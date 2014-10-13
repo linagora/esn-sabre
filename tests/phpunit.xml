@@ -1,0 +1,24 @@
+<phpunit
+  colors="true"
+  bootstrap="bootstrap.php"
+  convertErrorsToExceptions="true"
+  convertNoticesToExceptions="true"
+  convertWarningsToExceptions="true"
+  strict="true"
+  >
+  <testsuite name="linagora-esn-sabre-dav">
+      <directory>ESN/DAV</directory>
+  </testsuite>
+  <testsuite name="linagora-esn-sabre-davacl">
+      <directory>ESN/DAVACL</directory>
+  </testsuite>
+  <testsuite name="linagora-esn-sabre-caldav">
+      <directory>ESN/CalDAV</directory>
+  </testsuite>
+
+  <filter>
+    <whitelist addUncoveredFilesFromWhitelist="true">
+       <directory suffix=".php">../lib/</directory>
+    </whitelist>
+  </filter>
+</phpunit>

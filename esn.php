@@ -88,5 +88,8 @@ $server->addPlugin($browser);
 $corsPlugin = new ESN\DAV\CorsPlugin();
 $server->addPlugin($corsPlugin);
 
+$esnHookPlugin = new ESN\DAV\ESNHookPlugin();
+$server->addPlugin($esnHookPlugin);
+
 // And off we go!
 $server->exec();

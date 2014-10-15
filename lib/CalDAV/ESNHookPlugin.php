@@ -33,7 +33,6 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function checkMethodIsOnIcs(RequestInterface $request, ResponseInterface $response) {
-        error_log('checkMethodIsOnIcs');
         $request_uri = $request->getRawServerValue('REQUEST_URI');
         if (strpos($request_uri, '.ics') === false) {
           return false;
@@ -49,7 +48,6 @@ class ESNHookPlugin extends ServerPlugin {
 
         $node = $this->server->tree->getNodeForPath($path);
         $data = $node->get();
-        error_log(print_r($data, true));
 
         $bodyAsArray = [ 'event_id' => '/'.$path, 'type' => 'deleted', 'event' => $data ];
         $body = json_encode($bodyAsArray);
@@ -60,16 +58,12 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function afterUnbind($path) {
-        error_log('afterUnbind');
-        error_log(print_r((string)$this->request, true));
         $this->sendAsync($this->request);
 
         return true;
     }
 
     function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
-        error_log('beforeCreateFile');
-
         $community_id = $this->getCommunityIdFrom($parent->getOwner());
 
         $bodyAsArray = [ 'event_id' => '/'.$path, 'type' => 'created', 'event' => $data ];
@@ -81,16 +75,12 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function afterCreateFile($path, \Sabre\DAV\ICollection $parent) {
-        error_log('afterCreateFile');
-        error_log(print_r((string)$this->request, true));
         $this->sendAsync($this->request);
 
         return true;
     }
 
     function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {
-        error_log('beforeWriteContent');
-
         $community_id = $this->getCommunityIdFrom($node->getOwner());
         $old_event = $node->get();
 
@@ -103,8 +93,6 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function afterWriteContent($path, \Sabre\DAV\IFile $node) {
-        error_log('afterWriteContent');
-        error_log(print_r((string)$this->request, true));
         $this->sendAsync($this->request);
 
         return true;

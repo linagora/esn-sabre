@@ -13,12 +13,13 @@ class ESNHookPlugin extends ServerPlugin {
     private $request;
 
     const ESN_BASE_URI = 'http://localhost:8080';
+    const ESN_COMMUNITIES_TREE = '/principals/communities/';
 
     function initialize(Server $server) {
         $this->server = $server;
 
-        $server->on('method:PUT',         [$this, 'checkMethodIsOnIcs'], 90);
-        $server->on('method:DELETE',      [$this, 'checkMethodIsOnIcs'], 90);
+        $server->on('method:PUT',         [$this, 'isMethodCatchable'], 90);
+        $server->on('method:DELETE',      [$this, 'isMethodCatchable'], 90);
 
         $server->on('beforeCreateFile',   [$this, 'beforeCreateFile']);
         $server->on('afterCreateFile',    [$this, 'afterCreateFile']);
@@ -32,18 +33,23 @@ class ESNHookPlugin extends ServerPlugin {
         $this->httpClient = new HTTP\Client();
     }
 
-    function checkMethodIsOnIcs(RequestInterface $request, ResponseInterface $response) {
+    function isMethodCatchable(RequestInterface $request, ResponseInterface $response) {
         $request_uri = $request->getRawServerValue('REQUEST_URI');
         if (strpos($request_uri, '.ics') === false) {
           return false;
+        }
+        $pathAsArray = explode('/', $request_uri);
+        $community_id = $pathAsArray[2];
+        $principal_uri = self::ESN_COMMUNITIES_TREE.$community_id;
+        if (!$this->server->tree->nodeExists($principal_uri)) {
+            return false;
         }
         return true;
     }
 
     function beforeUnbind($path) {
         $pathAsArray = explode('/', $path);
-        array_shift($pathAsArray);
-        $community_id = array_shift($pathAsArray);
+        $community_id = $pathAsArray[1];
         $object_uri = array_pop($pathAsArray);
 
         $node = $this->server->tree->getNodeForPath($path);

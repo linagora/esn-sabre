@@ -8,13 +8,19 @@ use \Sabre\HTTP\RequestInterface;
 use \Sabre\HTTP\ResponseInterface;
 
 class ESNHookPlugin extends ServerPlugin {
+
     protected $server;
+
+    private $apiroot;
+    private $communities_principals;
     private $httpClient;
     private $request;
     private $connect_cookie;
 
-    const ESN_BASE_URI = 'http://localhost:8080';
-    const ESN_COMMUNITIES_TREE = '/principals/communities/';
+    function __construct($apiroot, $communities_principals) {
+      $this->apiroot = $apiroot;
+      $this->communities_principals = $communities_principals;
+    }
 
     function initialize(Server $server) {
         $this->server = $server;
@@ -48,7 +54,7 @@ class ESNHookPlugin extends ServerPlugin {
         }
         $pathAsArray = explode('/', $request_uri);
         $community_id = $pathAsArray[2];
-        $principal_uri = self::ESN_COMMUNITIES_TREE.$community_id;
+        $principal_uri = '/'.$this->communities_principals.'/'.$community_id;
         if (!$this->server->tree->nodeExists($principal_uri)) {
             return false;
         }
@@ -127,8 +133,9 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     private function createRequest($community_id, $body) {
-      $url = self::ESN_BASE_URI.'/api/calendars/'.$community_id.'/events';
+      $url = $this->apiroot.'/calendars/'.$community_id.'/events';
       $this->request = new HTTP\Request('POST', $url);
+      $this->request->setHeader('Cookie', $this->connect_cookie);
       $this->request->setHeader('Content-type', 'application/json');
       $this->request->setHeader('Content-length', strlen($body));
       $this->request->setBody($body);

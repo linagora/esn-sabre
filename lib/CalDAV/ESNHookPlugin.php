@@ -69,7 +69,7 @@ class ESNHookPlugin extends ServerPlugin {
         $node = $this->server->tree->getNodeForPath($path);
         $data = $node->get();
 
-        $bodyAsArray = [ 'event_id' => '/'.$path, 'type' => 'deleted', 'event' => $data ];
+        $bodyAsArray = [ 'event_id' => $path, 'type' => 'deleted', 'event' => $data ];
         $body = json_encode($bodyAsArray);
 
         $this->createRequest($community_id, $body);
@@ -86,7 +86,7 @@ class ESNHookPlugin extends ServerPlugin {
     function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
         $community_id = $this->getCommunityIdFrom($parent->getOwner());
 
-        $bodyAsArray = [ 'event_id' => '/'.$path, 'type' => 'created', 'event' => $data ];
+        $bodyAsArray = [ 'event_id' => $path, 'type' => 'created', 'event' => $data ];
         $body = json_encode($bodyAsArray);
 
         $this->createRequest($community_id, $body);
@@ -104,7 +104,7 @@ class ESNHookPlugin extends ServerPlugin {
         $community_id = $this->getCommunityIdFrom($node->getOwner());
         $old_event = $node->get();
 
-        $bodyAsArray = [ 'event_id' => '/'.$path, 'type' => 'updated', 'event' => $data, 'old_event' => $old_event ];
+        $bodyAsArray = [ 'event_id' => $path, 'type' => 'updated', 'event' => $data, 'old_event' => $old_event ];
         $body = json_encode($bodyAsArray);
 
         $this->createRequest($community_id, $body);

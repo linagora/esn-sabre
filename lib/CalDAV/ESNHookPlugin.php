@@ -130,6 +130,7 @@ class ESNHookPlugin extends ServerPlugin {
             error_log(print_r($error, true));
           }
       );
+      $this->httpClient->wait();
     }
 
     private function createRequest($community_id, $body) {

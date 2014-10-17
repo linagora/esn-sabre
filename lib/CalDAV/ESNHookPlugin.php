@@ -11,6 +11,7 @@ class ESNHookPlugin extends ServerPlugin {
     protected $server;
     private $httpClient;
     private $request;
+    private $connect_cookie;
 
     const ESN_BASE_URI = 'http://localhost:8080';
     const ESN_COMMUNITIES_TREE = '/principals/communities/';
@@ -30,7 +31,14 @@ class ESNHookPlugin extends ServerPlugin {
         $server->on('beforeUnbind',       [$this, 'beforeUnbind']);
         $server->on('afterUnbind',        [$this, 'afterUnbind']);
 
+        $server->on('afterLogin',         [$this, 'afterLogin'], 90);
+
         $this->httpClient = new HTTP\Client();
+    }
+
+    function afterLogin($connect_cookie) {
+      $this->connect_cookie = $connect_cookie;
+      return true;
     }
 
     function isMethodCatchable(RequestInterface $request, ResponseInterface $response) {

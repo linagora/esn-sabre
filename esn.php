@@ -5,8 +5,12 @@ require_once 'vendor/autoload.php';
 // settings
 date_default_timezone_set('UTC');
 
-// $baseUri = '/';
-$baseUri = '/esn.php/';
+define('BASE_URI', '/');
+define('ESN_BASE_API_ROOT', 'http://10.75.9.165:8000/api');
+define('MONGODB_URL', 'mongodb://localhost:27017');
+define('PRINCIPALS_COLLECTION', 'principals');
+define('PRINCIPALS_USERS', 'principals/users');
+define('PRINCIPALS_COMMUNITIES', 'principals/communities');
 
 //Mapping PHP errors to exceptions
 function exception_error_handler($errno, $errstr, $errfile, $errline ) {
@@ -14,9 +18,8 @@ function exception_error_handler($errno, $errstr, $errfile, $errline ) {
 }
 set_error_handler("exception_error_handler");
 
-// Database
 try {
-    $mongo = new MongoClient('mongodb://localhost:23456');
+    $mongo = new MongoClient(MONGODB_URL);
 } catch (MongoConnectionException $e) {
     // Create a fake server that will abort with the exception right away. This
     // allows us to use SabreDAV's exception handler and output.
@@ -37,9 +40,9 @@ $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($mongo->hiveet);
 
 // Directory structure
 $tree = [
-    new Sabre\DAV\SimpleCollection('principals', [
-      new Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/users'),
-      new Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/communities'),
+    new Sabre\DAV\SimpleCollection(PRINCIPALS_COLLECTION, [
+      new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_USERS),
+      new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_COMMUNITIES),
     ]),
     new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $mongo->hiveet),
     new ESN\CardDAV\AddressBookRoot($principalBackend, $addressbookBackend, $mongo->hiveet),
@@ -48,15 +51,14 @@ $tree = [
 $server = new Sabre\DAV\Server($tree);
 $server->debugExceptions = true;
 
-if (isset($baseUri))
-    $server->setBaseUri($baseUri);
+$server->setBaseUri(BASE_URI);
 
 // Server Plugins
 $authPlugin = new Sabre\DAV\Auth\Plugin($authBackend,'SabreDAV');
 $server->addPlugin($authPlugin);
 
 $aclPlugin = new Sabre\DAVACL\Plugin();
-$aclPlugin->defaultUsernamePath = 'principals/users';
+$aclPlugin->defaultUsernamePath = PRINCIPALS_USERS;
 $server->addPlugin($aclPlugin);
 
 // CalDAV support
@@ -87,6 +89,9 @@ $server->addPlugin($browser);
 // Support CORS
 $corsPlugin = new ESN\DAV\CorsPlugin();
 $server->addPlugin($corsPlugin);
+
+$esnHookPlugin = new ESN\CalDAV\ESNHookPlugin(ESN_BASE_API_ROOT, PRINCIPALS_COMMUNITIES);
+$server->addPlugin($esnHookPlugin);
 
 // And off we go!
 $server->exec();

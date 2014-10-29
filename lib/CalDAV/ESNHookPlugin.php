@@ -8,25 +8,21 @@ use \Sabre\HTTP\RequestInterface;
 use \Sabre\HTTP\ResponseInterface;
 
 class ESNHookPlugin extends ServerPlugin {
-
     protected $server;
+    protected $httpClient;
+    protected $apiroot;
+    protected $communities_principals;
+    protected $request;
 
-    private $apiroot;
-    private $communities_principals;
-    private $httpClient;
-    private $request;
     private $connect_cookie;
 
     function __construct($apiroot, $communities_principals) {
-      $this->apiroot = $apiroot;
-      $this->communities_principals = $communities_principals;
+        $this->apiroot = $apiroot;
+        $this->communities_principals = $communities_principals;
     }
 
     function initialize(Server $server) {
         $this->server = $server;
-
-        $server->on('method:PUT',         [$this, 'isMethodCatchable'], 90);
-        $server->on('method:DELETE',      [$this, 'isMethodCatchable'], 90);
 
         $server->on('beforeCreateFile',   [$this, 'beforeCreateFile']);
         $server->on('afterCreateFile',    [$this, 'afterCreateFile']);
@@ -43,21 +39,7 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function afterLogin($connect_cookie) {
-      $this->connect_cookie = $connect_cookie;
-      return true;
-    }
-
-    function isMethodCatchable(RequestInterface $request, ResponseInterface $response) {
-        $request_uri = $request->getRawServerValue('REQUEST_URI');
-        if (strpos($request_uri, '.ics') === false) {
-          return false;
-        }
-        $pathAsArray = explode('/', $request_uri);
-        $community_id = $pathAsArray[2];
-        $principal_uri = '/'.$this->communities_principals.'/'.$community_id;
-        if (!$this->server->tree->nodeExists($principal_uri)) {
-            return false;
-        }
+        $this->connect_cookie = $connect_cookie;
         return true;
     }
 
@@ -67,6 +49,10 @@ class ESNHookPlugin extends ServerPlugin {
         $object_uri = array_pop($pathAsArray);
 
         $node = $this->server->tree->getNodeForPath($path);
+
+        if (!($node instanceof \Sabre\CalDAV\CalendarObject)) {
+            return true;
+        }
         $data = $node->get();
 
         $bodyAsArray = [ 'event_id' => $path, 'type' => 'deleted', 'event' => $data ];
@@ -78,16 +64,24 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function afterUnbind($path) {
-        $this->sendAsync($this->request);
-
+        if ($this->request) {
+            $this->httpClient->send($this->request);
+        }
         return true;
     }
 
     function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
+        if (!($parent instanceof \Sabre\CalDAV\CalendarHome)) {
+            return true;
+        }
+
         $community_id = $this->getCommunityIdFrom($parent->getOwner());
 
-        $bodyAsArray = [ 'event_id' => $path, 'type' => 'created', 'event' => $data ];
-        $body = json_encode($bodyAsArray);
+        $body = json_encode([
+            'event_id' => $path,
+            'type' => 'created',
+            'event' => $data
+        ]);
 
         $this->createRequest($community_id, $body);
 
@@ -95,12 +89,17 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function afterCreateFile($path, \Sabre\DAV\ICollection $parent) {
-        $this->sendAsync($this->request);
-
+        if ($this->request) {
+            $this->httpClient->send($this->request);
+        }
         return true;
     }
 
     function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {
+        if (!($node instanceof \Sabre\CalDAV\CalendarObject)) {
+            return true;
+        }
+
         $community_id = $this->getCommunityIdFrom($node->getOwner());
         $old_event = $node->get();
 
@@ -113,38 +112,25 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function afterWriteContent($path, \Sabre\DAV\IFile $node) {
-        $this->sendAsync($this->request);
-
+        if ($this->request) {
+            $this->httpClient->send($this->request);
+        }
         return true;
     }
 
-    private function sendAsync($request) {
-      $this->httpClient->sendAsync(
-          $request,
-          function (ResponseInterface $response) {
-            error_log('success');
-            error_log(print_r($response->getBodyAsString(), true));
-          },
-          function($error) {
-            error_log('error');
-            error_log(print_r($error, true));
-          }
-      );
-      $this->httpClient->wait();
-    }
-
-    private function createRequest($community_id, $body) {
-      $url = $this->apiroot.'/calendars/'.$community_id.'/events';
-      $this->request = new HTTP\Request('POST', $url);
-      $this->request->setHeader('Cookie', $this->connect_cookie);
-      $this->request->setHeader('Content-type', 'application/json');
-      $this->request->setHeader('Content-length', strlen($body));
-      $this->request->setBody($body);
+    protected function createRequest($community_id, $body) {
+        $url = $this->apiroot.'/calendars/'.$community_id.'/events';
+        $this->request = new HTTP\Request('POST', $url);
+        $this->request->setHeader('Cookie', $this->connect_cookie);
+        $this->request->setHeader('Content-type', 'application/json');
+        $this->request->setHeader('Content-length', strlen($body));
+        $this->request->setBody($body);
+        return $this->request;
     }
 
     private function getCommunityIdFrom($principaluri) {
-      $array = explode('/', $principaluri);
-      $community_id = array_pop($array);
-      return $community_id;
+        $array = explode('/', $principaluri);
+        $community_id = array_pop($array);
+        return $community_id;
     }
 }

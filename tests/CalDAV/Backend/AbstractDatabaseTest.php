@@ -207,6 +207,22 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals('vevent', $data['component']);
     }
 
+    function testGetCalendarObjectByUID() {
+        $backend = $this->getBackend();
+        $returnedId = $backend->createCalendar('principals/user2','somerandomid',[]);
+
+        $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:foo\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $backend->createCalendarObject($returnedId, 'random-id', $object);
+
+        $this->assertNull(
+            $backend->getCalendarObjectByUID('principals/user2', 'bar')
+        );
+        $this->assertEquals(
+            'somerandomid/random-id',
+            $backend->getCalendarObjectByUID('principals/user2', 'foo')
+        );
+    }
+
     function testUpdateCalendarObject() {
         $backend = $this->getBackend();
         $returnedId = $backend->createCalendar('principals/user2','somerandomid',array());

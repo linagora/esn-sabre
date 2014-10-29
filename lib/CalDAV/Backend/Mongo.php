@@ -335,6 +335,25 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return $result;
     }
 
+    function getCalendarObjectByUID($principalUri, $uid) {
+        $collection = $this->db->selectCollection($this->calendarTableName);
+        $query = [ 'principaluri' => $principalUri ];
+        $fields = ['_id', 'uri'];
+
+        $calrow = $collection->findOne($query, $fields);
+        if (!$calrow) return null;
+
+        $collection = $this->db->selectCollection($this->calendarObjectTableName);
+        $query = [ 'calendarid' => (string)$calrow['_id'], 'uid' => $uid ];
+        $fields = ['uri'];
+
+        $objrow = $collection->findOne($query, $fields);
+        if (!$objrow) return null;
+
+        return $calrow['uri'] . '/' . $objrow['uri'];
+    }
+
+
     function getChangesForCalendar($calendarId, $syncToken, $syncLevel, $limit = null) {
         // Current synctoken
         $collection = $this->db->selectCollection($this->calendarTableName);

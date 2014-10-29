@@ -18,7 +18,8 @@
         "ext-mongo": "~1.5"
     },
     "require-dev" : {
-        "phpunit/phpunit" : "~4.3"
+        "phpunit/phpunit" : "~4.3",
+        "squizlabs/php_codesniffer": "1.*"
     },
     "autoload": {
         "psr-4" : {

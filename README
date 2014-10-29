@@ -1,0 +1,36 @@
+## OpenPaaS Frontend for SabreDAV
+
+Welcome to the OpenPaaS frontend for [SabreDAV](http://sabre.io/). This frontend
+adds calendaring and address book capabilities to your OpenPaaS instance and
+allows you to access them via standard CalDAV and CardDAV clients like
+Lightning.
+
+### Setting up the Environment
+
+The OpenPaaS frontend is managed through [composer](https://getcomposer.org/), all
+requirements can easily be set up using:
+
+```bash
+composer update
+```
+
+This command can be repeated to update package versions.
+
+### Unit tests and codestyle
+
+To run the unit tests, first make sure you have updated the environment, then
+you can use the following command. It will generate a nice report in the
+`tests/report` subdirectory.
+
+```bash
+cd tests
+phpunit --coverage-html report .
+```
+
+Running the code style checker is also just a matter of executing the right
+command. The style checker is installed by composer, we use the same code
+style as sabre-dav.
+
+```bash
+./vendor/bin/phpcs -p --standard=vendor/sabre/dav/tests/phpcs/ruleset.xml lib/
+```

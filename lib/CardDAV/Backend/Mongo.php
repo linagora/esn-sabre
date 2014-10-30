@@ -5,15 +5,12 @@ namespace ESN\CardDAV\Backend;
 class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     \Sabre\CardDAV\Backend\SyncSupport {
 
-    protected $addressBooksTableName;
-    protected $cardsTableName;
-    protected $addressBookChangesTableName;
+    public $addressBooksTableName = 'addressbooks';
+    public $cardsTableName = 'cards';
+    public $addressBookChangesTableName = 'addressbookchanges';
 
-    function __construct(\MongoDB $db, $addressBooksTableName = 'addressbooks', $cardsTableName = 'cards', $addressBookChangesTableName = 'addressbookchanges') {
+    function __construct(\MongoDB $db) {
         $this->db = $db;
-        $this->addressBooksTableName = $addressBooksTableName;
-        $this->cardsTableName = $cardsTableName;
-        $this->addressBookChangesTableName = $addressBookChangesTableName;
     }
 
     function getAddressBooksForUser($principalUri) {

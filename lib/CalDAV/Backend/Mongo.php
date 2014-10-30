@@ -11,11 +11,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     protected $db;
 
-    protected $calendarTableName;
-    protected $calendarObjectTableName;
-    protected $calendarChangesTableName;
-    protected $schedulingObjectTableName;
-    protected $calendarSubscriptionsTableName;
+    public $calendarTableName = 'calendars';
+    public $calendarObjectTableName = 'calendarobjects';
+    public $calendarChangesTableName = 'calendarchanges';
+    public $schedulingObjectTableName = 'schedulingobjects';
+    public $calendarSubscriptionsTableName = 'calendarsubscriptions';
 
     public $propertyMap = [
         '{DAV:}displayname' => 'displayname',
@@ -35,13 +35,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         '{http://calendarserver.org/ns/}subscribed-strip-attachments' => 'stripattachments',
     ];
 
-    function __construct(\MongoDB $db, $calendarTableName = 'calendars', $calendarObjectTableName = 'calendarobjects', $calendarChangesTableName = 'calendarchanges', $calendarSubscriptionsTableName = "calendarsubscriptions", $schedulingObjectTableName = "schedulingobjects") {
+    function __construct(\MongoDB $db) {
         $this->db = $db;
-        $this->calendarTableName = $calendarTableName;
-        $this->calendarObjectTableName = $calendarObjectTableName;
-        $this->calendarChangesTableName = $calendarChangesTableName;
-        $this->schedulingObjectTableName = $schedulingObjectTableName;
-        $this->calendarSubscriptionsTableName = $calendarSubscriptionsTableName;
     }
 
     function getCalendarsForUser($principalUri) {
@@ -339,6 +334,25 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         return $result;
     }
+
+    function getCalendarObjectByUID($principalUri, $uid) {
+        $collection = $this->db->selectCollection($this->calendarTableName);
+        $query = [ 'principaluri' => $principalUri ];
+        $fields = ['_id', 'uri'];
+
+        $calrow = $collection->findOne($query, $fields);
+        if (!$calrow) return null;
+
+        $collection = $this->db->selectCollection($this->calendarObjectTableName);
+        $query = [ 'calendarid' => (string)$calrow['_id'], 'uid' => $uid ];
+        $fields = ['uri'];
+
+        $objrow = $collection->findOne($query, $fields);
+        if (!$objrow) return null;
+
+        return $calrow['uri'] . '/' . $objrow['uri'];
+    }
+
 
     function getChangesForCalendar($calendarId, $syncToken, $syncLevel, $limit = null) {
         // Current synctoken

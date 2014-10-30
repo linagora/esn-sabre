@@ -33,7 +33,7 @@ try {
 
 
 // Backends
-$authBackend = new ESN\DAV\Auth\Backend\Mongo($mongo->hiveet);
+$authBackend = new ESN\DAV\Auth\Backend\Esn(ESN_BASE_API_ROOT);
 $calendarBackend = new ESN\CalDAV\Backend\Mongo($mongo->sabredav);
 $addressbookBackend = new ESN\CardDAV\Backend\Mongo($mongo->sabredav);
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($mongo->hiveet);

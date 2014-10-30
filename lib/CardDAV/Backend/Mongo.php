@@ -21,7 +21,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $addressBooks = [];
         foreach ($collection->find($query, $fields) as $row) {
             $addressBooks[] = [
-                'id'  => $row['_id'],
+                'id'  => (string)$row['_id'],
                 'uri' => $row['uri'],
                 'principaluri' => $row['principaluri'],
                 '{DAV:}displayname' => $row['displayname'],
@@ -36,7 +36,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     function updateAddressBook($addressBookId, \Sabre\DAV\PropPatch $propPatch) {
         $supportedProperties = [
             '{DAV:}displayname',
-            '{' . CardDAV\Plugin::NS_CARDDAV . '}addressbook-description',
+            '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description',
         ];
 
         $propPatch->handle($supportedProperties, function($mutations) use ($addressBookId) {
@@ -55,7 +55,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             }
 
             $collection = $this->db->selectCollection($this->addressBooksTableName);
-            $query = [ '_id' => $addressBookId ];
+            $query = [ '_id' => new \MongoId($addressBookId) ];
             $collection->update($query, [ '$set' => $updates ]);
             $this->addChange($addressBookId, "", 2);
 
@@ -83,7 +83,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                     $values['description'] = $newValue;
                     break;
                 default :
-                    throw new DAV\Exception\BadRequest('Unknown property: ' . $property);
+                    throw new \Sabre\DAV\Exception\BadRequest('Unknown property: ' . $property);
             }
 
         }
@@ -106,29 +106,47 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     }
 
-    function getCards($addressbookId) {
+    function getCards($addressBookId) {
         $fields = ['_id', 'uri', 'lastmodified', 'etag', 'size'];
-        $query = [ 'addressbookid' => $addressbookId ];
+        $query = [ 'addressbookid' => new \MongoId($addressBookId) ];
         $collection = $this->db->selectCollection($this->cardsTableName);
-        return iterator_to_array($collection->find($query, $fields));
+        $cards = [];
+        foreach ($collection->find($query, $fields) as $card) {
+            $card['id'] = (string)$card['_id'];
+            unset($card['_id']);
+            $cards[] = $card;
+        }
+        return $cards;
     }
 
     function getCard($addressBookId, $cardUri) {
-        $fields = ['_id', 'uri', 'lastmodified', 'etag', 'size'];
-        $query = [ 'addressbookid' => $addressbookId, 'uri' => $cardUri ];
+        $fields = ['_id', 'uri', 'lastmodified', 'carddata', 'etag', 'size'];
+        $query = [ 'addressbookid' => new \MongoId($addressBookId), 'uri' => $cardUri ];
         $collection = $this->db->selectCollection($this->cardsTableName);
 
-        return $collection->findOne($query, $fields);
+        $card = $collection->findOne($query, $fields);
+        if ($card) {
+            $card['id'] = (string) $card['_id'];
+            unset($card['_id']);
+            return $card;
+        } else {
+            return false;
+        }
     }
 
     function getMultipleCards($addressBookId, array $uris) {
-        $fields = ['_id', 'uri', 'lastmodified', 'etag', 'size'];
+        $fields = ['_id', 'uri', 'lastmodified', 'carddata', 'etag', 'size'];
         $query = [
-            'addressbookid' => $addressbookId,
+            'addressbookid' => new \MongoId($addressBookId),
             'uri' => [ '$in' => $uris ]
         ];
         $collection = $this->db->selectCollection($this->cardsTableName);
-        return iterator_to_array($collection->find($query, $fields));
+        foreach ($collection->find($query, $fields) as $card) {
+            $card['id'] = (string)$card['_id'];
+            unset($card['_id']);
+            $cards[] = $card;
+        }
+        return $cards;
     }
 
     function createCard($addressBookId, $cardUri, $cardData) {
@@ -140,7 +158,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'carddata' => $cardData,
             'uri' => $cardUri,
             'lastmodified' => time(),
-            'addressbookid' => $addressBookId,
+            'addressbookid' => new \MongoId($addressBookId),
             'size' => strlen($cardData),
             'etag' => $etag
         ];
@@ -161,7 +179,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'size' => strlen($cardData),
             'etag' => $etag
         ];
-        $query = [ 'addressbookid' => $addressbookId, 'uri' => $cardUri ];
+        $query = [ 'addressbookid' => new \MongoId($addressBookId), 'uri' => $cardUri ];
 
         $collection->update($query, [ '$set' => $data ]);
         $this->addChange($addressBookId, $cardUri, 2);
@@ -170,7 +188,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function deleteCard($addressBookId, $cardUri) {
-        $query = [ 'addressbookid' => $addressbookId, 'uri' => $cardUri ];
+        $query = [ 'addressbookid' => new \MongoId($addressBookId), 'uri' => $cardUri ];
         $collection = $this->db->selectCollection($this->cardsTableName);
         $res = $collection->remove($query, [ 'w' => 1 ]);
         $this->addChange($addressBookId, $cardUri, 3);
@@ -179,7 +197,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     function getChangesForAddressBook($addressBookId, $syncToken, $syncLevel, $limit = null) {
         $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $res = $collection->findOne([ 'id' => $addressBookId ], ['synctoken']);
+        $res = $collection->findOne([ '_id' => new \MongoId($addressBookId) ], ['synctoken']);
 
         if (!$res || is_null($res['synctoken'])) return null;
         $currentToken = $res['synctoken'];
@@ -195,7 +213,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             $query = "SELECT uri, operation FROM " .
             $collection = $this->db->selectCollection($this->addressBookChangesTableName);
             $query = [
-                'addressbookid' => $addressBookId,
+                'addressbookid' => new \MongoId($addressBookId),
                 'synctoken' => [ '$gt' => $syncToken, '$lt' => $currentToken ]
             ];
 
@@ -226,7 +244,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         } else {
             // No synctoken supplied, this is the initial sync.
             $collection = $this->db->selectCollection($this->cardsTableName);
-            $query = [ 'addressbookid' => $addressBookId ];
+            $query = [ 'addressbookid' => new \MongoId($addressBookId) ];
             $fields = ['uri'];
 
             $added = [];
@@ -249,7 +267,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $obj = [
             'uri' => $objectUri,
             'synctoken' => $res['synctoken'],
-            'addressbookid' => $addressBookId,
+            'addressbookid' => new \MongoId($addressBookId),
             'operation' => $operation
         ];
         $changecollection->insert($obj);

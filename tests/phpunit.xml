@@ -15,6 +15,9 @@
   <testsuite name="linagora-esn-sabre-caldav">
       <directory>ESN/CalDAV</directory>
   </testsuite>
+  <testsuite name="linagora-esn-sabre-carddav">
+      <directory>ESN/CardDAV</directory>
+  </testsuite>
 
   <filter>
     <whitelist addUncoveredFilesFromWhitelist="true">

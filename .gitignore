@@ -2,3 +2,4 @@ vendor
 tests/report
 tests/temp
 composer.lock
+config.json

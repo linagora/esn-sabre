@@ -5,7 +5,7 @@
   },
   "database": {
     "connectionString" : "mongodb://localhost:23456/",
-    "esnDb": "hiveet",
+    "esnDb": "esn",
     "sabreDb": "sabredav",
     "connectionOptions": {
       "w": 1,

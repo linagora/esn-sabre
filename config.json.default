@@ -1,0 +1,19 @@
+{
+  "webserver": {
+    "baseUri": "/",
+    "allowOrigin": "*"
+  },
+  "database": {
+    "connectionString" : "mongodb://localhost:23456/",
+    "esnDb": "hiveet",
+    "sabreDb": "sabredav",
+    "connectionOptions": {
+      "w": 1,
+      "fsync": true,
+      "connectTimeoutMS": 10000
+    }
+  },
+  "esn": {
+    "apiRoot": "http://localhost:8080/api"
+  }
+}

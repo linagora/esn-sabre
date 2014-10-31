@@ -2,12 +2,16 @@
 
 require_once 'vendor/autoload.php';
 
+define('CONFIG_PATH', 'config.json');
+
+$config = json_decode(file_get_contents(CONFIG_PATH), true);
+if (!$config) {
+    throw new Exception("Could not load config.json from " . realpath(CONFIG_PATH) . ", Error " . json_last_error());
+}
+
 // settings
 date_default_timezone_set('UTC');
 
-define('BASE_URI', '/');
-define('ESN_BASE_API_ROOT', 'http://10.75.9.165:8000/api');
-define('MONGODB_URL', 'mongodb://localhost:27017');
 define('PRINCIPALS_COLLECTION', 'principals');
 define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_COMMUNITIES', 'principals/communities');
@@ -19,7 +23,7 @@ function exception_error_handler($errno, $errstr, $errfile, $errline ) {
 set_error_handler("exception_error_handler");
 
 try {
-    $mongo = new MongoClient(MONGODB_URL);
+    $mongo = new MongoClient($config['database']['connectionString'], $config['database']['connectionOptions']);
 } catch (MongoConnectionException $e) {
     // Create a fake server that will abort with the exception right away. This
     // allows us to use SabreDAV's exception handler and output.
@@ -33,7 +37,7 @@ try {
 
 
 // Backends
-$authBackend = new ESN\DAV\Auth\Backend\Esn(ESN_BASE_API_ROOT);
+$authBackend = new ESN\DAV\Auth\Backend\Esn($config["esn"]["apiRoot"]);
 $calendarBackend = new ESN\CalDAV\Backend\Mongo($mongo->sabredav);
 $addressbookBackend = new ESN\CardDAV\Backend\Mongo($mongo->sabredav);
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($mongo->hiveet);
@@ -51,7 +55,7 @@ $tree = [
 $server = new Sabre\DAV\Server($tree);
 $server->debugExceptions = true;
 
-$server->setBaseUri(BASE_URI);
+$server->setBaseUri($config['webserver']['baseUri']);
 
 // Server Plugins
 $authPlugin = new Sabre\DAV\Auth\Plugin($authBackend,'SabreDAV');
@@ -88,9 +92,21 @@ $server->addPlugin($browser);
 
 // Support CORS
 $corsPlugin = new ESN\DAV\CorsPlugin();
+if (isset($config['webserver']['corsAllowMethods'])) {
+    $corsPlugin->allowMethods = $config['webserver']['corsAllowMethods'];
+}
+if (isset($config['webserver']['corsAllowHeaders'])) {
+    $corsPlugin->allowHeaders = $config['webserver']['corsAllowHeaders'];
+}
+if (isset($config['webserver']['corsAllowOrigin'])) {
+    $corsPlugin->allowOrigin = $config['webserver']['corsAllowOrigin'];
+}
+if (isset($config['webserver']['corsAllowCredentials'])) {
+    $corsPlugin->allowCredentials = $config['webserver']['corsAllowCredentials'];
+}
 $server->addPlugin($corsPlugin);
 
-$esnHookPlugin = new ESN\CalDAV\ESNHookPlugin(ESN_BASE_API_ROOT, PRINCIPALS_COMMUNITIES);
+$esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['apiRoot'], PRINCIPALS_COMMUNITIES);
 $server->addPlugin($esnHookPlugin);
 
 // And off we go!

@@ -35,7 +35,7 @@ class CorsPlugin extends ServerPlugin {
     }
 
     function authPreflight(RequestInterface $request, ResponseInterface $response) {
-        if ($request->getHeader("Access-Control-Request-Method")) {
+        if ($request->getHeader("Origin")) {
             $this->addCORSHeaders($request, $response);
             $this->server->sapi->sendResponse($response);
             return false;

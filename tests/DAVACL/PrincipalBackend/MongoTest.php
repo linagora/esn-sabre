@@ -9,7 +9,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
     const COMMUNITY_ID = '54313fcc398fef406b0041b4';
 
     static function setUpBeforeClass() {
-        $mc = new \MongoClient(ESN_MONGO_URI);
+        $mc = new \MongoClient(ESN_MONGO_ESNURI);
         self::$esndb = $mc->selectDB(ESN_MONGO_ESNDB);
         self::$esndb->drop();
 

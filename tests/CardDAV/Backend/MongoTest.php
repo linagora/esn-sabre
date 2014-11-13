@@ -41,8 +41,8 @@ class MongoTest extends AbstractDatabaseTest {
     }
 
     protected function getBackend() {
-        $mc = new \MongoClient(ESN_MONGO_URI);
-        $this->db = $mc->selectDB(ESN_MONGO_SABREDB);
+        $mcsabre = new \MongoClient(ESN_MONGO_SABREURI);
+        $this->db = $mcsabre->selectDB(ESN_MONGO_SABREDB);
         $this->db->drop();
         return new Mongo($this->db);
     }

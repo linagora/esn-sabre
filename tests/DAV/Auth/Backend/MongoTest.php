@@ -10,7 +10,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
     protected static $userId;
 
     static function setUpBeforeClass() {
-        $mc = new \MongoClient(ESN_MONGO_URI);
+        $mc = new \MongoClient(ESN_MONGO_ESNURI);
         self::$db = $mc->selectDB(ESN_MONGO_ESNDB);
 
         $salt = str_replace('+', '.', base64_encode("abcdefghijklmnopqrstuv"));

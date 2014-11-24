@@ -2,6 +2,9 @@
 
 namespace ESN\CardDAV;
 
+/**
+ * @medium
+ */
 class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
     protected $esndb;
     protected $sabredb;

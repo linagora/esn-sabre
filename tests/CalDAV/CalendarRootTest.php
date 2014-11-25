@@ -9,9 +9,11 @@ class CalendarRootTest extends \PHPUnit_Framework_TestCase {
     protected $caldavBackend;
 
     function setUp() {
-        $mc = new \MongoClient(ESN_MONGO_URI);
-        $this->esndb = $mc->selectDB(ESN_MONGO_ESNDB);
-        $this->sabredb = $mc->selectDB(ESN_MONGO_SABREDB);
+        $mcesn = new \MongoClient(ESN_MONGO_ESNURI);
+        $this->esndb = $mcesn->selectDB(ESN_MONGO_ESNDB);
+
+        $mcsabre = new \MongoClient(ESN_MONGO_SABREURI);
+        $this->sabredb = $mcsabre->selectDB(ESN_MONGO_SABREDB);
 
         $this->esndb->drop();
         $this->sabredb->drop();

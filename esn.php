@@ -8,6 +8,7 @@ $config = json_decode(file_get_contents(CONFIG_PATH), true);
 if (!$config) {
     throw new Exception("Could not load config.json from " . realpath(CONFIG_PATH) . ", Error " . json_last_error());
 }
+$dbConfig = $config['database'];
 
 // settings
 date_default_timezone_set('UTC');
@@ -23,7 +24,12 @@ function exception_error_handler($errno, $errstr, $errfile, $errline ) {
 set_error_handler("exception_error_handler");
 
 try {
-    $mongo = new MongoClient($config['database']['connectionString'], $config['database']['connectionOptions']);
+    $mongoEsn = new MongoClient($dbConfig['esn']['connectionString'], $dbConfig['esn']['connectionOptions']);
+    if ($dbConfig['esn']['connectionString'] == $dbConfig['sabre']['connectionString']) {
+        $mongoSabre = $mongoEsn;
+    } else {
+        $mongoSabre = new MongoClient($dbConfig['sabre']['connectionString'], $dbConfig['sabre']['connectionOptions']);
+    }
 } catch (MongoConnectionException $e) {
     // Create a fake server that will abort with the exception right away. This
     // allows us to use SabreDAV's exception handler and output.
@@ -35,12 +41,15 @@ try {
     return;
 }
 
+// Databases
+$esnDb = $mongoEsn->selectDB($dbConfig['esn']['db']);
+$sabreDb = $mongoSabre->selectDB($dbConfig['sabre']['db']);
 
 // Backends
-$authBackend = new ESN\DAV\Auth\Backend\Esn($config["esn"]["apiRoot"]);
-$calendarBackend = new ESN\CalDAV\Backend\Mongo($mongo->sabredav);
-$addressbookBackend = new ESN\CardDAV\Backend\Mongo($mongo->sabredav);
-$principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($mongo->hiveet);
+$authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot']);
+$calendarBackend = new ESN\CalDAV\Backend\Mongo($sabreDb);
+$addressbookBackend = new ESN\CardDAV\Backend\Mongo($sabreDb);
+$principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
 
 // Directory structure
 $tree = [
@@ -48,8 +57,8 @@ $tree = [
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_USERS),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_COMMUNITIES),
     ]),
-    new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $mongo->hiveet),
-    new ESN\CardDAV\AddressBookRoot($principalBackend, $addressbookBackend, $mongo->hiveet),
+    new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $esnDb),
+    new ESN\CardDAV\AddressBookRoot($principalBackend, $addressbookBackend, $esnDb),
 ];
 
 $server = new Sabre\DAV\Server($tree);

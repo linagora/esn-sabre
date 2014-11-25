@@ -18,9 +18,10 @@ if (!$config) {
 
 $testconfig = [
     'ESN_TEMPDIR'   => dirname(__FILE__) . '/temp/',
-    'ESN_MONGO_URI'  => $config['database']['connectionString'],
-    'ESN_MONGO_ESNDB' => $config['database']['esnDb'] . "_test",
-    'ESN_MONGO_SABREDB' => $config['database']['sabreDb'] . "_test"
+    'ESN_MONGO_ESNURI'  => $config['database']['esn']['connectionString'],
+    'ESN_MONGO_ESNDB' => $config['database']['esn']['db'] . "_test",
+    'ESN_MONGO_SABREDB' => $config['database']['sabre']['db'] . "_test",
+    'ESN_MONGO_SABREURI'  => $config['database']['sabre']['connectionString'],
 ];
 
 foreach($testconfig as $key=>$value) {

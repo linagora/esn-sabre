@@ -4,13 +4,23 @@
     "allowOrigin": "*"
   },
   "database": {
-    "connectionString" : "mongodb://localhost:23456/",
-    "esnDb": "esn",
-    "sabreDb": "sabredav",
-    "connectionOptions": {
-      "w": 1,
-      "fsync": true,
-      "connectTimeoutMS": 10000
+    "esn": {
+      "name": "esn",
+      "connectionString" : "mongodb://localhost:23456/",
+      "connectionOptions": {
+        "w": 1,
+        "fsync": true,
+        "connectTimeoutMS": 10000
+      }
+    },
+    "sabre": {
+      "name": "sabre",
+      "connectionString" : "mongodb://localhost:23456/",
+      "connectionOptions": {
+        "w": 1,
+        "fsync": true,
+        "connectTimeoutMS": 10000
+      }
     }
   },
   "esn": {

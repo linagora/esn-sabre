@@ -47,7 +47,7 @@ $sabreDb = $mongoSabre->selectDB($dbConfig['sabre']['db']);
 
 // Backends
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot']);
-$calendarBackend = new ESN\CalDAV\Backend\Mongo($sabreDb);
+$calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb);
 $addressbookBackend = new ESN\CardDAV\Backend\Mongo($sabreDb);
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
 

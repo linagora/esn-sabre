@@ -23,7 +23,12 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             '_id' => new \MongoId(self::COMMUNITY_ID),
             'title' => 'community',
             'members' => [
-                [ 'user' => new \MongoId(self::USER_ID) ]
+              [
+                'member' => [
+                  'objectType' => 'user',
+                  'id' => new \MongoId(self::USER_ID)
+                ]
+              ]
             ]
         ]);
     }

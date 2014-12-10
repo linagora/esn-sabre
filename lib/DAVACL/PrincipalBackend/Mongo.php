@@ -55,10 +55,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $principals = [];
         if (count($parts) == 3 && $parts[0] == 'principals' && $parts[1] == 'communities') {
             $community = $parts[2];
-            $res = $this->db->communities->findOne([ '_id' => new \MongoId($parts[2])], [ 'members' ]);
+            $res = $this->db->communities->findOne([ '_id' => new \MongoId($parts[2])], [ 'members.member.id' ]);
             if ($res && isset($res['members'])) {
                 foreach ($res['members'] as $member) {
-                    $principals[] = 'principals/users/' . $member['user'];
+                    $principals[] = 'principals/users/' . $member['member']['id'];
                 }
             }
         }
@@ -69,7 +69,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $parts = explode('/', $principal);
         $principals = [];
         if (count($parts) == 3 && $parts[0] == 'principals' && $parts[1] == 'users') {
-            $query = [ 'members' => [ '$elemMatch' => [ 'user' => new \MongoId($parts[2]) ] ] ];
+            $query = [ 'members' => [ '$elemMatch' => [ 'member.id' => new \MongoId($parts[2]) ] ] ];
             $res = $this->db->communities->find($query, ['_id']);
 
             foreach ($res as $community) {

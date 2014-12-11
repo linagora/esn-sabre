@@ -58,7 +58,8 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     }
 
     function getCurrentPrincipal() {
-        return "principals/users/" . $this->currentUserId;
+        $id = $this->currentUserId;
+        return $id ? "principals/users/" . $id : null;
     }
 
     function getAuthCookies() {
@@ -71,7 +72,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             $rv = $this->checkAuthByToken($auth);
             $msg = "Invalid Token";
         } else {
-            list($rv, $msg)  = parent::check($request, $response);
+            list($rv, $msg) = parent::check($request, $response);
         }
 
         if ($rv) {

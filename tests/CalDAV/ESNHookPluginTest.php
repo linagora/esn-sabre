@@ -24,7 +24,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
 
         $modified = false;
         $data = "BEGIN:VCALENDAR";
-        $parent = new \Sabre\CalDAV\CalendarHome(new CalDAVBackendMock(), null);
+        $parent = new \Sabre\CalDAV\Calendar(new CalDAVBackendMock(), null);
         $requestCalled = false;
         $self = $this;
 
@@ -179,12 +179,20 @@ class CalDAVBackendMock extends \Sabre\CalDAV\Backend\AbstractBackend {
     function deleteCalendarObject($calendarId,$objectUri) {}
 }
 
+
+class MockAuthBackend {
+    function getAuthCookies() {
+        return "coookies!!!";
+    }
+}
+
 class ESNHookPluginMock extends ESNHookPlugin {
 
     function __construct($apiroot, $communities_principal, $server = null) {
         require_once '../vendor/sabre/http/tests/HTTP/ClientTest.php';
         if (!$server) $server = new \Sabre\DAV\Server([]);
-        parent::__construct($apiroot, $communities_principal);
+        $authBackend = new MockAuthBackend();
+        parent::__construct($apiroot, $communities_principal, $authBackend);
         $this->initialize($server);
         $this->httpClient = new \Sabre\HTTP\ClientMock();
     }

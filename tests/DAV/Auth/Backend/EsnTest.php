@@ -14,7 +14,15 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             $return = [ [ 'http_code' => 200, 'header_size' => 40 ], 0, '' ];
         });
 
-        $this->continueAuthTest($esnauth);
+        $request = new \Sabre\HTTP\Request('GET', '/foo/bar');
+        $request->setHeader('ESNToken', '1234');
+        $response = new \Sabre\HTTP\Response(200);
+
+        list($rv, $msg) = $esnauth->check($request, $response);
+
+        $this->assertTrue($rv);
+        $this->assertEquals($esnauth->getCurrentPrincipal(), 'principals/users/123456789');
+        $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
     }
 
     function testAuthenticatePasswordSuccess() {
@@ -24,55 +32,26 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $requestCount = 0;
 
         $client->on('curlExec', function(&$return) use (&$requestCount) {
-            if ($requestCount == 0) {
-                $return = 'HTTP/1.1 403 Authentication Required';
-            } else if ($requestCount == 1) {
-                $return = "HTTP 200 OK\r\nSet-Cookie: test=passed\r\n\r\n{\"_id\":\"123456789\",\"firstname\":\"John\",\"lastname\":\"Doe\",\"emails\":[\"johndoe@linagora.com\"]}";
-            }
+            $return = "HTTP 200 OK\r\nSet-Cookie: test=passed\r\n\r\n{\"_id\":\"123456789\",\"firstname\":\"John\",\"lastname\":\"Doe\",\"emails\":[\"johndoe@linagora.com\"]}";
         });
 
         $client->on('curlStuff', function(&$return) use (&$requestCount) {
-            if ($requestCount == 0) {
-                $return = [ [ 'http_code' => 403, 'header_size' => 0 ], 0, '' ];
-            } else if ($requestCount == 1) {
-                $return = [ [ 'http_code' => 200, 'header_size' => 40 ], 0, '' ];
-            }
-            $requestCount++;
+            $return = [ [ 'http_code' => 200, 'header_size' => 40 ], 0, '' ];
         });
 
-        $this->continueAuthTest($esnauth);
-    }
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'PHP_AUTH_USER' => 'username',
+            'PHP_AUTH_PW' => 'password',
+        ));
+        $response = new \Sabre\HTTP\Response();
 
-    private function continueAuthTest($esnauth) {
-        $base64 = base64_encode('username:password');
-
-        $request = new \Sabre\HTTP\Request('GET', '/foo/bar');
-        $request->setHeader('Authorization', 'Basic ' .$base64);
-        $response = new \Sabre\HTTP\Response(200);
-
-        $server = new \Sabre\DAV\Server([]);
-        $server->httpRequest = $request;
-        $server->httpResponse = $response;
-
-        $handlerCalled = false;
-        $self = $this;
-
-        $server->on(Esn::AFTER_LOGIN_EVENT, function($cookie) use (&$handlerCalled, $self) {
-            $self->assertEquals($cookie, 'test=passed');
-            $handlerCalled = true;
-        });
-
-        $rv = $esnauth->authenticate($server, 'TestRealm');
+        list($rv, $msg) = $esnauth->check($request, $response);
 
         $this->assertTrue($rv);
-        $this->assertTrue($handlerCalled);
-        $this->assertEquals($esnauth->getCurrentUser(), '123456789');
+        $this->assertEquals($esnauth->getCurrentPrincipal(), 'principals/users/123456789');
         $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
     }
 
-    /**
-     * @expectedException \Sabre\DAV\Exception\NotAuthenticated
-     */
     function testAuthenticateFailedCode() {
         $esnauth = new EsnMock('http://localhost:8080/');
         $client = $esnauth->getClient();
@@ -85,22 +64,21 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         });
 
 
-        $base64 = base64_encode('username:password');
-
-        $request = new \Sabre\HTTP\Request('GET', '/foo/bar');
-        $request->setHeader('Authorization', 'Basic ' .$base64);
-        $response = new \Sabre\HTTP\Response(200);
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'PHP_AUTH_USER' => 'username',
+            'PHP_AUTH_PW' => 'password',
+        ));
+        $response = new \Sabre\HTTP\Response();
 
         $server = new \Sabre\DAV\Server([]);
         $server->httpRequest = $request;
         $server->httpResponse = $response;
 
-        $esnauth->authenticate($server, 'TestRealm');
+        $this->assertFalse(
+            $esnauth->check($request, $response)[0]
+        );
     }
 
-    /**
-     * @expectedException \Sabre\DAV\Exception\NotAuthenticated
-     */
     function testAuthenticateFailedJSON() {
         $esnauth = new EsnMock('http://localhost:8080/');
         $client = $esnauth->getClient();
@@ -112,17 +90,19 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             $return = [ [ 'http_code' => 200, 'header_size' => 0 ], 0, '' ];
         });
 
-        $base64 = base64_encode('username:password');
-
-        $request = new \Sabre\HTTP\Request('GET', '/foo/bar');
-        $request->setHeader('Authorization', 'Basic ' .$base64);
-        $response = new \Sabre\HTTP\Response(200);
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'PHP_AUTH_USER' => 'username',
+            'PHP_AUTH_PW' => 'password',
+        ));
+        $response = new \Sabre\HTTP\Response();
 
         $server = new \Sabre\DAV\Server([]);
         $server->httpRequest = $request;
         $server->httpResponse = $response;
 
-        $esnauth->authenticate($server, 'TestRealm');
+        $this->assertFalse(
+            $esnauth->check($request, $response)[0]
+        );
     }
 
     function testPluginCalled() {
@@ -136,22 +116,23 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             $return = [ [ 'http_code' => 200, 'header_size' => 40 ], 0, '' ];
         });
 
-        $base64 = base64_encode('username:password');
-
-        $request = new \Sabre\HTTP\Request('GET', '/foo/bar');
-        $request->setHeader('Authorization', 'Basic ' .$base64);
-        $response = new \Sabre\HTTP\Response(200);
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'PHP_AUTH_USER' => 'username',
+            'PHP_AUTH_PW' => 'password',
+        ));
+        $response = new \Sabre\HTTP\Response();
 
         $server = new \Sabre\DAV\Server([]);
         $server->httpRequest = $request;
         $server->httpResponse = $response;
 
-        $plugin = new ESNHookPluginMock('/', 'principals');
+        $plugin = new ESNHookPluginMock('/', 'principals', $esnauth);
         $server->addPlugin($plugin);
 
-        $rv = $esnauth->authenticate($server, 'TestRealm');
+        list($rv, $msg) = $esnauth->check($request, $response);
 
         $this->assertTrue($rv);
+        $this->assertEquals($msg, 'principals/users/123456789');
         $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
 
         $pluginrequest = $plugin->createRequest('123123', 'body');

@@ -6,6 +6,8 @@ class Mongo extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     protected $currentUserId;
 
+    protected $principalPrefix = 'principals/users/';
+
     function __construct($database) {
         $this->db = $database;
     }
@@ -27,6 +29,7 @@ class Mongo extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     }
 
     function getCurrentPrincipal() {
-        return "principals/users/" . $this->currentUserId;
+        $id = $this->currentUserId;
+        return $id ? "principals/users/" . $id : null;
     }
 }

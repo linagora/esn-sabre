@@ -58,6 +58,14 @@ class CorsPluginTest extends \PHPUnit_Framework_TestCase {
         $response = $server->sapi->response;
         $this->assertNull($response->getHeader('Access-Control-Allow-Credentials'));
     }
+
+    function testPluginInfo() {
+        list($corsplugin, $server) = $this->prepareServer();
+        // This is really just to get 100% test coverage :-)
+        $info = $corsplugin->getPluginInfo();
+        $this->assertEquals($info['name'], 'cors');
+        $this->assertEquals($info['description'], 'Responds to OPTIONS request created by CORS preflighting.');
+    }
 }
 
 class MockSapi {

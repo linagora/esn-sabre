@@ -14,11 +14,10 @@ class ESNHookPlugin extends ServerPlugin {
     protected $communities_principals;
     protected $request;
 
-    private $connect_cookie;
-
-    function __construct($apiroot, $communities_principals) {
+    function __construct($apiroot, $communities_principals, $authBackend) {
         $this->apiroot = $apiroot;
         $this->communities_principals = $communities_principals;
+        $this->authBackend = $authBackend;
     }
 
     function initialize(Server $server) {
@@ -33,14 +32,7 @@ class ESNHookPlugin extends ServerPlugin {
         $server->on('beforeUnbind',       [$this, 'beforeUnbind']);
         $server->on('afterUnbind',        [$this, 'afterUnbind']);
 
-        $server->on('afterLogin',         [$this, 'afterLogin'], 90);
-
         $this->httpClient = new HTTP\Client();
-    }
-
-    function afterLogin($connect_cookie) {
-        $this->connect_cookie = $connect_cookie;
-        return true;
     }
 
     function beforeUnbind($path) {
@@ -71,7 +63,7 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
-        if (!($parent instanceof \Sabre\CalDAV\CalendarHome)) {
+        if (!($parent instanceof \Sabre\CalDAV\Calendar)) {
             return true;
         }
 
@@ -121,9 +113,12 @@ class ESNHookPlugin extends ServerPlugin {
     protected function createRequest($community_id, $body) {
         $url = $this->apiroot.'/calendars/'.$community_id.'/events';
         $this->request = new HTTP\Request('POST', $url);
-        $this->request->setHeader('Cookie', $this->connect_cookie);
         $this->request->setHeader('Content-type', 'application/json');
         $this->request->setHeader('Content-length', strlen($body));
+
+        $cookie = $this->authBackend->getAuthCookies();
+        $this->request->setHeader('Cookie', $cookie);
+
         $this->request->setBody($body);
         return $this->request;
     }

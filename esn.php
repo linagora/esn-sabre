@@ -118,7 +118,7 @@ $corsPlugin->allowHeaders[] = 'ESNToken';
 
 $server->addPlugin($corsPlugin);
 
-$esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['apiRoot'], PRINCIPALS_COMMUNITIES);
+$esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['apiRoot'], PRINCIPALS_COMMUNITIES, $authBackend);
 $server->addPlugin($esnHookPlugin);
 
 // And off we go!

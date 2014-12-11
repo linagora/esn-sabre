@@ -63,6 +63,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
             $props = [ '{' . self::NS_CALDAV . '}calendar-data' ];
 
+            $results = [];
             foreach ($nodePaths as $path) {
                 list($properties) =
                     $this->server->getPropertiesForPath($calendar . '/' . $path, $props);

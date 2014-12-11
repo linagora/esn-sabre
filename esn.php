@@ -113,6 +113,10 @@ if (isset($config['webserver']['corsAllowOrigin'])) {
 if (isset($config['webserver']['corsAllowCredentials'])) {
     $corsPlugin->allowCredentials = $config['webserver']['corsAllowCredentials'];
 }
+
+// Regardless of the webserver settings, we need to support the ESNToken header
+$corsPlugin->allowHeaders[] = 'ESNToken';
+
 $server->addPlugin($corsPlugin);
 
 $esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['apiRoot'], PRINCIPALS_COMMUNITIES);

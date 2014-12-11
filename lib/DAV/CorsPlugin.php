@@ -10,14 +10,14 @@ use \Sabre\HTTP\ResponseInterface;
 class CorsPlugin extends ServerPlugin {
 
     public $allowMethods = ['GET', 'POST', 'PUT', 'PROPFIND', 'REPORT'];
-    public $allowHeaders = ["Depth", 'Authorization'];
+    public $allowHeaders = ["Depth", 'Authorization', 'Content-Type', 'Accept'];
     public $allowOrigin = ["*"];
     public $allowCredentials = true;
 
     function initialize(Server $server) {
         $this->server = $server;
         foreach($this->allowMethods as $method) {
-            $server->on('method:' . $method, [$this, 'addCORSHeaders'], 90);
+            $server->on('beforeMethod:' . $method, [$this, 'addCORSHeaders'], 90);
         }
 
         $server->on('beforeMethod:OPTIONS', [$this, 'authPreflight'], 5);

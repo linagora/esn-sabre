@@ -16,6 +16,7 @@ date_default_timezone_set('UTC');
 define('PRINCIPALS_COLLECTION', 'principals');
 define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_COMMUNITIES', 'principals/communities');
+define('JSON_ROOT', 'json');
 
 //Mapping PHP errors to exceptions
 function exception_error_handler($errno, $errstr, $errfile, $errline ) {
@@ -73,6 +74,10 @@ $server->addPlugin($authPlugin);
 $aclPlugin = new Sabre\DAVACL\Plugin();
 $aclPlugin->defaultUsernamePath = PRINCIPALS_USERS;
 $server->addPlugin($aclPlugin);
+
+// JSON api support
+$jsonPlugin = new ESN\JSON\Plugin(JSON_ROOT);
+$server->addPlugin($jsonPlugin);
 
 // CalDAV support
 $caldavPlugin = new Sabre\CalDAV\Plugin();

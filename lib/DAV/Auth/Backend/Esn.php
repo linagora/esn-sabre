@@ -2,12 +2,10 @@
 
 namespace ESN\DAV\Auth\Backend;
 
-use Sabre\DAV;
+use \Sabre\DAV;
 use \Sabre\HTTP;
 
 class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
-
-    const AFTER_LOGIN_EVENT = 'afterLogin';
 
     protected $httpClient;
     protected $currentUserId;
@@ -15,25 +13,16 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     private $lastConnectCookies;
 
+    protected $principalPrefix = 'principals/users/';
+
     function __construct($apiroot) {
         $this->apiroot = $apiroot;
         $this->httpClient = new HTTP\Client();
     }
 
-    private function checkAuthByToken($username, $password) {
-        $url = $this->apiroot . '/authenticationtoken/' . $password . '/user';
+    private function checkAuthByToken($token) {
+        $url = $this->apiroot . '/authenticationtoken/' . $token . '/user';
         $request = new HTTP\Request('GET', $url);
-        return $this->decodeResponse($this->httpClient->send($request));
-    }
-
-    private function checkAuthByLoginPassword($username, $password) {
-        $url = $this->apiroot . '/login';
-        $headers = [ 'Content-Type' => 'application/json' ];
-        $body = json_encode([
-            'username' => $username,
-            'password' => $password
-        ]);
-        $request = new HTTP\Request('POST', $url, $headers, $body);
         return $this->decodeResponse($this->httpClient->send($request));
     }
 
@@ -58,28 +47,37 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     protected function validateUserPass($username, $password) {
         $user = trim($username);
-        if ( $this->checkAuthByToken($user, $password) ) {
-            return true;
-        }
-        if ( $this->checkAuthByLoginPassword($user, $password)) {
-            return true;
-        }
-        return false;
+        $url = $this->apiroot . '/login';
+        $headers = [ 'Content-Type' => 'application/json' ];
+        $body = json_encode([
+            'username' => $username,
+            'password' => $password
+        ]);
+        $request = new HTTP\Request('POST', $url, $headers, $body);
+        return $this->decodeResponse($this->httpClient->send($request));
     }
 
-    function getCurrentUser() {
-        return $this->currentUserId;
+    function getCurrentPrincipal() {
+        return "principals/users/" . $this->currentUserId;
     }
 
     function getAuthCookies() {
         return $this->lastConnectCookies;
     }
 
-    function authenticate(\Sabre\DAV\Server $server, $realm) {
-        $rv = parent::authenticate($server, $realm);
-        if ($this->lastConnectCookies) {
-            $server->emit(self::AFTER_LOGIN_EVENT, [$this->lastConnectCookies]);
+    function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
+        $auth = $request->getHeader("ESNToken");
+        if ($auth) {
+            $rv = $this->checkAuthByToken($auth);
+            $msg = "Invalid Token";
+        } else {
+            list($rv, $msg)  = parent::check($request, $response);
         }
-        return $rv;
+
+        if ($rv) {
+            $msg = $this->getCurrentPrincipal();
+        }
+
+        return [$rv, $msg];
     }
 }

@@ -42,4 +42,15 @@ class CorsPlugin extends ServerPlugin {
         }
         return true;
     }
+
+    function getPluginName() {
+        return "cors";
+    }
+
+    function getPluginInfo() {
+        return [
+            'name'        => $this->getPluginName(),
+            'description' => 'Responds to OPTIONS request created by CORS preflighting.'
+        ];
+    }
 }

@@ -35,6 +35,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         '{http://calendarserver.org/ns/}subscribed-strip-attachments' => 'stripattachments',
     ];
 
+    const MAX_DATE = '2038-01-01';
+
     function __construct(\MongoDB $db) {
         $this->db = $db;
     }

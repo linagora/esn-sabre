@@ -26,7 +26,7 @@ class Mongo extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         return $authenticated;
     }
 
-    function getCurrentUser() {
-        return $this->currentUserId;
+    function getCurrentPrincipal() {
+        return "principals/users/" . $this->currentUserId;
     }
 }

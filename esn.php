@@ -71,7 +71,6 @@ $authPlugin = new Sabre\DAV\Auth\Plugin($authBackend,'SabreDAV');
 $server->addPlugin($authPlugin);
 
 $aclPlugin = new Sabre\DAVACL\Plugin();
-$aclPlugin->defaultUsernamePath = PRINCIPALS_USERS;
 $server->addPlugin($aclPlugin);
 
 // CalDAV support

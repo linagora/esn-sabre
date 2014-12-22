@@ -38,11 +38,38 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
         $cookies = $response->getHeaderAsArray('Set-Cookie');
         if (count($cookies) > 0) {
-            $this->lastConnectCookies = $cookies[0];
+            $cookies = self::parseCookie($cookies);
+            $cookiestr = self::buildCookie($cookies);
+
+            $this->lastConnectCookies = $cookiestr;
         }
 
         $this->currentUserId = $user->_id;
         return true;
+    }
+
+    private static function buildCookie($cookies) {
+        $cookieval = [];
+        foreach ($cookies as $k => $v) {
+            $cookieval[] = $k . '=' . $v . '';
+        }
+        return implode('; ', $cookieval);
+    }
+
+    private static function parseCookie($headers) {
+        $meta = array('domain', 'expires', 'path', 'secure', 'comment', 'httponly', 'max-age');
+        $cookies = [];
+        foreach ($headers as $header) {
+            $parts = explode(';', $header);
+            $cdata = array();
+            foreach ($parts as $part) {
+                $kv = array_map("trim", explode('=', $part, 2));
+                if (!in_array(strtolower($kv[0]), $meta)) {
+                    $cookies[$kv[0]] = $kv[1];
+                }
+            }
+        }
+        return $cookies;
     }
 
     protected function validateUserPass($username, $password) {

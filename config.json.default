@@ -1,7 +1,8 @@
 {
   "webserver": {
     "baseUri": "/",
-    "allowOrigin": "*"
+    "allowOrigin": "*",
+    "realm": "ESN"
   },
   "database": {
     "esn": {

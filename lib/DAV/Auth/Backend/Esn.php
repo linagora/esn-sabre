@@ -15,9 +15,13 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     protected $principalPrefix = 'principals/users/';
 
-    function __construct($apiroot) {
+    function __construct($apiroot, $realm = null) {
         $this->apiroot = $apiroot;
         $this->httpClient = new HTTP\Client();
+
+        if (!is_null($realm)) {
+            $this->realm = $realm;
+        }
     }
 
     private function checkAuthByToken($token) {

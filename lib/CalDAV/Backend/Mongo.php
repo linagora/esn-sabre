@@ -359,8 +359,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function getChangesForCalendar($calendarId, $syncToken, $syncLevel, $limit = null) {
         // Current synctoken
         $collection = $this->db->selectCollection($this->calendarTableName);
+        $mongoCalendarId = new \MongoId($calendarId);
         $fields = ['synctoken'];
-        $query = [ '_id' => new \MongoId($calendarId) ];
+        $query = [ '_id' => $mongoCalendarId ];
 
         $row = $collection->findOne($query, $fields);
         if (!$row || is_null($row['synctoken'])) return null;
@@ -379,8 +380,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $fields = ['uri', 'operation'];
             $collection = $this->db->selectCollection($this->calendarChangesTableName);
 
-            $query = [ 'synctoken' => [ '$gte' => $syncToken, '$lt' => $currentToken ],
-                       'calendarid' => $calendarId ];
+            $query = [ 'synctoken' => [ '$gte' => (int)$syncToken, '$lt' => (int)$currentToken ],
+                       'calendarid' => $mongoCalendarId ];
 
             $res = $collection->find($query, $fields);
             $res->sort([ 'synctoken' => 1 ]);
@@ -642,15 +643,16 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     protected function addChange($calendarId, $objectUri, $operation) {
         $calcollection = $this->db->selectCollection($this->calendarTableName);
+        $mongoCalendarId = new \MongoId($calendarId);
         $fields = ['synctoken'];
-        $query = [ '_id' => new \MongoId($calendarId) ];
+        $query = [ '_id' => $mongoCalendarId ];
         $res = $calcollection->findOne($query, $fields);
 
         $changecollection = $this->db->selectCollection($this->calendarChangesTableName);
         $obj = [
             'uri' => $objectUri,
             'synctoken' => $res['synctoken'],
-            'calendarid' => $calendarId,
+            'calendarid' => $mongoCalendarId,
             'operation' => $operation
         ];
         $changecollection->insert($obj);

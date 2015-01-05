@@ -35,7 +35,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
 
     static function tearDownAfterClass() {
         self::$esndb->drop();
-        self::$esndb = NULL;
+        self::$esndb = null;
     }
 
     function testInvalidPrincipal() {

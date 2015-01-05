@@ -7,16 +7,19 @@
   strict="true"
   >
   <testsuite name="linagora-esn-sabre-dav">
-      <directory>ESN/DAV</directory>
+      <directory>DAV</directory>
   </testsuite>
   <testsuite name="linagora-esn-sabre-davacl">
-      <directory>ESN/DAVACL</directory>
+      <directory>DAVACL</directory>
   </testsuite>
   <testsuite name="linagora-esn-sabre-caldav">
-      <directory>ESN/CalDAV</directory>
+      <directory>CalDAV</directory>
   </testsuite>
   <testsuite name="linagora-esn-sabre-carddav">
-      <directory>ESN/CardDAV</directory>
+      <directory>CardDAV</directory>
+  </testsuite>
+  <testsuite name="linagora-esn-sabre-json">
+      <directory>JSON</directory>
   </testsuite>
 
   <filter>

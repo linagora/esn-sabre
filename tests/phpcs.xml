@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<ruleset name="sabre.php">
+    <description>ESN sabredav codesniffer ruleset</description>
+
+    <exclude-pattern>tests/report/*</exclude-pattern>
+    <exclude-pattern>vendor/*</exclude-pattern>
+
+    <!-- We want to adhere to the same style as sabre/dav -->
+    <rule ref="../vendor/sabre/dav/tests/phpcs/ruleset.xml"/>
+
+    <!-- In tests and the main esn.php file, there are some rules to ignore -->
+    <rule ref="PSR1.Files.SideEffects.FoundWithSymbols">
+      <exclude-pattern>tests/*</exclude-pattern>
+      <exclude-pattern>esn.php</exclude-pattern>
+    </rule>
+    <rule ref="PSR1.Classes.ClassDeclaration.MultipleClasses">
+      <exclude-pattern>tests/*</exclude-pattern>
+    </rule>
+</ruleset>

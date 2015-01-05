@@ -117,6 +117,9 @@ if (isset($config['webserver']['corsAllowOrigin'])) {
 if (isset($config['webserver']['corsAllowCredentials'])) {
     $corsPlugin->allowCredentials = $config['webserver']['corsAllowCredentials'];
 }
+if (isset($config['webserver']['corsExposeHeaders'])) {
+    $corsPlugin->exposeHeaders = $config['webserver']['corsExposeHeaders'];
+}
 
 // Regardless of the webserver settings, we need to support the ESNToken header
 $corsPlugin->allowHeaders[] = 'ESNToken';

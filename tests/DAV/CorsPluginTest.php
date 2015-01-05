@@ -20,6 +20,7 @@ class CorsPluginTest extends \PHPUnit_Framework_TestCase {
         $corsplugin->allowMethods = ['POST', 'PUT'];
         $corsplugin->allowHeaders = ['X-Frobnicate'];
         $corsplugin->allowOrigin = ['http://localhost'];
+        $corsplugin->exposeHeaders = ['X-Been-Frobbed'];
         $corsplugin->allowCredentials = false;
 
         $server->httpRequest->setMethod("OPTIONS");
@@ -31,6 +32,7 @@ class CorsPluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($response->getHeader('Access-Control-Allow-Origin'), 'http://localhost');
         $this->assertEquals($response->getHeader('Access-Control-Allow-Headers'), 'X-Frobnicate');
         $this->assertEquals($response->getHeader('Access-Control-Allow-Methods'), 'POST, PUT');
+        $this->assertEquals($response->getHeader('Access-Control-Expose-Headers'), 'X-Been-Frobbed');
         $this->assertNull($response->getHeader('Access-Control-Allow-Credentials'));
     }
 

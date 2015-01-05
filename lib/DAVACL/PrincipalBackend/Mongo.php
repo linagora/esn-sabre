@@ -91,7 +91,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             case "users":
                 $principal = [
                     'uri' => 'principals/users/' . $obj['_id'],
-                    'id' => $obj['_id'],
+                    'id' => (string)$obj['_id'],
                     '{DAV:}displayname' => $obj['firstname'] . " " . $obj['lastname'],
                     '{http://sabredav.org/ns}email-address' => $obj['emails'][0]
                 ];
@@ -99,7 +99,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             case "communities":
                 $principal = [
                     'uri' => 'principals/communities/' . $obj['_id'],
-                    'id' => $obj['_id'],
+                    'id' => (string)$obj['_id'],
                     '{DAV:}displayname' => $obj['title'],
                 ];
                 break;

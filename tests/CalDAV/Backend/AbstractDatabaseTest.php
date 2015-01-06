@@ -462,6 +462,15 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             'deleted' => [],
             'added' => ["todo1.ics", "todo3.ics"],
         ], $result);
+
+        $result = $backend->getChangesForCalendar($id, $currentToken, "1");
+
+        $this->assertEquals([
+            'syncToken' => 6,
+            'modified'  => ["todo1.ics"],
+            'deleted'   => ["todo2.ics"],
+            'added'     => ["todo3.ics"],
+        ], $result);
     }
 
     function testCreateSubscriptions() {

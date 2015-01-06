@@ -47,7 +47,7 @@ $esnDb = $mongoEsn->selectDB($dbConfig['esn']['db']);
 $sabreDb = $mongoSabre->selectDB($dbConfig['sabre']['db']);
 
 // Backends
-$authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot']);
+$authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm']);
 $calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb);
 $addressbookBackend = new ESN\CardDAV\Backend\Mongo($sabreDb);
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
@@ -68,7 +68,7 @@ $server->debugExceptions = true;
 $server->setBaseUri($config['webserver']['baseUri']);
 
 // Server Plugins
-$authPlugin = new Sabre\DAV\Auth\Plugin($authBackend,'SabreDAV');
+$authPlugin = new Sabre\DAV\Auth\Plugin($authBackend);
 $server->addPlugin($authPlugin);
 
 $aclPlugin = new Sabre\DAVACL\Plugin();

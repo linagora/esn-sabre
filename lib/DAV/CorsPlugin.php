@@ -11,6 +11,7 @@ class CorsPlugin extends ServerPlugin {
 
     public $allowMethods = ['GET', 'POST', 'PUT', 'PROPFIND', 'REPORT'];
     public $allowHeaders = ["Depth", 'Authorization', 'Content-Type', 'Accept'];
+    public $exposeHeaders = [];
     public $allowOrigin = ["*"];
     public $allowCredentials = true;
 
@@ -27,6 +28,7 @@ class CorsPlugin extends ServerPlugin {
         $response->setHeader('Access-Control-Allow-Origin', join(', ', $this->allowOrigin));
         $response->setHeader('Access-Control-Allow-Headers', join(', ', $this->allowHeaders));
         $response->setHeader('Access-Control-Allow-Methods', join(', ', $this->allowMethods));
+        $response->setHeader('Access-Control-Expose-Headers', join(', ', $this->exposeHeaders));
 
         if ($this->allowCredentials) {
             $response->setHeader('Access-Control-Allow-Credentials', 'true');

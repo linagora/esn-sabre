@@ -129,5 +129,8 @@ $server->addPlugin($corsPlugin);
 $esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['apiRoot'], PRINCIPALS_COMMUNITIES, $authBackend);
 $server->addPlugin($esnHookPlugin);
 
+$communityMembersPlugin = new ESN\CalDAV\CommunityMembersPlugin($esnDb);
+$server->addPlugin($communityMembersPlugin);
+
 // And off we go!
 $server->exec();

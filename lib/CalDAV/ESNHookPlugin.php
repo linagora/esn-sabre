@@ -32,6 +32,12 @@ class ESNHookPlugin extends ServerPlugin {
         $server->on('beforeUnbind',       [$this, 'beforeUnbind']);
         $server->on('afterUnbind',        [$this, 'afterUnbind']);
 
+        // Make sure the message id header is exposed to XHR
+        $corsPlugin = $this->server->getPlugin("cors");
+        if (!is_null($corsPlugin)) {
+            $corsPlugin->exposeHeaders[] = 'ESN-Message-Id';
+        }
+
         $this->httpClient = new HTTP\Client();
     }
 
@@ -56,9 +62,7 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function afterUnbind($path) {
-        if ($this->request) {
-            $this->httpClient->send($this->request);
-        }
+        $this->sendRequest();
         return true;
     }
 
@@ -81,9 +85,7 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function afterCreateFile($path, \Sabre\DAV\ICollection $parent) {
-        if ($this->request) {
-            $this->httpClient->send($this->request);
-        }
+        $this->sendRequest();
         return true;
     }
 
@@ -104,9 +106,7 @@ class ESNHookPlugin extends ServerPlugin {
     }
 
     function afterWriteContent($path, \Sabre\DAV\IFile $node) {
-        if ($this->request) {
-            $this->httpClient->send($this->request);
-        }
+        $this->sendRequest();
         return true;
     }
 
@@ -121,6 +121,16 @@ class ESNHookPlugin extends ServerPlugin {
 
         $this->request->setBody($body);
         return $this->request;
+    }
+
+    private function sendRequest() {
+        if ($this->request) {
+            $response = $this->httpClient->send($this->request);
+            $json = json_decode($response->getBodyAsString());
+            if (!is_null($json) && isset($json->{'_id'})) {
+                $this->server->httpResponse->setHeader("ESN-Message-Id", $json->{'_id'});
+            }
+        }
     }
 
     private function getCommunityIdFrom($principaluri) {

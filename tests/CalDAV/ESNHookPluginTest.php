@@ -21,6 +21,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
     function testCreateFile() {
         $plugin = $this->getPlugin();
         $client = $plugin->getClient();
+        $server = $plugin->getServer();
 
         $modified = false;
         $data = "BEGIN:VCALENDAR";
@@ -34,6 +35,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
             $self->assertEquals($jsondata->{'type'}, "created");
             $self->assertEquals($jsondata->{'event'}, $data);
             $response = new \Sabre\HTTP\Response(200);
+            $response->setBody('{ "_id": "123123" }');
             $requestCalled = true;
         });
 
@@ -41,6 +43,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
         $plugin->afterCreateFile("test", $parent);
         $this->assertTrue($rv);
         $this->assertTrue($requestCalled);
+        $this->assertEquals($server->httpResponse->getHeader("ESN-Message-Id"), "123123");
     }
 
     function testCreateFileNonCalendarHome() {
@@ -58,6 +61,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
     function testWriteContent() {
         $plugin = $this->getPlugin();
         $client = $plugin->getClient();
+        $server = $plugin->getServer();
 
         $modified = false;
         $data = "BEGIN:VCALENDAR";
@@ -71,6 +75,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
             $self->assertEquals($jsondata->{'old_event'}, "olddata");
             $self->assertEquals($jsondata->{'event'}, $data);
             $response = new \Sabre\HTTP\Response(200);
+            $response->setBody('{ "_id": "123123" }');
             $requestCalled = true;
         });
 
@@ -138,6 +143,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
             $self->assertEquals($jsondata->{'type'}, "deleted");
             $self->assertEquals($jsondata->{'event'}, $data);
             $response = new \Sabre\HTTP\Response(200);
+            $response->setBody('{ "_id": "123123" }');
             $requestCalled = true;
         });
 
@@ -145,6 +151,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
         $plugin->afterUnbind($path);
         $this->assertTrue($rv);
         $this->assertTrue($requestCalled);
+        $this->assertEquals($server->httpResponse->getHeader("ESN-Message-Id"), "123123");
     }
 
     function testUnbindNonCalendarObject() {
@@ -164,6 +171,15 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($plugin->beforeUnbind($path));
         $this->assertTrue($plugin->afterUnbind($path));
         $this->assertNull($plugin->getRequest());
+    }
+
+    function testWithCORS() {
+        $server = new \Sabre\DAV\Server([]);
+        $corsplugin = new \ESN\DAV\CorsPlugin();
+        $server->addPlugin($corsplugin);
+        $plugin = $this->getPlugin($server);
+
+        $this->assertEquals($corsplugin->exposeHeaders, ["ESN-Message-Id"]);
     }
 }
 
@@ -195,6 +211,7 @@ class ESNHookPluginMock extends ESNHookPlugin {
         parent::__construct($apiroot, $communities_principal, $authBackend);
         $this->initialize($server);
         $this->httpClient = new \Sabre\HTTP\ClientMock();
+        $this->server = $server;
     }
 
     function getClient() {
@@ -203,5 +220,9 @@ class ESNHookPluginMock extends ESNHookPlugin {
 
     function getRequest() {
         return $this->request;
+    }
+
+    function getServer() {
+        return $this->server;
     }
 }

@@ -72,6 +72,9 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);
 
+        // Extra check to make sure no mongo ids are used
+        $this->assertSame($expected['id'], $principals[0]['id']);
+        $this->assertSame($expected['id'], $principal['id']);
     }
 
     function testCommunityPrincipalsByPrefix() {
@@ -88,6 +91,10 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         ];
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);
+
+        // Extra check to make sure no mongo ids are used
+        $this->assertSame($expected['id'], $principals[0]['id']);
+        $this->assertSame($expected['id'], $principal['id']);
     }
 
     function testGetGroupMemberSet() {
@@ -142,6 +149,4 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         ]);
         $backend->updatePrincipal('principals/users/' . self::USER_ID, $propPatch);
     }
-
-
 }

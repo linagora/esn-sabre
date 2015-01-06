@@ -184,6 +184,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
 }
 
 class CalDAVBackendMock extends \Sabre\CalDAV\Backend\AbstractBackend {
+    // @codingStandardsIgnoreStart
     function getCalendarsForUser($principalUri) { return []; }
     function createCalendar($principalUri,$calendarUri,array $properties) {}
     function deleteCalendar($calendarId) {}
@@ -193,6 +194,7 @@ class CalDAVBackendMock extends \Sabre\CalDAV\Backend\AbstractBackend {
     function createCalendarObject($calendarId,$objectUri,$calendarData) { return null; }
     function updateCalendarObject($calendarId,$objectUri,$calendarData) { return null; }
     function deleteCalendarObject($calendarId,$objectUri) {}
+    // @codingStandardsIgnoreEnd
 }
 
 
@@ -205,7 +207,7 @@ class MockAuthBackend {
 class ESNHookPluginMock extends ESNHookPlugin {
 
     function __construct($apiroot, $communities_principal, $server = null) {
-        require_once '../vendor/sabre/http/tests/HTTP/ClientTest.php';
+        require_once ESN_TEST_VENDOR . '/sabre/http/tests/HTTP/ClientTest.php';
         if (!$server) $server = new \Sabre\DAV\Server([]);
         $authBackend = new MockAuthBackend();
         parent::__construct($apiroot, $communities_principal, $authBackend);

@@ -2,7 +2,7 @@
 
 namespace ESN\DAV\Auth\Backend;
 
-require_once '../vendor/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
+require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
 
 class MongoTest extends \PHPUnit_Framework_TestCase {
 
@@ -29,7 +29,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
 
     static function tearDownAfterClass() {
         self::$db->drop();
-        self::$db = NULL;
+        self::$db = null;
     }
 
     function testConstruct() {

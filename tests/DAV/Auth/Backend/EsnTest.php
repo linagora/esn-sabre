@@ -148,7 +148,7 @@ class ESNHookPluginMock extends \ESN\CalDAV\ESNHookPlugin {
 
 class EsnMock extends Esn {
     function __construct($apiroot) {
-        require_once '../vendor/sabre/http/tests/HTTP/ClientTest.php';
+        require_once ESN_TEST_VENDOR . '/sabre/http/tests/HTTP/ClientTest.php';
         parent::__construct($apiroot, "Realm");
         $this->httpClient = new \Sabre\HTTP\ClientMock();
     }

@@ -2,12 +2,12 @@
 
 namespace ESN\CalDAV;
 
-require_once '../vendor/sabre/dav/tests/Sabre/DAVServerTest.php';
-require_once '../vendor/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
-require_once '../vendor/sabre/dav/tests/Sabre/DAVACL/PrincipalBackend/Mock.php';
-require_once '../vendor/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
-require_once '../vendor/sabre/dav/tests/Sabre/CalDAV/Backend/Mock.php';
-require_once '../vendor/sabre/dav/tests/Sabre/DAVServerTest.php';
+require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
+require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
+require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVACL/PrincipalBackend/Mock.php';
+require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
+require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/Mock.php';
+require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
 
 /**
  * @medium

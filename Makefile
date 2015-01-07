@@ -6,7 +6,13 @@ PHPUNIT_CONFIG=$(BASEDIR)/tests/phpunit.xml
 PHPUNIT_REPORT=$(BASEDIR)/tests/report/
 PHPCS_CONFIG=$(BASEDIR)/tests/phpcs.xml
 
-TARGET ?= $(BASEDIR)
+ifeq ($(origin TARGET), undefined)
+UNIT_TARGET=$(BASEDIR)/tests
+LINT_TARGET=$(BASEDIR)
+else
+UNIT_TARGET=$(TARGET)
+LINT_TARGET=$(TARGET)
+endif
 
 check: lint test-report
 
@@ -14,14 +20,14 @@ $(PHPCS) $(PHPUNIT):
 	composer install --working-dir $(BASEDIR)
 
 test: $(PHPUNIT)
-	$(PHPUNIT) -c $(PHPUNIT_CONFIG) $(TARGET)
+	$(PHPUNIT) -c $(PHPUNIT_CONFIG) $(UNIT_TARGET)
 
-test-report:
-	$(PHPUNIT) -c $(PHPUNIT_CONFIG) --coverage-html $(PHPUNIT_REPORT) $(TARGET)
+test-report: $(PHPUNIT)
+	$(PHPUNIT) -c $(PHPUNIT_CONFIG) --coverage-html $(PHPUNIT_REPORT) $(UNIT_TARGET)
 	@echo Check out file://$(abspath $(BASEDIR)/tests/report/index.html)
 
 lint: $(PHPCS)
-	$(PHPCS) -p --standard=$(PHPCS_CONFIG) $(TARGET)
+	$(PHPCS) -p --standard=$(PHPCS_CONFIG) $(LINT_TARGET)
 
 
 update: $(PHPCS) $(PHPUNIT)

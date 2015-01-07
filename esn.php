@@ -93,7 +93,11 @@ $server->addPlugin(
 
 // Calendar scheduling support
 $server->addPlugin(
-    new Sabre\CalDAV\Schedule\Plugin()
+    new ESN\CalDAV\Schedule\Plugin()
+);
+
+$server->addPlugin(
+    new ESN\CalDAV\Schedule\IMipPlugin($config['mail'])
 );
 
 // WebDAV-Sync plugin

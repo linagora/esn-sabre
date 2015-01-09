@@ -53,7 +53,7 @@ class ESNHookPlugin extends ServerPlugin {
         }
         $data = $node->get();
 
-        $bodyAsArray = [ 'event_id' => $path, 'type' => 'deleted', 'event' => $data ];
+        $bodyAsArray = [ 'event_id' => '/' . $path, 'type' => 'deleted', 'event' => $data ];
         $body = json_encode($bodyAsArray);
 
         $this->createRequest($community_id, $body);
@@ -74,7 +74,7 @@ class ESNHookPlugin extends ServerPlugin {
         $community_id = $this->getCommunityIdFrom($parent->getOwner());
 
         $body = json_encode([
-            'event_id' => $path,
+            'event_id' => '/' . $path,
             'type' => 'created',
             'event' => $data
         ]);
@@ -97,7 +97,7 @@ class ESNHookPlugin extends ServerPlugin {
         $community_id = $this->getCommunityIdFrom($node->getOwner());
         $old_event = $node->get();
 
-        $bodyAsArray = [ 'event_id' => $path, 'type' => 'updated', 'event' => $data, 'old_event' => $old_event ];
+        $bodyAsArray = [ 'event_id' => '/' .$path, 'type' => 'updated', 'event' => $data, 'old_event' => $old_event ];
         $body = json_encode($bodyAsArray);
 
         $this->createRequest($community_id, $body);

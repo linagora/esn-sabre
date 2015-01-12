@@ -26,5 +26,14 @@
   },
   "esn": {
     "apiRoot": "http://localhost:8080/api"
+  },
+  "mail": {
+    "from": "caldavserver@example.com",
+    "fromName": "ESN CalDAV server",
+    "sslmethod": null,
+    "port": null,
+    "hostname": "localhost",
+    "username": null,
+    "password": null
   }
 }

@@ -6,7 +6,7 @@
   },
   "database": {
     "esn": {
-      "name": "esn",
+      "db": "esn",
       "connectionString" : "mongodb://localhost:23456/",
       "connectionOptions": {
         "w": 1,
@@ -15,7 +15,7 @@
       }
     },
     "sabre": {
-      "name": "sabre",
+      "db": "sabre",
       "connectionString" : "mongodb://localhost:23456/",
       "connectionOptions": {
         "w": 1,

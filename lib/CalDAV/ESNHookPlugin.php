@@ -11,12 +11,16 @@ class ESNHookPlugin extends ServerPlugin {
     protected $server;
     protected $httpClient;
     protected $apiroot;
-    protected $communities_principals;
     protected $request;
 
-    function __construct($apiroot, $communities_principals, $authBackend) {
+
+    private $PRINCIPAL_TO_COLLABORATION = [
+      'communities' => 'community',
+      'projects' => 'project'
+    ];
+
+    function __construct($apiroot, $authBackend) {
         $this->apiroot = $apiroot;
-        $this->communities_principals = $communities_principals;
         $this->authBackend = $authBackend;
     }
 
@@ -24,13 +28,13 @@ class ESNHookPlugin extends ServerPlugin {
         $this->server = $server;
 
         $server->on('beforeCreateFile',   [$this, 'beforeCreateFile']);
-        $server->on('afterCreateFile',    [$this, 'afterCreateFile']);
+        $server->on('afterCreateFile',    [$this, 'after']);
 
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
-        $server->on('afterWriteContent',  [$this, 'afterWriteContent']);
+        $server->on('afterWriteContent',  [$this, 'after']);
 
         $server->on('beforeUnbind',       [$this, 'beforeUnbind']);
-        $server->on('afterUnbind',        [$this, 'afterUnbind']);
+        $server->on('afterUnbind',        [$this, 'after']);
 
         // Make sure the message id header is exposed to XHR
         $corsPlugin = $this->server->getPlugin("cors");
@@ -41,28 +45,25 @@ class ESNHookPlugin extends ServerPlugin {
         $this->httpClient = new HTTP\Client();
     }
 
-    function beforeUnbind($path) {
-        $pathAsArray = explode('/', $path);
-        $community_id = $pathAsArray[1];
-        $object_uri = array_pop($pathAsArray);
-
-        $node = $this->server->tree->getNodeForPath($path);
-
-        if (!($node instanceof \Sabre\CalDAV\CalendarObject)) {
-            return true;
-        }
-        $data = $node->get();
-
-        $bodyAsArray = [ 'event_id' => '/' . $path, 'type' => 'deleted', 'event' => $data ];
-        $body = json_encode($bodyAsArray);
-
-        $this->createRequest($community_id, $body);
-
+    function after($path) {
+        $this->sendRequest();
         return true;
     }
 
-    function afterUnbind($path) {
-        $this->sendRequest();
+    function beforeUnbind($path) {
+        $node = $this->server->tree->getNodeForPath($path);
+        if (!($node instanceof \Sabre\CalDAV\CalendarObject)) {
+            return true;
+        }
+
+
+        $body = json_encode([
+            'event_id' => '/' . $path,
+            'type' => 'deleted',
+            'event' => $node->get()
+        ]);
+
+        $this->createRequest($node->getOwner(), $path, $body);
         return true;
     }
 
@@ -71,21 +72,13 @@ class ESNHookPlugin extends ServerPlugin {
             return true;
         }
 
-        $community_id = $this->getCommunityIdFrom($parent->getOwner());
-
         $body = json_encode([
             'event_id' => '/' . $path,
             'type' => 'created',
             'event' => $data
         ]);
 
-        $this->createRequest($community_id, $body);
-
-        return true;
-    }
-
-    function afterCreateFile($path, \Sabre\DAV\ICollection $parent) {
-        $this->sendRequest();
+        $this->createRequest($parent->getOwner(), $path, $body);
         return true;
     }
 
@@ -94,24 +87,25 @@ class ESNHookPlugin extends ServerPlugin {
             return true;
         }
 
-        $community_id = $this->getCommunityIdFrom($node->getOwner());
-        $old_event = $node->get();
+        $body = json_encode([
+            'event_id' => '/' .$path,
+            'type' => 'updated',
+            'event' => $data,
+            'old_event' => $node->get()
+        ]);
 
-        $bodyAsArray = [ 'event_id' => '/' .$path, 'type' => 'updated', 'event' => $data, 'old_event' => $old_event ];
-        $body = json_encode($bodyAsArray);
-
-        $this->createRequest($community_id, $body);
-
+        $this->createRequest($node->getOwner(), $path, $body);
         return true;
     }
 
-    function afterWriteContent($path, \Sabre\DAV\IFile $node) {
-        $this->sendRequest();
-        return true;
-    }
+    protected function createRequest($owner, $path, $body) {
+        $parts = $this->getCollaborationFromPaths($owner, $path);
+        if (!$parts) {
+            return null;
+        }
+        list($collaborationType, $collaborationId) = $parts;
 
-    protected function createRequest($community_id, $body) {
-        $url = $this->apiroot.'/calendars/'.$community_id.'/events';
+        $url = $this->apiroot.'/calendars/'.$collaborationType.'/'.$collaborationId.'/events';
         $this->request = new HTTP\Request('POST', $url);
         $this->request->setHeader('Content-type', 'application/json');
         $this->request->setHeader('Content-length', strlen($body));
@@ -123,7 +117,7 @@ class ESNHookPlugin extends ServerPlugin {
         return $this->request;
     }
 
-    private function sendRequest() {
+    protected function sendRequest() {
         if ($this->request) {
             $response = $this->httpClient->send($this->request);
             $json = json_decode($response->getBodyAsString());
@@ -133,9 +127,19 @@ class ESNHookPlugin extends ServerPlugin {
         }
     }
 
-    private function getCommunityIdFrom($principaluri) {
-        $array = explode('/', $principaluri);
-        $community_id = array_pop($array);
-        return $community_id;
+    private function getCollaborationFromPaths($owner, $uri) {
+        $ownerParts = explode('/', $owner);
+        if (count($ownerParts) != 3 || $ownerParts[0] != "principals") {
+            return null;
+        }
+
+        $parts = explode('/', $uri);
+        $partCount = count($parts);
+        if (($partCount != 3 && $partCount != 4) || $parts[0] != 'calendars' ||
+            !isset($this->PRINCIPAL_TO_COLLABORATION[$ownerParts[1]])) {
+            return null;
+        }
+
+        return array($this->PRINCIPAL_TO_COLLABORATION[$ownerParts[1]], $parts[1]);
     }
 }

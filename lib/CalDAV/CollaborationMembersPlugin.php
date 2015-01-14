@@ -8,9 +8,11 @@ use \Sabre\HTTP\RequestInterface;
 use \Sabre\HTTP\ResponseInterface;
 use \Sabre\VObject\Component\VCalendar;
 
-class CommunityMembersPlugin extends ServerPlugin {
-    function __construct($esnDb) {
+class CollaborationMembersPlugin extends ServerPlugin {
+    function __construct($esnDb, $collectionName) {
         $this->db = $esnDb;
+        $this->collectionName = $collectionName;
+        $this->collection = $this->db->selectCollection($collectionName);
     }
 
     function initialize(Server $server) {
@@ -26,18 +28,18 @@ class CommunityMembersPlugin extends ServerPlugin {
             return;
         }
 
-        // Only handle community calendars
+        // Only handle calendars for this collaboration
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
         $owner = $calendarNode->getOwner();
         $parts = explode('/', $owner);
-        if ($parts[1] != 'communities' || count($parts) != 3) {
+        if ($parts[1] != $this->collectionName || count($parts) != 3) {
             return;
         }
 
-        // Find all members in the community
+        // Find all members in the collaboration
         $query = [ '_id' => new \MongoId($parts[2]) ];
         $fields = ['members'];
-        $res = $this->db->communities->findOne($query, $fields);
+        $res = $this->collection->findOne($query, $fields);
         $members  = [];
         foreach ($res['members'] as $memberObject) {
             $member = $memberObject['member'];
@@ -47,18 +49,18 @@ class CommunityMembersPlugin extends ServerPlugin {
         }
 
         // Add the current user to the list of attendees
-        $aclplugin = $this->server->getPlugin('acl');
-        $organizerPrincipal = $aclplugin->getCurrentUserPrincipal();
+        $authplugin = $this->server->getPlugin('auth');
+        $organizerPrincipal = $authplugin->getCurrentPrincipal();
         $parts = explode('/', $organizerPrincipal);
         $organizerId = new \MongoId($parts[2]);
         $members[] = $organizerId;
 
-        // Retrieve all community members from the database
+        // Retrieve all collaboration members from the database
         $query = [ '_id' => [ '$in' => $members] ];
         $fields = ['firstname', 'lastname', 'emails', '_id'];
         $userData = $this->db->users->find($query, $fields);
 
-        // Add one ATTENDEE property per community user
+        // Add one ATTENDEE property per collaboration member
         foreach ($userData as $user) {
             $params = [
                 'CN' => $user['firstname'] . ' ' . $user['lastname'],
@@ -82,13 +84,13 @@ class CommunityMembersPlugin extends ServerPlugin {
     }
 
     function getPluginName() {
-        return "community-members";
+        return "collaboration-members";
     }
 
     function getPluginInfo() {
         return [
             'name'        => $this->getPluginName(),
-            'description' => 'Automatically invite community members to events created on community calendars.'
+            'description' => 'Automatically invite members of a group calendar to events created on calendars.'
         ];
     }
 }

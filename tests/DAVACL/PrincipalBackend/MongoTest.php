@@ -7,6 +7,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
 
     const USER_ID = '54313fcc398fef406b0041b6';
     const COMMUNITY_ID = '54313fcc398fef406b0041b4';
+    const PROJECT_ID= '54b64eadf6d7d8e41d263e0f';
 
     static function setUpBeforeClass() {
         $mc = new \MongoClient(ESN_MONGO_ESNURI);
@@ -22,6 +23,18 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         self::$esndb->communities->insert([
             '_id' => new \MongoId(self::COMMUNITY_ID),
             'title' => 'community',
+            'members' => [
+              [
+                'member' => [
+                  'objectType' => 'user',
+                  'id' => new \MongoId(self::USER_ID)
+                ]
+              ]
+            ]
+        ]);
+        self::$esndb->projects->insert([
+            '_id' => new \MongoId(self::PROJECT_ID),
+            'title' => 'project',
             'members' => [
               [
                 'member' => [
@@ -97,26 +110,58 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $this->assertSame($expected['id'], $principal['id']);
     }
 
+    function testProjectPrincipalsByPrefix() {
+        $backend = new Mongo(self::$esndb);
+
+        $principals = $backend->getPrincipalsByPrefix('principals/projects');
+        $principal = $backend->getPrincipalByPath('principals/projects/' . self::PROJECT_ID);
+        $this->assertEquals(count($principals), 1);
+
+        $expected = [
+            'uri' => 'principals/projects/' . self::PROJECT_ID,
+            'id' => self::PROJECT_ID,
+            '{DAV:}displayname' => 'project',
+        ];
+        $this->assertEquals($expected, $principals[0]);
+        $this->assertEquals($expected, $principal);
+
+        // Extra check to make sure no mongo ids are used
+        $this->assertSame($expected['id'], $principals[0]['id']);
+        $this->assertSame($expected['id'], $principal['id']);
+    }
+
     function testGetGroupMemberSet() {
         $backend = new Mongo(self::$esndb);
         $expected = array('principals/users/' . self::USER_ID);
 
         $this->assertEquals($expected,$backend->getGroupMemberSet('principals/communities/' . self::COMMUNITY_ID));
+        $this->assertEquals($expected,$backend->getGroupMemberSet('principals/projects/' . self::PROJECT_ID));
     }
 
     function testGetGroupMembership() {
         $backend  = new Mongo(self::$esndb);
-        $expected = array('principals/communities/' . self::COMMUNITY_ID);
 
+        $expected = array(
+            'principals/communities/' . self::COMMUNITY_ID,
+            'principals/projects/' . self::PROJECT_ID
+        );
         $this->assertEquals($expected,$backend->getGroupMembership('principals/users/' . self::USER_ID));
     }
 
     /**
      * @expectedException \Sabre\DAV\Exception\MethodNotAllowed
      */
-    function testSetGroupMemberSet() {
+    function testSetGroupMemberSetCommunity() {
         $backend = new Mongo(self::$esndb);
         $backend->setGroupMemberSet('principals/' . self::COMMUNITY_ID, array());
+    }
+
+    /**
+     * @expectedException \Sabre\DAV\Exception\MethodNotAllowed
+     */
+    function testSetGroupMemberSetPRoject() {
+        $backend = new Mongo(self::$esndb);
+        $backend->setGroupMemberSet('principals/' . self::PROJECT_ID, array());
     }
 
     function testSearchPrincipals() {
@@ -127,6 +172,9 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
 
         $result = $backend->searchPrincipals('principals/communities', array('{DAV:}displayname' => 'com'));
         $this->assertEquals(array('principals/communities/' . self::COMMUNITY_ID), $result);
+
+        $result = $backend->searchPrincipals('principals/projects', array('{DAV:}displayname' => 'proj'));
+        $this->assertEquals(array('principals/projects/' . self::PROJECT_ID), $result);
 
         $result = $backend->searchPrincipals('principals/users', array('{DAV:}displayname' => 'FIrST', '{http://sabredav.org/ns}email-address' => 'USER@EXAMPLE'));
         $this->assertEquals(array('principals/users/' . self::USER_ID), $result);

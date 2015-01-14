@@ -16,6 +16,7 @@ date_default_timezone_set('UTC');
 define('PRINCIPALS_COLLECTION', 'principals');
 define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_COMMUNITIES', 'principals/communities');
+define('PRINCIPALS_PROJECTS', 'principals/projects');
 define('JSON_ROOT', 'json');
 
 //Mapping PHP errors to exceptions
@@ -57,6 +58,7 @@ $tree = [
     new Sabre\DAV\SimpleCollection(PRINCIPALS_COLLECTION, [
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_USERS),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_COMMUNITIES),
+      new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_PROJECTS),
     ]),
     new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $esnDb),
     new ESN\CardDAV\AddressBookRoot($principalBackend, $addressbookBackend, $esnDb),
@@ -130,11 +132,14 @@ $corsPlugin->allowHeaders[] = 'ESNToken';
 
 $server->addPlugin($corsPlugin);
 
-$esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['apiRoot'], PRINCIPALS_COMMUNITIES, $authBackend);
+$esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['apiRoot'], $authBackend);
 $server->addPlugin($esnHookPlugin);
 
-$communityMembersPlugin = new ESN\CalDAV\CommunityMembersPlugin($esnDb);
+$communityMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'communities');
 $server->addPlugin($communityMembersPlugin);
+
+$projectMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'projects');
+$server->addPlugin($projectMembersPlugin);
 
 // And off we go!
 $server->exec();

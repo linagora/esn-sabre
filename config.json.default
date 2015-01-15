@@ -6,7 +6,7 @@
   },
   "database": {
     "esn": {
-      "name": "esn",
+      "db": "esn",
       "connectionString" : "mongodb://localhost:23456/",
       "connectionOptions": {
         "w": 1,
@@ -15,7 +15,7 @@
       }
     },
     "sabre": {
-      "name": "sabre",
+      "db": "sabre",
       "connectionString" : "mongodb://localhost:23456/",
       "connectionOptions": {
         "w": 1,
@@ -26,5 +26,14 @@
   },
   "esn": {
     "apiRoot": "http://localhost:8080/api"
+  },
+  "mail": {
+    "from": "caldavserver@example.com",
+    "fromName": "ESN CalDAV server",
+    "sslmethod": null,
+    "port": null,
+    "hostname": "localhost",
+    "username": null,
+    "password": null
   }
 }

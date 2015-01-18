@@ -6,6 +6,7 @@ class CalendarRoot extends \Sabre\DAV\Collection {
 
     const USER_PREFIX = 'principals/users';
     const COMMUNITY_PREFIX = 'principals/communities';
+    const PROJECT_PREFIX = 'principals/projects';
 
     function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CalDAV\Backend\BackendInterface $caldavBackend, \MongoDB $db) {
         $this->principalBackend = $principalBackend;
@@ -30,20 +31,33 @@ class CalendarRoot extends \Sabre\DAV\Collection {
             $principal = [ 'uri' => self::COMMUNITY_PREFIX . '/' . $community['_id'] ];
             $homes[] = new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
         }
+        $res = $this->db->projects->find(array(), array("_id"));
+        foreach ($res as $project) {
+            $principal = [ 'uri' => self::PROJECT_PREFIX . '/' . $project['_id'] ];
+            $homes[] = new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
+        }
 
         return $homes;
     }
 
     public function getChild($name) {
-        $res = $this->db->users->findOne(['_id' => new \MongoId($name)]);
+        $mongoName = new \MongoId($name);
+
+        $res = $this->db->users->findOne(['_id' => $mongoName]);
         if ($res) {
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $name ];
             return new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
         }
 
-        $res = $this->db->communities->findOne(array('_id' => new \MongoId($name)), array());
+        $res = $this->db->communities->findOne(array('_id' => $mongoName), []);
         if ($res) {
             $principal = [ 'uri' => self::COMMUNITY_PREFIX . '/' . $name ];
+            return new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
+        }
+
+        $res = $this->db->projects->findOne(array('_id' => $mongoName), []);
+        if ($res) {
+            $principal = [ 'uri' => self::PROJECT_PREFIX . '/' . $name ];
             return new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
         }
 

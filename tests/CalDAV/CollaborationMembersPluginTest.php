@@ -12,14 +12,14 @@ require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
 /**
  * @medium
  */
-class CommunityMembersPluginTest extends  \Sabre\DAVServerTest {
+class CollaborationMembersPluginTest extends \Sabre\DAVServerTest {
     protected $setupCalDAV = true;
     protected $setupACL = true;
 
     function setUp() {
         $mcesn = new \MongoClient(ESN_MONGO_ESNURI);
         $this->esndb = $mcesn->selectDB(ESN_MONGO_ESNDB);
-        $this->plugin = new CommunityMembersPlugin($this->esndb);
+        $this->plugin = new CollaborationMembersPluginMock($this->esndb);
 
         $mcsabre = new \MongoClient(ESN_MONGO_SABREURI);
         $this->sabredb = $mcsabre->selectDB(ESN_MONGO_SABREDB);
@@ -29,6 +29,7 @@ class CommunityMembersPluginTest extends  \Sabre\DAVServerTest {
 
         $this->userMongoId = new \MongoId();
         $this->commMongoId = new \MongoId();
+        $this->projMongoId = new \MongoId();
         $this->userEmail = 'user@example.com';
         $this->autoLogin = 'users/' . $this->userMongoId;
 
@@ -45,6 +46,13 @@ class CommunityMembersPluginTest extends  \Sabre\DAVServerTest {
         $this->esndb->communities->insert([
             '_id' => $this->commMongoId,
             'title' => 'community',
+            'members' => [
+              [ 'member' => [ 'id' => $this->userMongoId, 'objectType' => 'user' ] ]
+            ]
+        ]);
+        $this->esndb->projects->insert([
+            '_id' => $this->projMongoId,
+            'title' => 'project',
             'members' => [
               [ 'member' => [ 'id' => $this->userMongoId, 'objectType' => 'user' ] ]
             ]
@@ -81,15 +89,8 @@ class CommunityMembersPluginTest extends  \Sabre\DAVServerTest {
         );
         return [$modified, $vobj];
     }
-    function testAdded() {
-        $data = join("\r\n", [
-            'BEGIN:VCALENDAR',
-            'BEGIN:VEVENT',
-            'UID:123',
-            'END:VEVENT',
-            'END:VCALENDAR'
-        ]);
-        list($modified, $vcal) = $this->emitObjectChange($data);
+
+    private function checkModified($modified, $vcal) {
         $this->assertTrue($modified);
 
         $vevent = $vcal->VEVENT;
@@ -107,6 +108,18 @@ class CommunityMembersPluginTest extends  \Sabre\DAVServerTest {
         $this->assertEquals($attendee['ROLE'], 'REQ-PARTICIPANT');
     }
 
+    function testAdded() {
+        $data = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'BEGIN:VEVENT',
+            'UID:123',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]);
+        list($modified, $vcal) = $this->emitObjectChange($data);
+        $this->checkModified($modified, $vcal);
+    }
+
     function testNonVevent() {
         $data = join("\r\n", [
             'BEGIN:VCALENDAR',
@@ -118,7 +131,8 @@ class CommunityMembersPluginTest extends  \Sabre\DAVServerTest {
         list($modified, $vcal) = $this->emitObjectChange($data);
         $this->assertFalse($modified);
     }
-    function testNonCommunity() {
+
+    function testUserCalendar() {
         $data = join("\r\n", [
             'BEGIN:VCALENDAR',
             'BEGIN:VEVENT',
@@ -131,11 +145,25 @@ class CommunityMembersPluginTest extends  \Sabre\DAVServerTest {
         $this->assertFalse($modified);
     }
 
+    function testProjectCalendar() {
+        $data = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'BEGIN:VEVENT',
+            'UID:123',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]);
+
+        $this->plugin->setCollection("projects");
+        $parentPath = 'calendars/' . $this->projMongoId . '/events';
+        list($modified, $vcal) = $this->emitObjectChange($data, $parentPath);
+        $this->checkModified($modified, $vcal);
+    }
 
     function testPluginInfo() {
         $info = $this->plugin->getPluginInfo();
-        $this->assertEquals($info['name'], 'community-members');
-        $this->assertEquals($info['description'], 'Automatically invite community members to events created on community calendars.');
+        $this->assertEquals($info['name'], 'collaboration-members');
+        $this->assertEquals($info['description'], 'Automatically invite members of a group calendar to events created on calendars.');
     }
 }
 
@@ -145,5 +173,15 @@ class MockSapi {
 
     function sendResponse($response) {
         $this->response = $response;
+    }
+}
+class CollaborationMembersPluginMock extends CollaborationMembersPlugin {
+    function __construct($esnDb) {
+        parent::__construct($esnDb, "communities");
+    }
+
+    function setCollection($collectionName) {
+        $this->collectionName = $collectionName;
+        $this->collection = $this->db->selectCollection($collectionName);
     }
 }

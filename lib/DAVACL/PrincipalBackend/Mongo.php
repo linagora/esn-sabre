@@ -7,7 +7,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $this->db = $db;
         $this->collectionMap = [
             'users' => $this->db->users,
-            'communities' => $this->db->communities
+            'communities' => $this->db->communities,
+            'projects' => $this->db->projects
         ];
     }
 
@@ -44,7 +45,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         if ($prefixPath == "principals/users") {
             return $this->searchUserPrincipals($searchProperties, $test);
         } else if ($prefixPath == "principals/communities") {
-            return $this->searchCommunityPrincipals($searchProperties, $test);
+            return $this->searchGroupPrincipals('communities', $searchProperties, $test);
+        } else if ($prefixPath == "principals/projects") {
+            return $this->searchGroupPrincipals('projects', $searchProperties, $test);
         } else {
             return [];
         }
@@ -53,15 +56,16 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     function getGroupMemberSet($principal) {
         $parts = explode('/', $principal);
         $principals = [];
-        if (count($parts) == 3 && $parts[0] == 'principals' && $parts[1] == 'communities') {
-            $community = $parts[2];
-            $res = $this->db->communities->findOne([ '_id' => new \MongoId($parts[2])], [ 'members.member.id' ]);
+        if (count($parts) == 3 && $parts[0] == 'principals' && isset($this->collectionMap[$parts[1]])) {
+            $collection = $this->collectionMap[$parts[1]];
+            $res = $collection->findOne([ '_id' => new \MongoId($parts[2])], [ 'members.member.id' ]);
             if ($res && isset($res['members'])) {
                 foreach ($res['members'] as $member) {
                     $principals[] = 'principals/users/' . $member['member']['id'];
                 }
             }
         }
+
         return $principals;
     }
 
@@ -70,10 +74,13 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $principals = [];
         if (count($parts) == 3 && $parts[0] == 'principals' && $parts[1] == 'users') {
             $query = [ 'members' => [ '$elemMatch' => [ 'member.id' => new \MongoId($parts[2]) ] ] ];
-            $res = $this->db->communities->find($query, ['_id']);
 
-            foreach ($res as $community) {
+            foreach ($this->db->communities->find($query, ['_id']) as $community) {
                 $principals[] = 'principals/communities/' . $community['_id'];
+            }
+
+            foreach ($this->db->projects->find($query, ['_id']) as $project) {
+                $principals[] = 'principals/projects/' . $project['_id'];
             }
         }
 
@@ -90,20 +97,21 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         switch($type) {
             case "users":
                 $principal = [
-                    'uri' => 'principals/users/' . $obj['_id'],
                     'id' => (string)$obj['_id'],
                     '{DAV:}displayname' => $obj['firstname'] . " " . $obj['lastname'],
                     '{http://sabredav.org/ns}email-address' => $obj['emails'][0]
                 ];
                 break;
             case "communities":
+            case "projects":
                 $principal = [
-                    'uri' => 'principals/communities/' . $obj['_id'],
                     'id' => (string)$obj['_id'],
                     '{DAV:}displayname' => $obj['title'],
                 ];
                 break;
         }
+
+        $principal['uri'] = 'principals/' . $type . '/' . $obj['_id'];
 
         return $principal;
     }
@@ -125,7 +133,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         return $principals;
     }
 
-    private function searchCommunityPrincipals(array $searchProperties, $test = 'allof') {
+    private function searchGroupPrincipals($groupName, array $searchProperties, $test = 'allof') {
         $query = [];
         foreach ($searchProperties as $property => $value) {
             switch ($property) {
@@ -135,7 +143,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             }
         }
 
-        return $this->queryPrincipals('communities', $this->db->communities, $query, $test);
+        $collection = $this->collectionMap[$groupName];
+        return $this->queryPrincipals($groupName, $collection, $query, $test);
     }
 
     private function searchUserPrincipals(array $searchProperties, $test = 'allof') {

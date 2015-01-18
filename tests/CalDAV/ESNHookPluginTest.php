@@ -5,7 +5,7 @@ namespace ESN\CalDAV;
 class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
 
     private function getPlugin($server = null) {
-        $plugin = new ESNHookPluginMock("/", "principals", $server);
+        $plugin = new ESNHookPluginMock("/", $server);
 
         $client = $plugin->getClient();
         $client->on('curlExec', function(&$return) {
@@ -25,13 +25,19 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
 
         $modified = false;
         $data = "BEGIN:VCALENDAR";
-        $parent = new \Sabre\CalDAV\Calendar(new CalDAVBackendMock(), null);
+        $calendarInfo = [
+            'uri' => 'calendars/123123',
+            'id' => '123123',
+            'principaluri' => 'principals/communities/456456'
+        ];
+        $parent = new \Sabre\CalDAV\Calendar(new CalDAVBackendMock(), $calendarInfo);
+        $path = "calendars/123123/uid.ics";
         $requestCalled = false;
         $self = $this;
 
-        $client->on('doRequest', function($request, &$response) use ($self, $data, &$requestCalled) {
+        $client->on('doRequest', function($request, &$response) use ($self, $data, &$requestCalled, $path) {
             $jsondata = json_decode($request->getBodyAsString());
-            $self->assertEquals($jsondata->{'event_id'}, "test");
+            $self->assertEquals($jsondata->{'event_id'}, "/" . $path);
             $self->assertEquals($jsondata->{'type'}, "created");
             $self->assertEquals($jsondata->{'event'}, $data);
             $response = new \Sabre\HTTP\Response(200);
@@ -39,22 +45,23 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
             $requestCalled = true;
         });
 
-        $rv = $plugin->beforeCreateFile("test", $data, $parent, $modified);
-        $plugin->afterCreateFile("test", $parent);
-        $this->assertTrue($rv);
+        $this->assertTrue($server->emit('beforeCreateFile', [$path, &$data, $parent, &$modified]));
+        $this->assertTrue($server->emit('afterCreateFile', [$path, $parent]));
+
         $this->assertTrue($requestCalled);
         $this->assertEquals($server->httpResponse->getHeader("ESN-Message-Id"), "123123");
     }
 
     function testCreateFileNonCalendarHome() {
         $plugin = $this->getPlugin();
+        $server = $plugin->getServer();
 
         $modified = false;
         $data = "BEGIN:VCALENDAR";
         $parent = new \Sabre\DAV\SimpleCollection("root", []);
 
-        $this->assertTrue($plugin->beforeCreateFile("test", $data, $parent, $modified));
-        $this->assertTrue($plugin->afterCreateFile("test", $parent));
+        $this->assertTrue($server->emit('beforeCreateFile', ["test", &$data, $parent, &$modified]));
+        $this->assertTrue($server->emit('afterCreateFile', ["test", $parent]));
         $this->assertNull($plugin->getRequest());
     }
 
@@ -65,12 +72,13 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
 
         $modified = false;
         $data = "BEGIN:VCALENDAR";
+        $path = "calendars/123123/uid.ics";
         $requestCalled = false;
         $self = $this;
 
-        $client->on('doRequest', function($request, &$response) use ($self, $data, &$requestCalled) {
+        $client->on('doRequest', function($request, &$response) use ($self, $data, &$requestCalled, $path) {
             $jsondata = json_decode($request->getBodyAsString());
-            $self->assertEquals($jsondata->{'event_id'}, "test");
+            $self->assertEquals($jsondata->{'event_id'}, "/" . $path);
             $self->assertEquals($jsondata->{'type'}, "updated");
             $self->assertEquals($jsondata->{'old_event'}, "olddata");
             $self->assertEquals($jsondata->{'event'}, $data);
@@ -85,25 +93,26 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
         ];
         $calendarData = [
             'id' => '123123123',
-            'principaluri' => 'principalUri',
+            'principaluri' => 'principals/communities/456456456'
         ];
         $node = new \Sabre\CalDAV\CalendarObject(new CalDAVBackendMock(), $calendarData, $objectData);
 
-        $rv = $plugin->beforeWriteContent("test", $node, $data, $modified);
-        $plugin->afterWriteContent("test", $node);
-        $this->assertTrue($rv);
+        $this->assertTrue($server->emit('beforeWriteContent', [$path, $node, &$data, &$modified]));
+        $this->assertTrue($server->emit('afterWriteContent', [$path, $node]));
         $this->assertTrue($requestCalled);
     }
 
     function testWriteContentNonACL() {
         $plugin = $this->getPlugin();
+        $server = $plugin->getServer();
 
         $modified = false;
         $data = "BEGIN:VCALENDAR";
         $node = new \Sabre\DAV\SimpleFile("filename", "contents");
 
-        $this->assertTrue($plugin->beforeWriteContent("test", $node, $data, $modified));
-        $this->assertTrue($plugin->afterWriteContent("test", $node));
+        $path = "calendars/123123/uid.ics";
+        $this->assertTrue($server->emit('beforeWriteContent', [$path, $node, &$data, &$modified]));
+        $this->assertTrue($server->emit('afterWriteContent', [$path, $node]));
         $this->assertNull($plugin->getRequest());
     }
 
@@ -117,7 +126,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
         ];
         $calendarData = [
             'id' => '123123123',
-            'principaluri' => 'principalUri',
+            'principaluri' => 'principals/communities/456456456'
         ];
         $calendarObject = new \Sabre\CalDAV\CalendarObject(new CalDAVBackendMock(), $calendarData, $objectData);
 
@@ -139,7 +148,7 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
 
         $client->on('doRequest', function($request, &$response) use ($self, $data, $path, &$requestCalled) {
             $jsondata = json_decode($request->getBodyAsString());
-            $self->assertEquals($jsondata->{'event_id'}, $path);
+            $self->assertEquals($jsondata->{'event_id'}, '/' . $path);
             $self->assertEquals($jsondata->{'type'}, "deleted");
             $self->assertEquals($jsondata->{'event'}, $data);
             $response = new \Sabre\HTTP\Response(200);
@@ -147,9 +156,8 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
             $requestCalled = true;
         });
 
-        $rv = $plugin->beforeUnbind($path);
-        $plugin->afterUnbind($path);
-        $this->assertTrue($rv);
+        $this->assertTrue($server->emit('beforeUnbind', [$path]));
+        $this->assertTrue($server->emit('afterUnbind', [$path]));
         $this->assertTrue($requestCalled);
         $this->assertEquals($server->httpResponse->getHeader("ESN-Message-Id"), "123123");
     }
@@ -168,8 +176,8 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
         ]);
 
         $plugin = $this->getPlugin($server);
-        $this->assertTrue($plugin->beforeUnbind($path));
-        $this->assertTrue($plugin->afterUnbind($path));
+        $this->assertTrue($server->emit('beforeUnbind', [$path]));
+        $this->assertTrue($server->emit('afterUnbind', [$path]));
         $this->assertNull($plugin->getRequest());
     }
 
@@ -179,7 +187,59 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
         $server->addPlugin($corsplugin);
         $plugin = $this->getPlugin($server);
 
-        $this->assertEquals($corsplugin->exposeHeaders, ["ESN-Message-Id"]);
+        $this->assertContains("ESN-Message-Id",$corsplugin->exposeHeaders);
+    }
+
+    function testBogusOwner() {
+        $plugin = $this->getPlugin();
+        $client = $plugin->getClient();
+        $server = $plugin->getServer();
+
+        $modified = false;
+        $data = "BEGIN:VCALENDAR";
+        $path = "calendars/123123/uid.ics";
+        $requestCalled = false;
+        $self = $this;
+
+        $objectData = [
+            'uri' => 'objecturi',
+            'calendardata' => 'olddata'
+        ];
+        $calendarData = [
+            'id' => '123123123',
+            'principaluri' => 'headmasters/communities/456456456'
+        ];
+        $node = new \Sabre\CalDAV\CalendarObject(new CalDAVBackendMock(), $calendarData, $objectData);
+
+        $this->assertTrue($server->emit('beforeWriteContent', [$path, $node, &$data, &$modified]));
+        $this->assertTrue($server->emit('afterWriteContent', [$path, $node]));
+        $this->assertNull($plugin->getRequest());
+    }
+
+    function testBogusPath() {
+        $plugin = $this->getPlugin();
+        $client = $plugin->getClient();
+        $server = $plugin->getServer();
+
+        $modified = false;
+        $data = "BEGIN:VCALENDAR";
+        $path = "calendars/bogus";
+        $requestCalled = false;
+        $self = $this;
+
+        $objectData = [
+            'uri' => 'objecturi',
+            'calendardata' => 'olddata'
+        ];
+        $calendarData = [
+            'id' => '123123123',
+            'principaluri' => 'principals/communities/456456456'
+        ];
+        $node = new \Sabre\CalDAV\CalendarObject(new CalDAVBackendMock(), $calendarData, $objectData);
+
+        $this->assertTrue($server->emit('beforeWriteContent', [$path, $node, &$data, &$modified]));
+        $this->assertTrue($server->emit('afterWriteContent', [$path, $node]));
+        $this->assertNull($plugin->getRequest());
     }
 }
 
@@ -206,11 +266,11 @@ class MockAuthBackend {
 
 class ESNHookPluginMock extends ESNHookPlugin {
 
-    function __construct($apiroot, $communities_principal, $server = null) {
+    function __construct($apiroot, $server = null) {
         require_once ESN_TEST_VENDOR . '/sabre/http/tests/HTTP/ClientTest.php';
         if (!$server) $server = new \Sabre\DAV\Server([]);
         $authBackend = new MockAuthBackend();
-        parent::__construct($apiroot, $communities_principal, $authBackend);
+        parent::__construct($apiroot, $authBackend);
         $this->initialize($server);
         $this->httpClient = new \Sabre\HTTP\ClientMock();
         $this->server = $server;

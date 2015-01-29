@@ -30,5 +30,6 @@
             "ESN\\DAVACL\\"     : "lib/DAVACL/",
             "ESN\\JSON\\"       : "lib/JSON/"
         }
-    }
+    },
+    "minimum-stability": "dev"
 }

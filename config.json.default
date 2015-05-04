@@ -25,7 +25,8 @@
     }
   },
   "esn": {
-    "apiRoot": "http://localhost:8080/api"
+    "apiRoot": "http://localhost:8080/api",
+    "calendarRoot": "http://localhost:8080/calendar/api"
   },
   "mail": {
     "from": "caldavserver@example.com",

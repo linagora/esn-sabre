@@ -132,7 +132,7 @@ $corsPlugin->allowHeaders[] = 'ESNToken';
 
 $server->addPlugin($corsPlugin);
 
-$esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['apiRoot'], $authBackend);
+$esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['calendarRoot'], $authBackend);
 $server->addPlugin($esnHookPlugin);
 
 $communityMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'communities');

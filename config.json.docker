@@ -1,0 +1,40 @@
+{
+  "webserver": {
+    "baseUri": "/",
+    "allowOrigin": "*",
+    "realm": "ESN"
+  },
+  "database": {
+    "esn": {
+      "db": "rse",
+      "connectionString" : "mongodb://esn_mongo:27017/",
+      "connectionOptions": {
+        "w": 1,
+        "fsync": true,
+        "connectTimeoutMS": 10000
+      }
+    },
+    "sabre": {
+      "db": "sabre",
+      "connectionString" : "mongodb://sabre_mongo:27017/",
+      "connectionOptions": {
+        "w": 1,
+        "fsync": true,
+        "connectTimeoutMS": 10000
+      }
+    }
+  },
+  "esn": {
+    "apiRoot": "http://esn_host:8080/api",
+    "calendarRoot": "http://esn_host:8080/calendar/api"
+  },
+  "mail": {
+    "from": "caldavserver@example.com",
+    "fromName": "ESN CalDAV server",
+    "sslmethod": null,
+    "port": null,
+    "hostname": "localhost",
+    "username": null,
+    "password": null
+  }
+}

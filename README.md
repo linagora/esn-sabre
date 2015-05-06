@@ -72,6 +72,12 @@ apt-get install libapache2-mod-php5
 apt-get install php5-mongo php5-curl
 ```
 
+If **composer update** throws an error, you might want to use PECL
+
+```bash
+apt-get install php5-dev php-pear && pecl install mongo
+```
+
 -	Restart Apache
 
 ```bash

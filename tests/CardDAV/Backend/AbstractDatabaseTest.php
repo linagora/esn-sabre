@@ -9,6 +9,9 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     abstract protected function getBackend();
     abstract protected function generateId();
 
+    protected $dummyCard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:hello\r\nEND:VCARD\r\n";
+    protected $dummyCard2 = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:world\r\nEND:VCARD\r\n";
+
     public function setUp() {
         $this->backend = $this->getBackend();
         //$pdo->exec('INSERT INTO addressbooks (principaluri, displayname, uri,
@@ -174,10 +177,37 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 'lastmodified' => 0,
                 'etag' => '"' . md5('card1') . '"',
                 'size' => 5
+            ),
+            array(
+                'id' => $this->cardId2,
+                'uri' => 'card2',
+                'lastmodified' => 0,
+                'etag' => '"' . md5('card2') . '"',
+                'size' => 5
             )
         );
 
         $this->assertEquals($expected, $result);
+    }
+
+    public function testGetCardsSortLimitOffset() {
+        $result = $this->backend->getCards($this->bookId, 1, 1, 'fn');
+
+        $expected = array(
+            array(
+                'id' => $this->cardId2,
+                'uri' => 'card2',
+                'lastmodified' => 0,
+                'etag' => '"' . md5('card2') . '"',
+                'size' => 5
+            )
+        );
+
+        $this->assertEquals($expected, $result);
+    }
+
+    public function testGetCardCount() {
+        $this->assertEquals($this->backend->getCardCount($this->bookId), 2);
     }
 
     public function testGetCard() {
@@ -199,19 +229,19 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
      * @depends testGetCard
      */
     public function testCreateCard() {
-        $result = $this->backend->createCard($this->bookId, 'card2', 'data2');
-        $this->assertEquals('"' . md5('data2') . '"', $result);
-        $result = $this->backend->getCard($this->bookId,'card2');
-        $this->assertEquals('card2', $result['uri']);
-        $this->assertEquals('data2', $result['carddata']);
+        $result = $this->backend->createCard($this->bookId, 'card3', $this->dummyCard);
+        $this->assertEquals('"' . md5($this->dummyCard) . '"', $result);
+        $result = $this->backend->getCard($this->bookId,'card3');
+        $this->assertEquals('card3', $result['uri']);
+        $this->assertEquals($this->dummyCard, $result['carddata']);
     }
 
     /**
      * @depends testCreateCard
      */
     public function testGetMultiple() {
-        $result = $this->backend->createCard($this->bookId, 'card2', 'data2');
-        $result = $this->backend->createCard($this->bookId, 'card3', 'data3');
+        $result = $this->backend->createCard($this->bookId, 'card3', $this->dummyCard);
+        $result = $this->backend->createCard($this->bookId, 'card4', $this->dummyCard2);
         $check = [
             [
                 'uri' => 'card1',
@@ -219,18 +249,18 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 'lastmodified' => 0,
             ],
             [
-                'uri' => 'card2',
-                'carddata' => 'data2',
+                'uri' => 'card3',
+                'carddata' => $this->dummyCard,
                 'lastmodified' => time(),
             ],
             [
-                'uri' => 'card3',
-                'carddata' => 'data3',
+                'uri' => 'card4',
+                'carddata' => $this->dummyCard2,
                 'lastmodified' => time(),
             ],
         ];
 
-        $result = $this->backend->getMultipleCards($this->bookId, ['card1','card2','card3']);
+        $result = $this->backend->getMultipleCards($this->bookId, ['card1','card3','card4']);
 
         foreach($check as $index=>$node) {
             foreach($node as $k=>$v) {
@@ -247,12 +277,12 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
      * @depends testGetCard
      */
     public function testUpdateCard() {
-        $result = $this->backend->updateCard($this->bookId, 'card1', 'newdata');
-        $this->assertEquals('"' . md5('newdata') . '"', $result);
+        $result = $this->backend->updateCard($this->bookId, 'card1', $this->dummyCard2);
+        $this->assertEquals('"' . md5($this->dummyCard2) . '"', $result);
 
         $result = $this->backend->getCard($this->bookId,'card1');
         $this->assertEquals($this->cardId, $result['id']);
-        $this->assertEquals('newdata', $result['carddata']);
+        $this->assertEquals($this->dummyCard2, $result['carddata']);
     }
 
     /**
@@ -282,12 +312,10 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
         $currentToken = $result['syncToken'];
 
-        $dummyCard = "BEGIN:VCARD\r\nEND:VCARD\r\n";
-
-        $backend->createCard($id, "card1.ics", $dummyCard);
-        $backend->createCard($id, "card2.ics", $dummyCard);
-        $backend->createCard($id, "card3.ics", $dummyCard);
-        $backend->updateCard($id, "card1.ics", $dummyCard);
+        $backend->createCard($id, "card1.ics", $this->dummyCard);
+        $backend->createCard($id, "card2.ics", $this->dummyCard);
+        $backend->createCard($id, "card3.ics", $this->dummyCard);
+        $backend->updateCard($id, "card1.ics", $this->dummyCard);
         $backend->deleteCard($id, "card2.ics");
 
         $result = $backend->getChangesForAddressBook($id, $currentToken, 1);

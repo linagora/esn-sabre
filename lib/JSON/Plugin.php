@@ -15,6 +15,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     function initialize(DAV\Server $server) {
         $this->server = $server;
         $server->on('method:POST', [$this, 'post'], 80);
+        $server->on('method:GET', [$this, 'get'], 80);
     }
 
     function post($request, $response) {
@@ -26,6 +27,18 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         if ($parts[0] == "queries" && $parts[1] == "time-range") {
             return $this->timeRangeQuery($request, $response);
+        }
+        return true;
+    }
+
+    function get($request, $response) {
+        $path = $request->getPath();
+        if (substr($path, -5) == '.json') {
+            $nodePath = substr($path, 0, -5);
+            $node = $this->server->tree->getNodeForPath($nodePath);
+            if ($node instanceof \Sabre\CardDAV\AddressBook) {
+                return $this->getContacts($request, $response, $nodePath, $node);
+            }
         }
         return true;
     }
@@ -77,9 +90,51 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $this->server->httpResponse->setStatus(200);
             $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
             $this->server->httpResponse->setBody(json_encode($results));
-        } else {
-            $this->server->httpResponse->setStatus(404);
         }
+        return false;
+    }
+
+    function getContacts($request, $response, $nodePath, $node) {
+        $queryParams = $request->getQueryParameters();
+        $offset = isset($queryParams['offset']) ? $queryParams['offset'] : 0;
+        $limit = isset($queryParams['limit']) ? $queryParams['limit'] : 0;
+        $sort = isset($queryParams['sort']) ? $queryParams['sort'] : null;
+
+        $cards = $node->getChildren($offset, $limit, $sort);
+        $count = $node->getChildCount();
+
+        $items = [];
+        foreach ($cards as $card) {
+            $vobj = VObject\Reader::read($card->get());
+            $cardItem = [
+                '_links' => [
+                  "self" => "/" . $nodePath . "/" . $card->getName(),
+                ],
+                "etag" => $card->getETag(),
+                "data" => $vobj->jsonSerialize()
+            ];
+            $items[] = $cardItem;
+        }
+
+        $requestPath = $this->server->getBaseUri() . $request->getPath();
+
+        $results = [
+            "_links" => [
+                "self" => [ "href" => $requestPath ]
+            ],
+            "dav:syncToken" => $node->getSyncToken(),
+            "_embedded" => [ 'dav:item' => $items ]
+        ];
+
+        if ($limit > 0 && ($offset + $limit < $count)) {
+            $queryParams['offset'] = $offset + $limit;
+            $href = $requestPath . "?" . http_build_query($queryParams);
+            $results['_links']['next'] = [ 'href' => $href ];
+        }
+
+        $this->server->httpResponse->setStatus(200);
+        $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
+        $this->server->httpResponse->setBody(json_encode($results));
         return false;
     }
 }

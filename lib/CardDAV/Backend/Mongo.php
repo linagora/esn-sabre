@@ -106,17 +106,33 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     }
 
-    function getCards($addressBookId) {
+    function getCards($addressBookId, $offset = 0, $limit = 0, $sort = null) {
         $fields = ['_id', 'uri', 'lastmodified', 'etag', 'size'];
         $query = [ 'addressbookid' => new \MongoId($addressBookId) ];
         $collection = $this->db->selectCollection($this->cardsTableName);
         $cards = [];
-        foreach ($collection->find($query, $fields) as $card) {
+
+        $cardscursor = $collection->find($query, $fields);
+        if ($sort != null) {
+            $cardscursor->sort([ $sort => 1]);
+        }
+        $cardscursor->skip($offset);
+        if ($limit > 0) {
+            $cardscursor->limit($limit);
+        }
+
+        foreach ($cardscursor as $card) {
             $card['id'] = (string)$card['_id'];
             unset($card['_id']);
             $cards[] = $card;
         }
         return $cards;
+    }
+
+    function getCardCount($addressBookId) {
+        $query = [ 'addressbookid' => new \MongoId($addressBookId) ];
+        $collection = $this->db->selectCollection($this->cardsTableName);
+        return $collection->count($query);
     }
 
     function getCard($addressBookId, $cardUri) {
@@ -150,41 +166,43 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function createCard($addressBookId, $cardUri, $cardData) {
+        $extraData = $this->getDenormalizedData($cardData);
+
         $collection = $this->db->selectCollection($this->cardsTableName);
-
-
-        $etag = '"' . md5($cardData) . '"';
         $obj = [
             'carddata' => $cardData,
             'uri' => $cardUri,
             'lastmodified' => time(),
             'addressbookid' => new \MongoId($addressBookId),
-            'size' => strlen($cardData),
-            'etag' => $etag
+            'size' => $extraData['size'],
+            'etag' => $extraData['etag'],
+            'fn' => $extraData['fn']
         ];
 
         $collection->insert($obj);
         $this->addChange($addressBookId, $cardUri, 1);
 
-        return $etag;
+        return $extraData['etag'];
     }
 
     function updateCard($addressBookId, $cardUri, $cardData) {
+        $extraData = $this->getDenormalizedData($cardData);
         $collection = $this->db->selectCollection($this->cardsTableName);
 
         $etag = '"' . md5($cardData) . '"';
         $data = [
             'carddata' => $cardData,
             'lastmodified' => time(),
-            'size' => strlen($cardData),
-            'etag' => $etag
+            'size' => $extraData['size'],
+            'etag' => $extraData['etag'],
+            'fn' => $extraData['fn']
         ];
         $query = [ 'addressbookid' => new \MongoId($addressBookId), 'uri' => $cardUri ];
 
         $collection->update($query, [ '$set' => $data ]);
         $this->addChange($addressBookId, $cardUri, 2);
 
-        return $etag;
+        return $extraData['etag'];
     }
 
     function deleteCard($addressBookId, $cardUri) {
@@ -274,5 +292,16 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         $update = [ '$inc' => [ 'synctoken' => 1 ] ];
         $adrcollection->update($query, $update);
+    }
+
+    protected function getDenormalizedData($cardData) {
+        $vcard = \Sabre\VObject\Reader::read($cardData);
+        $fn = (string)$vcard->FN;
+
+        return [
+            'fn' => $fn,
+            'size' => strlen($cardData),
+            'etag' => '"' . md5($cardData) . '"'
+        ];
     }
 }

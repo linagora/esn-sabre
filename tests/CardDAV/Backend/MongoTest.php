@@ -32,8 +32,19 @@ class MongoTest extends AbstractDatabaseTest {
             'size' => 5
         ];
         $this->db->cards->insert($card);
-
         $this->cardId = (string)$card['_id'];
+
+        $card = [
+            'addressbookid' => $book['_id'],
+            'carddata' => 'card2',
+            'uri' => 'card2',
+            'lastmodified' => 0,
+            'etag' => '"' . md5('card2') . '"',
+            'size' => 5
+        ];
+        $this->db->cards->insert($card);
+
+        $this->cardId2 = (string)$card['_id'];
     }
 
     protected function generateId() {

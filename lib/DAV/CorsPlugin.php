@@ -9,7 +9,7 @@ use \Sabre\HTTP\ResponseInterface;
 
 class CorsPlugin extends ServerPlugin {
 
-    public $allowMethods = ['GET', 'POST', 'PUT', 'PROPFIND', 'REPORT'];
+    public $allowMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PROPFIND', 'REPORT'];
     public $allowHeaders = ['Depth', 'Authorization', 'Content-Type', 'Accept', 'Prefer', 'If-Match'];
     public $exposeHeaders = ['ETag'];
     public $allowOrigin = ["*"];

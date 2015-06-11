@@ -15,40 +15,45 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             'SUMMARY:Hello',
             'END:VEVENT',
             'END:VCALENDAR']);
-        $this->config = [
-            "fromName" => "test",
-            "from" => "test@example.com",
-            "hostname" => "localhost",
-            "port" => 1234,
-            "sslmethod" => "tls",
-            "timeout" => 2345,
-            "username" => "fred",
-            "password" => "george"
-        ];
     }
 
-
-    private function init($sendResult = true) {
-        $plugin = new IMipPluginMock($this->config, $sendResult);
-        $plugin->initialize(new \Sabre\DAV\Server());
+    private function getPlugin($sendResult = true, $server = null) {
+        $plugin = new IMipPluginMock("/api", $server);
 
         $this->msg = new \Sabre\VObject\ITip\Message();
         if ($this->ical) {
             $this->msg->message = \Sabre\VObject\Reader::read($this->ical);
         }
+
+        $client = $plugin->getClient();
+        $client->on('curlExec', function(&$return) use ($sendResult) {
+            if ($sendResult) {
+                $return = "HTTP/1.1 OK\r\n\r\nOk";
+            } else {
+                $return = "HTTP/1.1 NOT OK\r\n\r\nNot ok";
+            }
+        });
+        $client->on('curlStuff', function(&$return) use ($sendResult) {
+            if ($sendResult) {
+                $return = [ [ 'http_code' => 200, 'header_size' => 0 ], 0, '' ];
+            } else {
+                $return = [ [ 'http_code' => 503, 'header_size' => 0 ], 0, '' ];
+            }
+        });
+
         return $plugin;
     }
 
-
     function testScheduleNoconfig() {
-        $this->config = null;
-        $plugin = $this->init();
+        $plugin = $this->getPlugin();
+        $plugin->setApiRoot(null);
         $plugin->schedule($this->msg);
         $this->assertEquals($this->msg->scheduleStatus, '5.2');
+        return $plugin;
     }
 
     function testScheduleNotSignificant() {
-        $plugin = $this->init();
+        $plugin = $this->getPlugin();
         $this->msg->significantChange = false;
 
         $plugin->schedule($this->msg);
@@ -56,7 +61,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testNotMailto() {
-        $plugin = $this->init();
+        $plugin = $this->getPlugin();
         $this->msg->sender = 'http://example.com';
         $this->msg->recipient = 'http://example.com';
         $this->msg->scheduleStatus = 'unchanged';
@@ -71,113 +76,83 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testSendSuccess() {
-        $plugin = $this->init(true);
+        $plugin = $this->getPlugin(true);
+        $client = $plugin->getClient();
 
         $this->msg->sender = 'mailto:test@example.com';
         $this->msg->recipient = 'mailto:test2@example.com';
         $this->msg->method = "REQUEST";
 
-        $plugin->schedule($this->msg);
-        $this->assertEquals($this->msg->scheduleStatus, '1.2');
+        $requestCalled = false;
+        $self = $this;
 
-        $mailer = $plugin->mailer;
-        $this->assertEquals($mailer->From, $this->config["from"]);
-        $this->assertEquals($mailer->FromName, $this->config["fromName"]);
-        $this->assertEquals($mailer->Port, $this->config["port"]);
-        $this->assertEquals($mailer->SMTPSecure, $this->config["sslmethod"]);
-        $this->assertEquals($mailer->Timeout, $this->config["timeout"]);
-        $this->assertEquals($mailer->SMTPAuth, true);
-        $this->assertEquals($mailer->Username, $this->config["username"]);
-        $this->assertEquals($mailer->Password, $this->config["password"]);
-        $this->assertEquals($mailer->Body, $this->ical . "\r\n");
-        $this->assertEquals($mailer->Subject, "Hello");
-        $this->assertEquals($mailer->ContentType,
-            'text/calendar; charset=UTF-8; method=REQUEST');
-    }
-    function testSubjectREPLY() {
-        $plugin = $this->init(true);
-
-        $this->msg->sender = 'mailto:test@example.com';
-        $this->msg->recipient = 'mailto:test2@example.com';
-        $this->msg->method = "REPLY";
+        $client->on('doRequest', function($request, &$response) use ($self, &$requestCalled) {
+            $jsondata = json_decode($request->getBodyAsString());
+            $self->assertEquals($jsondata->method, 'REQUEST');
+            $self->assertEquals($jsondata->emails, ['test2@example.com']);
+            $self->assertEquals($jsondata->event, $self->ical . "\r\n");
+            $self->assertTrue($jsondata->notify);
+            $requestCalled = true;
+        });
 
         $plugin->schedule($this->msg);
-        $this->assertEquals($plugin->mailer->Subject, "Re: Hello");
-    }
-
-    function testSubjectCANCEL() {
-        $plugin = $this->init(true);
-
-        $this->msg->sender = 'mailto:test@example.com';
-        $this->msg->recipient = 'mailto:test2@example.com';
-        $this->msg->method = "CANCEL";
-
-        $plugin->schedule($this->msg);
-        $this->assertEquals($plugin->mailer->Subject, "Cancelled: Hello");
+        $this->assertEquals('1.2', $this->msg->scheduleStatus);
+        $this->assertTrue($requestCalled);
     }
 
     function testSendFailed() {
-        $plugin = $this->init(false);
+        $plugin = $this->getPlugin(false);
+        $client = $plugin->getClient();
 
         $this->msg->sender = 'mailto:test@example.com';
         $this->msg->recipient = 'mailto:test2@example.com';
         $this->msg->method = "CANCEL";
 
-        $plugin->schedule($this->msg);
-        $this->assertEquals($this->msg->scheduleStatus, '5.1');
-    }
+        $requestCalled = false;
+        $self = $this;
 
-    function testPortDetectSSL() {
-        unset($this->config['port']);
-        $this->config['sslmethod'] = 'ssl';
+        $client->on('doRequest', function($request, &$response) use ($self, &$requestCalled) {
+            $jsondata = json_decode($request->getBodyAsString());
+            $self->assertEquals($jsondata->method, 'CANCEL');
+            $self->assertEquals($jsondata->emails, ['test2@example.com']);
+            $self->assertEquals($jsondata->event, $self->ical . "\r\n");
+            $self->assertTrue($jsondata->notify);
+            $requestCalled = true;
+        });
 
-        $plugin = $this->init(true);
-
-        $this->msg->sender = 'mailto:test@example.com';
-        $this->msg->recipient = 'mailto:test2@example.com';
-        $this->msg->method = 'REQUEST';
-
-        $plugin->schedule($this->msg);
-        $this->assertEquals($plugin->mailer->Port, 465);
-    }
-
-    function testPortDetectTLS() {
-        unset($this->config['port']);
-        $this->config['sslmethod'] = 'tls';
-
-        $plugin = $this->init(true);
-
-        $this->msg->sender = 'mailto:test@example.com';
-        $this->msg->recipient = 'mailto:test2@example.com';
-        $this->msg->method = 'REQUEST';
 
         $plugin->schedule($this->msg);
-        $this->assertEquals($plugin->mailer->Port, 587);
+        $this->assertEquals('5.1', $this->msg->scheduleStatus);
+        $this->assertTrue($requestCalled);
     }
 }
 
+class MockAuthBackend {
+    function getAuthCookies() {
+        return "coookies!!!";
+    }
+}
 
 class IMipPluginMock extends IMipPlugin {
-
-    public $mailer;
-
-    function __construct($server, $sendResult) {
-        parent::__construct($server);
-        $this->sendResult = $sendResult;
+    function __construct($apiroot, $server = null) {
+        require_once ESN_TEST_VENDOR . '/sabre/http/tests/HTTP/ClientTest.php';
+        if (!$server) $server = new \Sabre\DAV\Server([]);
+        $authBackend = new MockAuthBackend();
+        parent::__construct($apiroot, $authBackend);
+        $this->initialize($server);
+        $this->httpClient = new \Sabre\HTTP\ClientMock();
+        $this->server = $server;
     }
 
-    protected function newMailer() {
-        $this->mailer = new PHPMailerMock($this->sendResult);
-        return $this->mailer;
-    }
-}
-
-class PHPMailerMock extends \PHPMailer {
-    function __construct($sendResult) {
-        $this->sendResult = $sendResult;
+    function setApiRoot($val) {
+        $this->apiroot = $val;
     }
 
-    function send() {
-        return $this->sendResult;
+    function getClient() {
+        return $this->httpClient;
+    }
+
+    function getServer() {
+        return $this->server;
     }
 }

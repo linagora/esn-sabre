@@ -7,7 +7,7 @@
   "database": {
     "esn": {
       "db": "esn",
-      "connectionString" : "mongodb://localhost:23456/",
+      "connectionString" : "mongodb://esn_mongo:27017/",
       "connectionOptions": {
         "w": 1,
         "fsync": true,
@@ -16,7 +16,7 @@
     },
     "sabre": {
       "db": "sabre",
-      "connectionString" : "mongodb://localhost:23456/",
+      "connectionString" : "mongodb://sabre_mongo:27017/",
       "connectionOptions": {
         "w": 1,
         "fsync": true,
@@ -25,7 +25,7 @@
     }
   },
   "esn": {
-    "apiRoot": "http://localhost:8080/api",
-    "calendarRoot": "http://localhost:8080/calendar/api"
+    "apiRoot": "http://esn_host:8080/api",
+    "calendarRoot": "http://esn_host:8080/calendar/api"
   }
 }

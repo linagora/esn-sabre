@@ -27,7 +27,7 @@ RUN rm -rf composer.json composer.lock vendor data html server.php
 ADD . /var/www
 RUN cp esn.php server.php
 RUN composer update
-RUN mv config.json.docker config.json
+RUN mv config.json.default config.json
 RUN chown -R www-data:www-data /var/www
 
 EXPOSE 80

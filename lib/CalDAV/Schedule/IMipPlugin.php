@@ -2,11 +2,17 @@
 
 namespace ESN\CalDAV\Schedule;
 
-use Sabre\DAV;
-use Sabre\VObject;
-use Sabre\VObject\ITip;
+use \Sabre\DAV;
+use \Sabre\VObject;
+use \Sabre\VObject\ITip;
+use \Sabre\HTTP;
+use \Sabre\HTTP\RequestInterface;
+use \Sabre\HTTP\ResponseInterface;
 
 class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
+    protected $server;
+    protected $httpClient;
+    protected $apiroot;
 
     const SCHEDSTAT_SUCCESS_PENDING = '1.0';
     const SCHEDSTAT_SUCCESS_UNKNOWN = '1.1';
@@ -14,12 +20,13 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     const SCHEDSTAT_FAIL_TEMPORARY = '5.1';
     const SCHEDSTAT_FAIL_PERMANENT = '5.2';
 
-    function __construct($config) {
-        $this->config = $config;
+    function __construct($apiroot, $authBackend) {
+        $this->apiroot = $apiroot;
+        $this->authBackend = $authBackend;
     }
 
     function schedule(ITip\Message $iTipMessage) {
-        if (!$this->config) {
+        if (!$this->apiroot) {
             $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_PERMANENT;
             return;
         }
@@ -33,8 +40,6 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             return;
         }
 
-        $summary = $iTipMessage->message->VEVENT->SUMMARY;
-
         if (parse_url($iTipMessage->sender, PHP_URL_SCHEME)!=='mailto') {
             return;
         }
@@ -43,95 +48,36 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             return;
         }
 
-        $subject = 'Invitation';
-        switch(strtoupper($iTipMessage->method)) {
-            case 'REPLY' :
-                $subject = 'Re: ' . $summary;
-                break;
-            case 'REQUEST' :
-                $subject = $summary;
-                break;
-            case 'CANCEL' :
-                $subject = 'Cancelled: ' . $summary;
-                break;
-        }
+        $body = json_encode([
+          'emails' => [ substr($iTipMessage->recipient, 7) ],
+          'method' => $iTipMessage->method,
+          'event' => $iTipMessage->message->serialize(),
+          'notify' => true
+        ]);
 
-        $m = $this->initMailer();
+        $url = $this->apiroot . '/calendars/inviteattendees';
+        $request = new HTTP\Request('POST', $url);
+        $request->setHeader('Content-type', 'application/json');
+        $request->setHeader('Content-length', strlen($body));
+        $cookie = $this->authBackend->getAuthCookies();
+        $request->setHeader('Cookie', $cookie);
+        $request->setBody($body);
 
-        $m->Subject = $subject;
-        $m->ContentType = 'text/calendar; charset=UTF-8; method=' . $iTipMessage->method;
-        $m->Body = $iTipMessage->message->serialize();
+        $response = $this->httpClient->send($request);
+        $status = $response->getStatus();
 
-        $sender = substr($iTipMessage->sender, 7);
-        $name = $iTipMessage->senderName ? $iTipMessage->senderName : '';
-        $m->addReplyTo($sender, $name);
-
-        $recipient = substr($iTipMessage->recipient, 7);
-        $name = $iTipMessage->recipientName ? $iTipMessage->recipientName : '';
-        $m->addAddress($recipient, $name);
-
-        if ($m->send()) {
+        if (floor($status / 100) == 2) {
             $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_DELIVERED;
         } else {
             $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
-            error_log($m->ErrorInfo);
+            error_log("iTip Delivery failed for " . $iTipMessage->recipient .
+                      ": " . $status . " " . $response->getStatusText());
         }
-    }
-
-    /**
-     * This will be mocked by tests and never called
-     * @codeCoverageIgnore
-     */
-    protected function newMailer() {
-        return new \PHPMailer($this->server->debugExceptions);
-    }
-
-    protected function initMailer() {
-        $m = $this->newMailer();
-        $c = $this->config;
-        $m->isSMTP();
-
-        $m->SMTPDebug = $this->server->debugExceptions ? 3 : 0;
-        $m->Debugoutput = 'error_log';
-
-
-        $m->setFrom($c['from'], $c['fromName']);
-
-        if (DAV\Server::$exposeVersion) {
-            $m->CustomHeaders['X-Sabre-Version'] = DAV\Version::VERSION;
-        }
-
-        $sslmethod = isset($c['sslmethod']) ? $c['sslmethod'] : null;
-        $port = isset($c['port']) ? $c['port'] : null;
-
-        if ($port) {
-            $m->Port = $c['port'];
-        } else if ($sslmethod == 'ssl') {
-            $m->Port = 465;
-        } else { // also covers sslmethod = tls
-            $m->Port = 587;
-        }
-
-        if ($sslmethod) {
-            $m->SMTPSecure = $sslmethod;
-        }
-
-        $m->Host = $c['hostname'];
-        if (isset($c['timeout'])) {
-            $m->Timeout = $c['timeout'];
-        }
-
-        if (isset($c['username'])) {
-            $m->SMTPAuth = true;
-            $m->Username = $c['username'];
-            $m->Password = $c['password'];
-        }
-
-        return $m;
     }
 
     function initialize(DAV\Server $server) {
         parent::initialize($server);
         $this->server = $server;
+        $this->httpClient = new HTTP\Client();
     }
 }

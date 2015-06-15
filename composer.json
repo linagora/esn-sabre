@@ -15,7 +15,6 @@
     "require": {
         "php": ">=5.4.1",
         "sabre/dav": "2.2.0-alpha2",
-        "phpmailer/phpmailer": "dev-master",
         "ext-mongo": "~1.5"
     },
     "require-dev" : {

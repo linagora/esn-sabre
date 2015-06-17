@@ -4,7 +4,10 @@
   convertErrorsToExceptions="true"
   convertNoticesToExceptions="true"
   convertWarningsToExceptions="true"
-  strict="true"
+  reportUselessTests="true"
+  strictCoverage="true"
+  disallowTestOutput="true"
+  enforceTimeLimit="true"
   >
   <testsuite name="linagora-esn-sabre-dav">
       <directory>DAV</directory>

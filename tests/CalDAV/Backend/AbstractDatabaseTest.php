@@ -26,9 +26,9 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     function testCreateCalendarAndFetch() {
         $backend = $this->getBackend();
         $returnedId = $backend->createCalendar('principals/user2','somerandomid',array(
-            '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set' => new \Sabre\CalDAV\Property\SupportedCalendarComponentSet(array('VEVENT')),
+            '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set' => new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(array('VEVENT')),
             '{DAV:}displayname' => 'Hello!',
-            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Property\ScheduleCalendarTransp('transparent'),
+            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('transparent'),
         ));
         $calendars = $backend->getCalendarsForUser('principals/user2');
 
@@ -37,7 +37,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             'uri'               => 'somerandomid',
             '{DAV:}displayname' => 'Hello!',
             '{urn:ietf:params:xml:ns:caldav}calendar-description' => '',
-            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Property\ScheduleCalendarTransp('transparent'),
+            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('transparent'),
         );
 
         $this->assertInternalType('array',$calendars);
@@ -60,7 +60,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
         $propPatch = new PropPatch([
             '{DAV:}displayname' => 'myCalendar',
-            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Property\ScheduleCalendarTransp('transparent'),
+            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('transparent'),
         ]);
 
         // Updating the calendar
@@ -81,7 +81,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             '{urn:ietf:params:xml:ns:caldav}calendar-description' => '',
             '{urn:ietf:params:xml:ns:caldav}calendar-timezone' => '',
             '{http://calendarserver.org/ns/}getctag' => 'http://sabre.io/ns/sync/2',
-            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Property\ScheduleCalendarTransp('transparent'),
+            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('transparent'),
         );
 
         $this->assertInternalType('array',$calendars);
@@ -124,7 +124,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     function testDeleteCalendar() {
         $backend = $this->getBackend();
         $returnedId = $backend->createCalendar('principals/user2','somerandomid',array(
-            '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set' => new \Sabre\CalDAV\Property\SupportedCalendarComponentSet(array('VEVENT')),
+            '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set' => new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(array('VEVENT')),
             '{DAV:}displayname' => 'Hello!',
         ));
 
@@ -475,7 +475,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
     function testCreateSubscriptions() {
         $props = [
-            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Property\Href('http://example.org/cal.ics', false),
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('http://example.org/cal.ics', false),
             '{DAV:}displayname' => 'cal',
             '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
             '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
@@ -514,7 +514,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
     function testUpdateSubscriptions() {
         $props = [
-            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Property\Href('http://example.org/cal.ics', false),
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('http://example.org/cal.ics', false),
             '{DAV:}displayname' => 'cal',
             '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
             '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
@@ -528,7 +528,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
         $newProps = [
             '{DAV:}displayname' => 'new displayname',
-            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Property\Href('http://example.org/cal2.ics', false),
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('http://example.org/cal2.ics', false),
         ];
 
         $propPatch = new DAV\PropPatch($newProps);
@@ -555,7 +555,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
     function testUpdateSubscriptionsFail() {
         $props = [
-            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Property\Href('http://example.org/cal.ics', false),
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('http://example.org/cal.ics', false),
             '{DAV:}displayname' => 'cal',
             '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
             '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
@@ -569,7 +569,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
         $propPatch = new DAV\PropPatch([
             '{DAV:}displayname' => 'new displayname',
-            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Property\Href('http://example.org/cal2.ics', false),
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('http://example.org/cal2.ics', false),
             '{DAV:}unknown' => 'foo',
         ]);
 
@@ -585,7 +585,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
     function testDeleteSubscriptions() {
         $props = [
-            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Property\Href('http://example.org/cal.ics', false),
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('http://example.org/cal.ics', false),
             '{DAV:}displayname' => 'cal',
             '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
             '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
@@ -599,7 +599,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
         $newProps = [
             '{DAV:}displayname' => 'new displayname',
-            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Property\Href('http://example.org/cal2.ics', false),
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('http://example.org/cal2.ics', false),
         ];
 
         $backend->deleteSubscription($id);

@@ -21,7 +21,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             'uri'               => $backend->EVENTS_URI,
             '{DAV:}displayname' => '',
             '{urn:ietf:params:xml:ns:caldav}calendar-description' => '',
-            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Property\ScheduleCalendarTransp('opaque'),
+            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
         );
 
         $this->assertInternalType('array',$calendars);

@@ -2,7 +2,7 @@
 
 namespace ESN\CardDAV;
 
-class UserAddressBooks extends \Sabre\CardDAV\UserAddressBooks {
+class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
 
     /**
      * Returns a list of addressbooks. In contrast to the sabre version of this

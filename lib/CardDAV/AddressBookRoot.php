@@ -24,17 +24,17 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
         $res = $this->db->users->find(array(), array("_id"));
         foreach ($res as $user) {
             $uri = self::USER_PREFIX . '/' . $user['_id'];
-            $homes[] = new \ESN\CardDAV\UserAddressBooks($this->addrbookBackend, $uri);
+            $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }
         $res = $this->db->communities->find(array(), array("_id"));
         foreach ($res as $community) {
             $uri = self::COMMUNITY_PREFIX . '/' . $community['_id'];
-            $homes[] = new \ESN\CardDAV\UserAddressBooks($this->addrbookBackend, $uri);
+            $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }
         $res = $this->db->projects->find(array(), array("_id"));
         foreach ($res as $project) {
             $uri = self::PROJECT_PREFIX . '/' . $project['_id'];
-            $homes[] = new \ESN\CardDAV\UserAddressBooks($this->addrbookBackend, $uri);
+            $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }
 
         return $homes;
@@ -46,19 +46,19 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
         $res = $this->db->users->findOne(['_id' => $mongoName]);
         if ($res) {
             $uri = self::USER_PREFIX . '/' . $name;
-            return new \ESN\CardDAV\UserAddressBooks($this->addrbookBackend, $uri);
+            return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }
 
         $res = $this->db->communities->findOne(array('_id' => $mongoName), array());
         if ($res) {
             $uri = self::COMMUNITY_PREFIX . '/' . $name;
-            return new \ESN\CardDAV\UserAddressBooks($this->addrbookBackend, $uri);
+            return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }
 
         $res = $this->db->projects->findOne(array('_id' => $mongoName), array());
         if ($res) {
             $uri = self::PROJECT_PREFIX . '/' . $name;
-            return new \ESN\CardDAV\UserAddressBooks($this->addrbookBackend, $uri);
+            return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }
 
         throw new \Sabre\DAV\Exception\NotFound('Principal with name ' . $name . ' not found');

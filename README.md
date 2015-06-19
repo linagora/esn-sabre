@@ -142,6 +142,6 @@ For example, if you are running the ESN and mongo on your machine, you can set E
 ### Constraints
 
 -	Mongodb instances port must be 27017
--	ESN intance port must be 8080 and the mongodb is set to *rse*
+-	ESN intance port must be 8080 and the mongodb is set to *esn*
 
 Edit /var/www/config.json if needed.

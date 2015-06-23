@@ -46,15 +46,15 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
         $community = $children[1];
         $project = $children[2];
 
-        $this->assertTrue($user instanceof \Sabre\CardDAV\UserAddressBooks);
+        $this->assertTrue($user instanceof \Sabre\CardDAV\AddressBookHome);
         $this->assertEquals($user->getName(), '54313fcc398fef406b0041b6');
         $this->assertEquals($user->getOwner(), 'principals/users/54313fcc398fef406b0041b6');
 
-        $this->assertTrue($community instanceof \Sabre\CardDAV\UserAddressBooks);
+        $this->assertTrue($community instanceof \Sabre\CardDAV\AddressBookHome);
         $this->assertEquals($community->getName(), '54313fcc398fef406b0041b4');
         $this->assertEquals($community->getOwner(), 'principals/communities/54313fcc398fef406b0041b4');
 
-        $this->assertTrue($project instanceof \Sabre\CardDAV\UserAddressBooks);
+        $this->assertTrue($project instanceof \Sabre\CardDAV\AddressBookHome);
         $this->assertEquals($project->getName(), '54b64eadf6d7d8e41d263e0f');
         $this->assertEquals($project->getOwner(), 'principals/projects/54b64eadf6d7d8e41d263e0f');
     }
@@ -65,17 +65,17 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
         $this->esndb->projects->insert([ '_id' => new \MongoId('54b64eadf6d7d8e41d263e0f') ]);
 
         $user = $this->root->getChild('54313fcc398fef406b0041b6');
-        $this->assertTrue($user instanceof \Sabre\CardDAV\UserAddressBooks);
+        $this->assertTrue($user instanceof \Sabre\CardDAV\AddressBookHome);
         $this->assertEquals($user->getName(), '54313fcc398fef406b0041b6');
         $this->assertEquals($user->getOwner(), 'principals/users/54313fcc398fef406b0041b6');
 
         $community = $this->root->getChild('54313fcc398fef406b0041b4');
-        $this->assertTrue($community instanceof \Sabre\CardDAV\UserAddressBooks);
+        $this->assertTrue($community instanceof \Sabre\CardDAV\AddressBookHome);
         $this->assertEquals($community->getName(), '54313fcc398fef406b0041b4');
         $this->assertEquals($community->getOwner(), 'principals/communities/54313fcc398fef406b0041b4');
 
         $project = $this->root->getChild('54b64eadf6d7d8e41d263e0f');
-        $this->assertTrue($project instanceof \Sabre\CardDAV\UserAddressBooks);
+        $this->assertTrue($project instanceof \Sabre\CardDAV\AddressBookHome);
         $this->assertEquals($project->getName(), '54b64eadf6d7d8e41d263e0f');
         $this->assertEquals($project->getOwner(), 'principals/projects/54b64eadf6d7d8e41d263e0f');
     }

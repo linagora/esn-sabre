@@ -66,8 +66,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 'principaluri' => $row['principaluri'],
                 '{' . \Sabre\CalDAV\Plugin::NS_CALENDARSERVER . '}getctag' => 'http://sabre.io/ns/sync/' . ($row['synctoken']?$row['synctoken']:'0'),
                 '{http://sabredav.org/ns}sync-token' => $row['synctoken']?$row['synctoken']:'0',
-                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' => new \Sabre\CalDAV\Property\SupportedCalendarComponentSet($components),
-                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' => new \Sabre\CalDAV\Property\ScheduleCalendarTransp($row['transparent']?'transparent':'opaque'),
+                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' => new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet($components),
+                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp($row['transparent']?'transparent':'opaque'),
             ];
 
             foreach($this->propertyMap as $xmlName=>$dbName) {
@@ -93,8 +93,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         if (!isset($properties[$sccs])) {
             $obj['components'] = ['VEVENT', 'VTODO'];
         } else {
-            if (!($properties[$sccs] instanceof \Sabre\CalDAV\Property\SupportedCalendarComponentSet)) {
-                throw new \Sabre\DAV\Exception('The ' . $sccs . ' property must be of type: \Sabre\CalDAV\Property\SupportedCalendarComponentSet');
+            if (!($properties[$sccs] instanceof \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet)) {
+                throw new \Sabre\DAV\Exception('The ' . $sccs . ' property must be of type: \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet');
             }
             $obj['components'] = $properties[$sccs]->getValue();
         }
@@ -447,7 +447,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 'source'       => $row['source'],
                 'lastmodified' => $row['lastmodified'],
 
-                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' => new \Sabre\CalDAV\Property\SupportedCalendarComponentSet(['VTODO', 'VEVENT']),
+                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' => new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(['VTODO', 'VEVENT']),
             ];
 
             foreach($this->subscriptionPropertyMap as $xmlName=>$dbName) {

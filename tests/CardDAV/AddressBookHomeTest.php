@@ -5,7 +5,7 @@ namespace ESN\CardDAV;
 /**
  * @medium
  */
-class UserAddressBooksTest extends \PHPUnit_Framework_TestCase {
+class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
     protected $sabredb;
     protected $carddavBackend;
 
@@ -18,7 +18,7 @@ class UserAddressBooksTest extends \PHPUnit_Framework_TestCase {
         $this->principalUri = "principals/user1";
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
 
-        $this->books = new UserAddressBooks($this->carddavBackend, $this->principalUri);
+        $this->books = new AddressBookHome($this->carddavBackend, $this->principalUri);
     }
 
     function testGetChildren() {

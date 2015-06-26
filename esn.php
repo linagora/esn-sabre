@@ -74,6 +74,11 @@ $authPlugin = new Sabre\DAV\Auth\Plugin($authBackend);
 $server->addPlugin($authPlugin);
 
 $aclPlugin = new Sabre\DAVACL\Plugin();
+$aclPlugin->principalCollectionSet = [
+    PRINCIPALS_USERS,
+    PRINCIPALS_COMMUNITIES,
+    PRINCIPALS_PROJECTS
+];
 $server->addPlugin($aclPlugin);
 
 // JSON api support

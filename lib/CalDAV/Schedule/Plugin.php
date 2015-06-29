@@ -6,7 +6,10 @@ use
     Sabre\HTTP\RequestInterface,
     Sabre\HTTP\ResponseInterface,
     Sabre\VObject\Component\VCalendar,
-    Sabre\VObject\ITip;
+    Sabre\VObject\ITip,
+    Sabre\CalDAV\ICalendarObject,
+    Sabre\CalDAV\ISchedulingObject;
+
 // @codeCoverageIgnoreEnd
 
 /**

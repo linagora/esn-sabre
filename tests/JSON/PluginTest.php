@@ -127,7 +127,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
-            'REQUEST_URI'       => '/json/queries/time-range',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
         $request->setBody(json_encode($this->timeRangeData));
@@ -135,28 +135,37 @@ END:VCALENDAR
 
         $jsonResponse = json_decode($response->getBodyAsString());
 
-        $this->assertCount(1, $jsonResponse);
+        $this->assertCount(1, $jsonResponse->_embedded->{'dav:item'});
     }
 
     function testTimeRangeQuery404() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
-            'REQUEST_URI'       => '/json/queries/time-range',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/notfound.json',
         ));
-
-        $this->timeRangeData['scope']['calendars'] = ['/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event.ics'];
 
         $request->setBody(json_encode($this->timeRangeData));
         $response = $this->request($request);
         $this->assertEquals($response->status, 404);
     }
 
-    function testTimeRangeQueryOutsideRoot() {
+    function testTimeRangeOutsideroot() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
-            'REQUEST_URI'       => '/jaysun/queries/time-range',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/notfound.jaysun',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeData));
+        $response = $this->request($request);
+        $this->assertEquals($response->status, 501);
+    }
+    function testTimeRangeWrongNode() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
         ));
 
         $request->setBody(json_encode($this->timeRangeData));
@@ -164,17 +173,6 @@ END:VCALENDAR
         $this->assertEquals($response->status, 501);
     }
 
-    function testTimeRangeQueryUnknownQuery() {
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'REQUEST_URI'       => '/json/queries/invalid',
-        ));
-
-        $request->setBody(json_encode($this->timeRangeData));
-        $response = $this->request($request);
-        $this->assertEquals($response->status, 501);
-    }
     function testContactsUnknown() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
@@ -211,7 +209,7 @@ END:VCALENDAR
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json');
         $cards = $jsonResponse->{'_embedded'}->{'dav:item'};
         $this->assertEquals(count($cards), 4);
-        $this->assertEquals($cards[0]->{'_links'}->self, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1/card1');
+        $this->assertEquals($cards[0]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1/card1');
         $this->assertEquals($cards[0]->data[0], 'vcard');
         $this->assertEquals($cards[0]->data[1][0][3], 'd');
     }
@@ -229,7 +227,7 @@ END:VCALENDAR
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json');
         $cards = $jsonResponse->{'_embedded'}->{'dav:item'};
         $this->assertCount(1, $cards);
-        $this->assertEquals($cards[0]->{'_links'}->self, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1/card3');
+        $this->assertEquals($cards[0]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1/card3');
         $this->assertEquals($cards[0]->data[0], 'vcard');
         $this->assertEquals($cards[0]->data[1][0][3], 'b');
     }

@@ -94,7 +94,7 @@ The caldav support in OpenPaaS ESN is enabled by telling the system where to fin
 
 ```json
 {
-        "_id" : "caldav",
+        "_id" : "davserver",
         "backend" : {
                 "url" : "http://192.168.7.6/esn-sabre/esn.php"
         },

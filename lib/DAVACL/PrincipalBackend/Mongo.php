@@ -92,6 +92,22 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         throw new \Sabre\DAV\Exception\MethodNotAllowed('Changing group membership is not permitted');
     }
 
+    private function firstEmailAddress($obj) {
+        if (array_key_exists('emails', $obj)) {
+            return $obj['emails'][0];
+        }
+
+        if (array_key_exists('accounts', $obj)) {
+            foreach ($obj['accounts'] as $account) {
+                if ($account['type'] === 'email') {
+                    return $account['emails'][0];
+                }
+            }
+        }
+
+        return null;
+    }
+
     private function objectToPrincipal($obj, $type) {
         $principal = null;
         switch($type) {
@@ -99,7 +115,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 $principal = [
                     'id' => (string)$obj['_id'],
                     '{DAV:}displayname' => $obj['firstname'] . " " . $obj['lastname'],
-                    '{http://sabredav.org/ns}email-address' => $obj['emails'][0]
+                    '{http://sabredav.org/ns}email-address' => $this->firstEmailAddress($obj)
                 ];
                 break;
             case "communities":

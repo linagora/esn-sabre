@@ -6,6 +6,10 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
     protected static $esndb;
 
     const USER_ID = '54313fcc398fef406b0041b6';
+    const USER_WITH_TWO_ACCOUNTS_ID = '54313fcc398fef406b0041b7';
+    const USER_WITH_ACCOUNT_ID = '54313fcc398fef406b0041b8';
+    const USER_WITH_NO_EMAIL_ID = '54313fcc398fef406b0041b9';
+    const USER_WITH_NO_EMAIL_ACCOUNT_ID = '54313fcc398fef406b0041c0';
     const COMMUNITY_ID = '54313fcc398fef406b0041b4';
     const PROJECT_ID= '54b64eadf6d7d8e41d263e0f';
 
@@ -19,6 +23,36 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'firstname' => 'first',
             'lastname' => 'last',
             'emails' => [ 'user@example.com' ]
+        ]);
+        self::$esndb->users->insert([
+            '_id' => new \MongoId(self::USER_WITH_ACCOUNT_ID),
+            'firstname' => 'withAccount',
+            'lastname' => 'last',
+            'accounts' => [
+                [ 'type' => 'email', 'emails' => [ 'userWithAccount@example.com' ] ]
+            ]
+        ]);
+        self::$esndb->users->insert([
+            '_id' => new \MongoId(self::USER_WITH_TWO_ACCOUNTS_ID),
+            'firstname' => 'withTwoAccounts',
+            'lastname' => 'last',
+            'accounts' => [
+                [ 'type' => 'twitter' ],
+                [ 'type' => 'email', 'emails' => [ 'userWithTwoAccounts@example.com' ] ]
+            ]
+        ]);
+        self::$esndb->users->insert([
+            '_id' => new \MongoId(self::USER_WITH_NO_EMAIL_ID),
+            'firstname' => 'withNoEmail',
+            'lastname' => 'last'
+        ]);
+        self::$esndb->users->insert([
+            '_id' => new \MongoId(self::USER_WITH_NO_EMAIL_ACCOUNT_ID),
+            'firstname' => 'withNoEmailAccount',
+            'lastname' => 'last',
+            'accounts' => [
+                [ 'type' => 'twitter' ]
+            ]
         ]);
         self::$esndb->communities->insert([
             '_id' => new \MongoId(self::COMMUNITY_ID),
@@ -74,7 +108,11 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
 
         $principals = $backend->getPrincipalsByPrefix('principals/users');
         $principal = $backend->getPrincipalByPath('principals/users/' . self::USER_ID);
-        $this->assertEquals(count($principals), 1);
+        $principalWithAccount = $backend->getPrincipalByPath('principals/users/' . self::USER_WITH_ACCOUNT_ID);
+        $principalWithTwoAccounts = $backend->getPrincipalByPath('principals/users/' . self::USER_WITH_TWO_ACCOUNTS_ID);
+        $principalWithNoEmail = $backend->getPrincipalByPath('principals/users/' . self::USER_WITH_NO_EMAIL_ID);
+        $principalWithNoEmailAccount = $backend->getPrincipalByPath('principals/users/' . self::USER_WITH_NO_EMAIL_ACCOUNT_ID);
+        $this->assertEquals(count($principals), 5);
 
         $expected = [
             'uri' => 'principals/users/' . self::USER_ID,
@@ -82,8 +120,36 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             '{DAV:}displayname' => 'first last',
             '{http://sabredav.org/ns}email-address' => 'user@example.com'
         ];
+        $expectedWithNoEmail = [
+            'uri' => 'principals/users/' . self::USER_WITH_NO_EMAIL_ID,
+            'id' => self::USER_WITH_NO_EMAIL_ID,
+            '{DAV:}displayname' => 'withNoEmail last',
+            '{http://sabredav.org/ns}email-address' => null
+        ];
+        $expectedWithNoEmailAccount = [
+            'uri' => 'principals/users/' . self::USER_WITH_NO_EMAIL_ACCOUNT_ID,
+            'id' => self::USER_WITH_NO_EMAIL_ACCOUNT_ID,
+            '{DAV:}displayname' => 'withNoEmailAccount last',
+            '{http://sabredav.org/ns}email-address' => null
+        ];
+        $expectedWithAccount = [
+            'uri' => 'principals/users/' . self::USER_WITH_ACCOUNT_ID,
+            'id' => self::USER_WITH_ACCOUNT_ID,
+            '{DAV:}displayname' => 'withAccount last',
+            '{http://sabredav.org/ns}email-address' => 'userWithAccount@example.com'
+        ];
+        $expectedWithTwoAccounts = [
+            'uri' => 'principals/users/' . self::USER_WITH_TWO_ACCOUNTS_ID,
+            'id' => self::USER_WITH_TWO_ACCOUNTS_ID,
+            '{DAV:}displayname' => 'withTwoAccounts last',
+            '{http://sabredav.org/ns}email-address' => 'userWithTwoAccounts@example.com'
+        ];
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);
+        $this->assertEquals($expectedWithNoEmail, $principalWithNoEmail);
+        $this->assertEquals($expectedWithNoEmailAccount, $principalWithNoEmailAccount);
+        $this->assertEquals($expectedWithAccount, $principalWithAccount);
+        $this->assertEquals($expectedWithTwoAccounts, $principalWithTwoAccounts);
 
         // Extra check to make sure no mongo ids are used
         $this->assertSame($expected['id'], $principals[0]['id']);

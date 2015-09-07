@@ -27,7 +27,8 @@
             "ESN\\CalDAV\\"     : "lib/CalDAV/",
             "ESN\\CardDAV\\"    : "lib/CardDAV/",
             "ESN\\DAVACL\\"     : "lib/DAVACL/",
-            "ESN\\JSON\\"       : "lib/JSON/"
+            "ESN\\JSON\\"       : "lib/JSON/",
+            "ESN\\Utils\\"      : "lib/Utils/"
         }
     },
     "minimum-stability": "dev"

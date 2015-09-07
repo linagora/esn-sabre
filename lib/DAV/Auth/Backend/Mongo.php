@@ -13,7 +13,7 @@ class Mongo extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     }
 
     protected function validateUserPass($username, $password) {
-        $query = array('emails' => trim(strtolower($username)));
+        $query = array( 'accounts.emails' => trim(strtolower($username)));
         $rec = $this->db->users->findOne($query, array('password', '_id'));
 
         $authenticated = false;

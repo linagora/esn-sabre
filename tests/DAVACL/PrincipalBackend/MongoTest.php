@@ -22,7 +22,9 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             '_id' => new \MongoId(self::USER_ID),
             'firstname' => 'first',
             'lastname' => 'last',
-            'emails' => [ 'user@example.com' ]
+            'accounts' => [
+                [ 'type' => 'email', 'emails' => [ 'user@example.com' ] ]
+            ]
         ]);
         self::$esndb->users->insert([
             '_id' => new \MongoId(self::USER_WITH_ACCOUNT_ID),

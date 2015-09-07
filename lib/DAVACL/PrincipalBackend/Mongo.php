@@ -2,6 +2,8 @@
 
 namespace ESN\DAVACL\PrincipalBackend;
 
+use \ESN\Utils\Utils as Utils;
+
 class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     function __construct($db) {
         $this->db = $db;
@@ -92,22 +94,6 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         throw new \Sabre\DAV\Exception\MethodNotAllowed('Changing group membership is not permitted');
     }
 
-    private function firstEmailAddress($obj) {
-        if (array_key_exists('emails', $obj)) {
-            return $obj['emails'][0];
-        }
-
-        if (array_key_exists('accounts', $obj)) {
-            foreach ($obj['accounts'] as $account) {
-                if ($account['type'] === 'email') {
-                    return $account['emails'][0];
-                }
-            }
-        }
-
-        return null;
-    }
-
     private function objectToPrincipal($obj, $type) {
         $principal = null;
         switch($type) {
@@ -115,7 +101,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 $principal = [
                     'id' => (string)$obj['_id'],
                     '{DAV:}displayname' => $obj['firstname'] . " " . $obj['lastname'],
-                    '{http://sabredav.org/ns}email-address' => $this->firstEmailAddress($obj)
+                    '{http://sabredav.org/ns}email-address' => Utils::firstEmailAddress($obj)
                 ];
                 break;
             case "communities":
@@ -174,7 +160,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     ] ];
                     break;
                 case '{http://sabredav.org/ns}email-address':
-                    $query[] = [ 'emails' => [
+                    $query[] = [ 'accounts.emails' => [
                         '$elemMatch' => ['$regex' => $value, '$options' => 'i' ]
                     ] ];
                     break;

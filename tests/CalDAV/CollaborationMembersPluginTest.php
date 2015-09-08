@@ -40,7 +40,9 @@ class CollaborationMembersPluginTest extends \Sabre\DAVServerTest {
             '_id' => $this->userMongoId,
             'firstname' => 'test',
             'lastname' => 'user',
-            'emails' => [ $this->userEmail ]
+            'accounts' => [
+              [ 'type' => 'email', 'emails' => [ $this->userEmail ] ]
+            ]
         ]);
 
         $this->esndb->communities->insert([

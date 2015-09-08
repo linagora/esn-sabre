@@ -7,6 +7,7 @@ use \Sabre\HTTP;
 use \Sabre\HTTP\RequestInterface;
 use \Sabre\HTTP\ResponseInterface;
 use \Sabre\VObject\Component\VCalendar;
+use \ESN\Utils\Utils as Utils;
 
 class CollaborationMembersPlugin extends ServerPlugin {
     function __construct($esnDb, $collectionName) {
@@ -57,7 +58,7 @@ class CollaborationMembersPlugin extends ServerPlugin {
 
         // Retrieve all collaboration members from the database
         $query = [ '_id' => [ '$in' => $members] ];
-        $fields = ['firstname', 'lastname', 'emails', '_id'];
+        $fields = ['firstname', 'lastname', 'accounts', '_id'];
         $userData = $this->db->users->find($query, $fields);
 
         // Add one ATTENDEE property per collaboration member
@@ -72,11 +73,11 @@ class CollaborationMembersPlugin extends ServerPlugin {
             // as an organizer.
             if ($user['_id'] == $organizerId) {
                 $params['PARTSTAT'] = 'ACCEPTED';
-                $vevent->ORGANIZER = 'mailto:' . $user['emails'][0];
+                $vevent->ORGANIZER = 'mailto:' . Utils::firstEmailAddress($user);
             }
 
             // Add this member as an attendee
-            $vevent->add('ATTENDEE', 'mailto:' . $user['emails'][0], $params);
+            $vevent->add('ATTENDEE', 'mailto:' . Utils::firstEmailAddress($user), $params);
         }
 
         // We've made changes, signal this to the caller

@@ -21,7 +21,9 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $userId = new \MongoId();
         self::$db->users->insert([
           '_id' => $userId,
-          'emails' => ['user1@example.com', 'user2@example.com'],
+          'accounts' => [
+            [ 'type' => 'email', 'emails' => ['user1@example.com', 'user2@example.com'] ]
+          ],
           'password' => $pw
         ]);
         self::$userPrincipal = "principals/users/" . (string)$userId;

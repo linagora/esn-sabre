@@ -13,9 +13,7 @@ MAINTAINER Linagora Folks <openpaas@linagora.com>
 
 # Install Packages
 RUN apt-get update && \
-    apt-get -y upgrade && \
-    apt-get -y install git php5-curl php-pear php5-dev
-RUN pecl install mongo
+    apt-get -y install git php5-common=5.5.9+dfsg-1ubuntu4.11 php5-cli=5.5.9+dfsg-1ubuntu4.11 php5-readline=5.5.9+dfsg-1ubuntu4.11 php5-curl=5.5.9+dfsg-1ubuntu4.11 php5-mongo
 
 # Configure PHP
 RUN echo "extension=mongo.so" >> /etc/php5/fpm/php.ini && \

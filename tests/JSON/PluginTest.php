@@ -15,7 +15,10 @@ require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
 class PluginTest extends \PHPUnit_Framework_TestCase {
 
     protected $caldavCalendar = array(
-        'name' => 'Calendar',
+        '{DAV:}displayname' => 'Calendar',
+        '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
+        '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
+        '{http://apple.com/ns/ical/}calendar-order' => '2',
         'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
         'uri' => 'calendar1',
     );
@@ -97,7 +100,7 @@ END:VCALENDAR
 
 
         $cal = $this->caldavCalendar;
-        $cal['id'] = $this->caldavBackend->createCalendar($cal['principaluri'], $cal['uri'], []);
+        $cal['id'] = $this->caldavBackend->createCalendar($cal['principaluri'], $cal['uri'], $cal);
 
         foreach ($this->caldavCalendarObjects as $eventUri => $data) {
             $this->caldavBackend->createCalendarObject($cal['id'], $eventUri, $data);
@@ -230,5 +233,55 @@ END:VCALENDAR
         $this->assertEquals($cards[0]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1/card3');
         $this->assertEquals($cards[0]->data[0], 'vcard');
         $this->assertEquals($cards[0]->data[1][0][3], 'b');
+    }
+
+    function testCalendarRoot() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars.json',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars.json');
+
+        $homes = $jsonResponse->{'_embedded'}->{'dav:home'};
+        $this->assertCount(1, $homes);
+
+        $this->assertEquals($homes[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
+
+        $calendars = $homes[0]->{'_embedded'}->{'dav:calendar'};
+        $this->assertCount(1, $calendars);
+
+        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
+        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
+        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/2');
+        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
+        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+    }
+
+    function testCalendarList() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
+        $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
+        $this->assertCount(1, $calendars);
+
+        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
+        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
+        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/2');
+        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
+        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
     }
 }

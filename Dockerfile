@@ -8,13 +8,13 @@
 # docker run -d -p 8001:80 --add-host esn_host:<ESN_HOST_IP> --add-host esn_mongo:<ESN_MONGO_IP> --add-host sabre_mongo:<SABRE_MONGO_IP> linagora/esn-sabre
 #
 
-FROM stackd/sabre-dav
+FROM linagora/sabre-dav:0.1.0
 MAINTAINER Linagora Folks <openpaas@linagora.com>
 
 # Install Packages
 RUN apt-get update && \
     apt-get -y upgrade && \
-    apt-get -y install git php5-curl php-pear php5-dev
+    apt-get -y install git php5-curl php-pear php5-dev make
 RUN pecl install mongo
 
 # Configure PHP

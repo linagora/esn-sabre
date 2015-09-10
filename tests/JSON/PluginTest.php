@@ -284,4 +284,60 @@ END:VCALENDAR
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
     }
+
+    function testCreateCalendar() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
+        ));
+
+        $calendar = [
+            "id" => "ID",
+            "dav:name" => "NAME",
+            "caldav:description" => "DESCRIPTION",
+            "apple:color" => "#0190FFFF",
+            "apple:order" => "99"
+        ];
+
+        $request->setBody(json_encode($calendar));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 201);
+
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
+        $this->assertCount(2, $calendars);
+
+        $cal = $calendars[1];
+        $this->assertEquals('NAME', $cal['{DAV:}displayname']);
+        $this->assertEquals('DESCRIPTION', $cal['{urn:ietf:params:xml:ns:caldav}calendar-description']);
+        $this->assertEquals('#0190FFFF', $cal['{http://apple.com/ns/ical/}calendar-color']);
+        $this->assertEquals('99', $cal['{http://apple.com/ns/ical/}calendar-order']);
+    }
+
+    function testCreateCalendarMissingId() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
+        ));
+
+        $calendar = [
+            "id" => "",
+            "dav:name" => "NAME",
+            "caldav:description" => "DESCRIPTION",
+            "apple:color" => "#0190FFFF",
+            "apple:order" => "99"
+        ];
+
+        $request->setBody(json_encode($calendar));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 400);
+
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
+        $this->assertCount(1, $calendars);
+    }
 }

@@ -25,6 +25,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $node = $this->server->tree->getNodeForPath($nodePath);
             if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
                 return $this->getCalendarObjects($request, $response, $nodePath, $node);
+            } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+                $jsonData = json_decode($request->getBodyAsString());
+                $result = $this->createCalendar($nodePath, $node, $jsonData);
+                $this->server->httpResponse->setStatus($result ? 201 : 400);
+                return false;
             }
         }
         return true;
@@ -53,6 +58,26 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 return false;
             }
         }
+        return true;
+    }
+
+    function createCalendar($nodePath, $node, $jsonData) {
+        $issetdef = function($key, $default=null) use ($jsonData) {
+            return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
+        };
+
+        if (!isset($jsonData->id) || !$jsonData->id) {
+            return false;
+        }
+
+        $rt = ['{DAV:}collection', '{urn:ietf:params:xml:ns:caldav}calendar'];
+        $props = [
+            "{DAV:}displayname" => $issetdef("dav:name"),
+            "{urn:ietf:params:xml:ns:caldav}calendar-description" => $issetdef("caldav:description"),
+            "{http://apple.com/ns/ical/}calendar-color" => $issetdef("apple:color"),
+            "{http://apple.com/ns/ical/}calendar-order" => $issetdef("apple:order")
+        ];
+        $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
         return true;
     }
 

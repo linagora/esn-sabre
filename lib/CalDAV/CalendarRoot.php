@@ -41,7 +41,11 @@ class CalendarRoot extends \Sabre\DAV\Collection {
     }
 
     public function getChild($name) {
-        $mongoName = new \MongoId($name);
+        try {
+            $mongoName = new \MongoId($name);
+        } catch (\MongoException $e) {
+            return null;
+        }
 
         $res = $this->db->users->findOne(['_id' => $mongoName]);
         if ($res) {

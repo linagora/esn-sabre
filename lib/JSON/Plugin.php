@@ -35,11 +35,86 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         if (substr($path, -5) == '.json') {
             $nodePath = substr($path, 0, -5);
             $node = $this->server->tree->getNodeForPath($nodePath);
-            if ($node instanceof \Sabre\CardDAV\AddressBook) {
+
+            $result = null;
+
+            if ($node instanceof \ESN\CalDAV\CalendarRoot) {
+                $result = $this->listCalendarRoot($nodePath, $node);
+            } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+                $result = $this->listCalendarHome($nodePath, $node);
+            } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
                 return $this->getContacts($request, $response, $nodePath, $node);
+            }
+
+            if ($result) {
+                $this->server->httpResponse->setStatus(200);
+                $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
+                $this->server->httpResponse->setBody(json_encode($result));
+                return false;
             }
         }
         return true;
+    }
+
+    function listCalendarRoot($nodePath, $node) {
+        $homes = $node->getChildren();
+        $baseUri = $this->server->getBaseUri();
+
+        $items = [];
+        foreach ($homes as $home) {
+            if ($home instanceof \Sabre\CalDAV\CalendarHome) {
+                $noderef = $nodePath . "/" . $home->getName();
+                $items[] = $this->listCalendarHome($noderef, $home);
+            }
+        }
+
+        $requestPath = $baseUri . $nodePath . '.json';
+        $result = [
+            "_links" => [
+              "self" => [ "href" => $requestPath ]
+            ],
+            "_embedded" => [ "dav:home" => $items ]
+        ];
+
+        return $result;
+    }
+
+    function listCalendarHome($nodePath, $node) {
+        $calendars = $node->getChildren();
+        $baseUri = $this->server->getBaseUri();
+
+        $items = [];
+        foreach ($calendars as $calendar) {
+            if ($calendar instanceof \Sabre\CalDAV\Calendar) {
+                $items[] = $this->listCalendar($nodePath, $calendar);
+            }
+        }
+
+
+        $requestPath = $baseUri . $nodePath . '.json';
+        $result = [
+            "_links" => [
+              "self" => [ "href" => $requestPath ]
+            ],
+            "_embedded" => [ "dav:calendar" => $items ]
+        ];
+
+        return $result;
+    }
+
+    function listCalendar($nodePath, $calendar) {
+        $baseUri = $this->server->getBaseUri();
+        $calprops = $calendar->getProperties([]);
+        return [
+            "_links" => [
+                "self" => [ "href" => $baseUri . $nodePath . "/" . $calendar->getName() . ".json" ],
+            ],
+            "dav:name" => $calprops["{DAV:}displayname"],
+            "caldav:description" => $calprops["{urn:ietf:params:xml:ns:caldav}calendar-description"],
+            "calendarserver:ctag" => $calprops["{http://calendarserver.org/ns/}getctag"],
+            "apple:color" => $calprops["{http://apple.com/ns/ical/}calendar-color"],
+            "apple:order" => $calprops["{http://apple.com/ns/ical/}calendar-order"]
+        ];
     }
 
     function getCalendarObjects($request, $response, $nodePath, $node) {

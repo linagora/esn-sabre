@@ -25,7 +25,7 @@ class PluginTest extends \PHPUnit_Framework_TestCase {
 
     protected $caldavCalendarObjects = array(
         'event1.ics' =>
-             'BEGIN:VCALENDAR
+            'BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
 CREATED:20120313T142342Z
@@ -39,10 +39,26 @@ SEQUENCE:4
 END:VEVENT
 END:VCALENDAR
 ',
+        'recur.ics' =>
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:75EE3C60-34AC-4A97-953D-56CC004D6705
+SUMMARY:Recurring
+DTSTART:20150227T010000
+DTEND:20150227T020000
+RRULE:FREQ=DAILY
+END:VEVENT
+END:VCALENDAR
+',
     );
 
     protected $timeRangeData = [
           'match' => [ 'start' => '20120225T230000Z', 'end' => '20130228T225959Z' ],
+          'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
+        ];
+    protected $timeRangeDataRecur = [
+          'match' => [ 'start' => '20150227T000000Z', 'end' => '20150228T030000Z' ],
           'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
         ];
 
@@ -141,6 +157,32 @@ END:VCALENDAR
         $this->assertCount(1, $jsonResponse->_embedded->{'dav:item'});
     }
 
+    function testTimeRangeQueryRecur() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeDataRecur));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(1, $items);
+
+        $vcalendar = \Sabre\VObject\Reader::readJson($items[0]->{'data'});
+
+        $vevents = $vcalendar->select('VEVENT');
+        $this->assertCount(2, $vevents);
+
+        // All properties must contain a recurrence id
+        foreach ($vevents as $vevent) {
+            $this->assertTrue(!!$vevent->{'RECURRENCE-ID'});
+        }
+    }
+
     function testTimeRangeQueryMissingMatch() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
@@ -210,7 +252,7 @@ END:VCALENDAR
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
         $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/2');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/3');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
 
@@ -337,7 +379,7 @@ END:VCALENDAR
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
         $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/2');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/3');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
     }
@@ -359,7 +401,7 @@ END:VCALENDAR
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
         $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/2');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/3');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
     }

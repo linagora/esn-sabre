@@ -237,7 +237,20 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 $this->server->getPropertiesForPath($nodePath . "/" . $path, $props);
 
             $vObject = VObject\Reader::read($properties[200]['{' . self::NS_CALDAV . '}calendar-data']);
+
+            $isRecurring = !!$vObject->VEVENT->RRULE;
             $vObject->expand($start, $end);
+
+            // Sabre's VObject doesn't return the RECURRENCE-ID in the first
+            // occurrence, we'll need to do this ourselves. We take advantage
+            // of the fact that the object getter for VEVENT will always return
+            // the first one.
+            $vevent = $vObject->VEVENT;
+            if ($isRecurring && !$vevent->{'RECURRENCE-ID'}) {
+                $recurid = clone $vevent->DTSTART;
+                $recurid->name = 'RECURRENCE-ID';
+                $vevent->add($recurid);
+            }
 
             $items[] = [
                 "_links" => [

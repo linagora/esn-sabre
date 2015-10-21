@@ -11,6 +11,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
     protected $dummyCard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:hello\r\nEND:VCARD\r\n";
     protected $dummyCard2 = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:world\r\nEND:VCARD\r\n";
+    protected $dummyCard3 = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Zelda\r\nEND:VCARD\r\n";
 
     public function setUp() {
         $this->backend = $this->getBackend();
@@ -335,5 +336,22 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             'deleted'   => [],
             "added"     => ["card1.ics", "card3.ics"],
         ], $result);
+    }
+
+    public function testDecapitalizeFn() {
+        $backend = $this->backend;
+        $id = $backend->createAddressBook(
+            'principals/admin',
+            'admin',
+            []
+        );
+        $backend->createCard($id, 'hello', $this->dummyCard);
+        $backend->createCard($id, 'world', $this->dummyCard2);
+        $backend->createCard($id, 'Zelda', $this->dummyCard3);
+
+        $result = $backend->getCards($id, 0, 0, 'fn');
+        $this->assertEquals($result[0]['uri'], 'hello');
+        $this->assertEquals($result[1]['uri'], 'world');
+        $this->assertEquals($result[2]['uri'], 'Zelda');
     }
 }

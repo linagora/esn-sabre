@@ -299,7 +299,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $fn = (string)$vcard->FN;
 
         return [
-            'fn' => $fn,
+            'fn' => strtolower($fn),
             'size' => strlen($cardData),
             'etag' => '"' . md5($cardData) . '"'
         ];

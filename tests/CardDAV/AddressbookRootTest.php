@@ -78,6 +78,9 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($project instanceof \Sabre\CardDAV\AddressBookHome);
         $this->assertEquals($project->getName(), '54b64eadf6d7d8e41d263e0f');
         $this->assertEquals($project->getOwner(), 'principals/projects/54b64eadf6d7d8e41d263e0f');
+
+        $invalid = $this->root->getChild('not_a_mongo_id');
+        $this->assertNull($invalid);
     }
 
     /**

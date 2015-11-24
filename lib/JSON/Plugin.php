@@ -33,6 +33,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     list($code, $body) = $this->getCalendarObjects($nodePath, $node, $jsonData);
                 } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
                     list($code, $body) = $this->createCalendar($nodePath, $node, $jsonData);
+                } else if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
+                    list($code, $body) = $this->createAddressBook($node, $jsonData);
                 }
             }
 
@@ -92,6 +94,24 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             "{urn:ietf:params:xml:ns:caldav}calendar-description" => $issetdef("caldav:description"),
             "{http://apple.com/ns/ical/}calendar-color" => $issetdef("apple:color"),
             "{http://apple.com/ns/ical/}calendar-order" => $issetdef("apple:order")
+        ];
+        $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
+        return [201, null];
+    }
+
+    function createAddressbook($node, $jsonData) {
+        $issetdef = function($key, $default=null) use ($jsonData) {
+             return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
+        };
+
+        if (!isset($jsonData->id) || !$jsonData->id) {
+            return [400, null];
+        }
+
+        $rt = ['{DAV:}collection', '{urn:ietf:params:xml:ns:carddav}addressbook'];
+        $props = [
+            "{DAV:}displayname" => $issetdef("dav:name"),
+            "{urn:ietf:params:xml:ns:carddav}addressbook-description" => $issetdef("carddav:description")
         ];
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
         return [201, null];

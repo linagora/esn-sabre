@@ -163,6 +163,20 @@ be used in the calendar url.
 - 201 Created: The calendar has been created
 - 400 Bad Request: Missing keys in the request object
 
+## POST /addressbooks/{addressbookHomeId}.json
+
+Create a addressbook in the specified addressbook home.
+
+**Request JSON Object:**
+
+A dav:addressbook object, with an additional member "id" which specifies the id to
+be used in the addressbook url.
+
+**Status Codes:**
+
+- 201 Created: New addressbook has been created
+- 400 Bad Request: Missing keys in the request object
+
 
 ## GET /addressbooks/{addressbookHomeId}/{addressbookId}.json
 

@@ -461,4 +461,52 @@ END:VCALENDAR
         $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
         $this->assertCount(1, $calendars);
     }
+
+    function testCreateAddressbook() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json',
+        ));
+
+        $addressbook = [
+            "id" => "ID",
+            "dav:name" => "NAME",
+            "carddav:description" => "DESCRIPTION"
+        ];
+
+        $request->setBody(json_encode($addressbook));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals(201, $response->status);
+
+        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
+        $this->assertCount(2, $addressbooks);
+
+        $book = $addressbooks[1];
+        $this->assertEquals('NAME', $book['{DAV:}displayname']);
+        $this->assertEquals('DESCRIPTION', $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+    }
+
+    function testCreateAddressbookMissingId() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json',
+        ));
+
+        $addressbook = [
+            "id" => ""
+        ];
+
+        $request->setBody(json_encode($addressbook));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals(400, $response->status);
+
+        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
+        $this->assertCount(1, $addressbooks);
+    }
 }

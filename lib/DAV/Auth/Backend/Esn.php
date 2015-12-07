@@ -14,6 +14,8 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     private $lastConnectCookies;
 
     protected $principalPrefix = 'principals/users/';
+    protected $technicalPrincipal = 'principals/users/technicalUser';
+    protected $technicalUserType = 'technical';
 
     function __construct($apiroot, $realm = null) {
         $this->apiroot = $apiroot;
@@ -32,12 +34,12 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     private function decodeResponse($response) {
         if ($response->getStatus() != 200) {
-            return false;
+            return [false, null];
         }
 
         $user = json_decode($response->getBodyAsString());
         if (!$user) {
-            return false;
+            return [false, null];
         }
 
         $cookies = $response->getHeaderAsArray('Set-Cookie');
@@ -49,7 +51,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         $this->currentUserId = $user->_id;
-        return true;
+        return [true, $user->type];
     }
 
     private static function buildCookie($cookies) {
@@ -85,7 +87,8 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             'password' => $password
         ]);
         $request = new HTTP\Request('POST', $url, $headers, $body);
-        return $this->decodeResponse($this->httpClient->send($request));
+        list($response, $type) = $this->decodeResponse($this->httpClient->send($request));
+        return $response;
     }
 
     function getCurrentPrincipal() {
@@ -99,15 +102,16 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
         $auth = $request->getHeader("ESNToken");
+        $type = 'user';
         if ($auth) {
-            $rv = $this->checkAuthByToken($auth);
+            list($rv, $type) = $this->checkAuthByToken($auth);
             $msg = "Invalid Token";
         } else {
             list($rv, $msg) = parent::check($request, $response);
         }
 
         if ($rv) {
-            $msg = $this->getCurrentPrincipal();
+            $msg = ($type == $this->technicalUserType) ? $this->technicalPrincipal : $this->getCurrentPrincipal();
         }
 
         return [$rv, $msg];

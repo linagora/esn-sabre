@@ -79,7 +79,6 @@ $aclPlugin->principalCollectionSet = [
     PRINCIPALS_COMMUNITIES,
     PRINCIPALS_PROJECTS
 ];
-$aclPlugin->adminPrincipals[] = 'principals/users/technicalUser';
 $server->addPlugin($aclPlugin);
 
 // JSON api support

@@ -65,6 +65,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 list($code, $body) = $this->listCalendarHome($nodePath, $node);
             } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
                 list($code, $body) = $this->getContacts($request, $response, $nodePath, $node);
+            } else if ($node instanceof \Sabre\CalDAV\Calendar) {
+                list($code, $body) = $this->getCalendarInformation($nodePath, $node);
             }
 
             if ($code) {
@@ -162,6 +164,12 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         ];
 
         return [200, $result];
+    }
+
+    function getCalendarInformation($nodePath, $node) {
+        $baseUri = $this->server->getBaseUri();
+        $requestPath = $baseUri . $nodePath . ".json";
+        return [200, $this->listCalendar($nodePath, $node)];
     }
 
     function listCalendar($nodePath, $calendar) {

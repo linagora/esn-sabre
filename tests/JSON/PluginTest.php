@@ -312,7 +312,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json'
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar2.json'
         ));
 
         $request->setBody(json_encode($this->timeRangeData));
@@ -404,6 +404,24 @@ END:VCALENDAR
         $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/3');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+    }
+
+    function testGetCalendarConfiguration() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
+        $this->assertEquals($jsonResponse->{'dav:name'}, 'Calendar');
+        $this->assertEquals($jsonResponse->{'caldav:description'}, 'description');
+        $this->assertEquals($jsonResponse->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/3');
+        $this->assertEquals($jsonResponse->{'apple:color'}, '#0190FFFF');
+        $this->assertEquals($jsonResponse->{'apple:order'}, '2');
     }
 
     function testCreateCalendar() {

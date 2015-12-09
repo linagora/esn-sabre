@@ -14,7 +14,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     private $lastConnectCookies;
 
     protected $principalPrefix = 'principals/users/';
-    protected $technicalPrincipal = 'principals/users/technicalUser';
+    protected $technicalPrincipal = 'principals/technicalUser';
     protected $technicalUserType = 'technical';
 
     function __construct($apiroot, $realm = null) {
@@ -49,9 +49,9 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
             $this->lastConnectCookies = $cookiestr;
         }
-
+        $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
         $this->currentUserId = $user->_id;
-        return [true, $user->type];
+        return [true, $type];
     }
 
     private static function buildCookie($cookies) {
@@ -102,7 +102,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
         $auth = $request->getHeader("ESNToken");
-        $type = 'user';
+        $type = '';
         if ($auth) {
             list($rv, $type) = $this->checkAuthByToken($auth);
             $msg = "Invalid Token";

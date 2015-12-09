@@ -15,6 +15,7 @@ date_default_timezone_set('UTC');
 
 define('PRINCIPALS_COLLECTION', 'principals');
 define('PRINCIPALS_USERS', 'principals/users');
+define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
 define('PRINCIPALS_COMMUNITIES', 'principals/communities');
 define('PRINCIPALS_PROJECTS', 'principals/projects');
 define('JSON_ROOT', 'json');
@@ -59,6 +60,7 @@ $tree = [
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_USERS),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_COMMUNITIES),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_PROJECTS),
+      new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_TECHNICAL_USER),
     ]),
     new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $esnDb),
     new ESN\CardDAV\AddressBookRoot($principalBackend, $addressbookBackend, $esnDb),
@@ -79,7 +81,7 @@ $aclPlugin->principalCollectionSet = [
     PRINCIPALS_COMMUNITIES,
     PRINCIPALS_PROJECTS
 ];
-$aclPlugin->adminPrincipals[] = 'principals/users/technicalUser';
+$aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
 $server->addPlugin($aclPlugin);
 
 // JSON api support

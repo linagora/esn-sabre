@@ -183,7 +183,14 @@ Create a addressbook in the specified addressbook home.
 **Request JSON Object:**
 
 A dav:addressbook object, with an additional member "id" which specifies the id to
-be used in the addressbook url.
+be used in the addressbook url and "privilege" which determines the addressbook's privilege
+
+    {
+        id: 'ID',
+        'dav:name' :'NAME',
+        'carddav:description': 'DESCRIPTION',
+        privilege: 'read-only'
+    }
 
 **Status Codes:**
 

@@ -216,3 +216,26 @@ List all contacts in the addressbook.
 
 A dav:addressbook resource, with items expanded. The resource may also contain
 a next link, if the offset/limit query parameters are used.
+
+
+## PROPFIND /addressbooks/{addressbookHomeId}/{addressbookId}.json
+
+List all properties of the addressbook.
+
+**Status Codes:**
+
+- 200 OK: Query has succeeded and results are returned
+
+**Request JSON Object:**
+
+An object with an array member "property" which specifies list of property of the addressbook.
+
+**Response:**
+
+A json resource containing the values of all requested properties
+
+```json
+{
+  "{urn:ietf:params:xml:ns:carddav}addressbook-description": "description",
+  "privilege": "write"
+}

@@ -491,7 +491,7 @@ END:VCALENDAR
             "id" => "ID",
             "dav:name" => "NAME",
             "carddav:description" => "DESCRIPTION",
-            "privilege" => "read"
+            "privilege" => "read-only"
         ];
 
         $request->setBody(json_encode($addressbook));
@@ -506,7 +506,7 @@ END:VCALENDAR
         $book = $addressbooks[1];
         $this->assertEquals('NAME', $book['{DAV:}displayname']);
         $this->assertEquals('DESCRIPTION', $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
-        $this->assertEquals('read', $book['privilege']);
+        $this->assertEquals('read-only', $book['privilege']);
     }
 
     function testCreateAddressbookMissingId() {
@@ -529,7 +529,7 @@ END:VCALENDAR
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
         $this->assertCount(1, $addressbooks);
     }
-
+    
     function testDeleteCalendar() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',
@@ -642,5 +642,21 @@ END:VCALENDAR
         $request->setBody(json_encode($this->timeRangeData));
         $response = $this->request($request);
         $this->assertEquals($response->status, 400);
+    }
+
+    function testPropFindRequest() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPFIND',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
+        ));
+        
+        $body = '{"properties": ["{DAV:}acl","uri"]}';
+        $request->setBody($body);
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+        $this->assertEquals(200, $response->status);
+        $this->assertEquals('write', $jsonResponse['privilege']);
+        $this->assertEquals('book1', $jsonResponse['uri']);
     }
 }

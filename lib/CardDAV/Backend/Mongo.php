@@ -26,7 +26,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'principaluri' => $row['principaluri'],
                 '{DAV:}displayname' => $row['displayname'],
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $row['description'],
-                'privilege' => $row['privilege']?$row['privilege']:'write',
+                'privilege' => isset($row['privilege']) ? $row['privilege'] : 'write',
                 '{http://calendarserver.org/ns/}getctag' => $row['synctoken'],
                 '{http://sabredav.org/ns}sync-token' => $row['synctoken']?$row['synctoken']:'0',
             ];

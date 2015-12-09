@@ -149,6 +149,19 @@ List all calendars in the calendar home.
 A dav:home resource, containing all dav:calendar resources in it.
 
 
+## GET /calendars/{calendarHomeId}/{calendarId}.json
+
+Return information about a calendar
+
+**Status Codes:**
+
+- 200 OK: Query has succeeded and results are returned
+
+**Response:**
+
+A dav:calendar resources.
+
+
 ## POST /calendars/{calendarHomeId}.json
 
 Create a calendar in the specified calendar home.

@@ -527,4 +527,55 @@ END:VCALENDAR
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
         $this->assertCount(1, $addressbooks);
     }
+
+    function testDeleteCalendar() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
+        $this->assertCount(1, $calendars);
+
+        $response = $this->request($request);
+        $this->assertEquals(204, $response->status);
+
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
+        $this->assertCount(0, $calendars);
+    }
+
+    function testDeleteWrongCollection() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar2.json'
+        ));
+
+        $response = $this->request($request);
+        $this->assertEquals($response->status, 404);
+    }
+
+    function testDeleteUnknown() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar.jaysun'
+        ));
+
+        $response = $this->request($request);
+        $this->assertEquals($response->status, 404);
+    }
+
+    function testDeleteWrongNode() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeData));
+        $response = $this->request($request);
+        $this->assertEquals($response->status, 404);
+    }
+
 }

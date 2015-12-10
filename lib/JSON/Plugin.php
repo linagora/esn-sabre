@@ -16,6 +16,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $this->server = $server;
         $server->on('method:POST', [$this, 'post'], 80);
         $server->on('method:GET', [$this, 'get'], 80);
+        $server->on('method:DELETE', [$this, 'delete'], 80);
     }
 
     function post($request, $response) {
@@ -81,6 +82,28 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return true;
     }
 
+    function delete($request, $response) {
+        $path = $request->getPath();
+        if (substr($path, -5) == ".json") {
+            $nodePath = substr($path, 0, -5);
+            $node = $this->server->tree->getNodeForPath($nodePath);
+
+            $code = null;
+            $body = null;
+
+            if ($node instanceof \Sabre\CalDAV\Calendar) {
+                list($code, $body) = $this->deleteCalendar($nodePath, $node);
+            }
+
+            if ($code) {
+                $this->server->httpResponse->setStatus($code);
+                return false;
+            }
+        }
+        return true;
+
+    }
+
     function createCalendar($nodePath, $node, $jsonData) {
         $issetdef = function($key, $default=null) use ($jsonData) {
             return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
@@ -99,6 +122,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         ];
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
         return [201, null];
+    }
+
+    function deleteCalendar($nodePath, $node) {
+        $this->server->tree->delete($nodePath);
+        return [204, null];
     }
 
     function createAddressbook($node, $jsonData) {

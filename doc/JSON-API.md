@@ -186,10 +186,10 @@ A dav:addressbook object, with an additional member "id" which specifies the id 
 be used in the addressbook url and "privilege" which determines the addressbook's privilege
 
     {
-        id: 'ID',
+        'id': 'ID',
         'dav:name' :'NAME',
         'carddav:description': 'DESCRIPTION',
-        privilege: 'read-only'
+        'dav:acl': ['dav:read', 'dav:write']
     }
 
 **Status Codes:**
@@ -237,5 +237,5 @@ A json resource containing the values of all requested properties
 ```json
 {
   "{urn:ietf:params:xml:ns:carddav}addressbook-description": "description",
-  "privilege": "write"
+  "{DAV:}acl": ['dav:read', 'dav:write']
 }

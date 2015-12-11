@@ -17,7 +17,7 @@ class MongoTest extends AbstractDatabaseTest {
             'displayname' => 'book1',
             'uri' => 'book1',
             'description' => 'addressbook 1',
-            'privilege' => 'write',
+            'privilege' => ['dav:read', 'dav:write'],
             'synctoken' => 1
         ];
         $this->db->addressbooks->insert($book);

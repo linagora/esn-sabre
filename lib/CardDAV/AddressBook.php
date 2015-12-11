@@ -10,9 +10,8 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
     }
 
     function getACL() {
-        if($property = $this->getProperties(['privilege'])) {
-            $userPrivilege = $property['privilege'];
-            if ($userPrivilege == 'read-only') {
+        if($properties = $this->getProperties(['{DAV:}acl'])) {
+            if (!in_array('dav:write', $properties['{DAV:}acl'])) {
                 return [
                     [
                         'privilege' => '{DAV:}read',

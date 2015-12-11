@@ -26,7 +26,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'principaluri' => $row['principaluri'],
                 '{DAV:}displayname' => $row['displayname'],
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $row['description'],
-                'privilege' => isset($row['privilege']) ? $row['privilege'] : 'write',
+                '{DAV:}acl' => isset($row['privilege']) ? $row['privilege'] : ['dav:read', 'dav:write'],
                 '{http://calendarserver.org/ns/}getctag' => $row['synctoken'],
                 '{http://sabredav.org/ns}sync-token' => $row['synctoken']?$row['synctoken']:'0',
             ];
@@ -38,7 +38,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $supportedProperties = [
             '{DAV:}displayname',
             '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description',
-            'privilege'
+            '{DAV:}acl'
         ];
 
         $propPatch->handle($supportedProperties, function($mutations) use ($addressBookId) {
@@ -53,7 +53,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                     case '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' :
                         $updates['description'] = $newValue;
                         break;
-                    case '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}userPrivilege' :
+                    case '{DAV:}acl' :
                         $updates['privilege'] = $newValue;
                         break;
                 }
@@ -74,7 +74,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'synctoken' => 1,
             'displayname' => null,
             'description' => null,
-            'privilege' => 'write',
+            'privilege' => ['dav:read', 'dav:write'],
             'principaluri' => $principalUri,
             'uri' => $url,
         ];
@@ -88,7 +88,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 case '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' :
                     $values['description'] = $newValue;
                     break;
-                case 'privilege' :
+                case '{DAV:}acl' :
                     $values['privilege'] = $newValue;
                     break;
                 default :

@@ -196,7 +196,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $props = [
             "{DAV:}displayname" => $issetdef("dav:name"),
             "{urn:ietf:params:xml:ns:carddav}addressbook-description" => $issetdef("carddav:description"),
-            "privilege" => $issetdef("privilege")
+            "{DAV:}acl" => $issetdef("dav:acl")
         ];
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
         return [201, null];

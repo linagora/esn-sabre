@@ -33,7 +33,7 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testReadOnlyAddressbookACL() {
-        $this->bookInfo = [ 'id' => $this->bookId , 'principaluri' => $this->principalUri, 'privilege' => 'read-only' ];
+        $this->bookInfo = [ 'id' => $this->bookId , 'principaluri' => $this->principalUri, '{DAV:}acl' => ['dav:read'] ];
         $this->readOnlyBook = new \ESN\CardDAV\AddressBook($this->carddavBackend, $this->bookInfo);
         $expectedACL = [
             [

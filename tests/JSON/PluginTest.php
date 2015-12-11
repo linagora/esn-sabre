@@ -491,7 +491,7 @@ END:VCALENDAR
             "id" => "ID",
             "dav:name" => "NAME",
             "carddav:description" => "DESCRIPTION",
-            "privilege" => "read-only"
+            "dav:acl" => ['dav:read']
         ];
 
         $request->setBody(json_encode($addressbook));
@@ -506,7 +506,7 @@ END:VCALENDAR
         $book = $addressbooks[1];
         $this->assertEquals('NAME', $book['{DAV:}displayname']);
         $this->assertEquals('DESCRIPTION', $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
-        $this->assertEquals('read-only', $book['privilege']);
+        $this->assertEquals(['dav:read'], $book['{DAV:}acl']);
     }
 
     function testCreateAddressbookMissingId() {
@@ -656,7 +656,7 @@ END:VCALENDAR
         $response = $this->request($request);
         $jsonResponse = json_decode($response->getBodyAsString(), true);
         $this->assertEquals(200, $response->status);
-        $this->assertEquals('write', $jsonResponse['privilege']);
+        $this->assertEquals(['dav:read', 'dav:write'], $jsonResponse['{DAV:}acl']);
         $this->assertEquals('book1', $jsonResponse['uri']);
     }
 }

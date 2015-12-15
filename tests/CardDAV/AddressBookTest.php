@@ -31,4 +31,35 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
         $this->assertCount(1, $children);
         $this->assertEquals(1, $this->book->getChildCount());
     }
+
+    function testReadOnlyAddressbookACL() {
+        $this->bookInfo = [ 'id' => $this->bookId , 'principaluri' => $this->principalUri, '{DAV:}acl' => ['dav:read'] ];
+        $this->readOnlyBook = new \ESN\CardDAV\AddressBook($this->carddavBackend, $this->bookInfo);
+        $expectedACL = [
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => "principals/user1",
+                'protected' => true,
+            ]
+        ];
+        $this->assertEquals($expectedACL, $this->readOnlyBook->getACL());
+    }
+
+    function testDefaultAddressbookACL() {
+        $this->bookInfo = [ 'id' => $this->bookId , 'principaluri' => $this->principalUri];
+        $this->book = new \ESN\CardDAV\AddressBook($this->carddavBackend, $this->bookInfo);
+        $expectedACL = [
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => "principals/user1",
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}write',
+                'principal' => "principals/user1",
+                'protected' => true,
+            ]
+        ];
+        $this->assertEquals($expectedACL, $this->book->getACL());
+    }
 }

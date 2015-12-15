@@ -8,7 +8,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $client = $esnauth->getClient();
 
         $client->on('curlExec', function(&$return) {
-            $return = "HTTP 200 OK\r\nSet-Cookie: test=passed\r\n\r\n{\"_id\":\"123456789\",\"firstname\":\"John\",\"lastname\":\"Doe\",\"emails\":[\"johndoe@linagora.com\"]}";
+            $return = "HTTP 200 OK\r\nSet-Cookie: test=passed\r\n\r\n{\"_id\":\"123456789\",\"type\":\"user\",\"firstname\":\"John\",\"lastname\":\"Doe\",\"emails\":[\"johndoe@linagora.com\"]}";
         });
         $client->on('curlStuff', function(&$return) {
             $return = [ [ 'http_code' => 200, 'header_size' => 40 ], 0, '' ];
@@ -22,6 +22,28 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertTrue($rv);
         $this->assertEquals($esnauth->getCurrentPrincipal(), 'principals/users/123456789');
+        $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
+    }
+
+    function testAuthenticateTokenAsTechnicalUser() {
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $client = $esnauth->getClient();
+
+        $client->on('curlExec', function(&$return) {
+            $return = "HTTP 200 OK\r\nSet-Cookie: test=passed\r\n\r\n{\"_id\":\"123456789\",\"user_type\":\"technical\",\"firstname\":\"John\",\"lastname\":\"Doe\",\"emails\":[\"johndoe@linagora.com\"]}";
+        });
+        $client->on('curlStuff', function(&$return) {
+            $return = [ [ 'http_code' => 200, 'header_size' => 40 ], 0, '' ];
+        });
+
+        $request = new \Sabre\HTTP\Request('GET', '/foo/bar');
+        $request->setHeader('ESNToken', '1234');
+        $response = new \Sabre\HTTP\Response(200);
+
+        list($rv, $msg) = $esnauth->check($request, $response);
+
+        $this->assertTrue($rv);
+        $this->assertEquals($msg, 'principals/technicalUser');
         $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
     }
 
@@ -110,7 +132,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $client = $esnauth->getClient();
 
         $client->on('curlExec', function(&$return) {
-            $return = "HTTP 200 OK\r\nSet-Cookie: test=passed\r\n\r\n{\"_id\":\"123456789\",\"firstname\":\"John\",\"lastname\":\"Doe\",\"emails\":[\"johndoe@linagora.com\"]}";
+            $return = "HTTP 200 OK\r\nSet-Cookie: test=passed\r\n\r\n{\"_id\":\"123456789\",\"type\":\"user\",\"firstname\":\"John\",\"lastname\":\"Doe\",\"emails\":[\"johndoe@linagora.com\"]}";
         });
         $client->on('curlStuff', function(&$return) {
             $return = [ [ 'http_code' => 200, 'header_size' => 40 ], 0, '' ];

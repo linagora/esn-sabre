@@ -18,6 +18,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $server->on('method:GET', [$this, 'get'], 80);
         $server->on('method:DELETE', [$this, 'delete'], 80);
         $server->on('method:PROPPATCH', [$this, 'proppatch'], 80);
+        $server->on('method:PROPFIND', [$this, 'findProperties'], 80);
     }
 
     function post($request, $response) {
@@ -194,11 +195,34 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $rt = ['{DAV:}collection', '{urn:ietf:params:xml:ns:carddav}addressbook'];
         $props = [
             "{DAV:}displayname" => $issetdef("dav:name"),
-            "{urn:ietf:params:xml:ns:carddav}addressbook-description" => $issetdef("carddav:description")
+            "{urn:ietf:params:xml:ns:carddav}addressbook-description" => $issetdef("carddav:description"),
+            "{DAV:}acl" => $issetdef("dav:acl")
         ];
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
         return [201, null];
     }
+
+    function findProperties($request) {
+        $path = $request->getPath();
+        if (substr($path, -5) == ".json") {
+            $nodePath = substr($path, 0, -5);
+            $code = null;
+            $body = null;
+            $node = $this->server->tree->getNodeForPath($nodePath);
+            $jsonData = json_decode($request->getBodyAsString(), true);
+
+            if ($node instanceof \Sabre\CardDAV\AddressBook) {
+                if ($node->getProperties($jsonData['properties'])) {
+                    $this->server->httpResponse->setHeader("Content-Type","application/json; charset=utf-8");
+                    $this->server->httpResponse->setBody(json_encode($node->getProperties($jsonData['properties'])));
+                }
+                $this->server->httpResponse->setStatus(200);
+                return false;
+            }
+        }
+        return true;
+    }
+
 
     function listCalendarRoot($nodePath, $node) {
         $homes = $node->getChildren();

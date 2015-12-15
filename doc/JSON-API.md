@@ -183,7 +183,14 @@ Create a addressbook in the specified addressbook home.
 **Request JSON Object:**
 
 A dav:addressbook object, with an additional member "id" which specifies the id to
-be used in the addressbook url.
+be used in the addressbook url and "privilege" which determines the addressbook's privilege
+
+    {
+        'id': 'ID',
+        'dav:name' :'NAME',
+        'carddav:description': 'DESCRIPTION',
+        'dav:acl': ['dav:read', 'dav:write']
+    }
 
 **Status Codes:**
 
@@ -209,3 +216,26 @@ List all contacts in the addressbook.
 
 A dav:addressbook resource, with items expanded. The resource may also contain
 a next link, if the offset/limit query parameters are used.
+
+
+## PROPFIND /addressbooks/{addressbookHomeId}/{addressbookId}.json
+
+List all properties of the addressbook.
+
+**Status Codes:**
+
+- 200 OK: Query has succeeded and results are returned
+
+**Request JSON Object:**
+
+An object with an array member "property" which specifies list of property of the addressbook.
+
+**Response:**
+
+A json resource containing the values of all requested properties
+
+```json
+{
+  "{urn:ietf:params:xml:ns:carddav}addressbook-description": "description",
+  "{DAV:}acl": ['dav:read', 'dav:write']
+}

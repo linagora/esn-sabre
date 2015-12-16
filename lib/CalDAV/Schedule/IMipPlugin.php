@@ -13,6 +13,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     protected $server;
     protected $httpClient;
     protected $apiroot;
+    protected $db;
 
     const SCHEDSTAT_SUCCESS_PENDING = '1.0';
     const SCHEDSTAT_SUCCESS_UNKNOWN = '1.1';
@@ -20,9 +21,10 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     const SCHEDSTAT_FAIL_TEMPORARY = '5.1';
     const SCHEDSTAT_FAIL_PERMANENT = '5.2';
 
-    function __construct($apiroot, $authBackend) {
+    function __construct($apiroot, $authBackend, $db) {
         $this->apiroot = $apiroot;
         $this->authBackend = $authBackend;
+        $this->db = $db;
     }
 
     function schedule(ITip\Message $iTipMessage) {
@@ -48,11 +50,21 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             return;
         }
 
+        $objectsCollection = $this->db->selectCollection('calendarobjects');
+        $query = [ 'uid' => $iTipMessage->message->VEVENT->select('UID')[0]->getValue()];
+        $event = $objectsCollection->findOne($query);
+        if (!$event || !array_key_exists('calendarid', $event)) {
+            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
+            error_log("iTip Delivery could not be performed because calendar id could not be found.");
+            return;
+        }
+
         $body = json_encode([
           'emails' => [ substr($iTipMessage->recipient, 7) ],
           'method' => $iTipMessage->method,
           'event' => $iTipMessage->message->serialize(),
-          'notify' => true
+          'notify' => true,
+          'calendarId' => $event['calendarid']
         ]);
 
         $url = $this->apiroot . '/calendars/inviteattendees';

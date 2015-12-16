@@ -107,7 +107,7 @@ $server->addPlugin(
 );
 
 $server->addPlugin(
-    new ESN\CalDAV\Schedule\IMipPlugin($config['esn']['calendarRoot'], $authBackend)
+    new ESN\CalDAV\Schedule\IMipPlugin($config['esn']['calendarRoot'], $authBackend, $sabreDb)
 );
 
 // WebDAV-Sync plugin

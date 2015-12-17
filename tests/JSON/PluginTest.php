@@ -588,7 +588,6 @@ END:VCALENDAR
 
         $data = [ "dav:name" => "tested" ];
         $request->setBody(json_encode($data));
-        print(json_encode($data));
 
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);

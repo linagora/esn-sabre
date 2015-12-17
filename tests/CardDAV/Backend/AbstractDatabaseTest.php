@@ -12,6 +12,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     protected $dummyCard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:hello\r\nEND:VCARD\r\n";
     protected $dummyCard2 = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:world\r\nEND:VCARD\r\n";
     protected $dummyCard3 = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Zelda\r\nEND:VCARD\r\n";
+    protected $nonStandardFNCard1 = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:拔君\r\nEND:VCARD\r\n";
+    protected $nonStandardFNCard2 = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:+++\r\nEND:VCARD\r\n";
 
     public function setUp() {
         $this->backend = $this->getBackend();
@@ -353,5 +355,22 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($result[0]['uri'], 'hello');
         $this->assertEquals($result[1]['uri'], 'world');
         $this->assertEquals($result[2]['uri'], 'Zelda');
+    }
+
+    public function testgetCardsShouldReturnNonAlphabeticFnFirst() {
+        $backend = $this->backend;
+        $id = $backend->createAddressBook(
+            'principals/admin',
+            'admin',
+            []
+        );
+        $backend->createCard($id, 'hello', $this->dummyCard);
+        $backend->createCard($id, '拔君', $this->nonStandardFNCard1);
+        $backend->createCard($id, '++++', $this->nonStandardFNCard2);
+
+        $result = $backend->getCards($id, 0, 0, 'fn');
+        $this->assertEquals($result[0]['uri'], '拔君');
+        $this->assertEquals($result[1]['uri'], '++++');
+        $this->assertEquals($result[2]['uri'], 'hello');
     }
 }

@@ -122,7 +122,12 @@ END:VCALENDAR
             $this->caldavBackend->createCalendarObject($cal['id'], $eventUri, $data);
         }
         $book = $this->carddavAddressBook;
-        $book['id'] = $this->carddavBackend->createAddressBook($book['principaluri'], $book['uri'], []);
+        $book['id'] = $this->carddavBackend->createAddressBook($book['principaluri'],
+            $book['uri'],
+            [
+                '{DAV:}displayname' => 'Book 1',
+                '{urn:ietf:params:xml:ns:carddav}addressbook-description' => 'Book 1 description'
+            ]);
 
         foreach ($this->carddavCards as $card => $data) {
             $this->carddavBackend->createCard($book['id'], $card, $data);
@@ -658,4 +663,25 @@ END:VCALENDAR
         $this->assertEquals(['dav:read', 'dav:write'], $jsonResponse['{DAV:}acl']);
         $this->assertEquals('book1', $jsonResponse['uri']);
     }
+
+    function testGetAddressBookList() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f.json');
+        $addressBooks = $jsonResponse->{'_embedded'}->{'dav:addressbook'};
+        $this->assertCount(1, $addressBooks);
+
+        $this->assertEquals($addressBooks[0]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json');
+        $this->assertEquals($addressBooks[0]->{'dav:name'}, 'Book 1');
+        $this->assertEquals($addressBooks[0]->{'carddav:description'}, 'Book 1 description');
+        $this->assertEquals($addressBooks[0]->{'dav:acl'}, ['dav:read', 'dav:write']);
+    }
+
 }

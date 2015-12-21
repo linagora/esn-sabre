@@ -176,6 +176,30 @@ be used in the calendar url.
 - 201 Created: The calendar has been created
 - 400 Bad Request: Missing keys in the request object
 
+## GET /addressbooks/{addressbookHomeId}.json
+
+List all addressbooks in the addressbookHome.
+
+**Status Codes:**
+
+- 200 OK: Query has succeeded and results are returned
+- 404 NOT FOUND: addressbookHomeId is not correct
+
+**Response:**
+
+{
+    "_links":{"self":{"href":"/addressbooks/55f811e843f181db51af9a67.json"}},
+    "_embedded":{
+        "dav:calendar":
+        [
+            {"_links":{"self":{"href":"/addressbooks/55f811e843f181db51af9a67/readonly01.json"}},"dav:name":"","carddav:description":"","dav:acl":["dav:read"]}
+        ]
+    }
+}
+
+
+
+
 ## POST /addressbooks/{addressbookHomeId}.json
 
 Create a addressbook in the specified addressbook home.

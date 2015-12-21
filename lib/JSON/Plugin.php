@@ -66,10 +66,12 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 list($code, $body) = $this->listCalendarRoot($nodePath, $node);
             } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
                 list($code, $body) = $this->listCalendarHome($nodePath, $node);
-            } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
-                list($code, $body) = $this->getContacts($request, $response, $nodePath, $node);
             } else if ($node instanceof \Sabre\CalDAV\Calendar) {
                 list($code, $body) = $this->getCalendarInformation($nodePath, $node);
+            } else if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
+                list($code, $body) = $this->getAddressBooks($nodePath, $node);
+            } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
+                list($code, $body) = $this->getContacts($request, $response, $nodePath, $node);
             }
 
             if ($code) {
@@ -403,6 +405,41 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         ];
 
         return [200, $result];
+    }
+
+    function getAddressBooks($nodePath, $node) {
+        $addressBooks = $node->getChildren();
+        $baseUri = $this->server->getBaseUri();
+
+        $items = [];
+        foreach ($addressBooks as $addressBook) {
+            if ($addressBook instanceof \Sabre\CardDAV\AddressBook) {
+                $items[] = $this->getAddressBookDetail($nodePath . "/" . $addressBook->getName(), $addressBook);
+            }
+        }
+
+        $requestPath = $baseUri . $nodePath . ".json";
+        $result = [
+            "_links" => [
+                "self" => [ "href" => $requestPath ]
+            ],
+            "_embedded" => [ "dav:addressbook" => $items ]
+        ];
+
+        return [200, $result];
+    }
+
+    function getAddressBookDetail($nodePath, \Sabre\CardDAV\AddressBook $addressBook) {
+        $baseUri = $this->server->getBaseUri();
+        $bookProps = $addressBook->getProperties(["{DAV:}displayname", "{DAV:}acl", "{urn:ietf:params:xml:ns:carddav}addressbook-description"]);
+        return [
+            "_links" => [
+                "self" => [ "href" => $baseUri . $nodePath . ".json" ],
+            ],
+            "dav:name" => $bookProps["{DAV:}displayname"],
+            "carddav:description" => $bookProps["{urn:ietf:params:xml:ns:carddav}addressbook-description"],
+            "dav:acl" => $bookProps["{DAV:}acl"]
+        ];
     }
 
     function getContacts($request, $response, $nodePath, $node) {

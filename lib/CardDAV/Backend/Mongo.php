@@ -306,9 +306,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     protected function getDenormalizedData($cardData) {
         $vcard = \Sabre\VObject\Reader::read($cardData);
         $fn = (string)$vcard->FN;
-
+        $normalizedFn = ctype_alpha($fn{0}) ? strtolower($fn) : '#';
         return [
-            'fn' => strtolower($fn),
+            'fn'   => $normalizedFn,
             'size' => strlen($cardData),
             'etag' => '"' . md5($cardData) . '"'
         ];

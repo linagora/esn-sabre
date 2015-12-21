@@ -20,9 +20,20 @@ class MongoTest extends AbstractDatabaseTest {
             'privilege' => ['dav:read', 'dav:write'],
             'synctoken' => 1
         ];
+
+        $book1 = [
+            'principaluri' => 'principals/user2',
+            'displayname' => null,
+            'uri' => 'book2',
+            'description' => null,
+            'synctoken' => 1
+        ];
+
         $this->db->addressbooks->insert($book);
+        $this->db->addressbooks->insert($book1);
 
         $this->bookId = (string)$book['_id'];
+        $this->missingPropertiesBookId = (string)$book1['_id'];
 
         $card = [
             'addressbookid' => $book['_id'],

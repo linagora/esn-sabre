@@ -43,6 +43,25 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($expected, $result);
     }
 
+    public function testGetAddressBooksWithEmptyPropertiesForUser() {
+        $result = $this->backend->getAddressBooksForUser('principals/user2');
+
+        $expected = array(
+            array(
+                'id' => $this->missingPropertiesBookId,
+                'uri' => 'book2',
+                'principaluri' => 'principals/user2',
+                '{DAV:}displayname' => '',
+                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => '',
+                '{http://calendarserver.org/ns/}getctag' => 1,
+                '{DAV:}acl' => ['dav:read', 'dav:write'],
+                '{http://sabredav.org/ns}sync-token' => "1"
+            )
+        );
+
+        $this->assertEquals($expected, $result);
+    }
+
     public function testUpdateAddressBookInvalidProp() {
         $propPatch = new \Sabre\DAV\PropPatch([
             '{DAV:}displayname' => 'updated',

@@ -15,11 +15,11 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             'SUMMARY:Hello',
             'END:VEVENT',
             'END:VCALENDAR']);
-        $this->calendarId = 'calendarUUID';
+        $this->calendarURI = 'calendarURI';
     }
 
-    private function getPlugin($sendResult = true, $findCalendarId = true, $server = null) {
-        $db = new MongoDBMock($findCalendarId);
+    private function getPlugin($sendResult = true, $findCalendarObject = true, $findCalendar = true, $server = null) {
+        $db = new MongoDBMock($findCalendarObject, $findCalendar);
         $plugin = new IMipPluginMock("/api", $server, $db);
 
         $this->msg = new \Sabre\VObject\ITip\Message();
@@ -77,8 +77,20 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($this->msg->scheduleStatus, 'unchanged');
     }
 
-    function testCannotFindCalendarId() {
-        $plugin = $this->getPlugin(false, false);
+    function testCannotFindCalendarObject() {
+        $plugin = $this->getPlugin(false, false, true);
+        $client = $plugin->getClient();
+
+        $this->msg->sender = 'mailto:test@example.com';
+        $this->msg->recipient = 'mailto:test2@example.com';
+        $this->msg->method = "CANCEL";
+
+        $plugin->schedule($this->msg);
+        $this->assertEquals('5.1', $this->msg->scheduleStatus);
+    }
+
+    function testCannotFindCalendar() {
+        $plugin = $this->getPlugin(false, true, false);
         $client = $plugin->getClient();
 
         $this->msg->sender = 'mailto:test@example.com';
@@ -105,7 +117,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             $self->assertEquals($jsondata->method, 'REQUEST');
             $self->assertEquals($jsondata->emails, ['test2@example.com']);
             $self->assertEquals($jsondata->event, $self->ical . "\r\n");
-            $self->assertEquals($jsondata->calendarId, $self->calendarId);
+            $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
             $self->assertTrue($jsondata->notify);
             $requestCalled = true;
         });
@@ -131,7 +143,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             $self->assertEquals($jsondata->method, 'CANCEL');
             $self->assertEquals($jsondata->emails, ['test2@example.com']);
             $self->assertEquals($jsondata->event, $self->ical . "\r\n");
-            $self->assertEquals($jsondata->calendarId, $self->calendarId);
+            $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
             $self->assertTrue($jsondata->notify);
             $requestCalled = true;
         });
@@ -174,23 +186,41 @@ class IMipPluginMock extends IMipPlugin {
 }
 
 class MongoDBMock extends \MongoDB {
-    function __construct($findSuccess) {
-        $this->findSuccess = $findSuccess;
+    function __construct($findCalendarObject, $findCalendar) {
+        $this->findCalendarObject = $findCalendarObject;
+        $this->findCalendar = $findCalendar;
     }
 
     function selectCollection($collectionName) {
-        return new CollectionMock($this->findSuccess);
+        if (strcmp($collectionName, 'calendarobjects') === 0) {
+            return new CalendarObjectCollectionMock($this->findCalendarObject);
+        } else if (strcmp($collectionName, 'calendars') === 0) {
+            return new CalendarCollectionMock($this->findCalendar);
+        }
+        return null;
     }
 }
 
-class CollectionMock {
+abstract class CollectionMock {
     function __construct($findSuccess) {
         $this->findSuccess = $findSuccess;
     }
+}
 
+class CalendarObjectCollectionMock extends CollectionMock {
     function findOne($query) {
         if ($this->findSuccess) {
-            return ['calendarid' => 'calendarUUID'];
+            return ['calendarid' => '561b7fe65fef200f008b4574'];
+        } else {
+            return [];
+        }
+    }
+}
+
+class CalendarCollectionMock extends CollectionMock {
+    function findOne($query) {
+        if ($this->findSuccess) {
+            return ['uri' => 'calendarURI'];
         } else {
             return [];
         }

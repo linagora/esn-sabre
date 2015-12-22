@@ -17,18 +17,17 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $fields = ['_id', 'uri', 'displayname', 'principaluri', 'privilege', 'description', 'synctoken'];
         $query = [ 'principaluri' => $principalUri ];
         $collection = $this->db->selectCollection($this->addressBooksTableName);
-
         $addressBooks = [];
         foreach ($collection->find($query, $fields) as $row) {
             $addressBooks[] = [
                 'id'  => (string)$row['_id'],
                 'uri' => $row['uri'],
                 'principaluri' => $row['principaluri'],
-                '{DAV:}displayname' => $row['displayname'],
-                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $row['description'],
-                '{DAV:}acl' => isset($row['privilege']) ? $row['privilege'] : ['dav:read', 'dav:write'],
+                '{DAV:}displayname' => $this->getValue($row, 'displayname', ''),
+                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getValue($row, 'description', ''),
+                '{DAV:}acl' => $this->getValue($row, 'privilege', ['dav:read', 'dav:write']),
                 '{http://calendarserver.org/ns/}getctag' => $row['synctoken'],
-                '{http://sabredav.org/ns}sync-token' => $row['synctoken']?$row['synctoken']:'0',
+                '{http://sabredav.org/ns}sync-token' => $this->getValue($row, 'synctoken', '0'),
             ];
         }
         return $addressBooks;
@@ -72,8 +71,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         $values = [
             'synctoken' => 1,
-            'displayname' => null,
-            'description' => null,
+            'displayname' => '',
+            'description' => '',
             'privilege' => ['dav:read', 'dav:write'],
             'principaluri' => $principalUri,
             'uri' => $url,
@@ -301,6 +300,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         $update = [ '$inc' => [ 'synctoken' => 1 ] ];
         $adrcollection->update($query, $update);
+    }
+
+    protected function getValue($array, $key, $default=null){
+        return isset($array[$key]) ? $array[$key] : $default;
     }
 
     protected function getDenormalizedData($cardData) {

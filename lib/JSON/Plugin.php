@@ -374,7 +374,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $vObject = VObject\Reader::read($properties[200]['{' . self::NS_CALDAV . '}calendar-data']);
 
             $isRecurring = !!$vObject->VEVENT->RRULE;
-            $vObject->expand($start, $end);
+            $vObject = $vObject->expand($start, $end);
 
             // Sabre's VObject doesn't return the RECURRENCE-ID in the first
             // occurrence, we'll need to do this ourselves. We take advantage

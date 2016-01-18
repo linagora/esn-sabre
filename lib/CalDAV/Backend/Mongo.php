@@ -317,7 +317,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         }
 
         if ($timeRange && $timeRange['start']) {
-            $query['lastoccurence'] = [ '$gt' =>  $timeRange['start']->getTimeStamp() ];
+            $query['lastoccurence'] = [ '$gte' =>  $timeRange['start']->getTimeStamp() ];
         }
         if ($timeRange && $timeRange['end']) {
             $query['firstoccurence'] = [ '$lt' => $timeRange['end']->getTimeStamp() ];
@@ -613,7 +613,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                     $lastOccurence = $firstOccurence;
                 }
             } else {
-                $it = new VObject\RecurrenceIterator($vObject, (string)$component->UID);
+                $it = new VObject\Recur\EventIterator($vObject, (string)$component->UID);
                 $maxDate = new \DateTime(self::MAX_DATE);
                 if ($it->isInfinite()) {
                     $lastOccurence = $maxDate->getTimeStamp();

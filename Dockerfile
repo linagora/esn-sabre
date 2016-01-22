@@ -24,13 +24,10 @@ RUN echo "extension=mongo.so" >> /etc/php5/fpm/php.ini && \
 # Set up Sabre DAV
 WORKDIR /var/www
 RUN rm -rf composer.json composer.lock vendor data html server.php
-COPY . /var/www
+ADD . /var/www
 RUN cp esn.php server.php
 RUN composer update
-
-RUN /var/www/generate-config.sh
-
-# RUN mv config.json.default config.json
+RUN mv config.json.default config.json
 RUN chown -R www-data:www-data /var/www
 
 EXPOSE 80

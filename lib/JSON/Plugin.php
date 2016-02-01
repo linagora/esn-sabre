@@ -198,7 +198,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $props = [
             "{DAV:}displayname" => $issetdef("dav:name"),
             "{urn:ietf:params:xml:ns:carddav}addressbook-description" => $issetdef("carddav:description"),
-            "{DAV:}acl" => $issetdef("dav:acl")
+            "{DAV:}acl" => $issetdef("dav:acl"),
+            "{http://open-paas.org/contacts}type" => $issetdef("type")
         ];
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
         return [201, null];
@@ -431,14 +432,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function getAddressBookDetail($nodePath, \Sabre\CardDAV\AddressBook $addressBook) {
         $baseUri = $this->server->getBaseUri();
-        $bookProps = $addressBook->getProperties(["{DAV:}displayname", "{DAV:}acl", "{urn:ietf:params:xml:ns:carddav}addressbook-description"]);
+        $bookProps = $addressBook->getProperties(["{DAV:}displayname", "{DAV:}acl", "{http://open-paas.org/contacts}type", "{urn:ietf:params:xml:ns:carddav}addressbook-description"]);
+
         return [
             "_links" => [
                 "self" => [ "href" => $baseUri . $nodePath . ".json" ],
             ],
             "dav:name" => $bookProps["{DAV:}displayname"],
             "carddav:description" => $bookProps["{urn:ietf:params:xml:ns:carddav}addressbook-description"],
-            "dav:acl" => $bookProps["{DAV:}acl"]
+            "dav:acl" => $bookProps["{DAV:}acl"],
+            "type" => $bookProps["{http://open-paas.org/contacts}type"],
         ];
     }
 

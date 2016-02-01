@@ -126,7 +126,8 @@ END:VCALENDAR
             $book['uri'],
             [
                 '{DAV:}displayname' => 'Book 1',
-                '{urn:ietf:params:xml:ns:carddav}addressbook-description' => 'Book 1 description'
+                '{urn:ietf:params:xml:ns:carddav}addressbook-description' => 'Book 1 description',
+                '{http://open-paas.org/contacts}type' => 'social'
             ]);
 
         foreach ($this->carddavCards as $card => $data) {
@@ -496,7 +497,8 @@ END:VCALENDAR
             "id" => "ID",
             "dav:name" => "NAME",
             "carddav:description" => "DESCRIPTION",
-            "dav:acl" => ['dav:read']
+            "dav:acl" => ['dav:read'],
+            "type" => 'social'
         ];
 
         $request->setBody(json_encode($addressbook));
@@ -512,6 +514,7 @@ END:VCALENDAR
         $this->assertEquals('NAME', $book['{DAV:}displayname']);
         $this->assertEquals('DESCRIPTION', $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
         $this->assertEquals(['dav:read'], $book['{DAV:}acl']);
+        $this->assertEquals('social', $book['{http://open-paas.org/contacts}type']);
     }
 
     function testCreateAddressbookMissingId() {
@@ -682,6 +685,7 @@ END:VCALENDAR
         $this->assertEquals($addressBooks[0]->{'dav:name'}, 'Book 1');
         $this->assertEquals($addressBooks[0]->{'carddav:description'}, 'Book 1 description');
         $this->assertEquals($addressBooks[0]->{'dav:acl'}, ['dav:read', 'dav:write']);
+        $this->assertEquals($addressBooks[0]->{'type'}, 'social');
     }
 
 }

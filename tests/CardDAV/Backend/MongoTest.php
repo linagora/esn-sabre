@@ -27,6 +27,7 @@ class MongoTest extends AbstractDatabaseTest {
             'displayname' => null,
             'uri' => 'book2',
             'description' => null,
+            'type' => 'social',
             'synctoken' => 1
         ];
 

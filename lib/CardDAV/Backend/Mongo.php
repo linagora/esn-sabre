@@ -114,11 +114,19 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     }
 
-    function getCards($addressBookId, $offset = 0, $limit = 0, $sort = null) {
+    function getCards($addressBookId, $offset = 0, $limit = 0, $sort = null, $filters = null) {
         $fields = ['_id', 'uri', 'lastmodified', 'etag', 'size'];
         $query = [ 'addressbookid' => new \MongoId($addressBookId) ];
         $collection = $this->db->selectCollection($this->cardsTableName);
         $cards = [];
+
+        if ($filters) {
+            if (isset($filters['modifiedBefore'])) {
+                $query['lastmodified'] = [
+                    '$lt' => (int)$filters['modifiedBefore']
+                ];
+            }
+        }
 
         $cardscursor = $collection->find($query, $fields);
         if ($sort != null) {

@@ -185,7 +185,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [$returncode, null];
     }
 
-    function createAddressbook($node, $jsonData) {
+    function createAddressBook($node, $jsonData) {
         $issetdef = function($key, $default=null) use ($jsonData) {
              return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
         };
@@ -447,8 +447,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $offset = isset($queryParams['offset']) ? $queryParams['offset'] : 0;
         $limit = isset($queryParams['limit']) ? $queryParams['limit'] : 0;
         $sort = isset($queryParams['sort']) ? $queryParams['sort'] : null;
+        $modifiedBefore = isset($queryParams['modifiedBefore']) ? (int)$queryParams['modifiedBefore'] : 0;
 
-        $cards = $node->getChildren($offset, $limit, $sort);
+        $filters = null;
+        if ($modifiedBefore > 0) {
+            $filters = [
+                'modifiedBefore' => $modifiedBefore
+            ];
+        }
+
+        $cards = $node->getChildren($offset, $limit, $sort, $filters);
         $count = $node->getChildCount();
 
         $items = [];

@@ -197,45 +197,6 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($expected, $result);
     }
 
-    public function testGetCards() {
-        $result = $this->backend->getCards($this->bookId);
-
-        $expected = array(
-            array(
-                'id' => $this->cardId,
-                'uri' => 'card1',
-                'lastmodified' => 0,
-                'etag' => '"' . md5('card1') . '"',
-                'size' => 5
-            ),
-            array(
-                'id' => $this->cardId2,
-                'uri' => 'card2',
-                'lastmodified' => 0,
-                'etag' => '"' . md5('card2') . '"',
-                'size' => 5
-            )
-        );
-
-        $this->assertEquals($expected, $result);
-    }
-
-    public function testGetCardsSortLimitOffset() {
-        $result = $this->backend->getCards($this->bookId, 1, 1, 'fn');
-
-        $expected = array(
-            array(
-                'id' => $this->cardId2,
-                'uri' => 'card2',
-                'lastmodified' => 0,
-                'etag' => '"' . md5('card2') . '"',
-                'size' => 5
-            )
-        );
-
-        $this->assertEquals($expected, $result);
-    }
-
     public function testGetCardCount() {
         $this->assertEquals($this->backend->getCardCount($this->bookId), 2);
     }

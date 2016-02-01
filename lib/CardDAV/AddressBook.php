@@ -25,8 +25,8 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return parent::getACL();
     }
 
-    function getChildren($offset = 0, $limit = 0, $sort = null) {
-        $objs = $this->carddavBackend->getCards($this->addressBookInfo['id'], $offset, $limit, $sort);
+    function getChildren($offset = 0, $limit = 0, $sort = null, $filters = null) {
+        $objs = $this->carddavBackend->getCards($this->addressBookInfo['id'], $offset, $limit, $sort, $filters);
         $children = [];
         foreach($objs as $obj) {
             $obj['acl'] = $this->getChildACL();

@@ -107,7 +107,7 @@ queried.
 ## POST /calendars/{calendarHomeId}/{calendarId}.json
 
 Query a specific calendar for events.
-    
+
 **Request JSON Object:**
 
 A time range query object. The scope object within the query is not used for
@@ -187,6 +187,7 @@ List all addressbooks in the addressbookHome.
 
 **Response:**
 
+```json
 {
     "_links":{"self":{"href":"/addressbooks/55f811e843f181db51af9a67.json"}},
     "_embedded":{
@@ -196,9 +197,7 @@ List all addressbooks in the addressbookHome.
         ]
     }
 }
-
-
-
+```
 
 ## POST /addressbooks/{addressbookHomeId}.json
 
@@ -209,12 +208,14 @@ Create a addressbook in the specified addressbook home.
 A dav:addressbook object, with an additional member "id" which specifies the id to
 be used in the addressbook url and "privilege" which determines the addressbook's privilege
 
-    {
-        'id': 'ID',
-        'dav:name' :'NAME',
-        'carddav:description': 'DESCRIPTION',
-        'dav:acl': ['dav:read', 'dav:write']
-    }
+```json
+{
+    "id": "ID",
+    "dav:name" :"NAME",
+    "carddav:description": "DESCRIPTION",
+    "dav:acl": ["dav:read", "dav:write"]
+}
+```
 
 **Status Codes:**
 
@@ -235,6 +236,7 @@ List all contacts in the addressbook.
 - offset: List offset for the contacts returned
 - limit: The number of contacts to be returned
 - sort: The column to sort by, e.g. "fn"
+- modifiedBefore: Timestamp in seconds, to list contacts modified before a specificed time
 
 **Response:**
 
@@ -261,5 +263,6 @@ A json resource containing the values of all requested properties
 ```json
 {
   "{urn:ietf:params:xml:ns:carddav}addressbook-description": "description",
-  "{DAV:}acl": ['dav:read', 'dav:write']
+  "{DAV:}acl": ["dav:read", "dav:write"]
 }
+```

@@ -193,7 +193,7 @@ List all addressbooks in the addressbookHome.
     "_embedded":{
         "dav:calendar":
         [
-            {"_links":{"self":{"href":"/addressbooks/55f811e843f181db51af9a67/readonly01.json"}},"dav:name":"","carddav:description":"","dav:acl":["dav:read"]}
+            {"_links":{"self":{"href":"/addressbooks/55f811e843f181db51af9a67/readonly01.json"}},"dav:name":"","carddav:description":"","dav:acl":["dav:read"],"type":"social"}
         ]
     }
 }
@@ -210,10 +210,11 @@ be used in the addressbook url and "privilege" which determines the addressbook'
 
 ```json
 {
-    "id": "ID",
-    "dav:name" :"NAME",
-    "carddav:description": "DESCRIPTION",
-    "dav:acl": ["dav:read", "dav:write"]
+    'id': 'ID',
+    'dav:name' :'NAME',
+    'carddav:description': 'DESCRIPTION',
+    'dav:acl': ['dav:read', 'dav:write'],
+    'type': 'social'
 }
 ```
 
@@ -263,6 +264,7 @@ A json resource containing the values of all requested properties
 ```json
 {
   "{urn:ietf:params:xml:ns:carddav}addressbook-description": "description",
-  "{DAV:}acl": ["dav:read", "dav:write"]
+  "{DAV:}acl": ['dav:read', 'dav:write'],
+  "{http://open-paas.org/contacts}type": "social"
 }
 ```

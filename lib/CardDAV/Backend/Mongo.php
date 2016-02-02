@@ -14,7 +14,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function getAddressBooksForUser($principalUri) {
-        $fields = ['_id', 'uri', 'displayname', 'principaluri', 'privilege', 'description', 'synctoken'];
+        $fields = ['_id', 'uri', 'displayname', 'principaluri', 'privilege', 'type', 'description', 'synctoken'];
         $query = [ 'principaluri' => $principalUri ];
         $collection = $this->db->selectCollection($this->addressBooksTableName);
         $addressBooks = [];
@@ -26,6 +26,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 '{DAV:}displayname' => $this->getValue($row, 'displayname', ''),
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getValue($row, 'description', ''),
                 '{DAV:}acl' => $this->getValue($row, 'privilege', ['dav:read', 'dav:write']),
+                '{http://open-paas.org/contacts}type' => $this->getValue($row, 'type', ''),
                 '{http://calendarserver.org/ns/}getctag' => $row['synctoken'],
                 '{http://sabredav.org/ns}sync-token' => $this->getValue($row, 'synctoken', '0'),
             ];
@@ -75,6 +76,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'description' => '',
             'privilege' => ['dav:read', 'dav:write'],
             'principaluri' => $principalUri,
+            'type' => '',
             'uri' => $url,
         ];
 
@@ -89,6 +91,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                     break;
                 case '{DAV:}acl' :
                     $values['privilege'] = $newValue;
+                    break;
+                case '{http://open-paas.org/contacts}type' :
+                    $values['type'] = $newValue;
                     break;
                 default :
                     throw new \Sabre\DAV\Exception\BadRequest('Unknown property: ' . $property);

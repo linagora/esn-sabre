@@ -210,11 +210,11 @@ be used in the addressbook url and "privilege" which determines the addressbook'
 
 ```json
 {
-    'id': 'ID',
-    'dav:name' :'NAME',
-    'carddav:description': 'DESCRIPTION',
-    'dav:acl': ['dav:read', 'dav:write'],
-    'type': 'social'
+    "id": "ID",
+    "dav:name" :"NAME",
+    "carddav:description": "DESCRIPTION",
+    "dav:acl": ["dav:read", "dav:write"],
+    "type": "social"
 }
 ```
 

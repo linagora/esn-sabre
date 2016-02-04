@@ -34,7 +34,6 @@ class CalDAVPublisherPlugin extends ServerPlugin {
     }
 
     function after($path) {
-        error_log('AFTER '.$path);
         $this->publishMessage();
         return true;
     }

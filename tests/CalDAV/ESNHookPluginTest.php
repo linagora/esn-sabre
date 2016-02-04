@@ -1,6 +1,7 @@
 <?php
 
 namespace ESN\CalDAV;
+require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
 class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
 
@@ -240,27 +241,6 @@ class ESNHookPluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($server->emit('beforeWriteContent', [$path, $node, &$data, &$modified]));
         $this->assertTrue($server->emit('afterWriteContent', [$path, $node]));
         $this->assertNull($plugin->getRequest());
-    }
-}
-
-class CalDAVBackendMock extends \Sabre\CalDAV\Backend\AbstractBackend {
-    // @codingStandardsIgnoreStart
-    function getCalendarsForUser($principalUri) { return []; }
-    function createCalendar($principalUri,$calendarUri,array $properties) {}
-    function deleteCalendar($calendarId) {}
-    function getCalendarObjects($calendarId) { return []; }
-    function getCalendarObject($calendarId,$objectUri) { return null; }
-    function getMultipleCalendarObjects($calendarId, array $uris) { return []; }
-    function createCalendarObject($calendarId,$objectUri,$calendarData) { return null; }
-    function updateCalendarObject($calendarId,$objectUri,$calendarData) { return null; }
-    function deleteCalendarObject($calendarId,$objectUri) {}
-    // @codingStandardsIgnoreEnd
-}
-
-
-class MockAuthBackend {
-    function getAuthCookies() {
-        return "coookies!!!";
     }
 }
 

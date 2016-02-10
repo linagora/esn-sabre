@@ -30,6 +30,12 @@ The configuration file can be created from the example file.
 cp config.json.default config.json
 ```
 
+or by running the generation script:
+
+```bash
+sh ./scripts/generate_config.sh > config.json
+```
+
 You then have to modify the configuration to match your setup.
 
 -	**webserver.baseUri**
@@ -131,17 +137,22 @@ docker build -t linagora/esn-sabre .
 
 ### Run
 
-In order to run, the ESN sabre instance must access to the ESN, and mongo instances. They can be configured from the run command:
+In order to run, the ESN sabre instance must access to the ESN, and mongo instances. They can be configured from the run command using these optional environment variables:
+
+- SABRE_MONGO_HOST: Mongodb instance used to store sabre data, defaults to 'sabre_mongo'
+- SABRE_MONGO_PORT: Port used by the Mongodb instance defined above, defaults to '27017'
+- ESN_MONGO_HOST: Mongodb instance of the ESN, used to create principals, defaults to 'esn_mongo'
+- ESN_MONGO_PORT: Port of the ESN Mongodb instance, defaults to '27017'
+- ESN_MONGO_DBNAME: Database name of the ESN Mongodb instance, defaults to 'esn'
+- ESN_HOST: Hostname of the ESN API, defaults to 'esn_host'
+- ESN_PORT: Port of the ESN API, defaults to '8080'
+- REDIS_HOST: Redis instance used by Sabre and the ESN, defaults to 'redis_host'
+- REDIS_PORT: Port of the instance defined just above, defaults to '6379'
+
+For example:
 
 ```
-docker run -d -p 8001:80 --add-host esn_host:<ESN_HOST_IP> --add-host esn_mongo:<ESN_MONGO_IP> --add-host sabre_mongo:<SABRE_MONGO_IP> linagora/esn-sabre
+docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre
 ```
 
-For example, if you are running the ESN and mongo on your machine, you can set ESN_HOST_IP ESN_MONGO_IP and SABRE_MONGO_IP to the IP address returned from ifconfig (runs also with boot2docker).
-
-### Constraints
-
--	Mongodb instances port must be 27017
--	ESN intance port must be 8080 and the mongodb is set to *esn*
-
-Edit /var/www/config.json if needed.
+This will launch the Sabre container, create its configuration, launch Sabre and expose on port 8001 on your host.

@@ -5,7 +5,7 @@
 # docker build -t linagora/esn-sabre .
 #
 # Run:
-# docker run -d -p 8001:80 --add-host esn_host:<ESN_HOST_IP> --add-host esn_mongo:<ESN_MONGO_IP> --add-host sabre_mongo:<SABRE_MONGO_IP> linagora/esn-sabre
+# docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre
 #
 
 FROM linagora/sabre-dav:0.1.0
@@ -24,10 +24,10 @@ RUN echo "extension=mongo.so" >> /etc/php5/fpm/php.ini && \
 # Set up Sabre DAV
 WORKDIR /var/www
 RUN rm -rf composer.json composer.lock vendor data html server.php
-ADD composer.json /var/www
+COPY composer.json /var/www/composer.json
 RUN composer update
 
-ADD . /var/www
+COPY . /var/www
 RUN mv esn.php server.php
 RUN chown -R www-data:www-data /var/www
 

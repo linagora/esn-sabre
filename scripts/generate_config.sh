@@ -20,18 +20,6 @@ redis_port="6379"
 [ -z "$REDIS_HOST" ] || redis_host="$REDIS_HOST"
 [ -z "$REDIS_PORT" ] || redis_port="$REDIS_PORT"
 
-if [ "$HAS_OWN_MONGO" = true ] ; then
-    json_db_sabre=",\"sabre\": {
-      \"db\": \"sabre\",
-      \"connectionString\" : \"mongodb://${sabre_mongo_host}:${sabre_mongo_port}/\",
-      \"connectionOptions\": {
-        \"w\": 1,
-        \"fsync\": true,
-        \"connectTimeoutMS\": 10000
-      }
-    }"
-fi
-
 config="{
   \"webserver\": {
     \"baseUri\": \"/\",
@@ -51,8 +39,16 @@ config="{
         \"fsync\": true,
         \"connectTimeoutMS\": 10000
       }
+    },
+    \"sabre\": {
+      \"db\": \"sabre\",
+      \"connectionString\" : \"mongodb://${sabre_mongo_host}:${sabre_mongo_port}/\",
+      \"connectionOptions\": {
+        \"w\": 1,
+        \"fsync\": true,
+        \"connectTimeoutMS\": 10000
+      }
     }
-    ${json_db_sabre}
   },
   \"esn\": {
     \"apiRoot\": \"http://${esn_host}:${esn_port}/api\",

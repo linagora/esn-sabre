@@ -148,6 +148,7 @@ In order to run, the ESN sabre instance must access to the ESN, and mongo instan
 - ESN_PORT: Port of the ESN API, defaults to '8080'
 - REDIS_HOST: Redis instance used by Sabre and the ESN, defaults to 'redis_host'
 - REDIS_PORT: Port of the instance defined just above, defaults to '6379'
+- MONGO_TIMEOUT: Timeout to connect to Mongodb, defaults to 10000 ms
 
 For example:
 

@@ -9,12 +9,14 @@ esn_host="esn_host"
 esn_port="8080"
 redis_host="redis_host"
 redis_port="6379"
+mongo_timeout="10000"
 
 [ -z "$SABRE_MONGO_HOST" ] || sabre_mongo_host="$SABRE_MONGO_HOST"
 [ -z "$SABRE_MONGO_PORT" ] || sabre_mongo_port="$SABRE_MONGO_PORT"
 [ -z "$ESN_MONGO_HOST" ] || esn_mongo_host="$ESN_MONGO_HOST"
 [ -z "$ESN_MONGO_PORT" ] || esn_mongo_port="$ESN_MONGO_PORT"
 [ -z "$ESN_MONGO_DBNAME" ] || esn_mongo_dbname="$ESN_MONGO_DBNAME"
+[ -z "$MONGO_TIMEOUT" ] || mongo_timeout="$MONGO_TIMEOUT"
 [ -z "$ESN_HOST" ] || esn_host="$ESN_HOST"
 [ -z "$ESN_PORT" ] || esn_port="$ESN_PORT"
 [ -z "$REDIS_HOST" ] || redis_host="$REDIS_HOST"
@@ -37,7 +39,7 @@ config="{
       \"connectionOptions\": {
         \"w\": 1,
         \"fsync\": true,
-        \"connectTimeoutMS\": 10000
+        \"connectTimeoutMS\": ${mongo_timeout}
       }
     },
     \"sabre\": {
@@ -46,7 +48,7 @@ config="{
       \"connectionOptions\": {
         \"w\": 1,
         \"fsync\": true,
-        \"connectTimeoutMS\": 10000
+        \"connectTimeoutMS\": ${mongo_timeout}
       }
     }
   },

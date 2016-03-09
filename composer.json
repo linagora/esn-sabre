@@ -16,7 +16,7 @@
     "require": {
         "php": ">=5.4.1",
         "sabre/dav": "3.1.0",
-        "sabre/vobject": "dev-master#59388ab7c3c57c351b20de7f2daaad8c3597e2cc",
+        "sabre/vobject": "dev-master#d7727226da55cabd03eb4c630c6f3631873a7bf8",
         "ext-mongo": "~1.5",
         "predis/predis": "1.0.3"
     },

@@ -8,9 +8,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     public $addressBooksTableName = 'addressbooks';
     public $cardsTableName = 'cards';
     public $addressBookChangesTableName = 'addressbookchanges';
+    public $charAPI;
 
     function __construct(\MongoDB $db) {
         $this->db = $db;
+        $this->charAPI = new \ESN\Utils\charAPI();
     }
 
     function getAddressBooksForUser($principalUri) {
@@ -322,9 +324,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     protected function getDenormalizedData($cardData) {
         $vcard = \Sabre\VObject\Reader::read($cardData);
         $fn = (string)$vcard->FN;
-        $normalizedFn = ctype_alpha($fn{0}) ? strtolower($fn) : '#';
+        $convertedFn = $this->charAPI->getAsciiUpperCase($fn);
+        $storedFn = ctype_alpha($convertedFn[0]) ? strtolower($convertedFn[0]) : '#';
         return [
-            'fn'   => $normalizedFn,
+            'fn'   => $storedFn,
             'size' => strlen($cardData),
             'etag' => '"' . md5($cardData) . '"'
         ];

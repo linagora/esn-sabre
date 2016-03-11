@@ -2,7 +2,7 @@
 
 namespace ESN\Utils;
 
-class charAPI {
+class CharAPI {
     protected $defaultDiacriticsMap = array(
       "A" => array("A","Ⓐ","Ａ","À","Á","Â","Ầ","Ấ","Ẫ","Ẩ","Ã","Ā","Ă","Ằ","Ắ","Ẵ","Ẳ","Ȧ","Ǡ","Ä","Ǟ","Ả","Å","Ǻ","Ǎ","Ȁ","Ȃ","Ạ","Ậ","Ặ","Ḁ","Ą","Ⱥ","Ɐ","Ꜳ","Æ","Ǽ","Ǣ","Ꜵ","Ꜷ","Ꜹ","Ꜻ","Ꜽ"),
       "B" => array("B","Ⓑ","Ｂ","Ḃ","Ḅ","Ḇ","Ƀ","Ƃ","Ɓ"),
@@ -60,12 +60,12 @@ class charAPI {
     protected $accentedArray = [];
     protected $translatedArray = [];
     function __construct() {
-          foreach($this->defaultDiacriticsMap as $key => $value) {
-              foreach($value as $letter) {
-                   $this->accentedArray[] = $letter;
-                   $this->translatedArray[] = strtoupper($key);
-              }
-          }
+        foreach($this->defaultDiacriticsMap as $key => $value) {
+            foreach($value as $letter) {
+                 $this->accentedArray[] = $letter;
+                 $this->translatedArray[] = strtoupper($key);
+            }
+        }
     }
 
     function getAsciiUpperCase($str) {

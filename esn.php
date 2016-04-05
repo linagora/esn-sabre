@@ -144,14 +144,16 @@ $esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['calendarRoot'], $a
 $server->addPlugin($esnHookPlugin);
 
 // Redis Caldav publisher plugin
-$redis = new Predis\Client([
-  "host" => $config['redis']['host'],
-  "port" => $config['redis']['port'],
-  "persistent" => true
-]);
-$redisPublisher = new ESN\Utils\RedisPublisher($redis);
-$caldavPublisherPlugin = new ESN\CalDAV\CalDAVPublisherPlugin($redisPublisher);
-$server->addPlugin($caldavPublisherPlugin);
+if(!empty($config['redis']['host'])){
+  $redis = new Predis\Client([
+    "host" => $config['redis']['host'],
+    "port" => $config['redis']['port'],
+    "persistent" => true
+  ]);
+  $redisPublisher = new ESN\Utils\RedisPublisher($redis);
+  $caldavPublisherPlugin = new ESN\CalDAV\CalDAVPublisherPlugin($redisPublisher);
+  $server->addPlugin($caldavPublisherPlugin);
+}
 
 $communityMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'communities');
 $server->addPlugin($communityMembersPlugin);

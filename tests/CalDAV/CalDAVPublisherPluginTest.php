@@ -79,9 +79,10 @@ class CalDAVPublisherPluginTest extends \PHPUnit_Framework_TestCase {
         $modified = false;
         $data = "BEGIN:VCALENDAR";
 
+        $oldData = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a18225bc-3bfb-4e2a-a5f1-711c8d9cf531\r\nTRANSP:OPAQUE\r\nDTSTART;TZID=Europe/Berlin:20160209T110000\r\nDTEND;TZID=Europe/Berlin:20160209T130000\r\nSUMMARY:test\r\nORGANIZER;CN=admin admin:mailto:admin@open-paas.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
         $objectData = [
             'uri' => 'objecturi',
-            'calendardata' => 'olddata'
+            'calendardata' => $oldData
         ];
         $calendarData = [
             'id' => '123123123',
@@ -96,7 +97,7 @@ class CalDAVPublisherPluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($client->topic, 'calendar:event:updated');
         $this->assertEquals($jsondata->{'eventPath'}, "/" . self::PATH);
         $this->assertEquals($jsondata->{'type'}, 'updated');
-        $this->assertEquals($jsondata->{'old_event'}, json_decode(json_encode($node)));
+        $this->assertEquals($jsondata->{'old_event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($oldData))));
         $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->data))));
         $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:ws:event:updated');
         $this->assertEquals($jsondata->{'etag'}, self::ETAG);

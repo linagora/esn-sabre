@@ -156,11 +156,12 @@ class CalDAVPublisherPlugin extends ServerPlugin {
         }
 
         $vcal = \Sabre\VObject\Reader::read($data);
+        $oldVcal = \Sabre\VObject\Reader::read($node->get());
         $body = [
             'eventPath' => '/' .$path,
             'type' => 'updated',
             'event' => $vcal,
-            'old_event' => $node,
+            'old_event' => $oldVcal,
             'websocketEvent' => $this->WS_EVENTS['EVENT_UPDATED']
         ];
 

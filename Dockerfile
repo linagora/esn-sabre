@@ -8,7 +8,7 @@
 # docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre
 #
 
-FROM linagora/sabre-dav:0.1.0
+FROM linagora/sabre-dav
 MAINTAINER Linagora Folks <openpaas@linagora.com>
 
 # Install Packages

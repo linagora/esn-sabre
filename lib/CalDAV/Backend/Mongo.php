@@ -7,11 +7,13 @@ use \Sabre\VObject;
 class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     \Sabre\CalDAV\Backend\SubscriptionSupport,
     \Sabre\CalDAV\Backend\SyncSupport,
-    \Sabre\CalDAV\Backend\SchedulingSupport {
+    \Sabre\CalDAV\Backend\SchedulingSupport,
+    \Sabre\CalDAV\Backend\SharingSupport {
 
     protected $db;
 
     public $calendarTableName = 'calendars';
+    public $calendarInstancesTableName = 'calendarinstances';
     public $calendarObjectTableName = 'calendarobjects';
     public $calendarChangesTableName = 'calendarchanges';
     public $schedulingObjectTableName = 'schedulingobjects';
@@ -43,14 +45,15 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     function getCalendarsForUser($principalUri) {
         $fields = array_values($this->propertyMap);
-        $fields[] = '_id';
+        $fields[] = 'calendarid';
         $fields[] = 'uri';
         $fields[] = 'synctoken';
         $fields[] = 'components';
         $fields[] = 'principaluri';
         $fields[] = 'transparent';
+        $fields[] = 'access';
 
-        $collection = $this->db->selectCollection($this->calendarTableName);
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
         $query = [ 'principaluri' => $principalUri ];
 
         $res = $collection->find($query, $fields);
@@ -58,17 +61,30 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $calendars = [];
         foreach ($res as $row) {
-            $components = $row['components'];
+            $collection = $this->db->selectCollection($this->calendarTableName);
+            $query = [ '_id' => new \MongoId((string)$row['calendarid'])];
+            $fields = [ '_id', 'synctoken', 'components' ];
+            $calendarInstanceRow = $collection->findOne($query, $fields);
+
+            $components = $calendarInstanceRow['components'];
 
             $calendar = [
-                'id' => (string)$row['_id'],
+                'id' => [(string)$row['calendarid'], (string)$row['_id']],
                 'uri' => $row['uri'],
                 'principaluri' => $row['principaluri'],
-                '{' . \Sabre\CalDAV\Plugin::NS_CALENDARSERVER . '}getctag' => 'http://sabre.io/ns/sync/' . ($row['synctoken']?$row['synctoken']:'0'),
-                '{http://sabredav.org/ns}sync-token' => $row['synctoken']?$row['synctoken']:'0',
+                '{' . \Sabre\CalDAV\Plugin::NS_CALENDARSERVER . '}getctag' => 'http://sabre.io/ns/sync/' . ($calendarInstanceRow['synctoken'] ? $calendarInstanceRow['synctoken'] : '0'),
+                '{http://sabredav.org/ns}sync-token' => $calendarInstanceRow['synctoken'] ? $calendarInstanceRow['synctoken'] : '0',
                 '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' => new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet($components),
-                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp($row['transparent']?'transparent':'opaque'),
+                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp($row['transparent'] ? 'transparent' : 'opaque'),
+                'share-resource-uri' => '/ns/share/' . $row['_id']
             ];
+
+            // 1 = owner, 2 = readonly, 3 = readwrite
+            if ($row['access'] > 1) {
+                $calendar['share-access'] = (int)$row['access'];
+                // read-only is for backwards compatibility.
+                $calendar['read-only'] = (int)$row['access'] === \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
+            }
 
             foreach($this->propertyMap as $xmlName=>$dbName) {
                 $calendar[$xmlName] = $row[$dbName];
@@ -81,15 +97,13 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function createCalendar($principalUri, $calendarUri, array $properties) {
-        $obj = [
-            'principaluri' => $principalUri,
-            'uri' => $calendarUri,
-            'synctoken' => 1,
-            'transparent' => 0,
-        ];
-
         // Default value
         $sccs = '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set';
+
+        // Insert in calendars collection
+        $obj = [
+          'synctoken' => 1
+        ];
         if (!isset($properties[$sccs])) {
             $obj['components'] = ['VEVENT', 'VTODO'];
         } else {
@@ -98,11 +112,24 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             }
             $obj['components'] = $properties[$sccs]->getValue();
         }
+
+        $collection = $this->db->selectCollection($this->calendarTableName);
+        $collection->insert($obj);
+        $calendarId = (string)$obj['_id'];
+
+        // Insert in calendarinstances collection
+        $obj = [
+            'principaluri' => $principalUri,
+            'uri' => $calendarUri,
+            'transparent' => 0,
+            'access' => 1,
+            'calendarid' => new \MongoId($calendarId)
+        ];
+
         $transp = '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp';
         if (isset($properties[$transp])) {
-            $obj['transparent'] = $properties[$transp]->getValue()==='transparent';
+            $obj['transparent'] = $properties[$transp]->getValue() === 'transparent';
         }
-
         foreach($this->propertyMap as $xmlName=>$dbName) {
             if (isset($properties[$xmlName])) {
                 $obj[$dbName] = $properties[$xmlName];
@@ -111,17 +138,22 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             }
         }
 
-        $collection = $this->db->selectCollection($this->calendarTableName);
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
         $collection->insert($obj);
 
-        return (string)$obj['_id'];
+        return [$calendarId, (string)$obj['_id']];
     }
 
     function updateCalendar($calendarId, \Sabre\DAV\PropPatch $propPatch) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
+
         $supportedProperties = array_keys($this->propertyMap);
         $supportedProperties[] = '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp';
 
-        $propPatch->handle($supportedProperties, function($mutations) use ($calendarId) {
+        $propPatch->handle($supportedProperties, function($mutations) use ($calendarId, $instanceId) {
             $newValues = [];
             foreach($mutations as $propertyName=>$propertyValue) {
 
@@ -138,8 +170,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
             }
 
-            $collection = $this->db->selectCollection($this->calendarTableName);
-            $query = [ '_id' => new \MongoId($calendarId) ];
+            $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+            $query = [ '_id' => new \MongoId($instanceId) ];
             $collection->update($query, [ '$set' => $newValues ]);
             $this->addChange($calendarId, "", 2);
 
@@ -150,18 +182,40 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function deleteCalendar($calendarId) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
         $mongoId = new \MongoId($calendarId);
-        $collection = $this->db->selectCollection($this->calendarObjectTableName);
-        $collection->remove([ 'calendarid' => $mongoId ]);
+        $mongoInstanceId = new \MongoId($instanceId);
 
-        $collection = $this->db->selectCollection($this->calendarTableName);
-        $collection->remove([ '_id' => $mongoId ]);
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+        $query = [ '_id' => $mongoInstanceId ];
+        $row = $collection->findOne($query);
 
-        $collection = $this->db->selectCollection($this->calendarChangesTableName);
-        $collection->remove([ '_id' => $mongoId ]);
+        if ((int)$row['access'] === \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER) {
+            $collection = $this->db->selectCollection($this->calendarObjectTableName);
+            $collection->remove([ 'calendarid' => $mongoId ]);
+
+            $collection = $this->db->selectCollection($this->calendarChangesTableName);
+            $collection->remove([ 'calendarid' => $mongoId ]);
+
+            $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+            $collection->remove([ 'calendarid' => $mongoId ]);
+
+            $collection = $this->db->selectCollection($this->calendarTableName);
+            $collection->remove([ '_id' => $mongoId ]);
+        } else {
+            $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+            $collection->remove([ '_id' => $mongoInstanceId ]);
+        }
     }
 
     function getCalendarObjects($calendarId) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
 
         $query = [ 'calendarid' => $calendarId ];
         $fields = [ '_id', 'uri', 'lastmodified', 'etag', 'calendarid', 'size', 'componenttype' ];
@@ -174,7 +228,6 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 'uri'          => $row['uri'],
                 'lastmodified' => $row['lastmodified'],
                 'etag'         => '"' . $row['etag'] . '"',
-                'calendarid'   => $row['calendarid'],
                 'size'         => (int)$row['size'],
                 'component'    => strtolower($row['componenttype']),
             ];
@@ -182,7 +235,12 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return $result;
     }
 
-    function getCalendarObject($calendarId,$objectUri) {
+    function getCalendarObject($calendarId, $objectUri) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
+
         $query = [ 'calendarid' => $calendarId, 'uri' => $objectUri ];
         $fields = [ '_id', 'uri', 'lastmodified', 'etag', 'calendarid', 'size', 'calendardata', 'componenttype' ];
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
@@ -195,7 +253,6 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             'uri'           => $row['uri'],
             'lastmodified'  => $row['lastmodified'],
             'etag'          => '"' . $row['etag'] . '"',
-            'calendarid'    => $row['calendarid'],
             'size'          => (int)$row['size'],
             'calendardata'  => $row['calendardata'],
             'component'     => strtolower($row['componenttype']),
@@ -203,6 +260,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getMultipleCalendarObjects($calendarId, array $uris) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
+
         $query = [ 'calendarid' => $calendarId, 'uri' => [ '$in' => $uris ] ];
         $fields = [ '_id', 'uri', 'lastmodified', 'etag', 'calendarid', 'size', 'calendardata', 'componenttype' ];
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
@@ -214,7 +276,6 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 'uri'          => $row['uri'],
                 'lastmodified' => $row['lastmodified'],
                 'etag'         => '"' . $row['etag'] . '"',
-                'calendarid'   => $row['calendarid'],
                 'size'         => (int)$row['size'],
                 'calendardata' => $row['calendardata'],
                 'component'    => strtolower($row['componenttype']),
@@ -223,7 +284,12 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return $result;
     }
 
-    function createCalendarObject($calendarId,$objectUri,$calendarData) {
+    function createCalendarObject($calendarId, $objectUri, $calendarData) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
+
         $extraData = $this->getDenormalizedData($calendarData);
 
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
@@ -245,7 +311,12 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return '"' . $extraData['etag'] . '"';
     }
 
-    function updateCalendarObject($calendarId,$objectUri,$calendarData) {
+    function updateCalendarObject($calendarId, $objectUri, $calendarData) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
+
         $extraData = $this->getDenormalizedData($calendarData);
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
 
@@ -267,7 +338,12 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return '"' . $extraData['etag'] . '"';
     }
 
-    function deleteCalendarObject($calendarId,$objectUri) {
+    function deleteCalendarObject($calendarId, $objectUri) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
+
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
         $query = [ 'calendarid' => $calendarId, 'uri' => $objectUri ];
         $collection->remove($query);
@@ -275,6 +351,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function calendarQuery($calendarId, array $filters) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
+
         $componentType = null;
         $requirePostFilter = true;
         $timeRange = null;
@@ -338,15 +419,15 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getCalendarObjectByUID($principalUri, $uid) {
-        $collection = $this->db->selectCollection($this->calendarTableName);
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
         $query = [ 'principaluri' => $principalUri ];
-        $fields = ['_id', 'uri'];
+        $fields = ['calendarid', 'uri'];
 
         $calrow = $collection->findOne($query, $fields);
         if (!$calrow) return null;
 
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
-        $query = [ 'calendarid' => (string)$calrow['_id'], 'uid' => $uid ];
+        $query = [ 'calendarid' => (string)$calrow['calendarid'], 'uid' => $uid ];
         $fields = ['uri'];
 
         $objrow = $collection->findOne($query, $fields);
@@ -357,6 +438,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
 
     function getChangesForCalendar($calendarId, $syncToken, $syncLevel, $limit = null) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
+
         // Current synctoken
         $collection = $this->db->selectCollection($this->calendarTableName);
         $mongoCalendarId = new \MongoId($calendarId);
@@ -489,6 +575,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         return (string)$obj['_id'];
     }
+
     function updateSubscription($subscriptionId, \Sabre\DAV\PropPatch $propPatch) {
         $supportedProperties = array_keys($this->subscriptionPropertyMap);
         $supportedProperties[] = '{http://calendarserver.org/ns/}source';
@@ -572,6 +659,18 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             'size' => strlen($objectData)
         ];
         $collection->insert($obj);
+    }
+
+    function updateInvites($calendarId, array $sharees) {
+        throw new \Exception('Not implemented');
+    }
+
+    function getInvites($calendarId) {
+        throw new \Exception('Not implemented');
+    }
+
+    function setPublishStatus($calendarId, $value) {
+        throw new \Exception('Not implemented');
     }
 
     /**

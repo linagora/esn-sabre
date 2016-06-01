@@ -101,6 +101,10 @@ $server->addPlugin(
     new Sabre\CalDAV\Subscriptions\Plugin()
 );
 
+// Calendar sharing support
+$server->addPlugin(new Sabre\DAV\Sharing\Plugin());
+$server->addPlugin(new Sabre\CalDAV\SharingPlugin());
+
 // Calendar scheduling support
 $server->addPlugin(
     new ESN\CalDAV\Schedule\Plugin()

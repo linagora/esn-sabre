@@ -662,7 +662,51 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function updateInvites($calendarId, array $sharees) {
-        throw new \Exception('Not implemented');
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        $currentInvites = $this->getInvites($calendarId);
+        list($calendarId, $instanceId) = $calendarId;
+        $mongoCalendarId = new \MongoId($calendarId);
+        $mongoInstanceId = new \MongoId($instanceId);
+
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+        $existingInstance = $collection->findOne([ '_id' => $mongoInstanceId ]);
+
+        foreach($sharees as $sharee) {
+          if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS) {
+              // TODO access === 2 || access === 3
+              $collection->remove([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ]);
+              continue;
+          }
+
+          if (is_null($sharee->principal)) {
+              $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_INVALID;
+          } else {
+              $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
+          }
+
+          foreach($currentInvites as $oldSharee) {
+              if ($oldSharee->href === $sharee->href) {
+                  $sharee->properties = array_merge($oldSharee->properties, $sharee->properties);
+                  $collection->update([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ], [ '$set' => [
+                      'access' => $sharee->access,
+                      'share_displayname' => isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null,
+                      'share_invitestatus' => $sharee->inviteStatus ?: $oldSharee->inviteStatus
+                  ] ]);
+                  continue 2;
+              }
+          }
+
+          $existingInstance['calendarid'] = $calendarId;
+          $existingInstance['principaluri'] = $sharee->principal;
+          $existingInstance['access'] = $sharee->access;
+          $existingInstance['uri'] = \Sabre\DAV\UUIDUtil::getUUID();
+          $existingInstance['share_href'] = $sharee->href;
+          $existingInstance['share_displayname'] = isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null;
+          $existingInstance['share_invitestatus'] = $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
+          $collection->insert($existingInstance);
+        }
     }
 
     function getInvites($calendarId) {
@@ -677,7 +721,6 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
      * @codeCoverageIgnore      Copy/Paste from sabre/dav
      */
     protected function getDenormalizedData($calendarData) {
-
         $vObject = VObject\Reader::read($calendarData);
         $componentType = null;
         $component = null;

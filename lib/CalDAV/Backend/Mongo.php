@@ -123,6 +123,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             'uri' => $calendarUri,
             'transparent' => 0,
             'access' => 1,
+            'share_invitestatus' => 2,
             'calendarid' => new \MongoId($calendarId)
         ];
 
@@ -710,7 +711,35 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getInvites($calendarId) {
-        throw new \Exception('Not implemented');
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+        list($calendarId, $instanceId) = $calendarId;
+        $mongoCalendarId = new \MongoId($calendarId);
+
+        $fields[] = 'principaluri';
+        $fields[] = 'access';
+        $fields[] = 'share_href';
+        $fields[] = 'share_invitestatus';
+        $fields[] = 'share_displayname';
+
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+        $query = [ 'calendarid' => $mongoCalendarId ];
+
+        $res = $collection->find($query, $fields);
+
+        $result = [];
+        foreach ($res as $row) {
+            $result[] = new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => isset($row['share_href']) ? $row['share_href'] : \Sabre\HTTP\encodePath($row['principaluri']),
+                'access' => (int)$row['access'],
+                'inviteStatus' => (int)$row['share_invitestatus'],
+                'properties' => !empty($row['share_displayname']) ? [ '{DAV:}displayname' => $row['share_displayname'] ] : [],
+                'principal' => $row['principaluri']
+            ]);
+        }
+
+        return $result;
     }
 
     function setPublishStatus($calendarId, $value) {

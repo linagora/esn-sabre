@@ -675,38 +675,38 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $existingInstance = $collection->findOne([ '_id' => $mongoInstanceId ]);
 
         foreach($sharees as $sharee) {
-          if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS) {
-              // TODO access === 2 || access === 3
-              $collection->remove([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ]);
-              continue;
-          }
+            if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS) {
+                // TODO access === 2 || access === 3
+                $collection->remove([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ]);
+                continue;
+            }
 
-          if (is_null($sharee->principal)) {
-              $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_INVALID;
-          } else {
-              $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
-          }
+            if (is_null($sharee->principal)) {
+                $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_INVALID;
+            } else {
+                $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
+            }
 
-          foreach($currentInvites as $oldSharee) {
-              if ($oldSharee->href === $sharee->href) {
-                  $sharee->properties = array_merge($oldSharee->properties, $sharee->properties);
-                  $collection->update([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ], [ '$set' => [
-                      'access' => $sharee->access,
-                      'share_displayname' => isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null,
-                      'share_invitestatus' => $sharee->inviteStatus ?: $oldSharee->inviteStatus
-                  ] ]);
-                  continue 2;
-              }
-          }
+            foreach($currentInvites as $oldSharee) {
+                if ($oldSharee->href === $sharee->href) {
+                    $sharee->properties = array_merge($oldSharee->properties, $sharee->properties);
+                    $collection->update([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ], [ '$set' => [
+                        'access' => $sharee->access,
+                        'share_displayname' => isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null,
+                        'share_invitestatus' => $sharee->inviteStatus ?: $oldSharee->inviteStatus
+                    ] ]);
+                    continue 2;
+                }
+            }
 
-          $existingInstance['calendarid'] = $calendarId;
-          $existingInstance['principaluri'] = $sharee->principal;
-          $existingInstance['access'] = $sharee->access;
-          $existingInstance['uri'] = \Sabre\DAV\UUIDUtil::getUUID();
-          $existingInstance['share_href'] = $sharee->href;
-          $existingInstance['share_displayname'] = isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null;
-          $existingInstance['share_invitestatus'] = $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
-          $collection->insert($existingInstance);
+            $existingInstance['calendarid'] = $calendarId;
+            $existingInstance['principaluri'] = $sharee->principal;
+            $existingInstance['access'] = $sharee->access;
+            $existingInstance['uri'] = \Sabre\DAV\UUIDUtil::getUUID();
+            $existingInstance['share_href'] = $sharee->href;
+            $existingInstance['share_displayname'] = isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null;
+            $existingInstance['share_invitestatus'] = $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
+            $collection->insert($existingInstance);
         }
     }
 

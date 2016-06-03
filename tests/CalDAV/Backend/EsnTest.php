@@ -24,12 +24,12 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
         );
 
-        $this->assertInternalType('array',$calendars);
-        $this->assertEquals(1,count($calendars));
+        $this->assertInternalType('array', $calendars);
+        $this->assertEquals(1, count($calendars));
 
         foreach ($elementCheck as $name => $value) {
             $this->assertArrayHasKey($name, $calendars[0]);
-            $this->assertEquals($value,$calendars[0][$name]);
+            $this->assertEquals($value, $calendars[0][$name]);
         }
     }
 }

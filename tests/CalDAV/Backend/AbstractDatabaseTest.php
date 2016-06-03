@@ -674,7 +674,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         ]);
 
         // Add a new invite
-        $backend->updateInvites(
+        $insertedIds = $backend->updateInvites(
             $calendar['id'],
             [
                 new Sharee([
@@ -703,21 +703,27 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
         // Checking calendar_instances too
         $expectedCalendar = [
-            'id'                                     => [1,2],
+            'id'                                     => 'foo',
             'principaluri'                           => 'principals/user2',
             '{http://calendarserver.org/ns/}getctag' => 'http://sabre.io/ns/sync/1',
             '{http://sabredav.org/ns}sync-token'     => '1',
             'share-access'                           => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
             'read-only'                              => true,
-            'share-resource-uri'                     => '/ns/share/1',
+            'share-resource-uri'                     => 'bar',
         ];
         $calendars = $backend->getCalendarsForUser('principals/user2');
         foreach ($expectedCalendar as $k => $v) {
-            $this->assertEquals(
-                $v,
-                $calendars[0][$k],
-                "Key " . $k . " in calendars array did not have the expected value."
-            );
+            if ($k == 'id') {
+                $this->assertEquals($calendars[0][$k][0], $calendar['id'][0]);
+            } else if ($k == 'share-resource-uri') {
+                $this->assertEquals($calendars[0][$k], '/ns/share/' . $insertedIds[1]);
+            } else {
+                $this->assertEquals(
+                    $v,
+                    $calendars[0][$k],
+                    "Key " . $k . " in calendars array did not have the expected value."
+                );
+            }
         }
 
         // Updating an invite

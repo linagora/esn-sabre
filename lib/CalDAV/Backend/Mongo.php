@@ -699,14 +699,16 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 }
             }
 
-            $existingInstance['calendarid'] = $calendarId;
+            $existingInstance['calendarid'] = $mongoCalendarId;
             $existingInstance['principaluri'] = $sharee->principal;
             $existingInstance['access'] = $sharee->access;
             $existingInstance['uri'] = \Sabre\DAV\UUIDUtil::getUUID();
             $existingInstance['share_href'] = $sharee->href;
             $existingInstance['share_displayname'] = isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null;
             $existingInstance['share_invitestatus'] = $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
+            unset($existingInstance['_id']);
             $collection->insert($existingInstance);
+            return [(string)$existingInstance['calendarid'], (string)$existingInstance['_id']];
         }
     }
 

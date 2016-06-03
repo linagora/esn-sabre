@@ -53,13 +53,8 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
         $children = $this->book->getChild('hello.vcf');
         $expectedACL = [
             [
-                'privilege' => '{DAV:}read',
-                'principal' => "principals/user1",
-                'protected' => true,
-            ],
-            [
-                'privilege' => '{DAV:}write',
-                'principal' => "principals/user1",
+                'privilege' => '{DAV:}all',
+                'principal' => "{DAV:}owner",
                 'protected' => true,
             ]
         ];
@@ -84,13 +79,8 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
         $this->book = new \ESN\CardDAV\AddressBook($this->carddavBackend, $this->bookInfo);
         $expectedACL = [
             [
-                'privilege' => '{DAV:}read',
-                'principal' => "principals/user1",
-                'protected' => true,
-            ],
-            [
-                'privilege' => '{DAV:}write',
-                'principal' => "principals/user1",
+                'privilege' => '{DAV:}all',
+                'principal' => "{DAV:}owner",
                 'protected' => true,
             ]
         ];

@@ -283,16 +283,34 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     function listCalendar($nodePath, $calendar) {
         $baseUri = $this->server->getBaseUri();
         $calprops = $calendar->getProperties([]);
-        return [
-            "_links" => [
-                "self" => [ "href" => $baseUri . $nodePath . ".json" ],
-            ],
-            "dav:name" => $calprops["{DAV:}displayname"],
-            "caldav:description" => $calprops["{urn:ietf:params:xml:ns:caldav}calendar-description"],
-            "calendarserver:ctag" => $calprops["{http://calendarserver.org/ns/}getctag"],
-            "apple:color" => $calprops["{http://apple.com/ns/ical/}calendar-color"],
-            "apple:order" => $calprops["{http://apple.com/ns/ical/}calendar-order"]
+
+        $calendar = [
+          "_links" => [
+              "self" => [ "href" => $baseUri . $nodePath . ".json" ],
+          ]
         ];
+
+        if (isset($calprops["{DAV:}displayname"])) {
+          $calendar["dav:name"] = $calprops["{DAV:}displayname"];
+        }
+
+        if (isset($calprops["{urn:ietf:params:xml:ns:caldav}calendar-description"])) {
+          $calendar["caldav:description"] = $calprops["{urn:ietf:params:xml:ns:caldav}calendar-description"];
+        }
+
+        if (isset($calprops["{http://calendarserver.org/ns/}getctag"])) {
+          $calendar["calendarserver:ctag"] = $calprops["{http://calendarserver.org/ns/}getctag"];
+        }
+
+        if (isset($calprops["{http://apple.com/ns/ical/}calendar-color"])) {
+          $calendar["apple:color"] = $calprops["{http://apple.com/ns/ical/}calendar-color"];
+        }
+
+        if (isset($calprops["{http://apple.com/ns/ical/}calendar-order"])) {
+          $calendar["apple:order"] = $calprops["{http://apple.com/ns/ical/}calendar-order"];
+        }
+
+        return $calendar;
     }
 
     function queryCalendarObjects($nodePath, $node, $jsonData) {

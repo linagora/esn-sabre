@@ -146,9 +146,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function updateCalendar($calendarId, \Sabre\DAV\PropPatch $propPatch) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
+        $this->_assertIsArray($calendarId);
+
         list($calendarId, $instanceId) = $calendarId;
 
         $supportedProperties = array_keys($this->propertyMap);
@@ -183,9 +182,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function deleteCalendar($calendarId) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
+        $this->_assertIsArray($calendarId);
+
         list($calendarId, $instanceId) = $calendarId;
         $mongoId = new \MongoId($calendarId);
         $mongoInstanceId = new \MongoId($instanceId);
@@ -213,10 +211,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getCalendarObjects($calendarId) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
-        list($calendarId, $instanceId) = $calendarId;
+        $this->_assertIsArray($calendarId);
+
+        $calendarId = $calendarId[0];
 
         $query = [ 'calendarid' => $calendarId ];
         $fields = [ '_id', 'uri', 'lastmodified', 'etag', 'calendarid', 'size', 'componenttype' ];
@@ -237,10 +234,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getCalendarObject($calendarId, $objectUri) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
-        list($calendarId, $instanceId) = $calendarId;
+        $this->_assertIsArray($calendarId);
+
+        $calendarId = $calendarId[0];
 
         $query = [ 'calendarid' => $calendarId, 'uri' => $objectUri ];
         $fields = [ '_id', 'uri', 'lastmodified', 'etag', 'calendarid', 'size', 'calendardata', 'componenttype' ];
@@ -261,10 +257,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getMultipleCalendarObjects($calendarId, array $uris) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
-        list($calendarId, $instanceId) = $calendarId;
+        $this->_assertIsArray($calendarId);
+
+        $calendarId = $calendarId[0];
 
         $query = [ 'calendarid' => $calendarId, 'uri' => [ '$in' => $uris ] ];
         $fields = [ '_id', 'uri', 'lastmodified', 'etag', 'calendarid', 'size', 'calendardata', 'componenttype' ];
@@ -286,10 +281,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function createCalendarObject($calendarId, $objectUri, $calendarData) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
-        list($calendarId, $instanceId) = $calendarId;
+        $this->_assertIsArray($calendarId);
+
+        $calendarId = $calendarId[0];
 
         $extraData = $this->getDenormalizedData($calendarData);
 
@@ -313,10 +307,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function updateCalendarObject($calendarId, $objectUri, $calendarData) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
-        list($calendarId, $instanceId) = $calendarId;
+        $this->_assertIsArray($calendarId);
+
+        $calendarId = $calendarId[0];
 
         $extraData = $this->getDenormalizedData($calendarData);
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
@@ -340,10 +333,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function deleteCalendarObject($calendarId, $objectUri) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
-        list($calendarId, $instanceId) = $calendarId;
+        $this->_assertIsArray($calendarId);
+
+        $calendarId = $calendarId[0];
 
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
         $query = [ 'calendarid' => $calendarId, 'uri' => $objectUri ];
@@ -352,10 +344,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function calendarQuery($calendarId, array $filters) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
-        list($calendarId, $instanceId) = $calendarId;
+        $this->_assertIsArray($calendarId);
+
+        $calendarId = $calendarId[0];
 
         $componentType = null;
         $requirePostFilter = true;
@@ -439,10 +430,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
 
     function getChangesForCalendar($calendarId, $syncToken, $syncLevel, $limit = null) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
-        list($calendarId, $instanceId) = $calendarId;
+        $this->_assertIsArray($calendarId);
+
+        $calendarId = $calendarId[0];
 
         // Current synctoken
         $collection = $this->db->selectCollection($this->calendarTableName);
@@ -663,9 +653,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function updateInvites($calendarId, array $sharees) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
+        $this->_assertIsArray($calendarId);
+
         $currentInvites = $this->getInvites($calendarId);
         list($calendarId, $instanceId) = $calendarId;
         $mongoCalendarId = new \MongoId($calendarId);
@@ -713,10 +702,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getInvites($calendarId) {
-        if (!is_array($calendarId)) {
-            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
-        }
-        list($calendarId, $instanceId) = $calendarId;
+        $this->_assertIsArray($calendarId);
+
+        $calendarId = $calendarId[0];
         $mongoCalendarId = new \MongoId($calendarId);
 
         $fields[] = 'principaluri';
@@ -746,6 +734,12 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     function setPublishStatus($calendarId, $value) {
         throw new \Exception('Not implemented');
+    }
+
+    protected function _assertIsArray($calendarId) {
+        if (!is_array($calendarId)) {
+            throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
     }
 
     /**

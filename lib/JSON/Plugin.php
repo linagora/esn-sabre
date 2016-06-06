@@ -14,11 +14,21 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function initialize(DAV\Server $server) {
         $this->server = $server;
+        $server->on('beforeMethod', [$this, 'beforeMethod'], 15); // 15 is after Auth and before ACL
         $server->on('method:POST', [$this, 'post'], 80);
         $server->on('method:GET', [$this, 'get'], 80);
         $server->on('method:DELETE', [$this, 'delete'], 80);
         $server->on('method:PROPPATCH', [$this, 'proppatch'], 80);
         $server->on('method:PROPFIND', [$this, 'findProperties'], 80);
+    }
+
+    function beforeMethod($request, $response) {
+        $url = $request->getUrl();
+        if (substr($url, -5) == ".json") {
+            $url = substr($url, 0, -5);
+        }
+        $request->setUrl($url);
+        return true;
     }
 
     function post($request, $response) {

@@ -697,7 +697,6 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $existingInstance['share_invitestatus'] = $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
             unset($existingInstance['_id']);
             $collection->insert($existingInstance);
-            return [(string)$existingInstance['calendarid'], (string)$existingInstance['_id']];
         }
     }
 

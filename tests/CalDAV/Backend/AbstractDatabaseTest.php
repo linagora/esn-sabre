@@ -674,7 +674,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         ]);
 
         // Add a new invite
-        $insertedIds = $backend->updateInvites(
+        $backend->updateInvites(
             $calendar['id'],
             [
                 new Sharee([
@@ -716,7 +716,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             if ($k == 'id') {
                 $this->assertEquals($calendars[0][$k][0], $calendar['id'][0]);
             } else if ($k == 'share-resource-uri') {
-                $this->assertEquals($calendars[0][$k], '/ns/share/' . $insertedIds[1]);
+                $this->assertEquals(strpos($calendars[0][$k], '/ns/share/'), 0);
             } else {
                 $this->assertEquals(
                     $v,

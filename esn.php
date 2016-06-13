@@ -101,6 +101,10 @@ $server->addPlugin(
     new Sabre\CalDAV\Subscriptions\Plugin()
 );
 
+// Calendar sharing support
+$server->addPlugin(new Sabre\DAV\Sharing\Plugin());
+$server->addPlugin(new Sabre\CalDAV\SharingPlugin());
+
 // Calendar scheduling support
 $server->addPlugin(
     new ESN\CalDAV\Schedule\Plugin()
@@ -145,14 +149,14 @@ $server->addPlugin($esnHookPlugin);
 
 // Redis Caldav publisher plugin
 if(!empty($config['redis']['host'])){
-  $redis = new Predis\Client([
-    "host" => $config['redis']['host'],
-    "port" => $config['redis']['port'],
-    "persistent" => true
-  ]);
-  $redisPublisher = new ESN\Utils\RedisPublisher($redis);
-  $caldavPublisherPlugin = new ESN\CalDAV\CalDAVPublisherPlugin($redisPublisher);
-  $server->addPlugin($caldavPublisherPlugin);
+    $redis = new Predis\Client([
+        "host" => $config['redis']['host'],
+        "port" => $config['redis']['port'],
+        "persistent" => true
+    ]);
+    $redisPublisher = new ESN\Utils\RedisPublisher($redis);
+    $caldavPublisherPlugin = new ESN\CalDAV\CalDAVPublisherPlugin($redisPublisher);
+    $server->addPlugin($caldavPublisherPlugin);
 }
 
 $communityMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'communities');

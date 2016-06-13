@@ -104,7 +104,7 @@ queried.
 }
 ```
 
-## POST /calendars/{calendarHomeId}/{calendarId}.json
+## REPORT /calendars/{calendarHomeId}/{calendarId}.json
 
 Query a specific calendar for events.
 
@@ -112,6 +112,15 @@ Query a specific calendar for events.
 
 A time range query object. The scope object within the query is not used for
 this request, instead the specific calendar is queried.
+
+```json
+{
+    "match": {
+      "start": "20160606T000000",
+      "end": "20160613T000000"
+    }
+}
+```
 
 **Status Codes:**
 
@@ -122,6 +131,36 @@ this request, instead the specific calendar is queried.
 
 A dav:calendar resource, with the dav:item expanded.
 
+## POST /calendars/{calendarHomeId}/{calendarId}.json
+
+Define sharees (add or remove) on a particular calendar.
+
+**Request JSON Object:**
+
+```json
+{
+    "share": {
+      "set": [
+        {
+          "dav:href": "mailto:joe@example.org",
+          "common-name": "Joe Shmoe",
+          "summary": "something",
+          "dav:read-write": true
+        }
+      ],
+      "remove": [
+        {
+          "dav:href": "mailto:jane@example.org"
+        }
+      ]
+    }
+}
+```
+
+**Status Codes:**
+
+- 200 OK: Query has succeeded
+- 400 Bad Request: Missing keys in the request object
 
 ## GET /calendars.json
 

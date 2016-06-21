@@ -72,16 +72,41 @@ esn-sabre requires an Apache server to work.
 apt-get install libapache2-mod-php5
 ```
 
+Ubuntu 16.04
+
+```bash
+apt install php5.6
+apt install libapache2-mod-php5.6
+```
+
 -	Install mongodb & curl support in PHP
 
 ```bash
 apt-get install php5-mongo php5-curl
 ```
 
+Ubuntu 16.04
+
+```bash
+apt-get install php5.6-mongo php5.6-curl
+```
+
 If **composer update** throws an error, you might want to use PECL
 
 ```bash
 apt-get install php5-dev php-pear && pecl install mongo
+```
+Ubuntu 16.04
+
+```bash
+apt-get install php5.6-dev php-pear && pecl install mongo
+```
+
+Depending on your linux version you may need to add mongo extension in php.ini
+
+```bash
+extension=mongo.so
+extension=mbstring.so
 ```
 
 -	Restart Apache
@@ -102,10 +127,10 @@ The caldav support in OpenPaaS ESN is enabled by telling the system where to fin
 {
         "_id" : "davserver",
         "backend" : {
-                "url" : "http://192.168.7.6/esn-sabre/esn.php"
+                "url" : "http://192.168.7.6/esn-sabre/esn.php" // replace 192.168.7.6 by your localhost
         },
         "frontend" : {
-                "url" : "http://my-caldav-server.example.com/esn-sabre/esn.php"
+                "url" : "http://my-caldav-server.example.com/esn-sabre/esn.php"  // replace my-caldav-server.example.com by your localhost
         }
 }
 ```

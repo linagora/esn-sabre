@@ -14,7 +14,7 @@ MAINTAINER Linagora Folks <openpaas@linagora.com>
 # Install Packages
 RUN apt-get update && \
     apt-get -y upgrade && \
-    apt-get -y install git php5-curl php-pear php5-dev make
+    apt-get -y install git php5-curl=5.6.17+dfsg-0+deb8u1 php-pear=5.6.17+dfsg-0+deb8u1 php5-dev=5.6.17+dfsg-0+deb8u1 make
 RUN pecl install mongo
 
 # Configure PHP

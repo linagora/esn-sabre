@@ -74,6 +74,8 @@ END:VCALENDAR
         "card4" => "BEGIN:VCARD\nFN:a\nEND:VCARD\n",
     );
 
+    protected $cal;
+
     function setUp() {
         $mcesn = new \MongoClient(ESN_MONGO_ESNURI);
         $this->esndb = $mcesn->selectDB(ESN_MONGO_ESNDB);
@@ -85,6 +87,39 @@ END:VCALENDAR
         $this->esndb->drop();
 
         $this->esndb->users->insert([ '_id' => new \MongoId('54b64eadf6d7d8e41d263e0f') ]);
+        $this->esndb->users->insert([
+            '_id' => new \MongoId('54b64eadf6d7d8e41d263e0e'),
+            "accounts" => [
+                [
+                    "type" => "email",
+                    "emails" => [
+                      "johndoe@example.org"
+                    ]
+                ]
+            ]
+        ]);
+        $this->esndb->users->insert([
+            '_id' => new \MongoId('54b64eadf6d7d8e41d263e0d'),
+            "accounts" => [
+                [
+                    "type" => "email",
+                    "emails" => [
+                      "johndoe2@example.org"
+                    ]
+                ]
+            ]
+        ]);
+        $this->esndb->users->insert([
+            '_id' => new \MongoId('54b64eadf6d7d8e41d263e0c'),
+            "accounts" => [
+                [
+                    "type" => "email",
+                    "emails" => [
+                      "janedoe@example.org"
+                    ]
+                ]
+            ]
+        ]);
 
         $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
@@ -111,15 +146,18 @@ END:VCALENDAR
         $this->carddavPlugin = new \Sabre\CardDAV\Plugin();
         $this->server->addPlugin($this->carddavPlugin);
 
+        $this->server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
+        $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
+
         $plugin = new Plugin('json');
         $this->server->addPlugin($plugin);
 
 
-        $cal = $this->caldavCalendar;
-        $cal['id'] = $this->caldavBackend->createCalendar($cal['principaluri'], $cal['uri'], $cal);
+        $this->cal = $this->caldavCalendar;
+        $this->cal['id'] = $this->caldavBackend->createCalendar($this->cal['principaluri'], $this->cal['uri'], $this->cal);
 
         foreach ($this->caldavCalendarObjects as $eventUri => $data) {
-            $this->caldavBackend->createCalendarObject($cal['id'], $eventUri, $data);
+            $this->caldavBackend->createCalendarObject($this->cal['id'], $eventUri, $data);
         }
         $book = $this->carddavAddressBook;
         $book['id'] = $this->carddavBackend->createAddressBook($book['principaluri'],
@@ -150,8 +188,9 @@ END:VCALENDAR
 
     function testTimeRangeQuery() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
+            'REQUEST_METHOD'    => 'REPORT',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
@@ -165,8 +204,9 @@ END:VCALENDAR
 
     function testTimeRangeQueryRecur() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
+            'REQUEST_METHOD'    => 'REPORT',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
@@ -191,8 +231,9 @@ END:VCALENDAR
 
     function testTimeRangeQueryMissingMatch() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
+            'REQUEST_METHOD'    => 'REPORT',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
@@ -208,6 +249,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/notfound.json',
         ));
 
@@ -220,17 +262,20 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/notfound.jaysun',
         ));
 
         $request->setBody(json_encode($this->timeRangeData));
         $response = $this->request($request);
-        $this->assertEquals($response->status, 501);
+        $this->assertEquals($response->status, 404);
     }
+
     function testTimeRangeWrongNode() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
         ));
 
@@ -243,6 +288,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/query.json',
         ));
 
@@ -270,6 +316,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/query.json',
         ));
 
@@ -285,6 +332,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/query.json',
         ));
 
@@ -307,6 +355,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.jaysun'
         ));
 
@@ -314,10 +363,12 @@ END:VCALENDAR
         $response = $this->request($request);
         $this->assertEquals($response->status, 404);
     }
+
     function testContactsWrongCollection() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar2.json'
         ));
 
@@ -330,6 +381,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
         ));
 
@@ -348,6 +400,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json?limit=1&offset=1&sort=fn'
         ));
 
@@ -366,6 +419,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars.json',
         ));
 
@@ -375,7 +429,7 @@ END:VCALENDAR
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars.json');
 
         $homes = $jsonResponse->{'_embedded'}->{'dav:home'};
-        $this->assertCount(1, $homes);
+        $this->assertCount(4, $homes);
 
         $this->assertEquals($homes[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
 
@@ -394,6 +448,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
         ));
 
@@ -416,6 +471,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
@@ -434,6 +490,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
         ));
 
@@ -465,6 +522,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
         ));
 
@@ -490,6 +548,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json',
         ));
 
@@ -521,6 +580,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json',
         ));
 
@@ -537,10 +597,11 @@ END:VCALENDAR
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
         $this->assertCount(1, $addressbooks);
     }
-    
+
     function testDeleteCalendar() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
@@ -558,6 +619,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar2.json'
         ));
 
@@ -569,6 +631,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar.jaysun'
         ));
 
@@ -580,7 +643,8 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',
             'HTTP_CONTENT_TYPE' => 'application/json',
-            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book2.json',
         ));
 
         $request->setBody(json_encode($this->timeRangeData));
@@ -591,6 +655,7 @@ END:VCALENDAR
     function testPatchCalendar() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
@@ -604,6 +669,7 @@ END:VCALENDAR
     function testPatchCalendarReadonlyProp() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
@@ -618,6 +684,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar2.json'
         ));
 
@@ -629,6 +696,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar.jaysun'
         ));
 
@@ -636,13 +704,14 @@ END:VCALENDAR
         $request->setBody(json_encode($data));
 
         $response = $this->request($request);
-        $this->assertEquals($response->status, 400);
+        $this->assertEquals($response->status, 404);
     }
 
     function testPatchWrongNode() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
         ));
 
@@ -655,9 +724,10 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPFIND',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
         ));
-        
+
         $body = '{"properties": ["{DAV:}acl","uri"]}';
         $request->setBody($body);
         $response = $this->request($request);
@@ -671,6 +741,7 @@ END:VCALENDAR
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json',
         ));
 
@@ -688,4 +759,47 @@ END:VCALENDAR
         $this->assertEquals($addressBooks[0]->{'type'}, 'social');
     }
 
+    function testCalendarUpdateShareesAdd() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $sharees = [
+            "share" => [
+                "set" => [
+                    [
+                        "dav:href"       => "mailto:johndoe@example.org",
+                        "common-name"    => "With John Doe",
+                        "summary"        => "Delegation",
+                        "dav:read-write" => true
+                    ],
+                    [
+                        "dav:href" => "mailto:johndoe2@example.org",
+                        "dav:read" => true
+                    ]
+                ],
+                "remove" => [
+                    [
+                        "dav:href" => "mailto:janedoe@example.org",
+                    ]
+                ]
+            ]
+        ];
+
+        $request->setBody(json_encode($sharees));
+        $response = $this->request($request);
+
+        $this->assertEquals(200, $response->status);
+
+        $sharees = $this->caldavBackend->getInvites($this->cal['id']);
+        $this->assertEquals(count($sharees), 3);
+        $this->assertEquals($sharees[1]->href, "mailto:johndoe@example.org");
+        $this->assertEquals($sharees[1]->properties['{DAV:}displayname'], "With John Doe");
+        $this->assertEquals($sharees[1]->access, 3);
+        $this->assertEquals($sharees[2]->href, "mailto:johndoe2@example.org");
+        $this->assertEquals($sharees[2]->access, 2);
+    }
 }

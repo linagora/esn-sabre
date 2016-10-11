@@ -9,7 +9,7 @@ require_once 'AbstractDatabaseTest.php';
  */
 class MongoTest extends AbstractDatabaseTest {
     protected function generateId() {
-        return (string) new \MongoId();
+        return [(string) new \MongoId(), (string) new \MongoId()];
     }
 
     protected function getBackend() {
@@ -18,7 +18,7 @@ class MongoTest extends AbstractDatabaseTest {
         $db->drop();
         return new Mongo($db);
     }
-    
+
     function testConstruct() {
         $backend = $this->getBackend();
         $this->assertTrue($backend instanceof Mongo);

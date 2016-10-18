@@ -235,6 +235,18 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $this->server->httpResponse->setStatus(200);
             return false;
         }
+        else if ($node instanceof \Sabre\CalDAV\SharedCalendar) {
+            $result = array();
+            if (in_array('cs:invite', $jsonData['prop'])) {
+                $result['invite'] = $node->getInvites();
+            }
+            if (in_array('acl', $jsonData['prop'])) {
+                $result['acl'] = $node->getACL();
+            }
+
+            $this->send(200, $result);
+            return false;
+        }
         return true;
     }
 

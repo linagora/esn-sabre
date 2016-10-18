@@ -307,3 +307,46 @@ A json resource containing the values of all requested properties
   "{http://open-paas.org/contacts}type": "social"
 }
 ```
+
+## PROPFIND /calendars/{calendarHomeId}/{calendarHomeId}.json
+
+List asked properties about a calendar. For the moment only 'cs:invite' and 'acl' properties are supported
+**Status Codes:**
+
+- 200 OK: Query has succeeded and results are returned
+
+**Request JSON Object:**
+
+An object with an array member "prop" which specifies list of wanted property of the calendar.
+
+```json
+{
+  "prop": [
+    "cs:invite",
+    "acl"
+   ] 
+}
+```
+
+**Response:**
+
+A json resource containing the values of all requested properties
+
+```json
+{
+  "invite": [
+    {
+      "href": "principals/users/54b64eadf6d7d8e41d263e0f"
+      ...
+    }
+  ]
+  "acl": [
+    {
+      "privilege": "{DAV:}share"
+      "principal": "principals/users/54b64eadf6d7d8e41d263e0f"
+      "protected": 1
+    },
+    ...
+  ]
+}
+```

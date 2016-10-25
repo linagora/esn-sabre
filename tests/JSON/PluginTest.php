@@ -732,9 +732,100 @@ END:VCALENDAR
         $request->setBody($body);
         $response = $this->request($request);
         $jsonResponse = json_decode($response->getBodyAsString(), true);
+
         $this->assertEquals(200, $response->status);
         $this->assertEquals(['dav:read', 'dav:write'], $jsonResponse['{DAV:}acl']);
         $this->assertEquals('book1', $jsonResponse['uri']);
+    }
+
+
+    function testPropFindRequestCalendarSharingMultipleProp() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPFIND',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $body = '{"prop": ["acl", "cs:invite"]}';
+        $request->setBody($body);
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+
+        $this->assertEquals(200, $response->status);
+        $this->assertTrue(is_array($jsonResponse['invite']));
+        $this->assertTrue(is_array($jsonResponse['acl']));
+    }
+
+    function testPropFindRequestCalendarSharingInvites() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPFIND',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $body = '{"prop": ["cs:invite"]}';
+        $request->setBody($body);
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+
+        $this->assertEquals(200, $response->status);
+        $this->assertTrue(is_array($jsonResponse['invite']));
+
+        $this->assertEquals($jsonResponse['invite'][0]['href'], 'principals/users/54b64eadf6d7d8e41d263e0f');
+        $this->assertEquals($jsonResponse['invite'][0]['principal'], 'principals/users/54b64eadf6d7d8e41d263e0f');
+        $this->assertEquals($jsonResponse['invite'][0]['properties'], array());
+        $this->assertEquals($jsonResponse['invite'][0]['access'], 1);
+        $this->assertEquals($jsonResponse['invite'][0]['comment'], '');
+        $this->assertEquals($jsonResponse['invite'][0]['inviteStatus'], 2);
+    }
+
+    function testPropFindRequestCalendarSharingMultipleACL() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPFIND',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $body = '{"prop": ["acl"]}';
+        $request->setBody($body);
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+
+        $this->assertEquals(200, $response->status);
+        $this->assertTrue(is_array($jsonResponse['acl']));
+
+        $shared = array();
+        $write = array();
+        $write_properties = array();
+        $read = array();
+        $read_free_busy = array();
+        foreach($jsonResponse['acl'] as $acl) {
+            $this->assertEquals($acl['protected'], 1);
+            if(strcmp($acl['privilege'], '{DAV:}share') == 0) {
+                array_push($shared, $acl['principal']);
+            }
+            else if(strcmp($acl['privilege'], '{DAV:}write') == 0) {
+                array_push($write, $acl['principal']);
+            }
+            else if(strcmp($acl['privilege'], '{DAV:}write-properties') == 0) {
+                array_push($write_properties, $acl['principal']);
+            }
+            else if(strcmp($acl['privilege'], '{DAV:}read') == 0) {
+                array_push($read, $acl['principal']);
+            }
+            else if(strcmp($acl['privilege'], '{urn:ietf:params:xml:ns:caldav}read-free-busy') == 0) {
+                array_push($read_free_busy, $acl['principal']);
+            }
+        }
+
+        $this->assertEquals($shared, array('principals/users/54b64eadf6d7d8e41d263e0f', 'principals/users/54b64eadf6d7d8e41d263e0f/calendar-proxy-write'));
+        $this->assertEquals($write, array('principals/users/54b64eadf6d7d8e41d263e0f', 'principals/users/54b64eadf6d7d8e41d263e0f/calendar-proxy-write'));
+        $this->assertEquals($write_properties, array('principals/users/54b64eadf6d7d8e41d263e0f', 'principals/users/54b64eadf6d7d8e41d263e0f/calendar-proxy-write'));
+        $this->assertEquals($read, array('principals/users/54b64eadf6d7d8e41d263e0f', 'principals/users/54b64eadf6d7d8e41d263e0f/calendar-proxy-read', 'principals/users/54b64eadf6d7d8e41d263e0f/calendar-proxy-write'));
+        $this->assertEquals($read_free_busy, array('{DAV:}authenticated'));
     }
 
     function testGetAddressBookList() {

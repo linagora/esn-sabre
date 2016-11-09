@@ -2,13 +2,13 @@
 namespace ESN\CalDAV;
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
-class CalDAVPublisherPluginTest extends \PHPUnit_Framework_TestCase {
+class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
     const PATH = "calendars/123123/uid.ics";
     const ETAG = 'The etag';
 
     private function getPlugin($server = null) {
-        $plugin = new CalDAVPublisherPluginMock($server);
+        $plugin = new CalDAVRealTimePluginMock($server);
         $server = $plugin->getServer();
         $this->data = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a18225bc-3bfb-4e2a-a5f1-711c8d9cf531\r\nTRANSP:OPAQUE\r\nDTSTART;TZID=Europe/Berlin:20160209T113000\r\nDTEND;TZID=Europe/Berlin:20160209T140000\r\nSUMMARY:test\r\nORGANIZER;CN=admin admin:mailto:admin@open-paas.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
@@ -172,7 +172,7 @@ class CalDAVPublisherPluginTest extends \PHPUnit_Framework_TestCase {
     }
 }
 
-class PublisherMock implements \ESN\Utils\Publisher {
+class RealTimeMock implements \ESN\Utils\Publisher {
     public $topic;
     public $message;
 
@@ -182,12 +182,12 @@ class PublisherMock implements \ESN\Utils\Publisher {
     }
 }
 
-class CalDAVPublisherPluginMock extends CalDAVPublisherPlugin {
+class CalDAVRealTimePluginMock extends CalDAVRealTimePlugin {
 
     function __construct($server) {
         if (!$server) $server = new \Sabre\DAV\Server([]);
         $this->initialize($server);
-        $this->client = new PublisherMock();
+        $this->client = new RealTimeMock();
         $this->server = $server;
     }
 

@@ -155,8 +155,8 @@ if(!empty($config['redis']['host'])){
         "persistent" => true
     ]);
     $redisPublisher = new ESN\Utils\RedisPublisher($redis);
-    $caldavPublisherPlugin = new ESN\CalDAV\CalDAVPublisherPlugin($redisPublisher);
-    $server->addPlugin($caldavPublisherPlugin);
+    $caldavRealTimePlugin = new ESN\CalDAV\CalDAVRealTimePlugin($redisPublisher);
+    $server->addPlugin($caldavRealTimePlugin);
 }
 
 $communityMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'communities');

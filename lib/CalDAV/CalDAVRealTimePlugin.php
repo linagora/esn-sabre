@@ -5,6 +5,8 @@ use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 
 class CalDAVRealTimePlugin extends ServerPlugin {
+    const PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN = 101;
+
     protected $server;
     protected $message;
 
@@ -35,6 +37,9 @@ class CalDAVRealTimePlugin extends ServerPlugin {
 
         $server->on('beforeUnbind',       [$this, 'beforeUnbind']);
         $server->on('afterUnbind',        [$this, 'after']);
+
+        //we want that the schedule plugin get called before so attendee's event are created
+        $server->on('schedule',           [$this, 'schedule'], PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN);
     }
 
     function after($path) {
@@ -108,5 +113,78 @@ class CalDAVRealTimePlugin extends ServerPlugin {
             }
             $this->client->publish($message['topic'], json_encode($message['data']));
         }
+    }
+
+    function schedule(\Sabre\VObject\ITip\Message $iTipMessage) {
+        $aclPlugin = $this->server->getPlugin('acl');
+
+        if (!$aclPlugin) {
+            error_log('No aclPlugin');
+            return true;
+        }
+
+        $caldavNS = '{' . \Sabre\CalDAV\Schedule\Plugin::NS_CALDAV . '}';
+        $principalUri = $aclPlugin->getPrincipalByUri($iTipMessage->recipient);
+        if (!$principalUri) {
+            error_log('3.7;Could not find principal.');
+            return true;
+        }
+        // We found a principal URL, now we need to find its inbox.
+        // Unfortunately we may not have sufficient privileges to find this, so
+        // we are temporarily turning off ACL to let this come through.
+        //
+        // Once we support PHP 5.5, this should be wrapped in a try..finally
+        // block so we can ensure that this privilege gets added again after.
+        $this->server->removeListener('propFind', [$aclPlugin, 'propFind']);
+        $result = $this->server->getProperties(
+            $principalUri,
+            [
+                '{DAV:}principal-URL',
+                 $caldavNS . 'calendar-home-set',
+                 $caldavNS . 'schedule-inbox-URL',
+                 $caldavNS . 'schedule-default-calendar-URL',
+                '{http://sabredav.org/ns}email-address',
+            ]
+        );
+        // Re-registering the ACL event
+        $this->server->on('propFind', [$aclPlugin, 'propFind'], 20);
+        if (!isset($result[$caldavNS . 'schedule-inbox-URL'])) {
+            error_log('5.2;Could not find local inbox');
+            return;
+        }
+        if (!isset($result[$caldavNS . 'calendar-home-set'])) {
+            error_log('5.2;Could not locate a calendar-home-set');
+            return;
+        }
+        if (!isset($result[$caldavNS . 'schedule-default-calendar-URL'])) {
+            error_log('5.2;Could not find a schedule-default-calendar-URL property');
+            return true;
+        }
+        $calendarPath = $result[$caldavNS . 'schedule-default-calendar-URL']->getHref();
+        $homePath = $result[$caldavNS . 'calendar-home-set']->getHref();
+        $inboxPath = $result[$caldavNS . 'schedule-inbox-URL']->getHref();
+        if ($iTipMessage->method === 'REPLY') {
+            $privilege = 'schedule-deliver-reply';
+        } else {
+            $privilege = 'schedule-deliver-invite';
+        }
+        if (!$aclPlugin->checkPrivileges($inboxPath, $caldavNS . $privilege, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+            error_log('3.8;organizer did not have the ' . $privilege . ' privilege on the attendees inbox');
+            return;
+        }
+        // Next, we're going to find out if the item already exits in one of
+        // the users' calendars.
+        $uid = $iTipMessage->uid;
+        $home = $this->server->tree->getNodeForPath($homePath);
+        $path = $homePath.$home->getCalendarObjectByUID($uid);
+        $body = [
+            'eventPath' => '/' . $path,
+            'type' => $iTipMessage->method,
+            'event' => $iTipMessage->message,
+            'websocketEvent' => $this->WS_EVENTS['EVENT_'.$iTipMessage->method]
+        ];
+
+        $this->createMessage($path, $body);
+        return true;
     }
 }

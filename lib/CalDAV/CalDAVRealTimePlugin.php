@@ -39,7 +39,7 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         $server->on('afterUnbind',        [$this, 'after']);
 
         //we want that the schedule plugin get called before so attendee's event are created
-        $server->on('schedule',           [$this, 'schedule'], PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN);
+        $server->on('schedule',           [$this, 'schedule'], self::PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN);
     }
 
     function after($path) {

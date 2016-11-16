@@ -89,7 +89,7 @@ $jsonPlugin = new ESN\JSON\Plugin(JSON_ROOT);
 $server->addPlugin($jsonPlugin);
 
 // CalDAV support
-$caldavPlugin = new Sabre\CalDAV\Plugin();
+$caldavPlugin = new ESN\CalDAV\Plugin();
 $server->addPlugin($caldavPlugin);
 
 // CardDAV support

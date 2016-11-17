@@ -2,6 +2,8 @@
 
 require_once 'vendor/autoload.php';
 
+use \PhpAmqpLib\Connection\AMQPStreamConnection;
+
 define('CONFIG_PATH', 'config.json');
 
 $config = json_decode(file_get_contents(CONFIG_PATH), true);
@@ -148,14 +150,17 @@ $esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['calendarRoot'], $a
 $server->addPlugin($esnHookPlugin);
 
 // Redis Caldav publisher plugin
-if(!empty($config['redis']['host'])){
-    $redis = new Predis\Client([
-        "host" => $config['redis']['host'],
-        "port" => $config['redis']['port'],
-        "persistent" => true
-    ]);
-    $redisPublisher = new ESN\Utils\RedisPublisher($redis);
-    $caldavRealTimePlugin = new ESN\CalDAV\CalDAVRealTimePlugin($redisPublisher);
+if(!empty($config['amqp']['host'])){
+    $connection = new AMQPStreamConnection(
+      $config['amqp']['host'],
+      $config['amqp']['port'],
+      'guest',
+      'guest'
+    );
+
+    $channel = $connection->channel();
+    $AMQPPublisher = new ESN\Utils\AMQPPublisher($channel);
+    $caldavRealTimePlugin = new ESN\CalDAV\CalDAVRealTimePlugin($AMQPPublisher);
     $server->addPlugin($caldavRealTimePlugin);
 }
 

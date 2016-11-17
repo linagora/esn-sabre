@@ -7,8 +7,10 @@ esn_mongo_port="27017"
 esn_mongo_dbname="esn"
 esn_host="esn_host"
 esn_port="8080"
-redis_host="redis_host"
-redis_port="6379"
+amqp_host='amqp_host'
+amqp_port='5672'
+amqp_login='guest'
+amqp_password='guest'
 mongo_timeout="10000"
 
 [ -z "$SABRE_MONGO_HOST" ] || sabre_mongo_host="$SABRE_MONGO_HOST"
@@ -19,8 +21,10 @@ mongo_timeout="10000"
 [ -z "$MONGO_TIMEOUT" ] || mongo_timeout="$MONGO_TIMEOUT"
 [ -z "$ESN_HOST" ] || esn_host="$ESN_HOST"
 [ -z "$ESN_PORT" ] || esn_port="$ESN_PORT"
-[ -z "$REDIS_HOST" ] || redis_host="$REDIS_HOST"
-[ -z "$REDIS_PORT" ] || redis_port="$REDIS_PORT"
+[ -z "$AMQP_HOST" ] || amqp_host="$AMQP_HOST"
+[ -z "$AMQP_PORT" ] || amqp_port="$AMQP_PORT"
+[ -z "$AMQP_LOGIN" ] || amqp_login"=$AMQP_LOGIN"
+[ -z "$AMQP_PASSWORD" ] || amqp_password="$AMQP_PASSWORD"
 
 config="{
   \"webserver\": {
@@ -28,9 +32,11 @@ config="{
     \"allowOrigin\": \"*\",
     \"realm\": \"ESN\"
   },
-  \"redis\": {
-    \"host\": \"${redis_host}\",
-    \"port\": \"${redis_port}\"
+  \"amqp\": {
+    \"host\": \"${amqp_host}\",
+    \"port\": \"${amqp_port}\",
+    \"login\": \"${amqp_login}\",
+    \"password\": \"${amqp_password}\"
   },
   \"database\": {
     \"esn\": {

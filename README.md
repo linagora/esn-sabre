@@ -117,7 +117,7 @@ extension=mbstring.so
 
 -	Test your environment by pointing a browser to the "esn.php" file
 
-	http://your.server.example.com/esn-sabre/esn.php
+    http://your.server.example.com/esn-sabre/esn.php
 
 ### Enable the Caldav support in OpenPaaS ESN
 
@@ -171,8 +171,8 @@ In order to run, the ESN sabre instance must access to the ESN, and mongo instan
 - ESN_MONGO_DBNAME: Database name of the ESN Mongodb instance, defaults to 'esn'
 - ESN_HOST: Hostname of the ESN API, defaults to 'esn_host'
 - ESN_PORT: Port of the ESN API, defaults to '8080'
-- REDIS_HOST: Redis instance used by Sabre and the ESN, defaults to 'redis_host'
-- REDIS_PORT: Port of the instance defined just above, defaults to '6379'
+- AMQP_HOST: AMQP instance used by Sabre and the ESN, defaults to 'amqp_host'
+- AMQP_PORT: Port of the instance defined just above, defaults to '5672'
 - MONGO_TIMEOUT: Timeout to connect to Mongodb, defaults to 10000 ms
 
 For example:

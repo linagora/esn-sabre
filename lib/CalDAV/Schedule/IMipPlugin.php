@@ -50,29 +50,22 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             return;
         }
 
-        $objectsCollection = $this->db->selectCollection('calendarobjects');
-        $eventQuery = [ 'uid' => $iTipMessage->message->VEVENT->select('UID')[0]->getValue()];
-        $event = $objectsCollection->findOne($eventQuery);
-        if (!$event || !array_key_exists('calendarid', $event)) {
-            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
-            error_log("iTip Delivery could not be performed because calendar id could not be found.");
-            return;
-        }
-        $calendarsCollection = $this->db->selectCollection('calendars');
-        $calendarQuery = [ '_id' => new \MongoId($event['calendarid'])];
-        $calendar = $calendarsCollection->findOne($calendarQuery);
-        if (!$calendar || !array_key_exists('uri', $calendar)) {
-            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
-            error_log("iTip Delivery could not be performed because calendar uri could not be found.");
-            return;
+        $requestPath = $_SERVER["REQUEST_URI"];
+        $matched = preg_match("|/(calendars/.*/.*)/|", $requestPath, $matches);
+
+        if (!$matched) {
+          $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
+          error_log("iTip Delivery could not be performed because calendar uri could not be found.");
+          return;
         }
 
+        $calendarNode = $this->server->tree->getNodeForPath($matches[1]);
         $body = json_encode([
           'emails' => [ substr($iTipMessage->recipient, 7) ],
           'method' => $iTipMessage->method,
           'event' => $iTipMessage->message->serialize(),
           'notify' => true,
-          'calendarURI' => $calendar['uri']
+          'calendarURI' => $calendarNode->getName()
         ]);
 
         $url = $this->apiroot . '/calendars/inviteattendees';

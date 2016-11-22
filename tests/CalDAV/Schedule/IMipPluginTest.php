@@ -6,7 +6,8 @@ namespace ESN\CalDAV\Schedule;
  * @medium
  */
 class IMipPluginTest extends \PHPUnit_Framework_TestCase {
-
+    const NAME = "calendarURI";
+    const PATH = "calendars/calendarURI/events";
     function setUp() {
         $this->ical = join("\r\n", [
             'BEGIN:VCALENDAR',
@@ -15,12 +16,27 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             'SUMMARY:Hello',
             'END:VEVENT',
             'END:VCALENDAR']);
-        $this->calendarURI = 'calendarURI';
+        $this->calendarURI = self::NAME;
+        $_SERVER["REQUEST_URI"] = "/calendars/" . $this->calendarURI . "/events/daab17fe-fac4-4946-9105-0f2cdb30f5ab.ics";
+    }
+
+    private function mockTree($server) {
+        $server->tree = $this->getMockBuilder('\Sabre\DAV\Tree')->disableOriginalConstructor()->getMock();
+        $server->tree->expects($this->any())->method('nodeExists')
+            ->with(self::PATH)
+            ->willReturn(true);
+
+        $nodeMock = $this->getMockBuilder('\Sabre\DAV\File')->getMock();
+        $nodeMock->expects($this->any())->method('getName')->willReturn(self::NAME);
+
+        $server->tree->expects($this->any())->method('getNodeForPath')
+            ->with(self::PATH)
+            ->will($this->returnValue($nodeMock));
     }
 
     private function getPlugin($sendResult = true, $findCalendarObject = true, $findCalendar = true, $server = null) {
-        $db = new MongoDBMock($findCalendarObject, $findCalendar);
-        $plugin = new IMipPluginMock("/api", $server, $db);
+        $plugin = new IMipPluginMock("/api", $server, null);
+        $this->mockTree($plugin->getServer());
 
         $this->msg = new \Sabre\VObject\ITip\Message();
         if ($this->ical) {
@@ -182,47 +198,5 @@ class IMipPluginMock extends IMipPlugin {
 
     function getServer() {
         return $this->server;
-    }
-}
-
-class MongoDBMock extends \MongoDB {
-    function __construct($findCalendarObject, $findCalendar) {
-        $this->findCalendarObject = $findCalendarObject;
-        $this->findCalendar = $findCalendar;
-    }
-
-    function selectCollection($collectionName) {
-        if (strcmp($collectionName, 'calendarobjects') === 0) {
-            return new CalendarObjectCollectionMock($this->findCalendarObject);
-        } else if (strcmp($collectionName, 'calendars') === 0) {
-            return new CalendarCollectionMock($this->findCalendar);
-        }
-        return null;
-    }
-}
-
-abstract class CollectionMock {
-    function __construct($findSuccess) {
-        $this->findSuccess = $findSuccess;
-    }
-}
-
-class CalendarObjectCollectionMock extends CollectionMock {
-    function findOne($query) {
-        if ($this->findSuccess) {
-            return ['calendarid' => '561b7fe65fef200f008b4574'];
-        } else {
-            return [];
-        }
-    }
-}
-
-class CalendarCollectionMock extends CollectionMock {
-    function findOne($query) {
-        if ($this->findSuccess) {
-            return ['uri' => 'calendarURI'];
-        } else {
-            return [];
-        }
     }
 }

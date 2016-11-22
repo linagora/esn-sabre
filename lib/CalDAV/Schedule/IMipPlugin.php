@@ -54,18 +54,18 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $matched = preg_match("|/(calendars/.*/.*)/|", $requestPath, $matches);
 
         if (!$matched) {
-          $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
-          error_log("iTip Delivery could not be performed because calendar uri could not be found.");
-          return;
+            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
+            error_log("iTip Delivery could not be performed because calendar uri could not be found.");
+            return;
         }
 
         $calendarNode = $this->server->tree->getNodeForPath($matches[1]);
         $body = json_encode([
-          'emails' => [ substr($iTipMessage->recipient, 7) ],
-          'method' => $iTipMessage->method,
-          'event' => $iTipMessage->message->serialize(),
-          'notify' => true,
-          'calendarURI' => $calendarNode->getName()
+            'emails' => [ substr($iTipMessage->recipient, 7) ],
+            'method' => $iTipMessage->method,
+            'event' => $iTipMessage->message->serialize(),
+            'notify' => true,
+            'calendarURI' => $calendarNode->getName()
         ]);
 
         $url = $this->apiroot . '/calendars/inviteattendees';

@@ -131,7 +131,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $client->on('doRequest', function($request, &$response) use ($self, &$requestCalled) {
             $jsondata = json_decode($request->getBodyAsString());
             $self->assertEquals($jsondata->method, 'REQUEST');
-            $self->assertEquals($jsondata->emails, ['test2@example.com']);
+            $self->assertEquals($jsondata->email, 'test2@example.com');
             $self->assertEquals($jsondata->event, $self->ical . "\r\n");
             $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
             $self->assertTrue($jsondata->notify);
@@ -157,7 +157,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $client->on('doRequest', function($request, &$response) use ($self, &$requestCalled) {
             $jsondata = json_decode($request->getBodyAsString());
             $self->assertEquals($jsondata->method, 'CANCEL');
-            $self->assertEquals($jsondata->emails, ['test2@example.com']);
+            $self->assertEquals($jsondata->email, 'test2@example.com');
             $self->assertEquals($jsondata->event, $self->ical . "\r\n");
             $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
             $self->assertTrue($jsondata->notify);

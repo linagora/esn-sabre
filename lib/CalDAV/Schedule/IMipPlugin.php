@@ -61,7 +61,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
         $calendarNode = $this->server->tree->getNodeForPath($matches[1]);
         $body = json_encode([
-            'emails' => [ substr($iTipMessage->recipient, 7) ],
+            'email' => substr($iTipMessage->recipient, 7),
             'method' => $iTipMessage->method,
             'event' => $iTipMessage->message->serialize(),
             'notify' => true,

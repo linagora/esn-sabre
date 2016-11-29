@@ -1,0 +1,32 @@
+#
+# Docker container for ESN Sabre frontend
+#
+# Build:
+# docker build -t linagora/esn-sabre .
+#
+# Run:
+# docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre
+#
+
+FROM centos:7
+MAINTAINER Linagora Folks <openpaas@linagora.com>
+
+# instal third party repositories
+RUN rpm -Uvh https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+RUN rpm -Uvh https://mirror.webtatic.com/yum/el7/webtatic-release.rpm
+
+# Install Packages
+RUN yum -y install git php55w-devel php55w-fpm php55w-mbstring make automake gcc gcc-c++ kernel-devel openssl-devel
+RUN pecl install mongo
+
+RUN curl -sS https://getcomposer.org/installer | php &&  mv composer.phar /usr/local/bin/composer.phar && ln -s /usr/local/bin/composer.phar /usr/local/bin/composer
+
+# Configure PHP
+RUN echo "extension=mongo.so" >> /etc/php.d/mongo.ini
+
+# Set up Sabre DAV
+WORKDIR /var/www
+COPY . /var/www
+RUN composer update
+
+RUN mv esn.php server.php

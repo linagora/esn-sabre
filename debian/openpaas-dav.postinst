@@ -1,0 +1,2 @@
+ln -s /etc/openpaas/dav/config.json /var/www/html/openpaas-dav/config.json
+  

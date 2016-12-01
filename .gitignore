@@ -2,4 +2,6 @@ vendor
 tests/report
 tests/temp
 composer.lock
-config.json
+/config.json
+.idea
+

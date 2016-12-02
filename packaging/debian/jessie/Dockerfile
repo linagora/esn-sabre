@@ -19,6 +19,7 @@ RUN git clone --no-single-branch --depth=1 https://ci.open-paas.org/stash/scm/or
 ADD package /package
 ADD openpaas-davserver.preinst /root/
 ADD openpaas-davserver.postinst /root/
+ADD openpaas-davserver.postrm /root/
 
 WORKDIR /package/usr/share/openpaas-davserver
 RUN git checkout $TREEISH && composer update --no-dev && find . -name .git -type d -exec rm -rf {} +
@@ -45,6 +46,7 @@ RUN fpm \
   --depends mongodb-org \
   --before-install /root/openpaas-davserver.preinst \
   --after-install /root/openpaas-davserver.postinst \
+  --after-remove /root/openpaas-davserver.postrm \
   .
 
 VOLUME /result

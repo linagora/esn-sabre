@@ -1,0 +1,18 @@
+server {
+    listen 80;
+    server_name dav.$hostname;
+
+    root /usr/share/openpaas-davserver;
+    try_files $uri $uri/ /esn.php;
+    index esn.php;
+
+    access_log /var/log/openpaas/davserver/access.log;
+    error_log /var/log/openpaas/davserver/error.log;
+
+    location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_pass unix:/var/run/php5-fpm.sock;
+    }
+}

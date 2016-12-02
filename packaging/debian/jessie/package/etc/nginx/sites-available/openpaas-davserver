@@ -1,6 +1,6 @@
 server {
     listen 80;
-    server_name dav.$hostname;
+    server_name dav.openpaas.local;
 
     root /usr/share/openpaas-davserver;
     try_files $uri $uri/ /esn.php;

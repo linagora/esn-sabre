@@ -177,6 +177,10 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         $uid = $iTipMessage->uid;
         $home = $this->server->tree->getNodeForPath($homePath);
         $path = $homePath.$home->getCalendarObjectByUID($uid);
+
+        $event = $iTipMessage->message;
+        $event->remove('method');
+
         $body = [
             'eventPath' => '/' . $path,
             'type' => $iTipMessage->method,

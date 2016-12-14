@@ -1,0 +1,10 @@
+#! /bin/sh -e
+
+echo "127.0.0.1 dav.openpaas.local" | tee -a /etc/hosts
+
+setsebool -P httpd_can_network_connect 1
+
+service nginx restart
+service mongod status > /dev/null || service mongod start
+service rabbitmq-server status > /dev/null || service rabbitmq-server start
+service php-fpm status > /dev/null || service php-fpm start

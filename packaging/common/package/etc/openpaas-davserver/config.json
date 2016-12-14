@@ -4,9 +4,9 @@
     "allowOrigin": "*",
     "realm": "OpenPaaS Enterprise Social Network Dav Server"
   },
-  "redis": {
+  "amqp": {
     "host": "localhost",
-    "port": "6379"
+    "port": "5672"
   },
   "database": {
     "esn": {

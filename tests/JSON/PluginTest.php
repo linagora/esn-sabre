@@ -615,6 +615,35 @@ END:VCALENDAR
         $this->assertCount(0, $calendars);
     }
 
+    function testDeleteMainCalendar() {
+        $defaultUri = \ESN\CalDAV\Backend\Esn::EVENTS_URI;
+
+        $mainCalDavCalendar = array(
+            '{DAV:}displayname' => 'Calendar',
+            '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
+            '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
+            '{http://apple.com/ns/ical/}calendar-order' => '2',
+            'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+            'uri' => $defaultUri,
+        );
+
+        $this->caldavBackend->createCalendar($mainCalDavCalendar['principaluri'], $mainCalDavCalendar['uri'], $mainCalDavCalendar);
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/'.$defaultUri.'.json',
+        ));
+
+        $calendars = $this->caldavBackend->getCalendarsForUser($mainCalDavCalendar['principaluri']);
+        $this->assertCount(2, $calendars);
+
+        $response = $this->request($request);
+        $this->assertEquals(403, $response->status);
+
+        $calendars = $this->caldavBackend->getCalendarsForUser($mainCalDavCalendar['principaluri']);
+        $this->assertCount(2, $calendars);
+    }
+
     function testDeleteWrongCollection() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',

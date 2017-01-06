@@ -39,6 +39,21 @@ SEQUENCE:4
 END:VEVENT
 END:VCALENDAR
 ',
+        'event2.ics' =>
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20120313T142342Z
+UID:28CCB90C-0F2F-48FC-B1D9-33A2BA3D9594
+TRANSP:OPAQUE
+SUMMARY:Event 2
+DTSTART:20130401T000000Z
+DTEND:20130401T010000Z
+DTSTAMP:20120313T142416Z
+SEQUENCE:1
+END:VEVENT
+END:VCALENDAR
+',
         'recur.ics' =>
             'BEGIN:VCALENDAR
 VERSION:2.0
@@ -57,6 +72,12 @@ END:VCALENDAR
           'match' => [ 'start' => '20120225T230000Z', 'end' => '20130228T225959Z' ],
           'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
         ];
+
+    protected $timeRangeDataBothEvents = [
+        'match' => [ 'start' => '20120101T000000Z', 'end' => '20150101T000000Z' ],
+        'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
+    ];
+
     protected $timeRangeDataRecur = [
           'match' => [ 'start' => '20150227T000000Z', 'end' => '20150228T030000Z' ],
           'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
@@ -73,6 +94,10 @@ END:VCALENDAR
         "card3" => "BEGIN:VCARD\r\nFN:b\r\nEND:VCARD\r\n",
         "card4" => "BEGIN:VCARD\nFN:a\nEND:VCARD\n",
     );
+
+    protected $uidQueryData = [ 'uid' => '171EBEFC-C951-499D-B234-7BA7D677B45D' ];
+
+    protected $uidQueryDataRecur = [ 'uid' => '75EE3C60-34AC-4A97-953D-56CC004D6705' ];
 
     protected $cal;
 
@@ -202,6 +227,22 @@ END:VCALENDAR
         $this->assertCount(1, $jsonResponse->_embedded->{'dav:item'});
     }
 
+    function testTimeRangeQueryShouldReturnTwoEventsWhenBothAreInRange() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeDataBothEvents));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $this->assertCount(2, $jsonResponse->_embedded->{'dav:item'});
+    }
+
     function testTimeRangeQueryRecur() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',
@@ -304,7 +345,7 @@ END:VCALENDAR
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
         $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/3');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
 
@@ -439,7 +480,7 @@ END:VCALENDAR
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
         $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/3');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
     }
@@ -462,7 +503,7 @@ END:VCALENDAR
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
         $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/3');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
     }
@@ -481,7 +522,7 @@ END:VCALENDAR
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($jsonResponse->{'dav:name'}, 'Calendar');
         $this->assertEquals($jsonResponse->{'caldav:description'}, 'description');
-        $this->assertEquals($jsonResponse->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/3');
+        $this->assertEquals($jsonResponse->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
         $this->assertEquals($jsonResponse->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($jsonResponse->{'apple:order'}, '2');
     }
@@ -921,5 +962,77 @@ END:VCALENDAR
         $this->assertEquals($sharees[1]->access, 3);
         $this->assertEquals($sharees[2]->href, "mailto:johndoe2@example.org");
         $this->assertEquals($sharees[2]->access, 2);
+    }
+
+    function testUIDQueryShouldReturn400WhenUIDIsMissing() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 400);
+    }
+
+    function testUIDQueryShouldReturn404WhenEventDoesNotExist() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+
+        $request->setBody(json_encode([ 'uid' => 'CertainlyDoesNotExist' ]));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 404);
+    }
+
+    function testUIDQueryShouldReturnOneEvent() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+
+        $request->setBody(json_encode($this->uidQueryData));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(1, $items);
+
+        $vcalendar = \Sabre\VObject\Reader::readJson($items[0]->{'data'});
+        $vevents = $vcalendar->select('VEVENT');
+
+        $this->assertCount(1, $vevents);
+        $this->assertEquals('Monday 0h', $vevents[0]->SUMMARY);
+    }
+
+    function testUIDQueryShouldReturnOneRecurringEventWithRecurrenceId() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+
+        $request->setBody(json_encode($this->uidQueryDataRecur));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(1, $items);
+
+        $vcalendar = \Sabre\VObject\Reader::readJson($items[0]->{'data'});
+        $vevents = $vcalendar->select('VEVENT');
+
+        $this->assertCount(1, $vevents);
+        $this->assertTrue(!!$vevents[0]->{'RECURRENCE-ID'});
     }
 }

@@ -37,17 +37,18 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             return true;
         }
 
-        $path = $request->getPath();
-        $jsonData = json_decode($request->getBodyAsString());
         $code = null;
         $body = null;
+        $path = $request->getPath();
+        $jsonData = json_decode($request->getBodyAsString());
 
         $node = $this->server->tree->getNodeForPath($path);
-        if (!($node instanceof \Sabre\CalDAV\ICalendarObjectContainer)) {
-            return true;
-        }
 
-        list($code, $body) = $this->getCalendarObjects($path, $node, $jsonData);
+        if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+            list($code, $body) = $this->getCalendarObjectByUID($path, $node, $jsonData);
+        } else if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+            list($code, $body) = $this->getCalendarObjects($path, $node, $jsonData);
+        }
 
         return $this->send($code, $body);
     }
@@ -382,17 +383,28 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $result];
     }
 
+    function getCalendarObjectByUID($nodePath, $node, $jsonData) {
+        if (!isset($jsonData->uid)) {
+            return [400, null];
+        }
+
+        $eventPath = $node->getCalendarObjectByUID($jsonData->uid);
+
+        if (!$eventPath) {
+            return [404, null];
+        }
+
+        return [200, $this->getMultipleDAVItems($nodePath, [$eventPath])];
+    }
+
     function getCalendarObjects($nodePath, $node, $jsonData) {
         if (!isset($jsonData->match) || !isset($jsonData->match->start) ||
             !isset($jsonData->match->end)) {
             return [400, null];
         }
 
-        $start = $jsonData->match->start;
-        $end = $jsonData->match->end;
-
-        $start = VObject\DateTimeParser::parseDateTime($start);
-        $end = VObject\DateTimeParser::parseDateTime($end);
+        $start = VObject\DateTimeParser::parseDateTime($jsonData->match->start);
+        $end = VObject\DateTimeParser::parseDateTime($jsonData->match->end);
         $filters = [
             'name' => 'VCALENDAR',
             'comp-filters' => [
@@ -411,20 +423,24 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             'is-not-defined' => false,
             'time-range' => null,
         ];
-        $nodePaths = $node->calendarQuery($filters);
-        $baseUri = $this->server->getBaseUri();
 
+        return [200, $this->getMultipleDAVItems($nodePath, $node->calendarQuery($filters), $start, $end)];
+    }
+
+    private function getMultipleDAVItems($parentNodePath, $paths, $start = false, $end = false) {
+        $items = [];
+        $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
-        $items = [];
-        foreach ($nodePaths as $path) {
-            list($properties) =
-                $this->server->getPropertiesForPath($nodePath . "/" . $path, $props);
+        foreach ($paths as $path) {
+            list($properties) = $this->server->getPropertiesForPath($parentNodePath . "/" . $path, $props);
 
             $vObject = VObject\Reader::read($properties[200]['{' . self::NS_CALDAV . '}calendar-data']);
-
             $isRecurring = !!$vObject->VEVENT->RRULE;
-            $vObject = $vObject->expand($start, $end);
+
+            if ($start && $end) {
+                $vObject = $vObject->expand($start, $end);
+            }
 
             // Sabre's VObject doesn't return the RECURRENCE-ID in the first
             // occurrence, we'll need to do this ourselves. We take advantage
@@ -439,22 +455,19 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
             $items[] = [
                 "_links" => [
-                  "self" => [ "href" =>  $baseUri . $properties["href"] ]
+                    "self" => [ "href" => $baseUri . $properties["href" ] ]
                 ],
                 "etag" => $properties[200]['{DAV:}getetag'],
                 "data" => $vObject->jsonSerialize()
             ];
         }
 
-        $requestPath = $this->server->getBaseUri() . $nodePath . '.json';
-        $result = [
+        return [
             "_links" => [
-              "self" => [ "href" => $requestPath ]
+                "self" => [ "href" => $baseUri . $parentNodePath . '.json']
             ],
             "_embedded" => [ "dav:item" => $items ]
         ];
-
-        return [200, $result];
     }
 
     function updateSharees($path, $node, $jsonData) {

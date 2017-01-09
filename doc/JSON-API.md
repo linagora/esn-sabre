@@ -23,6 +23,16 @@ appended.
 }
 ```
 
+### UID query object
+
+Used to query an event by its UID.
+
+```json
+{
+    "uid": "the event UID"
+}
+```
+
 ### dav:root
 
 A calendar root collection, which contains the calendar homes.
@@ -126,6 +136,30 @@ this request, instead the specific calendar is queried.
 
 - 200 OK: Query has succeeded and results are returned
 - 400 Bad Request: Missing keys in the request object
+
+**Response:**
+
+A dav:calendar resource, with the dav:item expanded.
+
+## REPORT /calendars/{calendarHomeId}
+
+Query all calendars of the given _home_ for an event with a given UID.
+
+**Request JSON Object:**
+
+A UID query object.
+
+```json
+{
+    "uid": "the event UID"
+}
+```
+
+**Status Codes:**
+
+- 200 OK: Query has succeeded and results are returned
+- 400 Bad Request: Missing keys in the request object
+- 404 Not Found: No event with the given UID found
 
 **Response:**
 

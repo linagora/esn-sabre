@@ -436,21 +436,21 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($properties) = $this->server->getPropertiesForPath($parentNodePath . "/" . $path, $props);
 
             $vObject = VObject\Reader::read($properties[200]['{' . self::NS_CALDAV . '}calendar-data']);
-            $isRecurring = !!$vObject->VEVENT->RRULE;
 
+            // If we have start and end date, we're getting an expanded list of occurrences between these dates
             if ($start && $end) {
                 $vObject = $vObject->expand($start, $end);
-            }
 
-            // Sabre's VObject doesn't return the RECURRENCE-ID in the first
-            // occurrence, we'll need to do this ourselves. We take advantage
-            // of the fact that the object getter for VEVENT will always return
-            // the first one.
-            $vevent = $vObject->VEVENT;
-            if ($isRecurring && !$vevent->{'RECURRENCE-ID'}) {
-                $recurid = clone $vevent->DTSTART;
-                $recurid->name = 'RECURRENCE-ID';
-                $vevent->add($recurid);
+                // Sabre's VObject doesn't return the RECURRENCE-ID in the first
+                // occurrence, we'll need to do this ourselves. We take advantage
+                // of the fact that the object getter for VEVENT will always return
+                // the first one.
+                $vevent = $vObject->VEVENT;
+                if (!!$vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
+                    $recurid = clone $vevent->DTSTART;
+                    $recurid->name = 'RECURRENCE-ID';
+                    $vevent->add($recurid);
+                }
             }
 
             $items[] = [

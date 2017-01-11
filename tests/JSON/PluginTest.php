@@ -64,6 +64,13 @@ DTSTART:20150227T010000
 DTEND:20150227T020000
 RRULE:FREQ=DAILY
 END:VEVENT
+BEGIN:VEVENT
+UID:75EE3C60-34AC-4A97-953D-56CC004D6705
+RECURRENCE-ID:20150228T010000
+SUMMARY:Recurring
+DTSTART:20150228T030000
+DTEND:20150228T040000
+END:VEVENT
 END:VCALENDAR
 ',
     );
@@ -79,7 +86,7 @@ END:VCALENDAR
     ];
 
     protected $timeRangeDataRecur = [
-          'match' => [ 'start' => '20150227T000000Z', 'end' => '20150228T030000Z' ],
+          'match' => [ 'start' => '20150227T000000Z', 'end' => '20150229T030000Z' ],
           'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
         ];
 
@@ -262,7 +269,7 @@ END:VCALENDAR
         $vcalendar = \Sabre\VObject\Reader::readJson($items[0]->{'data'});
 
         $vevents = $vcalendar->select('VEVENT');
-        $this->assertCount(2, $vevents);
+        $this->assertCount(3, $vevents);
 
         // All properties must contain a recurrence id
         foreach ($vevents as $vevent) {
@@ -1013,7 +1020,7 @@ END:VCALENDAR
         $this->assertEquals('Monday 0h', $vevents[0]->SUMMARY);
     }
 
-    function testUIDQueryShouldReturnOneRecurringEventWithRecurrenceId() {
+    function testUIDQueryShouldReturnOneRecurringEventWithNoRecurrenceIdOnMasterEvent() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -1032,7 +1039,8 @@ END:VCALENDAR
         $vcalendar = \Sabre\VObject\Reader::readJson($items[0]->{'data'});
         $vevents = $vcalendar->select('VEVENT');
 
-        $this->assertCount(1, $vevents);
-        $this->assertTrue(!!$vevents[0]->{'RECURRENCE-ID'});
+        $this->assertCount(2, $vevents);
+        $this->assertTrue(!$vevents[0]->{'RECURRENCE-ID'});
+        $this->assertTrue(!!$vevents[1]->{'RECURRENCE-ID'});
     }
 }

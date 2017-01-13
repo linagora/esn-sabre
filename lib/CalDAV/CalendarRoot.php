@@ -24,17 +24,17 @@ class CalendarRoot extends \Sabre\DAV\Collection {
         $res = $this->db->users->find(array(), array("_id"));
         foreach ($res as $user) {
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $user['_id'] ];
-            $homes[] = new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
+            $homes[] = new CalendarHome($this->caldavBackend, $principal);
         }
         $res = $this->db->communities->find(array(), array("_id"));
         foreach ($res as $community) {
             $principal = [ 'uri' => self::COMMUNITY_PREFIX . '/' . $community['_id'] ];
-            $homes[] = new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
+            $homes[] = new CalendarHome($this->caldavBackend, $principal);
         }
         $res = $this->db->projects->find(array(), array("_id"));
         foreach ($res as $project) {
             $principal = [ 'uri' => self::PROJECT_PREFIX . '/' . $project['_id'] ];
-            $homes[] = new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
+            $homes[] = new CalendarHome($this->caldavBackend, $principal);
         }
 
         return $homes;
@@ -50,19 +50,19 @@ class CalendarRoot extends \Sabre\DAV\Collection {
         $res = $this->db->users->findOne(['_id' => $mongoName]);
         if ($res) {
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $name ];
-            return new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
+            return new CalendarHome($this->caldavBackend, $principal);
         }
 
         $res = $this->db->communities->findOne(array('_id' => $mongoName), []);
         if ($res) {
             $principal = [ 'uri' => self::COMMUNITY_PREFIX . '/' . $name ];
-            return new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
+            return new CalendarHome($this->caldavBackend, $principal);
         }
 
         $res = $this->db->projects->findOne(array('_id' => $mongoName), []);
         if ($res) {
             $principal = [ 'uri' => self::PROJECT_PREFIX . '/' . $name ];
-            return new \Sabre\CalDAV\CalendarHome($this->caldavBackend, $principal);
+            return new CalendarHome($this->caldavBackend, $principal);
         }
 
         throw new \Sabre\DAV\Exception\NotFound('Principal with name ' . $name . ' not found');

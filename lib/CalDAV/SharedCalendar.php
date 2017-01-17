@@ -22,13 +22,12 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
      */
     function getACL() {
         $acl = parent::getACL();
-
         $public_right = $this->caldavBackend->getCalendarPublicRight($this->calendarInfo['id']);
 
         if (isset($public_right)) {
             foreach ($acl as &$ace) {
                 // we know it will exist since it is hardcoded in Sabre\CalDAV\SharedCalendar
-                if (strcmp($ace['principal'], '{DAV:}authenticated') === 0) {
+                if ($ace['principal'] === '{DAV:}authenticated') {
                     $ace['privilege'] = $public_right;
                     break;
                 }
@@ -51,7 +50,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
         $authenticatedACE = null;
         foreach ($acl as &$ace) {
-            if (strcmp($ace['principal'], '{DAV:}authenticated') === 0) {
+            if ($ace['principal'] === '{DAV:}authenticated') {
                 $authenticatedACE = $ace;
             }
         }

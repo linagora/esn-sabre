@@ -731,32 +731,26 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return $result;
     }
 
+    function prepareRequestForCalendarPublicRight($calendarId) {
+      $this->_assertIsArray($calendarId);
+
+      $mongoCalendarId = new \MongoId($calendarId[0]);
+
+      return [ $this->db->selectCollection($this->calendarInstancesTableName), [ 'calendarid' => $mongoCalendarId ] ];
+    }
+
     function saveCalendarPublicRight($calendarId, $privilege) {
-        $this->_assertIsArray($calendarId);
-
-        $calendarId = $calendarId[0];
-        $mongoCalendarId = new \MongoId($calendarId);
-
-        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-        $query = [ 'calendarid' => $mongoCalendarId ];
+        list($collection, $query) = $this->prepareRequestForCalendarPublicRight($calendarId);
 
         $collection->update($query, ['$set' => ['public_right' => $privilege]]);
     }
 
     function getCalendarPublicRight($calendarId) {
-        $this->_assertIsArray($calendarId);
+        list($collection, $query) = $this->prepareRequestForCalendarPublicRight($calendarId);
 
-        $calendarId = $calendarId[0];
-        $mongoCalendarId = new \MongoId($calendarId);
+        $mongoRes = $collection->findOne($query, ['public_right']);
 
-        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-        $fields[] = 'public_right';
-        $query = [ 'calendarid' => $mongoCalendarId ];
-
-        $mongoRes = $collection->find($query, $fields);
-        foreach( $mongoRes as $calendar) {
-            return isset($calendar['public_right']) ? $calendar['public_right'] : null;
-        };
+        return @$mongoRes['public_right'] ?: null;
     }
 
     function setPublishStatus($calendarId, $value) {

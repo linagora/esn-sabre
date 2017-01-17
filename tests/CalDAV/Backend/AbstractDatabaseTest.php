@@ -790,4 +790,62 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         ];
         $this->assertEquals($expected, $result);
     }
+
+    function testGetCalendarWithNoPublicRight() {
+        $publicRight = 'my public right';
+        $backend = $this->getBackend();
+
+        $newId = $backend->createCalendar('principals/user2','somerandomid',array());
+
+        $this->assertEquals('', $backend->getCalendarPublicRight($newId));
+    }
+
+    function testSetCalendarPublicRight() {
+        $publicRight = 'my public right';
+        $backend = $this->getBackend();
+
+        $newId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $backend->saveCalendarPublicRight($newId, $publicRight);
+
+        $this->assertEquals($publicRight, $backend->getCalendarPublicRight($newId));
+    }
+
+    function testUpdateCalendarPublicRight() {
+        $publicRight = 'my public right';
+        $backend = $this->getBackend();
+
+        $newId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $backend->saveCalendarPublicRight($newId, $publicRight);
+
+        $this->assertEquals($publicRight, $backend->getCalendarPublicRight($newId));
+
+        $newPublicRight = 'my new public right';
+        $backend->saveCalendarPublicRight($newId, $newPublicRight);
+
+        $this->assertEquals($newPublicRight, $backend->getCalendarPublicRight($newId));
+    }
+
+    function testRemoveCalendarPublicRight() {
+        $publicRight = 'my public right';
+        $backend = $this->getBackend();
+
+        $newId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $backend->saveCalendarPublicRight($newId, $publicRight);
+
+        $this->assertEquals($publicRight, $backend->getCalendarPublicRight($newId));
+
+        $backend->saveCalendarPublicRight($newId, null);
+
+        $this->assertEquals('', $backend->getCalendarPublicRight($newId));
+    }
+
+    function testSetCalendarPublicRightWithWrongAttribute() {
+        $backend = $this->getBackend();
+        try {
+          $backend->saveCalendarPublicRight(null, '');
+        } catch(\Exception $exception) {
+            $this->assertTrue($exception instanceof \LogicException);
+            $this->assertEquals($exception->getMessage(), 'The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');
+        }
+    }
 }

@@ -533,7 +533,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             return true;
         }
 
-        //this is a very simplificated version of Sabre\DAVACL\Plugin#httpacl function
+        //this is a very simplified version of Sabre\DAVACL\Plugin#httpacl function
         //here we do not consider a normal acl payload but only a json formatted like {public_right: aprivilege}
         //if the request is not 400 we need to store this info inside the calendarinstance node (i.e. $node->savePublicRight)
         //the info is then available through node->getACL() alongside hardcoded acls

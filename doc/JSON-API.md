@@ -6,6 +6,23 @@ or application/hal+json format.
 
 ## Resources
 
+### iTip processing request object
+
+Allows Sabre to process iTip messages.
+
+```json
+{
+  "method": "REQUEST",
+  "sender": "a@b.com",
+  "recipient": "c@d.com",
+  "uid": "the iTip UID",
+  "recurrence-id": "the iTip RECURRENCE-ID, if any",
+  "sequence": "0",
+  "dtstamp": "the iTip DTSTAMP",
+  "ical": "raw UTF-8 ical string"
+}
+```
+
 ### time range query object
 
 Make a time range query on one or more calendars. The calendar scope may be
@@ -384,3 +401,34 @@ A json resource containing the values of all requested properties
   ]
 }
 ```
+
+## ITIP /calendars/{calendarHomeId}
+
+Requests that Sabre processes a iTip message.
+
+**Request JSON Object:**
+
+An iTip processing request object.  
+All keys in the request object except `method` (defaults to _REQUEST_) and `sequence` (defaults to _0_) are required.
+
+```json
+{
+  "method": "REQUEST",
+  "sender": "a@b.com",
+  "recipient": "c@d.com",
+  "uid": "the iTip UID",
+  "recurrence-id": "the iTip RECURRENCE-ID, if any",
+  "sequence": "0",
+  "dtstamp": "the iTip DTSTAMP",
+  "ical": "raw UTF-8 ical string"
+}
+```
+
+**Status Codes:**
+
+- 204 No Content: Query has succeeded
+- 400 Bad Request: Missing keys in the request object
+
+**Response:**
+
+None.

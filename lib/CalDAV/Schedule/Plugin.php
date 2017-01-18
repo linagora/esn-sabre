@@ -33,8 +33,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
-
-        if (!$this->scheduleReply($this->server->httpRequest)) {
+        // ITIP operations are silent -> no email should be sent
+        if ($request->getMethod() === 'ITIP' || !$this->scheduleReply($this->server->httpRequest)) {
             return;
         }
 
@@ -52,7 +52,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         $this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
-
     }
 
     function beforeUnbind($path) {

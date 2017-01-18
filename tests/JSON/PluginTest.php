@@ -2,6 +2,10 @@
 
 namespace ESN\JSON;
 
+use Sabre\DAV\ServerPlugin;
+use Sabre\VObject\Document;
+use Sabre\VObject\ITip\Message;
+
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVACL/PrincipalBackend/Mock.php';
@@ -105,6 +109,27 @@ END:VCALENDAR
     protected $uidQueryData = [ 'uid' => '171EBEFC-C951-499D-B234-7BA7D677B45D' ];
 
     protected $uidQueryDataRecur = [ 'uid' => '75EE3C60-34AC-4A97-953D-56CC004D6705' ];
+
+    protected $itipRequestData = [
+        'method' => 'REPLY',
+        'uid' => '75EE3C60-34AC-4A97-953D-56CC004D6705',
+        'sequence' => '1',
+        'sender' => 'a@linagora.com',
+        'recipient' => 'b@linagora.com',
+        'ical' => 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20120313T142342Z
+UID:171EBEFC-C951-499D-B234-7BA7D677B45D
+DTEND;TZID=Europe/Berlin:20120227T000000
+TRANSP:OPAQUE
+SUMMARY:Monday 0h
+DTSTART;TZID=Europe/Berlin:20120227T000000
+DTSTAMP:20120313T142416Z
+SEQUENCE:4
+END:VEVENT
+END:VCALENDAR'
+    ];
 
     protected $cal;
 
@@ -1042,5 +1067,122 @@ END:VCALENDAR
         $this->assertCount(2, $vevents);
         $this->assertTrue(!$vevents[0]->{'RECURRENCE-ID'});
         $this->assertTrue(!!$vevents[1]->{'RECURRENCE-ID'});
+    }
+
+    function testITIPShouldReturn400IfUIDIsMissing() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ITIP',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+        $this->itipRequestData['uid'] = null;
+
+        $request->setBody(json_encode($this->itipRequestData));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 400);
+    }
+
+    function testITIPShouldReturn400IfSenderIsMissing() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ITIP',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+        $this->itipRequestData['sender'] = null;
+
+        $request->setBody(json_encode($this->itipRequestData));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 400);
+    }
+
+    function testITIPShouldReturn400IfRecipientIsMissing() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ITIP',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+        $this->itipRequestData['recipient'] = null;
+
+        $request->setBody(json_encode($this->itipRequestData));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 400);
+    }
+
+    function testITIPShouldReturn400IfICalIsMissing() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ITIP',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+        $this->itipRequestData['ical'] = null;
+
+        $request->setBody(json_encode($this->itipRequestData));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 400);
+    }
+
+    function testITIPShouldDelegateToSchedulingPluginAndReturn200() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ITIP',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+        $schedulePlugin = $this->getMock(ServerPlugin::class, ['getPluginName', 'scheduleLocalDelivery', 'initialize']);
+        $schedulePlugin->expects($this->any())->method('getPluginName')->will($this->returnValue('caldav-schedule'));
+        $schedulePlugin->expects($this->once())->method('scheduleLocalDelivery')->will($this->returnCallback(function($message) {
+            $this->assertInstanceOf(Message::class, $message);
+            $this->assertEquals('REPLY', $message->method);
+            $this->assertEquals('75EE3C60-34AC-4A97-953D-56CC004D6705', $message->uid);
+            $this->assertEquals('1', $message->sequence);
+            $this->assertEquals('mailto:a@linagora.com', $message->sender);
+            $this->assertEquals('mailto:b@linagora.com', $message->recipient);
+            $this->assertInstanceOf(Document::class, $message->message);
+        }));
+
+        $this->server->addPlugin($schedulePlugin);
+
+        $request->setBody(json_encode($this->itipRequestData));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 204);
+    }
+
+    function testITIPShouldDefaultForRequestAndSequence() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ITIP',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+        $this->itipRequestData['method'] = null;
+        $this->itipRequestData['sequence'] = null;
+
+        $schedulePlugin = $this->getMock(ServerPlugin::class, ['getPluginName', 'scheduleLocalDelivery', 'initialize']);
+        $schedulePlugin->expects($this->any())->method('getPluginName')->will($this->returnValue('caldav-schedule'));
+        $schedulePlugin->expects($this->once())->method('scheduleLocalDelivery')->will($this->returnCallback(function($message) {
+            $this->assertInstanceOf(Message::class, $message);
+            $this->assertEquals('REQUEST', $message->method);
+            $this->assertEquals('75EE3C60-34AC-4A97-953D-56CC004D6705', $message->uid);
+            $this->assertEquals('0', $message->sequence);
+            $this->assertEquals('mailto:a@linagora.com', $message->sender);
+            $this->assertEquals('mailto:b@linagora.com', $message->recipient);
+            $this->assertInstanceOf(Document::class, $message->message);
+        }));
+
+        $this->server->addPlugin($schedulePlugin);
+
+        $request->setBody(json_encode($this->itipRequestData));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 204);
     }
 }

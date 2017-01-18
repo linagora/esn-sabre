@@ -4,6 +4,7 @@ namespace ESN\JSON;
 
 use \Sabre\VObject,
     \Sabre\DAV;
+use Sabre\VObject\ITip\Message;
 
 class Plugin extends \Sabre\CalDAV\Plugin {
 
@@ -20,6 +21,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $server->on('method:DELETE', [$this, 'delete'], 80);
         $server->on('method:PROPPATCH', [$this, 'proppatch'], 80);
         $server->on('method:PROPFIND', [$this, 'findProperties'], 80);
+        $server->on('method:ITIP', [$this, 'itip'], 80);
     }
 
     function beforeMethod($request, $response) {
@@ -30,6 +32,28 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $this->acceptHeader = explode(', ', $request->getHeader("Accept"));
         $request->setUrl($url);
         return true;
+    }
+
+    function itip($request) {
+        $payload = json_decode($request->getBodyAsString());
+        $issetdef = $this->propertyOrDefault($payload);
+
+        if (!isset($payload->uid) || !$payload->sender || !$payload->recipient || !$payload->ical) {
+            return $this->send(400, null);
+        }
+
+        $message = new Message();
+        $message->component = 'VEVENT';
+        $message->uid = $payload->uid;
+        $message->method = $issetdef('method', 'REQUEST');
+        $message->sequence = $issetdef('sequence', '0');
+        $message->sender = 'mailto:' . $payload->sender;
+        $message->recipient = 'mailto:' . $payload->recipient;
+        $message->message = VObject\Reader::read($payload->ical);
+
+        $this->server->getPlugin('caldav-schedule')->scheduleLocalDelivery($message);
+
+        return $this->send(204, null);
     }
 
     function httpReport($request, $response) {
@@ -144,9 +168,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function createCalendar($nodePath, $node, $jsonData) {
-        $issetdef = function($key, $default=null) use ($jsonData) {
-            return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
-        };
+        $issetdef = $this->propertyOrDefault($jsonData);
 
         if (!isset($jsonData->id) || !$jsonData->id) {
             return [400, null];
@@ -205,9 +227,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function createAddressBook($node, $jsonData) {
-        $issetdef = function($key, $default=null) use ($jsonData) {
-             return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
-        };
+        $issetdef = $this->propertyOrDefault($jsonData);
 
         if (!isset($jsonData->id) || !$jsonData->id) {
             return [400, null];
@@ -613,5 +633,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
         $this->server->httpResponse->setStatus($code);
         return false;
+    }
+
+    private function propertyOrDefault($jsonData) {
+        return function($key, $default = null) use ($jsonData) {
+            return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
+        };
     }
 }

@@ -22,6 +22,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $server->on('method:PROPPATCH', [$this, 'proppatch'], 80);
         $server->on('method:PROPFIND', [$this, 'findProperties'], 80);
         $server->on('method:ITIP', [$this, 'itip'], 80);
+        $server->on('method:ACL', [$this, 'changePublicRights'], 80);
     }
 
     function beforeMethod($request, $response) {
@@ -526,6 +527,38 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         // see vendor/sabre/dav/lib/CalDAV/SharingPlugin.php:268
         $this->server->httpResponse->setHeader('X-Sabre-Status', 'everything-went-well');
         return [200, null];
+    }
+
+    function changePublicRights($request, $response) {
+        if (!$this->acceptJson()) {
+            return true;
+        }
+
+        //this is a very simplified version of Sabre\DAVACL\Plugin#httpacl function
+        //here we do not consider a normal acl payload but only a json formatted like {public_right: aprivilege}
+        //if the request is not 400 we need to store this info inside the calendarinstance node (i.e. $node->savePublicRight)
+        //the info is then available through node->getACL() alongside hardcoded acls
+
+        $path = $request->getPath();
+        $node = $this->server->tree->getNodeForPath($path);
+        $jsonData = json_decode($request->getBodyAsString());
+
+        if ($node instanceof \ESN\CalDAV\SharedCalendar) {
+            if (!isset($jsonData->public_right)) {
+                throw new DAV\Exception\BadRequest('JSON body expected in ACL request');
+            }
+
+            $supportedPrivileges = $this->server->getPlugin('acl')->getFlatPrivilegeSet($node);
+            if (!isset($supportedPrivileges[$jsonData->public_right])) {
+                throw new \Sabre\DAVACL\Exception\NotSupportedPrivilege('The privilege you specified (' . $jsonData->public_right . ') is not recognized by this server');
+            }
+
+            $node->savePublicRight($jsonData->public_right);
+
+            $this->send(200, $node->getACL());
+            return false;
+        }
+        return true;
     }
 
     function getAddressBooks($nodePath, $node) {

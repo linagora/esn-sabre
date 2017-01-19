@@ -1,5 +1,7 @@
 <?php
 namespace ESN\CalDAV;
+use Sabre\DAV\ServerPlugin;
+
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
 class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
@@ -7,10 +9,12 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     const PATH = "calendars/123123/uid.ics";
     const ETAG = 'The etag';
 
+    private $icalData;
+
     private function getPlugin($server = null) {
         $plugin = new CalDAVRealTimePluginMock($server);
         $server = $plugin->getServer();
-        $this->data = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a18225bc-3bfb-4e2a-a5f1-711c8d9cf531\r\nTRANSP:OPAQUE\r\nDTSTART;TZID=Europe/Berlin:20160209T113000\r\nDTEND;TZID=Europe/Berlin:20160209T140000\r\nSUMMARY:test\r\nORGANIZER;CN=admin admin:mailto:admin@open-paas.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $this->icalData = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a18225bc-3bfb-4e2a-a5f1-711c8d9cf531\r\nTRANSP:OPAQUE\r\nDTSTART;TZID=Europe/Berlin:20160209T113000\r\nDTEND;TZID=Europe/Berlin:20160209T140000\r\nSUMMARY:test\r\nORGANIZER;CN=admin admin:mailto:admin@open-paas.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
         return $plugin;
     }
@@ -45,7 +49,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
         $client = $plugin->getClient();
 
-        $this->assertTrue($server->emit('beforeCreateFile', [self::PATH, &$this->data, $parent, &$modified]));
+        $this->assertTrue($server->emit('beforeCreateFile', [self::PATH, &$this->icalData, $parent, &$modified]));
         $this->assertTrue($server->emit('afterCreateFile', [self::PATH, $parent]));
 
         $jsondata = json_decode($client->message);
@@ -53,7 +57,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($jsondata->{'eventPath'}, "/" . self::PATH);
         $this->assertEquals($jsondata->{'etag'}, self::ETAG);
         $this->assertEquals($jsondata->{'type'}, 'created');
-        $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->data))));
+        $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->icalData))));
         $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:ws:event:created');
     }
 
@@ -65,7 +69,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $modified = false;
         $parent = new \Sabre\DAV\SimpleCollection("root", []);
 
-        $this->assertTrue($server->emit('beforeCreateFile', ["test", &$this->data, $parent, &$modified]));
+        $this->assertTrue($server->emit('beforeCreateFile', ["test", &$this->icalData, $parent, &$modified]));
         $this->assertTrue($server->emit('afterCreateFile', ["test", $parent]));
         $this->assertNull($client->message);
     }
@@ -90,7 +94,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         ];
         $node = new \Sabre\CalDAV\CalendarObject(new CalDAVBackendMock(), $calendarData, $objectData);
 
-        $this->assertTrue($server->emit('beforeWriteContent', [self::PATH, $node, &$this->data, &$modified]));
+        $this->assertTrue($server->emit('beforeWriteContent', [self::PATH, $node, &$this->icalData, &$modified]));
         $this->assertTrue($server->emit('afterWriteContent', [self::PATH, $node]));
 
         $jsondata = json_decode($client->message);
@@ -98,7 +102,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($jsondata->{'eventPath'}, "/" . self::PATH);
         $this->assertEquals($jsondata->{'type'}, 'updated');
         $this->assertEquals($jsondata->{'old_event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($oldData))));
-        $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->data))));
+        $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->icalData))));
         $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:ws:event:updated');
         $this->assertEquals($jsondata->{'etag'}, self::ETAG);
     }
@@ -121,7 +125,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $data = "BEGIN:VCALENDAR";
         $objectData = [
             'uri' => 'uid.ics',
-            'calendardata' => &$this->data
+            'calendardata' => &$this->icalData
         ];
         $calendarData = [
             'id' => '123123',
@@ -148,7 +152,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($client->topic, 'calendar:event:updated');
         $this->assertEquals($jsondata->{'eventPath'}, "/" . self::PATH);
         $this->assertEquals($jsondata->{'type'}, 'deleted');
-        $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->data))));
+        $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->icalData))));
         $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:ws:event:deleted');
     }
 
@@ -169,6 +173,19 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($server->emit('beforeUnbind', [self::PATH]));
         $this->assertTrue($server->emit('afterUnbind', [self::PATH]));
         $this->assertNull($client->message);
+    }
+
+    function testItipDelegateToScheduleAndPublishMessage() {
+        $plugin = $this->getMock(CalDAVRealTimePlugin::class, ['schedule', 'publishMessage'], ['']);
+        $plugin->expects($this->once())->method('schedule')->will($this->returnCallback(function($message) {
+            $this->assertInstanceOf(\Sabre\VObject\ITip\Message::class, $message);
+
+            return $message;
+        }));
+        $plugin->expects($this->once())->method('publishMessage');
+
+        $plugin->itip(new \Sabre\VObject\ITip\Message());
+        $this->verifyMockObjects();
     }
 }
 

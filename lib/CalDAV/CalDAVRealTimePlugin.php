@@ -40,6 +40,7 @@ class CalDAVRealTimePlugin extends ServerPlugin {
 
         //we want that the schedule plugin get called before so attendee's event are created
         $server->on('schedule',           [$this, 'schedule'], self::PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN);
+        $server->on('itip', [$this, 'itip']);
     }
 
     function after($path) {
@@ -190,5 +191,10 @@ class CalDAVRealTimePlugin extends ServerPlugin {
 
         $this->createMessage($path, $body);
         return true;
+    }
+
+    function itip(\Sabre\VObject\ITip\Message $iTipMessage) {
+        $this->schedule($iTipMessage);
+        $this->publishMessage();
     }
 }

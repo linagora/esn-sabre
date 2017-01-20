@@ -750,7 +750,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $mongoRes = $collection->findOne($query, ['public_right']);
 
-        return @$mongoRes['public_right'] ?: null;
+        return isset($mongoRes['public_right']) ? $mongoRes['public_right'] : null;
     }
 
     function setPublishStatus($calendarId, $value) {

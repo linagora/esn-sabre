@@ -185,13 +185,14 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         }
 
         $path = $homePath . $eventPath;
-        $event = $iTipMessage->message;
+
+        $event = clone $iTipMessage->message;
         $event->remove('method');
 
         $body = [
             'eventPath' => '/' . $path,
             'type' => $iTipMessage->method,
-            'event' => $iTipMessage->message,
+            'event' => $event,
             'websocketEvent' => $this->WS_EVENTS['EVENT_'.$iTipMessage->method]
         ];
 

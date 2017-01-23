@@ -32,6 +32,20 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     }
 
+    /**
+     * Used to perform healthchecks on the Message before delivery.
+     *
+     * @param ITip\Message $iTipMessage The Message to deliver.
+     */
+    function deliver(ITip\Message $iTipMessage)
+    {
+        if (!$iTipMessage->message->VEVENT->SEQUENCE) {
+            $iTipMessage->message->VEVENT->SEQUENCE = 0;
+        }
+
+        parent::deliver($iTipMessage);
+    }
+
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
         // ITIP operations are silent -> no email should be sent
         if ($request->getMethod() === 'ITIP' || !$this->scheduleReply($this->server->httpRequest)) {

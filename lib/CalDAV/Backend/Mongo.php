@@ -732,11 +732,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function prepareRequestForCalendarPublicRight($calendarId) {
-      $this->_assertIsArray($calendarId);
+        $this->_assertIsArray($calendarId);
 
-      $mongoCalendarId = new \MongoId($calendarId[0]);
+        $mongoCalendarId = new \MongoId($calendarId[0]);
 
-      return [ $this->db->selectCollection($this->calendarInstancesTableName), [ 'calendarid' => $mongoCalendarId ] ];
+        return [$this->db->selectCollection($this->calendarInstancesTableName), ['calendarid' => $mongoCalendarId]];
     }
 
     function saveCalendarPublicRight($calendarId, $privilege) {

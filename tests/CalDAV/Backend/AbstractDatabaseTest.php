@@ -842,7 +842,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     function testSetCalendarPublicRightWithWrongAttribute() {
         $backend = $this->getBackend();
         try {
-          $backend->saveCalendarPublicRight(null, '');
+            $backend->saveCalendarPublicRight(null, '');
         } catch(\Exception $exception) {
             $this->assertTrue($exception instanceof \LogicException);
             $this->assertEquals($exception->getMessage(), 'The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');

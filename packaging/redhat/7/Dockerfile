@@ -9,7 +9,7 @@ ARG VERSION=0.0.0
 ARG ITERATION=1
 ARG TREEISH=master
 
-RUN rpm -ivh http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-8.noarch.rpm && \
+RUN rpm -ivh http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && \
     rpm -ivh http://rpms.famillecollet.com/enterprise/remi-release-7.rpm && \
     yum --setopt=alwaysprompt=no --enablerepo=remi,remi-php56 -y install git rpm-build php php-cli php-fpm php-curl php-bcmath php-mbstring php-xml php-pecl-mongo
 

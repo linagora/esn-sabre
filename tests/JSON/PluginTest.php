@@ -12,6 +12,7 @@ require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVACL/PrincipalBackend/M
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/Mock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CardDAV/Backend/Mock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
+require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
 
 /**
  * @medium
@@ -143,7 +144,11 @@ END:VCALENDAR'
         $this->sabredb->drop();
         $this->esndb->drop();
 
-        $this->esndb->users->insert([ '_id' => new \MongoId('54b64eadf6d7d8e41d263e0f') ]);
+        $this->esndb->users->insert([
+            '_id' => new \MongoId('54b64eadf6d7d8e41d263e0f'),
+            "firstname" => "Roberto",
+            "lastname" => "Carlos"
+        ]);
         $this->esndb->users->insert([
             '_id' => new \MongoId('54b64eadf6d7d8e41d263e0e'),
             "accounts" => [
@@ -182,6 +187,9 @@ END:VCALENDAR'
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
 
+        $this->tree[] = new \Sabre\DAV\SimpleCollection('principals', [
+          new \Sabre\CalDAV\Principal\Collection($this->principalBackend, 'principals/users')
+        ]);
         $this->tree[] = new \ESN\CardDAV\AddressBookRoot(
             $this->principalBackend,
             $this->carddavBackend,
@@ -206,9 +214,17 @@ END:VCALENDAR'
         $this->server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
         $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
 
+        $authBackend = new \Sabre\DAV\Auth\Backend\Mock();
+        $authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0f');
+        $authPlugin = new \Sabre\DAV\Auth\Plugin($authBackend);
+        $this->server->addPlugin($authPlugin);
+
+        $aclPlugin = new \Sabre\DAVACL\Plugin();
+        $aclPlugin->principalCollectionSet = ['principals/users'];
+        $this->server->addPlugin($aclPlugin);
+
         $plugin = new Plugin('json');
         $this->server->addPlugin($plugin);
-
 
         $this->cal = $this->caldavCalendar;
         $this->cal['id'] = $this->caldavBackend->createCalendar($this->cal['principaluri'], $this->cal['uri'], $this->cal);
@@ -1184,5 +1200,66 @@ END:VCALENDAR'
         $response = $this->request($request);
 
         $this->assertEquals($response->status, 204);
+    }
+
+    function testACLShouldReturn404IfCalendarDoesNotExist() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ACL',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/unknownCalendar.json',
+        ));
+
+        $response = $this->request($request);
+        $this->assertEquals($response->status, 404);
+    }
+
+    function testACLShouldReturn400IfBodyIsBadlyFormatted() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ACL',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode(['key' => 'value']));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 400);
+    }
+
+    function testACLShouldReturn412IfPrivilegeIsNotSupported() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ACL',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode(['public_right' => '{DAV}:doesnotexist']));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 412);
+    }
+
+    function testACLShouldReturn200WithModifiedPrivileges() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ACL',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode(['public_right' => '{DAV:}read']));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 200);
+        $publicACE = null;
+        foreach (json_decode($response->body) as &$ace) {
+            if ($ace->principal === '{DAV:}authenticated') {
+                $publicACE = $ace;
+            }
+        }
+        $this->assertEquals($publicACE->privilege, '{DAV:}read');
     }
 }

@@ -375,7 +375,7 @@ An object with an array member "prop" which specifies list of wanted property of
   "prop": [
     "cs:invite",
     "acl"
-   ] 
+   ]
 }
 ```
 
@@ -400,6 +400,41 @@ A json resource containing the values of all requested properties
     ...
   ]
 }
+```
+
+## ACL /calendars/{calendarHomeId}/{calendarId}
+
+Sets the public access privilege on a calendar.
+
+**Request JSON Object:**
+
+```json
+{
+  "public_right": "{DAV:}read" //any supported DAV acl privilege for a calendar
+}
+```
+
+**Status Codes:**
+
+- 200 Ok
+- 400 Bad Request: Request payload is badly formatted
+- 404 Not Found: Calendar has not been found
+- 412 Precondition Failed: Privilege in the payload is not supported
+
+**Response:**
+
+```json
+[
+  {
+    "privilege": "{DAV:}read",
+    "principal": "principals/users/54b64eadf6d7d8e41d263e0f"
+  },
+  {
+    "privilege": "{DAV:}read",
+    "principal": "{DAV:}authenticated"
+  },
+  ...
+]
 ```
 
 ## ITIP /calendars/{calendarHomeId}

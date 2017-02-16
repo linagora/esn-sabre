@@ -32,6 +32,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
         $this->acceptHeader = explode(', ', $request->getHeader("Accept"));
         $request->setUrl($url);
+
+        $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
+
         return true;
     }
 
@@ -416,7 +419,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             return [404, null];
         }
 
-        return [200, $this->getMultipleDAVItems($nodePath, [$eventPath])];
+        return [200, $this->getMultipleDAVItems($nodePath, $node, [$eventPath])];
     }
 
     function getCalendarObjects($nodePath, $node, $jsonData) {
@@ -446,10 +449,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             'time-range' => null,
         ];
 
-        return [200, $this->getMultipleDAVItems($nodePath, $node->calendarQuery($filters), $start, $end)];
+        return [200, $this->getMultipleDAVItems($nodePath, $node, $node->calendarQuery($filters), $start, $end)];
     }
 
-    private function getMultipleDAVItems($parentNodePath, $paths, $start = false, $end = false) {
+    private function getMultipleDAVItems($parentNodePath, $parentNode, $paths, $start = false, $end = false) {
         $items = [];
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
@@ -473,6 +476,22 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     $recurid->name = 'RECURRENCE-ID';
                     $vevent->add($recurid);
                 }
+            }
+
+            $newEvents = array();
+            foreach ($vObject->VEVENT as $vevent) {
+                if ($vevent->CLASS == 'PRIVATE' && $parentNode->getOwner() != $this->currentUser) {
+                    $vevent = new \Sabre\VObject\Component\VEvent($vObject, 'VEVENT', [
+                      'UID' => $vevent->UID,
+                      'DTSTART' => $vevent->DTSTART,
+                      'DTEND' => $vevent->DTEND,
+                    ]);
+                }
+                $newEvents[] = $vevent;
+            }
+            $vObject->remove('VEVENT');
+            foreach ($newEvents as &$vevent) {
+                $vObject->add($vevent);
             }
 
             $items[] = [

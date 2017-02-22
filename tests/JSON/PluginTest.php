@@ -28,6 +28,15 @@ class PluginTest extends \PHPUnit_Framework_TestCase {
         'uri' => 'calendar1',
     );
 
+    protected $publicCaldavCalendar = array(
+        '{DAV:}displayname' => 'Calendar',
+        '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
+        '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
+        '{http://apple.com/ns/ical/}calendar-order' => '2',
+        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0e',
+        'uri' => 'publicCal1',
+    );
+
     protected $caldavCalendarObjects = array(
         'event1.ics' =>
             'BEGIN:VCALENDAR
@@ -79,6 +88,28 @@ END:VEVENT
 END:VCALENDAR
 ',
     );
+
+    protected $privateRecurEvent =
+    'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:75EE3C60-34AC-4A97-953D-56CC004D6705
+SUMMARY:RecurringPrivate
+DTSTART:20150227T010000
+DTEND:20150227T020000
+LOCATION:Paris
+RRULE:FREQ=DAILY
+CLASS:PRIVATE
+END:VEVENT
+BEGIN:VEVENT
+UID:75EE3C60-34AC-4A97-953D-56CC004D6705
+RECURRENCE-ID:20150228T010000
+SUMMARY:Exception
+DTSTART:20150228T030000
+DTEND:20150228T040000
+END:VEVENT
+END:VCALENDAR
+';
 
     protected $timeRangeData = [
           'match' => [ 'start' => '20120225T230000Z', 'end' => '20130228T225959Z' ],
@@ -228,10 +259,15 @@ END:VCALENDAR'
 
         $this->cal = $this->caldavCalendar;
         $this->cal['id'] = $this->caldavBackend->createCalendar($this->cal['principaluri'], $this->cal['uri'], $this->cal);
-
         foreach ($this->caldavCalendarObjects as $eventUri => $data) {
             $this->caldavBackend->createCalendarObject($this->cal['id'], $eventUri, $data);
         }
+
+        $this->publicCal = $this->publicCaldavCalendar;
+        $this->publicCal['id'] = $this->caldavBackend->createCalendar($this->publicCal['principaluri'], $this->publicCal['uri'], $this->publicCal);
+        $this->caldavBackend->saveCalendarPublicRight($this->publicCal['id'], '{DAV:}read');
+        $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'privateRecurEvent.ics', $this->privateRecurEvent);
+
         $book = $this->carddavAddressBook;
         $book['id'] = $this->carddavBackend->createAddressBook($book['principaluri'],
             $book['uri'],
@@ -332,6 +368,45 @@ END:VCALENDAR'
         $request->setBody(json_encode($data));
         $response = $this->request($request);
         $this->assertEquals($response->status, 400);
+    }
+
+    function testGetAnonimizedCalendarObjects() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeDataRecur));
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $vcalendar = \Sabre\VObject\Reader::readJson($jsonResponse->_embedded->{'dav:item'}[0]->{'data'});
+        $vevents = $vcalendar->select('VEVENT');
+        $this->assertCount(3, $vevents);
+        $this->assertNull($vevents[0]->SUMMARY);
+        $this->assertEquals($vevents[1]->SUMMARY, 'Exception');
+        $this->assertNull($vevents[2]->SUMMARY);
+    }
+
+    function testGetAnonimizedCalendarObjectByUID() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e',
+        ));
+
+        $request->setBody(json_encode($this->uidQueryDataRecur));
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $vcalendar = \Sabre\VObject\Reader::readJson($jsonResponse->_embedded->{'dav:item'}[0]->{'data'});
+        $vevents = $vcalendar->select('VEVENT');
+        $this->assertCount(2, $vevents);
+        $this->assertNull($vevents[0]->SUMMARY);
+        $this->assertEquals($vevents[1]->SUMMARY, 'Exception');
     }
 
     function testTimeRangeQuery404() {

@@ -265,7 +265,7 @@ END:VCALENDAR'
 
         $this->publicCal = $this->publicCaldavCalendar;
         $this->publicCal['id'] = $this->caldavBackend->createCalendar($this->publicCal['principaluri'], $this->publicCal['uri'], $this->publicCal);
-        $this->caldavBackend->saveCalendarPublicRight($this->publicCal['id'], '{DAV:}read');
+        $this->caldavBackend->saveCalendarPublicRight($this->publicCal['id'], '{DAV:}all');
         $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'privateRecurEvent.ics', $this->privateRecurEvent);
 
         $book = $this->carddavAddressBook;
@@ -407,6 +407,30 @@ END:VCALENDAR'
         $this->assertCount(2, $vevents);
         $this->assertNull($vevents[0]->SUMMARY);
         $this->assertEquals($vevents[1]->SUMMARY, 'Exception');
+    }
+
+    function test403ModifyPrivateCalendarObjects() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1/privateRecurEvent.ics',
+        ));
+
+        $event = $this->caldavBackend->getCalendarObject([$this->publicCal['id'][0], ''], 'privateRecurEvent.ics');
+
+        $request->setBody($event['calendardata']);
+        $response = $this->request($request);
+        $this->assertEquals($response->status, 403);
+    }
+
+    function test403DeletePrivateCalendarObjects() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1/privateRecurEvent.ics',
+        ));
+
+        $event = $this->caldavBackend->getCalendarObject([$this->publicCal['id'][0], ''], 'privateRecurEvent.ics');
+        $response = $this->request($request);
+        $this->assertEquals($response->status, 403);
     }
 
     function testTimeRangeQuery404() {

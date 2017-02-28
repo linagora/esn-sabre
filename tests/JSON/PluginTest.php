@@ -605,7 +605,7 @@ END:VCALENDAR'
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars.json');
 
         $homes = $jsonResponse->{'_embedded'}->{'dav:home'};
-        $this->assertCount(4, $homes);
+        $this->assertCount(2, $homes);
 
         $this->assertEquals($homes[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
 

@@ -315,10 +315,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $items = [];
         foreach ($calendars as $calendar) {
             if ($calendar instanceof \Sabre\CalDAV\Calendar) {
-                $items[] = $this->listCalendar($nodePath . "/" . $calendar->getName(), $calendar);
+                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . "/" . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+                    $items[] = $this->listCalendar($nodePath . "/" . $calendar->getName(), $calendar);
+                }
             }
         }
-
 
         $requestPath = $baseUri . $nodePath . ".json";
         $result = [

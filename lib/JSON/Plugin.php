@@ -138,13 +138,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $code = null;
         $body = null;
+        $withRights = $this->getWithRightsParameter($request);
 
         if ($node instanceof \ESN\CalDAV\CalendarRoot) {
-            list($code, $body) = $this->listCalendarRoot($path, $node);
+            list($code, $body) = $this->listCalendarRoot($path, $node, $withRights);
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
-            list($code, $body) = $this->listCalendarHome($path, $node);
+            list($code, $body) = $this->listCalendarHome($path, $node, $withRights);
         } else if ($node instanceof \Sabre\CalDAV\Calendar) {
-            list($code, $body) = $this->getCalendarInformation($path, $node);
+            list($code, $body) = $this->getCalendarInformation($path, $node, $withRights);
         } else if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
             list($code, $body) = $this->getAddressBooks($path, $node);
         } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
@@ -152,6 +153,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return $this->send($code, $body);
+    }
+
+    private function getWithRightsParameter($request) {
+        $queryParams = $request->getQueryParameters();
+        return isset($queryParams['withRights']) && $queryParams['withRights'] === 'true' ;
     }
 
     function delete($request, $response) {
@@ -304,7 +310,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
 
-    function listCalendarRoot($nodePath, $node) {
+    function listCalendarRoot($nodePath, $node, $withRights = null) {
         $homes = $node->getChildren();
         $baseUri = $this->server->getBaseUri();
 
@@ -312,7 +318,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         foreach ($homes as $home) {
             if ($home instanceof \Sabre\CalDAV\CalendarHome) {
                 $noderef = $nodePath . "/" . $home->getName();
-                list($code, $result) = $this->listCalendarHome($noderef, $home);
+                list($code, $result) = $this->listCalendarHome($noderef, $home, $withRights);
                 if (!empty($result)) {
                     $items[] = $result;
                 }
@@ -330,7 +336,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $result];
     }
 
-    function listCalendarHome($nodePath, $node) {
+    function listCalendarHome($nodePath, $node, $withRights = null) {
         $calendars = $node->getChildren();
         $baseUri = $this->server->getBaseUri();
 
@@ -338,7 +344,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         foreach ($calendars as $calendar) {
             if ($calendar instanceof \Sabre\CalDAV\Calendar) {
                 if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . "/" . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
-                    $items[] = $this->listCalendar($nodePath . "/" . $calendar->getName(), $calendar);
+                    $items[] = $this->listCalendar($nodePath . "/" . $calendar->getName(), $calendar, $withRights);
                 }
             }
         }
@@ -357,15 +363,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $result];
     }
 
-    function getCalendarInformation($nodePath, $node) {
+    function getCalendarInformation($nodePath, $node, $withRights) {
         $baseUri = $this->server->getBaseUri();
         $requestPath = $baseUri . $nodePath . ".json";
-        return [200, $this->listCalendar($nodePath, $node)];
+        return [200, $this->listCalendar($nodePath, $node, $withRights)];
     }
 
-    function listCalendar($nodePath, $calendar) {
+    function listCalendar($nodePath, $calendar, $withRights = null) {
         $baseUri = $this->server->getBaseUri();
         $calprops = $calendar->getProperties([]);
+        $node = $calendar;
 
         $calendar = [
             "_links" => [
@@ -391,6 +398,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         if (isset($calprops["{http://apple.com/ns/ical/}calendar-order"])) {
             $calendar["apple:order"] = $calprops["{http://apple.com/ns/ical/}calendar-order"];
+        }
+
+        if ($withRights) {
+            if ($node->getInvites()) {
+                $calendar['invite'] = $node->getInvites();
+            }
+
+            if ($node->getACL()) {
+                $calendar['acl'] = $node->getACL();
+            }
         }
 
         return $calendar;

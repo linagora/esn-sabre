@@ -15,6 +15,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     function initialize(DAV\Server $server) {
         $this->server = $server;
         $server->on('beforeMethod', [$this, 'beforeMethod'], 15); // 15 is after Auth and before ACL
+        $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
+        $server->on('beforeUnbind', [$this, 'beforeUnbind']);
         $server->on('method:REPORT', [$this, 'httpReport'], 80);
         $server->on('method:POST', [$this, 'post'], 80);
         $server->on('method:GET', [$this, 'get'], 80);
@@ -35,6 +37,24 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
 
+        return true;
+    }
+
+    function beforeUnbind($path) {
+        return $this->checkModificationsRights($this->server->tree->getNodeForPath($path));
+    }
+
+    function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {
+        return $this->checkModificationsRights($node);
+    }
+
+    function checkModificationsRights(\Sabre\DAV\IFile $node) {
+        if ($node instanceof \Sabre\CalDAV\ICalendarObject) {
+            $vcalendar = VObject\Reader::read($node->get());
+            if ($this->isHiddenPrivateEvent($vcalendar->VEVENT, $node)) {
+                throw new DAV\Exception\Forbidden('You can not modify private events you do not own');
+            }
+        }
         return true;
     }
 
@@ -480,7 +500,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
             $newEvents = array();
             foreach ($vObject->VEVENT as $vevent) {
-                if ($vevent->CLASS == 'PRIVATE' && $parentNode->getOwner() != $this->currentUser) {
+                if ($this->isHiddenPrivateEvent($vevent, $parentNode)) {
                     $vevent = new \Sabre\VObject\Component\VEvent($vObject, 'VEVENT', [
                       'UID' => $vevent->UID,
                       'DTSTART' => $vevent->DTSTART,
@@ -509,6 +529,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             ],
             "_embedded" => [ "dav:item" => $items ]
         ];
+    }
+
+    function isHiddenPrivateEvent($vevent, $node) {
+        return $vevent->CLASS == 'PRIVATE' && $node->getOwner() != $this->currentUser;
     }
 
     function updateSharees($path, $node, $jsonData) {

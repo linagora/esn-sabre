@@ -415,17 +415,22 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $query = [ 'principaluri' => $principalUri ];
         $fields = ['calendarid', 'uri'];
 
-        $calrow = $collection->findOne($query, $fields);
-        if (!$calrow) return null;
+        $calendarInstances = $collection->find($query, $fields);
+        if (!$calendarInstances || !$calendarInstances->hasNext()) return null;
+
+        $calendarUris = array();
+        foreach($calendarInstances as $calendarInstance) {
+            $calendarUris[(string) $calendarInstance['calendarid']] = (string) $calendarInstance['uri'];
+        }
 
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
-        $query = [ 'calendarid' => (string)$calrow['calendarid'], 'uid' => $uid ];
-        $fields = ['uri'];
+        $query = ['calendarid' => ['$in' => array_keys($calendarUris)] , 'uid' => $uid ];
+        $fields = ['uri', 'calendarid'];
 
         $objrow = $collection->findOne($query, $fields);
         if (!$objrow) return null;
 
-        return $calrow['uri'] . '/' . $objrow['uri'];
+        return $calendarUris[(string) $objrow['calendarid']] . '/' . $objrow['uri'];
     }
 
 

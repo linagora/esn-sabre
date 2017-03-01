@@ -313,7 +313,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             if ($home instanceof \Sabre\CalDAV\CalendarHome) {
                 $noderef = $nodePath . "/" . $home->getName();
                 list($code, $result) = $this->listCalendarHome($noderef, $home);
-                $items[] = $result;
+                if (!empty($result)) {
+                    $items[] = $result;
+                }
             }
         }
 
@@ -335,18 +337,22 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $items = [];
         foreach ($calendars as $calendar) {
             if ($calendar instanceof \Sabre\CalDAV\Calendar) {
-                $items[] = $this->listCalendar($nodePath . "/" . $calendar->getName(), $calendar);
+                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . "/" . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+                    $items[] = $this->listCalendar($nodePath . "/" . $calendar->getName(), $calendar);
+                }
             }
         }
 
-
         $requestPath = $baseUri . $nodePath . ".json";
-        $result = [
-            "_links" => [
-              "self" => [ "href" => $requestPath ]
-            ],
-            "_embedded" => [ "dav:calendar" => $items ]
-        ];
+        $result = [];
+        if (!empty($items)) {
+            $result = [
+                "_links" => [
+                    "self" => [ "href" => $requestPath ]
+                ],
+                "_embedded" => [ "dav:calendar" => $items ]
+            ];
+        }
 
         return [200, $result];
     }

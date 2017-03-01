@@ -28,6 +28,15 @@ class PluginTest extends \PHPUnit_Framework_TestCase {
         'uri' => 'calendar1',
     );
 
+    protected $caldavCalendarUser2 = array(
+        '{DAV:}displayname' => 'Calendar',
+        '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
+        '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
+        '{http://apple.com/ns/ical/}calendar-order' => '2',
+        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0e',
+        'uri' => 'calendar2',
+    );
+
     protected $publicCaldavCalendar = array(
         '{DAV:}displayname' => 'Calendar',
         '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
@@ -93,7 +102,7 @@ END:VCALENDAR
     'BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
-UID:75EE3C60-34AC-4A97-953D-56CC004D6705
+UID:75EE3C60-34AC-4A97-953D-56CC004D6706
 SUMMARY:RecurringPrivate
 DTSTART:20150227T010000
 DTEND:20150227T020000
@@ -102,7 +111,7 @@ RRULE:FREQ=DAILY
 CLASS:PRIVATE
 END:VEVENT
 BEGIN:VEVENT
-UID:75EE3C60-34AC-4A97-953D-56CC004D6705
+UID:75EE3C60-34AC-4A97-953D-56CC004D6706
 RECURRENCE-ID:20150228T010000
 SUMMARY:Exception
 DTSTART:20150228T030000
@@ -263,6 +272,9 @@ END:VCALENDAR'
             $this->caldavBackend->createCalendarObject($this->cal['id'], $eventUri, $data);
         }
 
+        $this->calUser2 = $this->caldavCalendarUser2;
+        $this->calUser2['id'] = $this->caldavBackend->createCalendar($this->calUser2['principaluri'], $this->calUser2['uri'], $this->calUser2);
+
         $this->publicCal = $this->publicCaldavCalendar;
         $this->publicCal['id'] = $this->caldavBackend->createCalendar($this->publicCal['principaluri'], $this->publicCal['uri'], $this->publicCal);
         $this->caldavBackend->saveCalendarPublicRight($this->publicCal['id'], '{DAV:}all');
@@ -398,7 +410,7 @@ END:VCALENDAR'
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e',
         ));
 
-        $request->setBody(json_encode($this->uidQueryDataRecur));
+        $request->setBody(json_encode([ 'uid' => '75EE3C60-34AC-4A97-953D-56CC004D6706' ]));
         $response = $this->request($request);
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 200);
@@ -617,7 +629,7 @@ END:VCALENDAR'
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars.json');
 
         $homes = $jsonResponse->{'_embedded'}->{'dav:home'};
-        $this->assertCount(4, $homes);
+        $this->assertCount(2, $homes);
 
         $this->assertEquals($homes[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
 
@@ -628,6 +640,18 @@ END:VCALENDAR'
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
         $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
         $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
+        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
+        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+
+        $this->assertEquals($homes[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e.json');
+
+        $calendars = $homes[1]->{'_embedded'}->{'dav:calendar'};
+        $this->assertCount(1, $calendars);
+
+        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
+        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
+        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/2');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
     }

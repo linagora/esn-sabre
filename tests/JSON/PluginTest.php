@@ -437,9 +437,11 @@ END:VCALENDAR'
         $vcalendar = \Sabre\VObject\Reader::readJson($jsonResponse->_embedded->{'dav:item'}[0]->{'data'});
         $vevents = $vcalendar->select('VEVENT');
         $this->assertCount(3, $vevents);
-        $this->assertNull($vevents[0]->SUMMARY);
+        $this->assertEquals($vevents[0]->SUMMARY, 'Busy');
+        $this->assertEquals($vevents[0]->CLASS, 'PRIVATE');
         $this->assertEquals($vevents[1]->SUMMARY, 'Exception');
-        $this->assertNull($vevents[2]->SUMMARY);
+        $this->assertEquals($vevents[2]->SUMMARY, 'Busy');
+        $this->assertEquals($vevents[2]->CLASS, 'PRIVATE');
     }
 
     function testGetAnonimizedCalendarObjectByUID() {
@@ -457,7 +459,8 @@ END:VCALENDAR'
         $vcalendar = \Sabre\VObject\Reader::readJson($jsonResponse->_embedded->{'dav:item'}[0]->{'data'});
         $vevents = $vcalendar->select('VEVENT');
         $this->assertCount(2, $vevents);
-        $this->assertNull($vevents[0]->SUMMARY);
+        $this->assertEquals($vevents[0]->SUMMARY->getValue(), 'Busy');
+        $this->assertEquals($vevents[0]->CLASS, 'PRIVATE');
         $this->assertEquals($vevents[1]->SUMMARY, 'Exception');
     }
 

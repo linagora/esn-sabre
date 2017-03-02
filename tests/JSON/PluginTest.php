@@ -46,6 +46,15 @@ class PluginTest extends \PHPUnit_Framework_TestCase {
         'uri' => 'publicCal1',
     );
 
+    protected $delegatedCaldavCalendar = array(
+        '{DAV:}displayname' => 'delegatedCalendar',
+        '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description of the delegated calendar',
+        '{http://apple.com/ns/ical/}calendar-color' => '#33333333',
+        '{http://apple.com/ns/ical/}calendar-order' => '2',
+        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+        'uri' => 'delegatedCal1',
+    );
+
     protected $caldavCalendarObjects = array(
         'event1.ics' =>
             'BEGIN:VCALENDAR
@@ -263,6 +272,10 @@ END:VCALENDAR'
         $aclPlugin->principalCollectionSet = ['principals/users'];
         $this->server->addPlugin($aclPlugin);
 
+        $this->server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
+        $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
+        $sharingPlugin = $this->server->getPlugin('sharing');
+
         $plugin = new Plugin('json');
         $this->server->addPlugin($plugin);
 
@@ -279,6 +292,10 @@ END:VCALENDAR'
         $this->publicCal['id'] = $this->caldavBackend->createCalendar($this->publicCal['principaluri'], $this->publicCal['uri'], $this->publicCal);
         $this->caldavBackend->saveCalendarPublicRight($this->publicCal['id'], '{DAV:}all');
         $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'privateRecurEvent.ics', $this->privateRecurEvent);
+
+        $this->delegatedCal = $this->delegatedCaldavCalendar;
+        $this->delegatedCal['id'] = $this->caldavBackend->createCalendar($this->delegatedCal['principaluri'], $this->delegatedCal['uri'], $this->delegatedCal);
+        $this->delegateCalendar();
 
         $book = $this->carddavAddressBook;
         $book['id'] = $this->carddavBackend->createAddressBook($book['principaluri'],
@@ -305,6 +322,29 @@ END:VCALENDAR'
 
         return $this->server->httpResponse;
 
+    }
+
+    private function delegateCalendar() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/delegatedCalendar.json',
+        ));
+
+        $sharees = [
+            "share" => [
+                "set" => [
+                    [
+                        "dav:href"       => "mailto:johndoe@example.org",
+                        "dav:read-write" => true
+                    ]
+                ]
+            ]
+        ];
+
+        $request->setBody(json_encode($sharees));
+        $this->request($request);
     }
 
     function testTimeRangeQuery() {
@@ -615,6 +655,22 @@ END:VCALENDAR'
         $this->assertEquals($cards[0]->data[1][0][3], 'b');
     }
 
+    private function checkCalendars($calendars) {
+        $this->assertCount(2, $calendars);
+
+        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
+        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
+        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
+        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
+        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+
+        $this->assertEquals($calendars[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/delegatedCal1.json');
+        $this->assertEquals($calendars[1]->{'dav:name'}, 'delegatedCalendar');
+
+        return $calendars;
+    }
+
     function testCalendarRoot() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
@@ -633,17 +689,7 @@ END:VCALENDAR'
 
         $this->assertEquals($homes[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
 
-        $calendars = $homes[0]->{'_embedded'}->{'dav:calendar'};
-        $this->assertCount(1, $calendars);
-
-        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
-        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
-        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
-        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
-        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
-
-        $this->assertEquals($homes[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e.json');
+        $this->checkCalendars($homes[0]->{'_embedded'}->{'dav:calendar'});
 
         $calendars = $homes[1]->{'_embedded'}->{'dav:calendar'};
         $this->assertCount(1, $calendars);
@@ -656,27 +702,38 @@ END:VCALENDAR'
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
     }
 
-    function testCalendarList() {
+    private function _testCalendarList($withRightsParam = null) {
+        $requestUri = $withRightsParam ? '/calendars/54b64eadf6d7d8e41d263e0f.json?withRights=' . $withRightsParam : '/calendars/54b64eadf6d7d8e41d263e0f.json';
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
             'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
+            'REQUEST_URI'       => $requestUri,
         ));
 
         $response = $this->request($request);
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 200);
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
-        $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
-        $this->assertCount(1, $calendars);
 
-        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
-        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
-        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
-        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
-        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+        return $this->checkCalendars($jsonResponse->{'_embedded'}->{'dav:calendar'});
+    }
+
+    function testCalendarList() {
+        $this->_testCalendarList();
+    }
+
+    function testCalendarListWithRights() {
+        $calendars = $this->_testCalendarList('true');
+        $this->assertNotNull($calendars[1]->{'dav:name'});
+        $this->assertNotNull($calendars[1]->{'invite'});
+        $this->assertNotNull($calendars[1]->{'acl'});
+    }
+
+    function testCalendarListWithoutRights() {
+        $calendars = $this->_testCalendarList('false');
+        $this->assertFalse(isset($calendars[1]->{'invite'}));
+        $this->assertFalse(isset($calendars[1]->{'acl'}));
     }
 
     function testGetCalendarConfiguration() {
@@ -721,9 +778,9 @@ END:VCALENDAR'
         $this->assertEquals($response->status, 201);
 
         $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(2, $calendars);
+        $this->assertCount(3, $calendars);
 
-        $cal = $calendars[1];
+        $cal = $calendars[2];
         $this->assertEquals('NAME', $cal['{DAV:}displayname']);
         $this->assertEquals('DESCRIPTION', $cal['{urn:ietf:params:xml:ns:caldav}calendar-description']);
         $this->assertEquals('#0190FFFF', $cal['{http://apple.com/ns/ical/}calendar-color']);
@@ -753,7 +810,7 @@ END:VCALENDAR'
         $this->assertEquals($response->status, 400);
 
         $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(1, $calendars);
+        $this->assertCount(2, $calendars);
     }
 
     function testCreateAddressbook() {
@@ -818,13 +875,13 @@ END:VCALENDAR'
         ));
 
         $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(1, $calendars);
+        $this->assertCount(2, $calendars);
 
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);
 
         $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(0, $calendars);
+        $this->assertCount(1, $calendars);
     }
 
     function testDeleteMainCalendar() {
@@ -847,13 +904,13 @@ END:VCALENDAR'
         ));
 
         $calendars = $this->caldavBackend->getCalendarsForUser($mainCalDavCalendar['principaluri']);
-        $this->assertCount(2, $calendars);
+        $this->assertCount(3, $calendars);
 
         $response = $this->request($request);
         $this->assertEquals(403, $response->status);
 
         $calendars = $this->caldavBackend->getCalendarsForUser($mainCalDavCalendar['principaluri']);
-        $this->assertCount(2, $calendars);
+        $this->assertCount(3, $calendars);
     }
 
     function testDeleteWrongCollection() {

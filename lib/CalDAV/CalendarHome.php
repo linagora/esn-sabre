@@ -8,7 +8,11 @@ class CalendarHome extends \Sabre\CalDAV\CalendarHome {
         return $this->wrapCalendarForACLs(parent::getChild($name));
     }
 
-    protected function wrapCalendarForACLs($cal) {
+    function getChildren() {
+        return array_map([$this, 'wrapCalendarForACLs'], parent::getChildren());
+    }
+
+    private function wrapCalendarForACLs($cal) {
         if ($cal instanceof \Sabre\CalDAV\SharedCalendar) {
             return new SharedCalendar($cal);
         }

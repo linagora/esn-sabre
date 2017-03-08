@@ -3,12 +3,17 @@ namespace ESN\CalDAV;
 
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
+use Sabre\HTTP\RequestInterface;
+use Sabre\HTTP\ResponseInterface;
+use Sabre\VObject\Document;
+use Sabre\Uri;
 
 class CalDAVRealTimePlugin extends ServerPlugin {
     const PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN = 101;
 
     protected $server;
     protected $message;
+    protected $body;
 
     private $REDIS_EVENTS = 'calendar:event:updated';
 
@@ -28,10 +33,12 @@ class CalDAVRealTimePlugin extends ServerPlugin {
     function initialize(Server $server) {
         $this->server = $server;
         $this->messages = array();
+        $this->body = array();
 
         $server->on('beforeCreateFile',   [$this, 'beforeCreateFile']);
         $server->on('afterCreateFile',    [$this, 'after']);
 
+        $server->on('calendarObjectChange', [$this, 'calendarObjectChange']);
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
         $server->on('afterWriteContent',  [$this, 'after']);
 
@@ -43,6 +50,13 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         $server->on('itip', [$this, 'itip']);
     }
 
+    function buildEventBody($eventPath, $type, $event, $websocketEvent) {
+        $this->body['eventPath'] = $eventPath;
+        $this->body['type'] = $type;
+        $this->body['event'] = $event;
+        $this->body['websocketEvent'] = $websocketEvent;
+    }
+
     function after($path) {
         $this->publishMessage();
         return true;
@@ -52,29 +66,52 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         $node = $this->server->tree->getNodeForPath('/'.$path);
 
         if ($node instanceof \Sabre\CalDAV\CalendarObject) {
-            $body = [
-                'eventPath' => '/' . $path,
-                'type' => 'deleted',
-                'event' => \Sabre\VObject\Reader::read($node->get()),
-                'websocketEvent' => $this->WS_EVENTS['EVENT_DELETED']
-            ];
+            list($parentUri) = Uri\split($path);
+            $nodeParent = $this->server->tree->getNodeForPath('/'.$parentUri);
+            $this->addSharedUsers($nodeParent);
 
-            $this->createMessage($path, $body);
+            $this->buildEventBody(
+                '/' . $path,
+                'deleted',
+                \Sabre\VObject\Reader::read($node->get()),
+                $this->WS_EVENTS['EVENT_DELETED']
+            );
+
+            $this->createMessage($path);
         }
 
         return true;
     }
 
+    function calendarObjectChange(RequestInterface $request, ResponseInterface $response, Document $calendar, $parentPath, &$modified, $isNew) {
+        $calendarNode = $this->server->tree->getNodeForPath($parentPath);
+        $this->addSharedUsers($calendarNode);
+
+        return true;
+    }
+
+    function addSharedUsers($node) {
+        if ($node instanceof \ESN\CalDAV\SharedCalendar) {
+            $usersId = array();
+            $invites= $node->getInvites();
+            foreach($invites as $user) {
+                array_push($usersId, $user->principal);
+            }
+
+            $this->body['shareeIds'] = $usersId;
+        }
+    }
+
     function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
         if ($parent instanceof \Sabre\CalDAV\Calendar) {
-            $body = [
-                'eventPath' => '/' . $path,
-                'type' => 'created',
-                'event' => \Sabre\VObject\Reader::read($data),
-                'websocketEvent' => $this->WS_EVENTS['EVENT_CREATED']
-            ];
+            $this->buildEventBody(
+                '/' . $path,
+                'created',
+                \Sabre\VObject\Reader::read($data),
+                $this->WS_EVENTS['EVENT_CREATED']
+            );
 
-            $this->createMessage($path, $body);
+            $this->createMessage($path);
         }
 
         return true;
@@ -84,24 +121,25 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         if ($node instanceof \Sabre\CalDAV\CalendarObject) {
             $vcal = \Sabre\VObject\Reader::read($data);
             $oldVcal = \Sabre\VObject\Reader::read($node->get());
-            $body = [
-                'eventPath' => '/' .$path,
-                'type' => 'updated',
-                'event' => $vcal,
-                'old_event' => $oldVcal,
-                'websocketEvent' => $this->WS_EVENTS['EVENT_UPDATED']
-            ];
 
-            $this->createMessage($path, $body);
+            $this->buildEventBody(
+                '/' . $path,
+                'updated',
+                $vcal,
+                $this->WS_EVENTS['EVENT_UPDATED']
+            );
+
+            $this->body['old_event'] = $oldVcal;
+            $this->createMessage($path);
         }
 
         return true;
     }
 
-    protected function createMessage($path, $body) {
+    protected function createMessage($path) {
         $this->messages[] = [
             'topic' => $this->REDIS_EVENTS,
-            'data' => $body
+            'data' => $this->body
         ];
         return $this->messages;
     }
@@ -189,14 +227,14 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         $event = clone $iTipMessage->message;
         $event->remove('method');
 
-        $body = [
-            'eventPath' => '/' . $path,
-            'type' => $iTipMessage->method,
-            'event' => $event,
-            'websocketEvent' => $this->WS_EVENTS['EVENT_'.$iTipMessage->method]
-        ];
+        $this->buildEventBody(
+            '/' . $path,
+            $iTipMessage->method,
+            $event,
+            $this->WS_EVENTS['EVENT_'.$iTipMessage->method]
+        );
 
-        $this->createMessage($path, $body);
+        $this->createMessage($path);
         return true;
     }
 

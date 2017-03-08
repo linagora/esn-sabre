@@ -272,10 +272,6 @@ END:VCALENDAR'
         $aclPlugin->principalCollectionSet = ['principals/users'];
         $this->server->addPlugin($aclPlugin);
 
-        $this->server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
-        $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
-        $sharingPlugin = $this->server->getPlugin('sharing');
-
         $plugin = new Plugin('json');
         $this->server->addPlugin($plugin);
 

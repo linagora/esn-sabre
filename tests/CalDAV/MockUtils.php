@@ -13,6 +13,7 @@ class CalDAVBackendMock extends \Sabre\CalDAV\Backend\AbstractBackend {
     function createCalendarObject($calendarId,$objectUri,$calendarData) { return null; }
     function updateCalendarObject($calendarId,$objectUri,$calendarData) { return null; }
     function deleteCalendarObject($calendarId,$objectUri) {}
+    function getInvites() { return []; }
     // @codingStandardsIgnoreEnd
 }
 
@@ -21,4 +22,8 @@ class MockAuthBackend {
     function getAuthCookies() {
         return "coookies!!!";
     }
+}
+
+class MockedDocument extends \Sabre\VObject\Document {
+
 }

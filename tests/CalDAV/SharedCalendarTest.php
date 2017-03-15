@@ -2,6 +2,8 @@
 
 namespace ESN\CalDAV;
 
+require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/MockSharing.php';
+
 /**
  * @medium
  */
@@ -25,6 +27,163 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $sharedCalendarSabre =  $calendarSabre->getChild('events');
 
         $this->assertTrue($sharedCalendarESN->getACL() == $sharedCalendarSabre->getACL());
+    }
+
+
+    function testGetACLAdministrationShareAccess() {
+        $props = [
+            'id'                                        => 1,
+            '{http://calendarserver.org/ns/}shared-url' => 'calendars/owner/original',
+            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner',
+            '{http://sabredav.org/ns}read-only'         => false,
+            'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
+            'principaluri'                              => 'principals/sharee',
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $expected = [
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => 'principals/sharee',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => 'principals/sharee' . '/calendar-proxy-read',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => 'principals/sharee' . '/calendar-proxy-write',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}write',
+                'principal' => 'principals/sharee',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}write',
+                'principal' => 'principals/sharee' . '/calendar-proxy-write',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}write-properties',
+                'principal' => 'principals/sharee',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}write-properties',
+                'principal' => 'principals/sharee' . '/calendar-proxy-write',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}read-acl',
+                'principal' => 'principals/sharee',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}read-acl',
+                'principal' => 'principals/sharee' . '/calendar-proxy-write',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}write-acl',
+                'principal' => 'principals/sharee',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}write-acl',
+                'principal' => 'principals/sharee' . '/calendar-proxy-write',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{' . Plugin::NS_CALDAV . '}read-free-busy',
+                'principal' => '{DAV:}authenticated',
+                'protected' => true,
+            ]
+        ];
+
+        $this->assertEquals($sharedCalendar->getACL(), $expected);
+    }
+
+    function testGetACLFreeBusyShareAccess() {
+        $props = [
+            'id'                                        => 1,
+            '{http://calendarserver.org/ns/}shared-url' => 'calendars/owner/original',
+            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner',
+            '{http://sabredav.org/ns}read-only'         => false,
+            'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY          ,
+            'principaluri'                              => 'principals/sharee',
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $expected = [
+            [
+                'privilege' => '{' . Plugin::NS_CALDAV . '}read-free-busy',
+                'principal' => '{DAV:}authenticated',
+                'protected' => true,
+            ]
+        ];
+
+        $this->assertEquals($sharedCalendar->getACL(), $expected);
+    }
+
+
+    function testGetChildACLAdministrationShareAccess() {
+        $props = [
+            'id'                                        => 1,
+            '{http://calendarserver.org/ns/}shared-url' => 'calendars/owner/original',
+            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner',
+            '{http://sabredav.org/ns}read-only'         => false,
+            'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
+            'principaluri'                              => 'principals/sharee',
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $expected = [
+            [
+                'privilege' => '{DAV:}write',
+                'principal' => 'principals/sharee',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}write',
+                'principal' => 'principals/sharee/calendar-proxy-write',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => 'principals/sharee',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => 'principals/sharee/calendar-proxy-write',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => 'principals/sharee/calendar-proxy-read',
+                'protected' => true,
+            ],
+            [
+                'privilege' => '{' . Plugin::NS_CALDAV . '}read-free-busy',
+                'principal' => '{DAV:}authenticated',
+                'protected' => true,
+            ]
+        ];
+
+        $this->assertEquals($sharedCalendar->getChildACL(), $expected);
     }
 
     function getAuthentificated($calendar) {
@@ -73,5 +232,11 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         }
 
         $this->assertTrue($isPresent);
+    }
+}
+
+class SimpleBackendMock extends \Sabre\CalDAV\Backend\MockSharing {
+    function getCalendarPublicRight() {
+        return null;
     }
 }

@@ -98,9 +98,17 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $principal = null;
         switch($type) {
             case "users":
+                $displayname = "";
+                if (isset($obj['firstname'])) {
+                    $displayname = $displayname . $obj['firstname'];
+                }
+                if (isset($obj['lastname'])) {
+                    $displayname = $displayname . " " .  $obj['lastname'];
+                }
+
                 $principal = [
                     'id' => (string)$obj['_id'],
-                    '{DAV:}displayname' => $obj['firstname'] . " " . $obj['lastname'],
+                    '{DAV:}displayname' => $displayname,
                     '{http://sabredav.org/ns}email-address' => Utils::firstEmailAddress($obj)
                 ];
                 break;

@@ -2,6 +2,8 @@
 
 namespace ESN\CalDAV;
 
+use ESN\DAV\Sharing\Plugin as SPlugin;
+
 class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
     function __construct(\Sabre\CalDAV\SharedCalendar $sharedCalendar) {
@@ -22,6 +24,74 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
      */
     function getACL() {
         $acl = parent::getACL();
+
+        switch ($this->getShareAccess()) {
+            case SPlugin::ACCESS_ADMINISTRATION :
+                $acl[] = [
+                    'privilege' => '{DAV:}read',
+                    'principal' => $this->calendarInfo['principaluri'],
+                    'protected' => true,
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}read',
+                    'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-read',
+                    'protected' => true,
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}read',
+                    'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-write',
+                    'protected' => true,
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}write',
+                    'principal' => $this->calendarInfo['principaluri'],
+                    'protected' => true,
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}write',
+                    'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-write',
+                    'protected' => true,
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}write-properties',
+                    'principal' => $this->calendarInfo['principaluri'],
+                    'protected' => true,
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}write-properties',
+                    'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-write',
+                    'protected' => true,
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}read-acl',
+                    'principal' => $this->calendarInfo['principaluri'],
+                    'protected' => true,
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}read-acl',
+                    'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-write',
+                    'protected' => true,
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}write-acl',
+                    'principal' => $this->calendarInfo['principaluri'],
+                    'protected' => true,
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}write-acl',
+                    'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-write',
+                    'protected' => true,
+                ];
+                // No break intentional!
+            case SPlugin::ACCESS_FREEBUSY :
+                $acl[] = [
+                    'privilege' => '{' . Plugin::NS_CALDAV . '}read-free-busy',
+                    'principal' => '{DAV:}authenticated',
+                    'protected' => true,
+                ];
+                break;
+        }
+
         $public_right = $this->caldavBackend->getCalendarPublicRight($this->calendarInfo['id']);
 
         if (isset($public_right)) {
@@ -46,6 +116,35 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
      */
     function getChildACL() {
         $childACL = parent::getChildACL();
+
+        if ($this->getShareAccess() == SPlugin::ACCESS_ADMINISTRATION) {
+            $childACL[] = [
+                'privilege' => '{DAV:}write',
+                'principal' => $this->calendarInfo['principaluri'],
+                'protected' => true,
+            ];
+            $childACL[] = [
+                'privilege' => '{DAV:}write',
+                'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-write',
+                'protected' => true,
+            ];
+            $childACL[] = [
+                'privilege' => '{DAV:}read',
+                'principal' => $this->calendarInfo['principaluri'],
+                'protected' => true,
+            ];
+            $childACL[] = [
+                'privilege' => '{DAV:}read',
+                'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-write',
+                'protected' => true,
+            ];
+            $childACL[] = [
+                'privilege' => '{DAV:}read',
+                'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-read',
+                'protected' => true,
+            ];
+        }
+
         $acl = $this->getACL();
 
         $authenticatedACE = null;

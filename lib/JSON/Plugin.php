@@ -571,9 +571,17 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 if (isset($sharee->{"common-name"})) {
                     $properties['{DAV:}displayname'] = $sharee->{"common-name"};
                 }
-                $access = isset($sharee->{"dav:read-write"})
-                    ? \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE
-                    : \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
+
+                if(isset($sharee->{"dav:administration"})) {
+                    $access = \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION;
+                } else if (isset($sharee->{"dav:read-write"})) {
+                    $access = \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE;
+                } else if (isset($sharee->{"dav:read"})) {
+                    $access = \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
+                } else if (isset($sharee->{"dav:freebusy"})) {
+                    $access = \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY;
+                }
+
                 $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([
                     'href'       => $sharee->{"dav:href"},
                     'properties' => $properties,

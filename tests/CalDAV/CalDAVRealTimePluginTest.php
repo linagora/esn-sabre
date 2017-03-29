@@ -66,7 +66,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($jsondata->{'etag'}, self::ETAG);
         $this->assertEquals($jsondata->{'type'}, 'created');
         $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->icalData))));
-        $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:ws:event:created');
+        $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:event:created');
     }
 
     function testCreateFileNonCalendarHome() {
@@ -119,7 +119,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($jsondata->{'type'}, 'updated');
         $this->assertEquals($jsondata->{'old_event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($oldData))));
         $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->icalData))));
-        $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:ws:event:updated');
+        $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:event:updated');
         $this->assertEquals($jsondata->{'etag'}, self::ETAG);
     }
 
@@ -177,7 +177,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($jsondata->{'eventPath'}, "/" . self::PATH);
         $this->assertEquals($jsondata->{'type'}, 'deleted');
         $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->icalData))));
-        $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:ws:event:deleted');
+        $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:event:deleted');
     }
 
     function testAddUsersSharedCalendar() {

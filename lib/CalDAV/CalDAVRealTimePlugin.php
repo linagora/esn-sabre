@@ -15,15 +15,15 @@ class CalDAVRealTimePlugin extends ServerPlugin {
     protected $message;
     protected $body;
 
-    private $REDIS_EVENTS = 'calendar:event:updated';
+    private $RABBIT_EVENTS = 'calendar:event:updated';
 
     private $WS_EVENTS = [
-        'EVENT_CREATED' => 'calendar:ws:event:created',
-        'EVENT_UPDATED' => 'calendar:ws:event:updated',
-        'EVENT_DELETED' => 'calendar:ws:event:deleted',
-        'EVENT_REQUEST' => 'calendar:ws:event:request',
-        'EVENT_REPLY' => 'calendar:ws:event:reply',
-        'EVENT_CANCEL' => 'calendar:ws:event:cancel'
+        'EVENT_CREATED' => 'calendar:event:created',
+        'EVENT_UPDATED' => 'calendar:event:updated',
+        'EVENT_DELETED' => 'calendar:event:deleted',
+        'EVENT_REQUEST' => 'calendar:event:request',
+        'EVENT_REPLY' => 'calendar:event:reply',
+        'EVENT_CANCEL' => 'calendar:event:cancel'
     ];
 
     function __construct($client) {
@@ -138,7 +138,7 @@ class CalDAVRealTimePlugin extends ServerPlugin {
 
     protected function createMessage($path) {
         $this->messages[] = [
-            'topic' => $this->REDIS_EVENTS,
+            'topic' => $this->RABBIT_EVENTS,
             'data' => $this->body
         ];
         return $this->messages;

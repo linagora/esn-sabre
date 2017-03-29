@@ -40,7 +40,11 @@ You then have to modify the configuration to match your setup.
 
 -	**webserver.baseUri**
 
-The local part of the url that bring the esn.php file. For example, if you reach esn.php through http://some.example.com/esn-sabre/esn.php then your baseUri is **/esn-sabre/esn.php**.
+The local part of the url that bring the esn.php file.
+
+From apache, if you reach esn.php through http://YOUR_ESN_SABRE_IP/esn-sabre/esn.php then your baseUri is **/esn-sabre/esn.php**.
+
+By using Docker your baseUri is only **/**.
 
 -	**webserver.allowOrigin**
 

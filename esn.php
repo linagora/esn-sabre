@@ -149,7 +149,7 @@ $server->addPlugin($corsPlugin);
 $esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['calendarRoot'], $authBackend);
 $server->addPlugin($esnHookPlugin);
 
-// Redis Caldav publisher plugin
+// Rabbit Caldav publisher plugin
 if(!empty($config['amqp']['host'])){
     $connection = new AMQPStreamConnection(
       $config['amqp']['host'],
@@ -160,8 +160,11 @@ if(!empty($config['amqp']['host'])){
 
     $channel = $connection->channel();
     $AMQPPublisher = new ESN\Utils\AMQPPublisher($channel);
-    $caldavRealTimePlugin = new ESN\CalDAV\CalDAVRealTimePlugin($AMQPPublisher);
+    $caldavRealTimePlugin = new ESN\CalDAV\CalDAVRealTimePlugin($AMQPPublisher, $calendarBackend);
     $server->addPlugin($caldavRealTimePlugin);
+
+    $newRealTimePlugin = new ESN\CalDAV\NewRealTime($AMQPPublisher, $calendarBackend->getEventEmitter());
+    $server->addPlugin($newRealTimePlugin);
 }
 
 $communityMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'communities');

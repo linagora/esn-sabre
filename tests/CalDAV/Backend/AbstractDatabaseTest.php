@@ -17,7 +17,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
      */
     function testGetCalendarsForUserNoCalendars() {
         $backend = $this->getBackend();
-        $calendars = $backend->getCalendarsForUser('principals/user2');
+        $calendars = $backend->getCalendarsForUser('principals/user2/userID');
         $this->assertEquals(array(),$calendars);
     }
 
@@ -26,12 +26,12 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
      */
     function testCreateCalendarAndFetch() {
         $backend = $this->getBackend();
-        $returnedId = $backend->createCalendar('principals/user2','somerandomid',array(
+        $returnedId = $backend->createCalendar('principals/user2/userID','somerandomid',array(
             '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set' => new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(array('VEVENT')),
             '{DAV:}displayname' => 'Hello!',
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('transparent'),
         ));
-        $calendars = $backend->getCalendarsForUser('principals/user2');
+        $calendars = $backend->getCalendarsForUser('principals/user2/userID');
 
         $elementCheck = array(
             'uri'               => 'somerandomid',
@@ -56,7 +56,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $backend = $this->getBackend();
 
         //Creating a new calendar
-        $newId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $newId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
 
         $propPatch = new PropPatch([
             '{DAV:}displayname' => 'myCalendar',
@@ -71,7 +71,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($result);
 
         // Fetching all calendars from this user
-        $calendars = $backend->getCalendarsForUser('principals/user2');
+        $calendars = $backend->getCalendarsForUser('principals/user2/userID');
 
         // Checking if all the information is still correct
         $elementCheck = array(
@@ -100,7 +100,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $backend = $this->getBackend();
 
         //Creating a new calendar
-        $newId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $newId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
 
         $propPatch = new PropPatch([
             '{DAV:}displayname' => 'myCalendar',
@@ -123,14 +123,14 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
      */
     function testDeleteCalendar() {
         $backend = $this->getBackend();
-        $returnedId = $backend->createCalendar('principals/user2','somerandomid',array(
+        $returnedId = $backend->createCalendar('principals/user2/userID','somerandomid',array(
             '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set' => new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(array('VEVENT')),
             '{DAV:}displayname' => 'Hello!',
         ));
 
         $backend->deleteCalendar($returnedId);
 
-        $calendars = $backend->getCalendarsForUser('principals/user2');
+        $calendars = $backend->getCalendarsForUser('principals/user2/userID');
         $this->assertEquals(array(),$calendars);
     }
 
@@ -142,14 +142,14 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $backend = $this->getBackend();
 
         //Creating a new calendar
-        $newId = $backend->createCalendar('principals/user2','somerandomid',array(
+        $newId = $backend->createCalendar('principals/user2/userID','somerandomid',array(
             '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set' => 'blabla',
         ));
     }
 
     function testGetMultipleObjects() {
         $backend = $this->getBackend();
-        $returnedId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $returnedId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
 
         $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
@@ -188,7 +188,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
     function testGetCalendarObjects() {
         $backend = $this->getBackend();
-        $returnedId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $returnedId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
 
         $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
         $backend->createCalendarObject($returnedId, 'random-id', $object);
@@ -206,24 +206,24 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
     function testGetCalendarObjectByUID() {
         $backend = $this->getBackend();
-        $returnedId = $backend->createCalendar('principals/user2','somerandomid',[]);
+        $returnedId = $backend->createCalendar('principals/user2/userID','somerandomid',[]);
 
         $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:foo\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
         $backend->createCalendarObject($returnedId, 'random-id', $object);
         $backend->createCalendarObject($returnedId, 'random-id2', $object);
 
         $this->assertNull(
-            $backend->getCalendarObjectByUID('principals/user2', 'bar')
+            $backend->getCalendarObjectByUID('principals/user2/userID', 'bar')
         );
         $this->assertEquals(
             'somerandomid/random-id',
-            $backend->getCalendarObjectByUID('principals/user2', 'foo')
+            $backend->getCalendarObjectByUID('principals/user2/userID', 'foo')
         );
     }
 
     function testUpdateCalendarObject() {
         $backend = $this->getBackend();
-        $returnedId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $returnedId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
 
         $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
         $object2 = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20130101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
@@ -238,7 +238,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
     function testDeleteCalendarObject() {
         $backend = $this->getBackend();
-        $returnedId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $returnedId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
 
         $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
         $backend->createCalendarObject($returnedId, 'random-id', $object);
@@ -420,7 +420,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     function testGetChanges() {
         $backend = $this->getBackend();
         $id = $backend->createCalendar(
-            'principals/user1',
+            'principals/user1/userID',
             'bla',
             []
         );
@@ -483,14 +483,14 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         ];
 
         $backend = $this->getBackend();
-        $id = $backend->createSubscription('principals/user1', 'sub1', $props);
+        $id = $backend->createSubscription('principals/user1/userID', 'sub1', $props);
 
-        $subs = $backend->getSubscriptionsForUser('principals/user1');
+        $subs = $backend->getSubscriptionsForUser('principals/user1/userID');
 
         $expected = $props;
         $expected['id'] = $id;
         $expected['uri'] = 'sub1';
-        $expected['principaluri'] = 'principals/user1';
+        $expected['principaluri'] = 'principals/user1/userID';
 
         unset($expected['{http://calendarserver.org/ns/}source']);
         $expected['source'] = 'http://example.org/cal.ics';
@@ -507,7 +507,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     function testCreateSubscriptionFail() {
         $props = [];
         $backend = $this->getBackend();
-        $backend->createSubscription('principals/user1', 'sub1', $props);
+        $backend->createSubscription('principals/user1/userID', 'sub1', $props);
     }
 
     function testUpdateSubscriptions() {
@@ -522,7 +522,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         ];
 
         $backend = $this->getBackend();
-        $id = $backend->createSubscription('principals/user1', 'sub1', $props);
+        $id = $backend->createSubscription('principals/user1/userID', 'sub1', $props);
 
         $newProps = [
             '{DAV:}displayname' => 'new displayname',
@@ -535,12 +535,12 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertTrue($result);
 
-        $subs = $backend->getSubscriptionsForUser('principals/user1');
+        $subs = $backend->getSubscriptionsForUser('principals/user1/userID');
 
         $expected = array_merge($props, $newProps);
         $expected['id'] = $id;
         $expected['uri'] = 'sub1';
-        $expected['principaluri'] = 'principals/user1';
+        $expected['principaluri'] = 'principals/user1/userID';
 
         unset($expected['{http://calendarserver.org/ns/}source']);
         $expected['source'] = 'http://example.org/cal2.ics';
@@ -563,7 +563,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         ];
 
         $backend = $this->getBackend();
-        $backend->createSubscription('principals/user1', 'sub1', $props);
+        $backend->createSubscription('principals/user1/userID', 'sub1', $props);
 
         $propPatch = new DAV\PropPatch([
             '{DAV:}displayname' => 'new displayname',
@@ -593,7 +593,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         ];
 
         $backend = $this->getBackend();
-        $id = $backend->createSubscription('principals/user1', 'sub1', $props);
+        $id = $backend->createSubscription('principals/user1/userID', 'sub1', $props);
 
         $newProps = [
             '{DAV:}displayname' => 'new displayname',
@@ -602,7 +602,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
         $backend->deleteSubscription($id);
 
-        $subs = $backend->getSubscriptionsForUser('principals/user1');
+        $subs = $backend->getSubscriptionsForUser('principals/user1/userID');
         $this->assertEquals(0, count($subs));
     }
 
@@ -612,7 +612,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $calData = "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n";
 
         $backend->createSchedulingObject(
-            'principals/user1',
+            'principals/user1/userID',
             'schedule1.ics',
             $calData
         );
@@ -624,13 +624,13 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             'size' => strlen($calData)
         ];
 
-        $result = $backend->getSchedulingObject('principals/user1', 'schedule1.ics');
+        $result = $backend->getSchedulingObject('principals/user1/userID', 'schedule1.ics');
         foreach($expected as $k=>$v) {
             $this->assertArrayHasKey($k, $result);
             $this->assertEquals($v, $result[$k]);
         }
 
-        $results = $backend->getSchedulingObjects('principals/user1');
+        $results = $backend->getSchedulingObjects('principals/user1/userID');
 
         $this->assertEquals(1, count($results));
         $result = $results[0];
@@ -638,22 +638,22 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             $this->assertEquals($v, $result[$k]);
         }
 
-        $backend->deleteSchedulingObject('principals/user1', 'schedule1.ics');
-        $result = $backend->getSchedulingObject('principals/user1', 'schedule1.ics');
+        $backend->deleteSchedulingObject('principals/user1/userID', 'schedule1.ics');
+        $result = $backend->getSchedulingObject('principals/user1/userID', 'schedule1.ics');
 
         $this->assertNull($result);
     }
 
     function testGetInvites() {
         $backend = $this->getBackend();
-        $backend->createCalendar('principals/user1', 'somerandomid', []);
-        $calendar = $backend->getCalendarsForUser('principals/user1')[0];
+        $backend->createCalendar('principals/user1/userID', 'somerandomid', []);
+        $calendar = $backend->getCalendarsForUser('principals/user1/userID')[0];
         $result = $backend->getInvites($calendar['id']);
 
         $expected = [
             new Sharee([
-                'href'         => 'principals/user1',
-                'principal'    => 'principals/user1',
+                'href'         => 'principals/user1/userID',
+                'principal'    => 'principals/user1/userID',
                 'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
                 'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED
             ])
@@ -665,11 +665,11 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $backend = $this->getBackend();
 
         // creating a new calendar
-        $backend->createCalendar('principals/user1', 'somerandomid', []);
-        $calendar = $backend->getCalendarsForUser('principals/user1')[0];
+        $backend->createCalendar('principals/user1/userID', 'somerandomid', []);
+        $calendar = $backend->getCalendarsForUser('principals/user1/userID')[0];
         $ownerSharee = new Sharee([
-            'href'         => 'principals/user1',
-            'principal'    => 'principals/user1',
+            'href'         => 'principals/user1/userID',
+            'principal'    => 'principals/user1/userID',
             'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
             'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
         ]);
@@ -680,7 +680,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             [
                 new Sharee([
                     'href'         => 'mailto:user@example.org',
-                    'principal'    => 'principals/user2',
+                    'principal'    => 'principals/user2/userID',
                     'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
                     'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
                     'properties'   => ['{DAV:}displayname' => 'User 2'],
@@ -692,7 +692,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             $ownerSharee,
             new Sharee([
                 'href'         => 'mailto:user@example.org',
-                'principal'    => 'principals/user2',
+                'principal'    => 'principals/user2/userID',
                 'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
                 'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
                 'properties'   => [
@@ -705,14 +705,14 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         // Checking calendar_instances too
         $expectedCalendar = [
             'id'                                     => 'foo',
-            'principaluri'                           => 'principals/user2',
+            'principaluri'                           => 'principals/user2/userID',
             '{http://calendarserver.org/ns/}getctag' => 'http://sabre.io/ns/sync/1',
             '{http://sabredav.org/ns}sync-token'     => '1',
             'share-access'                           => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
             'read-only'                              => true,
             'share-resource-uri'                     => 'bar',
         ];
-        $calendars = $backend->getCalendarsForUser('principals/user2');
+        $calendars = $backend->getCalendarsForUser('principals/user2/userID');
         foreach ($expectedCalendar as $k => $v) {
             if ($k == 'id') {
                 $this->assertEquals($calendars[0][$k][0], $calendar['id'][0]);
@@ -733,7 +733,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             [
                 new Sharee([
                     'href'         => 'mailto:user@example.org',
-                    'principal'    => 'principals/user2',
+                    'principal'    => 'principals/user2/userID',
                     'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
                     'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
                 ])
@@ -744,7 +744,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             $ownerSharee,
             new Sharee([
                 'href'         => 'mailto:user@example.org',
-                'principal'    => 'principals/user2',
+                'principal'    => 'principals/user2/userID',
                 'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
                 'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
                 'properties'   => [
@@ -775,7 +775,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             $calendar['id'],
             [
                 new Sharee([
-                    'href'         => 'principals/user2',
+                    'href'         => 'principals/user2/userID',
                     'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS,
                 ])
             ]
@@ -783,8 +783,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $result = $backend->getInvites($calendar['id']);
         $expected = [
             new Sharee([
-                'href'         => 'principals/user1',
-                'principal'    => 'principals/user1',
+                'href'         => 'principals/user1/userID',
+                'principal'    => 'principals/user1/userID',
                 'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
                 'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
             ]),
@@ -796,7 +796,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $publicRight = 'my public right';
         $backend = $this->getBackend();
 
-        $newId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $newId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
 
         $this->assertEquals('', $backend->getCalendarPublicRight($newId));
     }
@@ -805,7 +805,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $publicRight = 'my public right';
         $backend = $this->getBackend();
 
-        $newId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $newId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
         $backend->saveCalendarPublicRight($newId, $publicRight);
 
         $this->assertEquals($publicRight, $backend->getCalendarPublicRight($newId));
@@ -815,7 +815,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $publicRight = 'my public right';
         $backend = $this->getBackend();
 
-        $newId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $newId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
         $backend->saveCalendarPublicRight($newId, $publicRight);
 
         $this->assertEquals($publicRight, $backend->getCalendarPublicRight($newId));
@@ -830,7 +830,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $publicRight = 'my public right';
         $backend = $this->getBackend();
 
-        $newId = $backend->createCalendar('principals/user2','somerandomid',array());
+        $newId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
         $backend->saveCalendarPublicRight($newId, $publicRight);
 
         $this->assertEquals($publicRight, $backend->getCalendarPublicRight($newId));

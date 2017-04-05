@@ -7,12 +7,13 @@ require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
     const PATH = "calendars/123123/uid.ics";
+    const PARENT = 'calendars/123123';
     const ETAG = 'The etag';
 
     private $icalData;
 
     private function getPlugin($server = null) {
-        $plugin = new CalDAVRealTimePluginMock($server);
+        $plugin = new CalDAVRealTimePluginMock($server, new CalDAVBackendMock());
         $server = $plugin->getServer();
         $this->icalData = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a18225bc-3bfb-4e2a-a5f1-711c8d9cf531\r\nTRANSP:OPAQUE\r\nDTSTART;TZID=Europe/Berlin:20160209T113000\r\nDTEND;TZID=Europe/Berlin:20160209T140000\r\nSUMMARY:test\r\nORGANIZER;CN=admin admin:mailto:admin@open-paas.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
@@ -30,6 +31,10 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
         $server->tree->expects($this->any())->method('getNodeForPath')
             ->with('/'.self::PATH)
+            ->will($this->returnValue($nodeMock));
+
+        $server->tree->expects($this->any())->method('getNodeForPath')
+            ->with('/'.self::PARENT)
             ->will($this->returnValue($nodeMock));
     }
 
@@ -50,23 +55,13 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $client = $plugin->getClient();
 
         $this->assertTrue($server->emit('beforeCreateFile', [self::PATH, &$this->icalData, $parent, &$modified]));
-        $this->assertTrue($server->emit('calendarObjectChange', [
-            $server->httpRequest,
-            $server->httpResponse,
-            new MockedDocument(),
-            '/'.self::PATH,
-            &$refModified,
-            true
-        ]));
         $this->assertTrue($server->emit('afterCreateFile', [self::PATH, $parent]));
 
         $jsondata = json_decode($client->message);
-        $this->assertEquals($client->topic, 'calendar:event:updated');
+        $this->assertEquals($client->topic, 'calendar:event:created');
         $this->assertEquals($jsondata->{'eventPath'}, "/" . self::PATH);
         $this->assertEquals($jsondata->{'etag'}, self::ETAG);
-        $this->assertEquals($jsondata->{'type'}, 'created');
         $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->icalData))));
-        $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:event:created');
     }
 
     function testCreateFileNonCalendarHome() {
@@ -103,26 +98,18 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $node = new \Sabre\CalDAV\CalendarObject(new CalDAVBackendMock(), $calendarData, $objectData);
 
         $this->assertTrue($server->emit('beforeWriteContent', [self::PATH, $node, &$this->icalData, &$modified]));
-        $this->assertTrue($server->emit('calendarObjectChange', [
-            $server->httpRequest,
-            $server->httpResponse,
-            new MockedDocument(),
-            '/'.self::PATH,
-            &$refModified,
-            false
-        ]));
         $this->assertTrue($server->emit('afterWriteContent', [self::PATH, $node]));
 
         $jsondata = json_decode($client->message);
         $this->assertEquals($client->topic, 'calendar:event:updated');
         $this->assertEquals($jsondata->{'eventPath'}, "/" . self::PATH);
-        $this->assertEquals($jsondata->{'type'}, 'updated');
         $this->assertEquals($jsondata->{'old_event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($oldData))));
         $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->icalData))));
-        $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:event:updated');
         $this->assertEquals($jsondata->{'etag'}, self::ETAG);
     }
-
+/**
+    @group toto
+**/
     function testWriteContentNonACL() {
         $plugin = $this->getPlugin();
         $server = $plugin->getServer();
@@ -173,11 +160,9 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($server->emit('afterUnbind', [self::PATH]));
 
         $jsondata = json_decode($client->message);
-        $this->assertEquals($client->topic, 'calendar:event:updated');
+        $this->assertEquals($client->topic, 'calendar:event:deleted');
         $this->assertEquals($jsondata->{'eventPath'}, "/" . self::PATH);
-        $this->assertEquals($jsondata->{'type'}, 'deleted');
         $this->assertEquals($jsondata->{'event'}, json_decode(json_encode(\Sabre\VObject\Reader::read($this->icalData))));
-        $this->assertEquals($jsondata->{'websocketEvent'}, 'calendar:event:deleted');
     }
 
     function testAddUsersSharedCalendar() {
@@ -221,7 +206,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testItipDelegateToScheduleAndPublishMessage() {
-        $plugin = $this->getMock(CalDAVRealTimePlugin::class, ['schedule', 'publishMessage'], ['']);
+        $plugin = $this->getMock(CalDAVRealTimePlugin::class, ['schedule', 'publishMessage'], ['', new CalDAVBackendMock()]);
         $plugin->expects($this->once())->method('schedule')->will($this->returnCallback(function($message) {
             $this->assertInstanceOf(\Sabre\VObject\ITip\Message::class, $message);
 
@@ -235,13 +220,11 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
     function testBuildEventBody() {
         $plugin = $this->getPlugin();
-        $plugin->buildEventBody('eventPath', 'type', 'event', 'websocketEvent');
+        $plugin->buildEventBody('eventPath', 'event');
 
         $body = $plugin->getBody();
         $this->assertEquals($body['eventPath'], 'eventPath');
-        $this->assertEquals($body['type'], 'type');
         $this->assertEquals($body['event'], 'event');
-        $this->assertEquals($body['websocketEvent'], 'websocketEvent');
     }
 }
 
@@ -257,7 +240,7 @@ class RealTimeMock implements \ESN\Utils\Publisher {
 
 class CalDAVRealTimePluginMock extends CalDAVRealTimePlugin {
 
-    function __construct($server) {
+    function __construct($server, $backend) {
         if (!$server) $server = new \Sabre\DAV\Server([]);
         $this->initialize($server);
         $this->client = new RealTimeMock();

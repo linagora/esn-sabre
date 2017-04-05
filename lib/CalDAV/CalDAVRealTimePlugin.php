@@ -14,10 +14,10 @@ class CalDAVRealTimePlugin extends ServerPlugin {
     protected $server;
     protected $message;
     protected $body;
+    protected $caldavBackend;
 
-    private $RABBIT_EVENTS = 'calendar:event:updated';
-
-    private $WS_EVENTS = [
+    // We use a topic per action, as in OP
+    private $EVENT_TOPICS = [
         'EVENT_CREATED' => 'calendar:event:created',
         'EVENT_UPDATED' => 'calendar:event:updated',
         'EVENT_DELETED' => 'calendar:event:deleted',
@@ -26,8 +26,9 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         'EVENT_CANCEL' => 'calendar:event:cancel'
     ];
 
-    function __construct($client) {
+    function __construct($client, $caldavBackend) {
         $this->client = $client;
+        $this->caldavBackend = $caldavBackend;
     }
 
     function initialize(Server $server) {
@@ -38,7 +39,6 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         $server->on('beforeCreateFile',   [$this, 'beforeCreateFile']);
         $server->on('afterCreateFile',    [$this, 'after']);
 
-        $server->on('calendarObjectChange', [$this, 'calendarObjectChange']);
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
         $server->on('afterWriteContent',  [$this, 'after']);
 
@@ -50,11 +50,9 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         $server->on('itip', [$this, 'itip']);
     }
 
-    function buildEventBody($eventPath, $type, $event, $websocketEvent) {
+    function buildEventBody($eventPath, $event) {
         $this->body['eventPath'] = $eventPath;
-        $this->body['type'] = $type;
         $this->body['event'] = $event;
-        $this->body['websocketEvent'] = $websocketEvent;
     }
 
     function after($path) {
@@ -68,77 +66,66 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         if ($node instanceof \Sabre\CalDAV\CalendarObject) {
             list($parentUri) = Uri\split($path);
             $nodeParent = $this->server->tree->getNodeForPath('/'.$parentUri);
-            $this->addSharedUsers($nodeParent);
-
-            $this->buildEventBody(
-                '/' . $path,
-                'deleted',
-                \Sabre\VObject\Reader::read($node->get()),
-                $this->WS_EVENTS['EVENT_DELETED']
-            );
-
-            $this->createMessage($path);
+            $this->addSharedUsers($this->EVENT_TOPICS['EVENT_DELETED'], $nodeParent, $path, $node->get());
         }
 
         return true;
     }
 
-    function calendarObjectChange(RequestInterface $request, ResponseInterface $response, Document $calendar, $parentPath, &$modified, $isNew) {
-        $calendarNode = $this->server->tree->getNodeForPath($parentPath);
-        $this->addSharedUsers($calendarNode);
+    function addSharedUsers($topic, $calendar, $calendarPathObject, $data, $old_event = null) {
+        if ($calendar instanceof \ESN\CalDAV\SharedCalendar) {
+            $invites = $calendar->getInvites();
+            $calendarid = $calendar->getCalendarId();
 
-        return true;
-    }
+            $pathExploded = explode('/', $calendarPathObject);
+            $objectUri = $pathExploded[3];
 
-    function addSharedUsers($node) {
-        if ($node instanceof \ESN\CalDAV\SharedCalendar) {
-            $usersId = array();
-            $invites= $node->getInvites();
             foreach($invites as $user) {
-                array_push($usersId, $user->principal);
-            }
+                $calendars = $this->caldavBackend->getCalendarsForUser($user->principal);
+                foreach($calendars as $calendarUser) {
+                    if($calendarUser['id'][0] == $calendarid) {
+                        $calendarUri = $calendarUser['uri'];
+                    }
+                }
 
-            $this->body['shareeIds'] = $usersId;
+                $uriExploded = explode('/', $user->principal);
+                $path = '/calendars/' . $uriExploded[2] . '/' . $calendarUri . '/' . $objectUri;
+                $event = \Sabre\VObject\Reader::read($data);
+                $event->remove('method');
+                $this->buildEventBody(
+                    $path,
+                    $event
+                );
+
+                if($old_event) {
+                    $this->body['old_event'] = $old_event;
+                }
+
+                $this->createMessage($path, $topic);
+            }
         }
     }
 
     function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
-        if ($parent instanceof \Sabre\CalDAV\Calendar) {
-            $this->buildEventBody(
-                '/' . $path,
-                'created',
-                \Sabre\VObject\Reader::read($data),
-                $this->WS_EVENTS['EVENT_CREATED']
-            );
-
-            $this->createMessage($path);
-        }
+        $this->addSharedUsers($this->EVENT_TOPICS['EVENT_CREATED'], $parent, $path, $data);
 
         return true;
     }
 
     function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {
-        if ($node instanceof \Sabre\CalDAV\CalendarObject) {
-            $vcal = \Sabre\VObject\Reader::read($data);
-            $oldVcal = \Sabre\VObject\Reader::read($node->get());
+        list($parentUri) = Uri\split($path);
 
-            $this->buildEventBody(
-                '/' . $path,
-                'updated',
-                $vcal,
-                $this->WS_EVENTS['EVENT_UPDATED']
-            );
+        $nodeParent = $this->server->tree->getNodeForPath('/'.$parentUri);
 
-            $this->body['old_event'] = $oldVcal;
-            $this->createMessage($path);
-        }
+        $oldVcal = \Sabre\VObject\Reader::read($node->get());
+        $this->addSharedUsers($this->EVENT_TOPICS['EVENT_UPDATED'], $nodeParent, $path, $data, $oldVcal);
 
         return true;
     }
 
-    protected function createMessage($path) {
+    protected function createMessage($path, $topic) {
         $this->messages[] = [
-            'topic' => $this->RABBIT_EVENTS,
+            'topic' => $topic,
             'data' => $this->body
         ];
         return $this->messages;
@@ -229,12 +216,10 @@ class CalDAVRealTimePlugin extends ServerPlugin {
 
         $this->buildEventBody(
             '/' . $path,
-            $iTipMessage->method,
-            $event,
-            $this->WS_EVENTS['EVENT_'.$iTipMessage->method]
+            $event
         );
 
-        $this->createMessage($path);
+        $this->createMessage($path, $this->EVENT_TOPICS['EVENT_'.$iTipMessage->method]);
         return true;
     }
 

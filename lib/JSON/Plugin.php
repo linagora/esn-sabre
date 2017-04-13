@@ -213,6 +213,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             "{http://apple.com/ns/ical/}calendar-order" => $issetdef("apple:order")
         ];
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
+
         return [201, null];
     }
 
@@ -599,10 +600,12 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 ]);
             }
         }
+
         $sharingPlugin->shareResource($path, $sharees);
 
         // see vendor/sabre/dav/lib/CalDAV/SharingPlugin.php:268
         $this->server->httpResponse->setHeader('X-Sabre-Status', 'everything-went-well');
+
         return [200, null];
     }
 

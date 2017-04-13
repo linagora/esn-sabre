@@ -15,7 +15,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
 
     function testGetCalendarsForUserNoCalendars() {
         $backend = $this->getBackend();
-        $calendars = $backend->getCalendarsForUser('principals/user2');
+        $calendars = $backend->getCalendarsForUser('principals/user/54b64eadf6d7d8e41d263e0f');
 
         $elementCheck = array(
             'uri'               => $backend::EVENTS_URI,

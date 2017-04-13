@@ -20,8 +20,8 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
     function testGetACLIfNoPublicRight() {
         $backend = $this->getBackend();
 
-        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user2']);
-        $calendarSabre = new \Sabre\CalDAV\CalendarHome($backend, ['uri' => 'principals/user2']);
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $calendarSabre = new \Sabre\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
 
         $sharedCalendarESN =  $calendarESN->getChild('events');
         $sharedCalendarSabre =  $calendarSabre->getChild('events');
@@ -34,10 +34,10 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $props = [
             'id'                                        => 1,
             '{http://calendarserver.org/ns/}shared-url' => 'calendars/owner/original',
-            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner',
+            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner/54b64eadf6d7d8e41d263e0f',
             '{http://sabredav.org/ns}read-only'         => false,
             'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
-            'principaluri'                              => 'principals/sharee',
+            'principaluri'                              => 'principals/sharee/54b64eadf6d7d8e41d263e0e',
         ];
 
         $backend = new SimpleBackendMock([$props], [], []);
@@ -47,57 +47,57 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $expected = [
             [
                 'privilege' => '{DAV:}read',
-                'principal' => 'principals/sharee',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}read',
-                'principal' => 'principals/sharee' . '/calendar-proxy-read',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e' . '/calendar-proxy-read',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}read',
-                'principal' => 'principals/sharee' . '/calendar-proxy-write',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e' . '/calendar-proxy-write',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}write',
-                'principal' => 'principals/sharee',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}write',
-                'principal' => 'principals/sharee' . '/calendar-proxy-write',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e' . '/calendar-proxy-write',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}write-properties',
-                'principal' => 'principals/sharee',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}write-properties',
-                'principal' => 'principals/sharee' . '/calendar-proxy-write',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e' . '/calendar-proxy-write',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}read-acl',
-                'principal' => 'principals/sharee',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}read-acl',
-                'principal' => 'principals/sharee' . '/calendar-proxy-write',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e' . '/calendar-proxy-write',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}write-acl',
-                'principal' => 'principals/sharee',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}write-acl',
-                'principal' => 'principals/sharee' . '/calendar-proxy-write',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e' . '/calendar-proxy-write',
                 'protected' => true,
             ],
             [
@@ -114,10 +114,10 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $props = [
             'id'                                        => 1,
             '{http://calendarserver.org/ns/}shared-url' => 'calendars/owner/original',
-            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner',
+            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner/54b64eadf6d7d8e41d263e0f',
             '{http://sabredav.org/ns}read-only'         => false,
             'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY          ,
-            'principaluri'                              => 'principals/sharee',
+            'principaluri'                              => 'principals/sharee/54b64eadf6d7d8e41d263e0e',
         ];
 
         $backend = new SimpleBackendMock([$props], [], []);
@@ -140,10 +140,10 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $props = [
             'id'                                        => 1,
             '{http://calendarserver.org/ns/}shared-url' => 'calendars/owner/original',
-            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner',
+            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner/54b64eadf6d7d8e41d263e0f',
             '{http://sabredav.org/ns}read-only'         => false,
             'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
-            'principaluri'                              => 'principals/sharee',
+            'principaluri'                              => 'principals/sharee/54b64eadf6d7d8e41d263e0e',
         ];
 
         $backend = new SimpleBackendMock([$props], [], []);
@@ -153,27 +153,27 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $expected = [
             [
                 'privilege' => '{DAV:}write',
-                'principal' => 'principals/sharee',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}write',
-                'principal' => 'principals/sharee/calendar-proxy-write',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e/calendar-proxy-write',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}read',
-                'principal' => 'principals/sharee',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}read',
-                'principal' => 'principals/sharee/calendar-proxy-write',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e/calendar-proxy-write',
                 'protected' => true,
             ],
             [
                 'privilege' => '{DAV:}read',
-                'principal' => 'principals/sharee/calendar-proxy-read',
+                'principal' => 'principals/sharee/54b64eadf6d7d8e41d263e0e/calendar-proxy-read',
                 'protected' => true,
             ],
             [
@@ -202,8 +202,8 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
     function testGetACLCalendarWithPublicRight() {
         $backend = $this->getBackend();
 
-        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user2']);
-        $calendarSabre = new \Sabre\CalDAV\CalendarHome($backend, ['uri' => 'principals/user2']);
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $calendarSabre = new \Sabre\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
 
         $sharedCalendarESN =  $calendarESN->getChild('events');
         $sharedCalendarSabre =  $calendarSabre->getChild('events');
@@ -217,7 +217,7 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
     function testSavePublicRight() {
         $backend = $this->getBackend();
 
-        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user2']);
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
         $sharedCalendarESN =  $calendarESN->getChild('events');
 
         $privilege = 'droit';

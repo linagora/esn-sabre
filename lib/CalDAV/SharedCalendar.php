@@ -164,4 +164,8 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     function savePublicRight($privilege) {
         $this->caldavBackend->saveCalendarPublicRight($this->calendarInfo['id'], $privilege);
     }
+
+    function getCalendarId() {
+        return $this->calendarInfo['id'][0];
+    }
 }

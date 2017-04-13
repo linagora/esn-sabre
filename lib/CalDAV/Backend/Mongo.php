@@ -3,6 +3,7 @@
 namespace ESN\CalDAV\Backend;
 
 use \Sabre\VObject;
+use Sabre\Event\EventEmitter;
 
 class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     \Sabre\CalDAV\Backend\SubscriptionSupport,
@@ -11,6 +12,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     \Sabre\CalDAV\Backend\SharingSupport {
 
     protected $db;
+    protected $eventEmitter;
 
     public $calendarTableName = 'calendars';
     public $calendarInstancesTableName = 'calendarinstances';
@@ -41,6 +43,12 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     function __construct(\MongoDB $db) {
         $this->db = $db;
+
+        $this->eventEmitter = new EventEmitter();
+    }
+
+    function getEventEmitter() {
+        return $this->eventEmitter;
     }
 
     function getCalendarsForUser($principalUri) {
@@ -142,7 +150,13 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $collection = $this->db->selectCollection($this->calendarInstancesTableName);
         $collection->insert($obj);
 
+        $this->eventEmitter->emit('esn:calendarCreated', [$this->getCalendarPath($principalUri, $calendarUri)]);
         return [$calendarId, (string)$obj['_id']];
+    }
+
+    private function getCalendarPath($principalUri, $calendarUri) {
+        $uriExploded = explode('/', $principalUri);
+        return '/calendars/' . $uriExploded[2] . '/' . $calendarUri;
     }
 
     function updateCalendar($calendarId, \Sabre\DAV\PropPatch $propPatch) {
@@ -174,6 +188,16 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $query = [ '_id' => new \MongoId($instanceId) ];
             $collection->update($query, [ '$set' => $newValues ]);
             $this->addChange($calendarId, "", 2);
+
+            $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+            $query = [ '_id' => new \MongoId($instanceId) ];
+            $fields = [
+                'uri',
+                'principaluri'
+            ];
+            $row = $collection->findOne($query);
+
+            $this->eventEmitter->emit('esn:calendarUpdated', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
 
             return true;
 
@@ -208,6 +232,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $collection = $this->db->selectCollection($this->calendarInstancesTableName);
             $collection->remove([ '_id' => $mongoInstanceId ]);
         }
+
+        $this->eventEmitter->emit('esn:calendarDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
     }
 
     function getCalendarObjects($calendarId) {
@@ -660,6 +686,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function updateInvites($calendarId, array $sharees) {
         $this->_assertIsArray($calendarId);
 
+        $calendarInstance = [];
+
         $currentInvites = $this->getInvites($calendarId);
         list($calendarId, $instanceId) = $calendarId;
         $mongoCalendarId = new \MongoId($calendarId);
@@ -671,7 +699,15 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         foreach($sharees as $sharee) {
             if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS) {
                 // TODO access === 2 || access === 3
+                $uri = $collection->findone([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ], ['uri']);
                 $collection->remove([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ]);
+
+                $calendarInstances[] = [
+                    'uri' => $uri['uri'],
+                    'type' => 'delete',
+                    'sharee' => $sharee
+                ];
+
                 continue;
             }
 
@@ -689,6 +725,15 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                         'share_displayname' => isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null,
                         'share_invitestatus' => $sharee->inviteStatus ?: $oldSharee->inviteStatus
                     ] ]);
+
+                    $uri = $collection->findone([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ], ['uri']);
+
+                    $calendarInstances[] = [
+                        'uri' => $uri['uri'],
+                        'type' => 'update',
+                        'sharee' => $sharee
+                    ];
+
                     continue 2;
                 }
             }
@@ -702,7 +747,15 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $existingInstance['share_invitestatus'] = $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
             unset($existingInstance['_id']);
             $collection->insert($existingInstance);
+
+            $calendarInstances[] = [
+                'uri' => $existingInstance['uri'],
+                'type' => 'create',
+                'sharee' => $sharee
+            ];
         }
+
+        $this->eventEmitter->emit('esn:updateSharees', [$calendarInstances]);
     }
 
     function getInvites($calendarId) {

@@ -205,10 +205,18 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     }
 
-    function deleteCalendar($calendarId) {
-        $this->_assertIsArray($calendarId);
+    function deleteCalendar($calendarIdArray) {
+        $this->_assertIsArray($calendarIdArray);
 
-        list($calendarId, $instanceId) = $calendarId;
+        $currentInvites = $this->getInvites($calendarIdArray);
+
+        foreach($currentInvites as $sharee) {
+            $sharee->access = \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS;
+        }
+
+        $this->updateInvites($calendarIdArray, $currentInvites);
+
+        list($calendarId, $instanceId) = $calendarIdArray;
         $mongoId = new \MongoId($calendarId);
         $mongoInstanceId = new \MongoId($instanceId);
 

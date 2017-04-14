@@ -202,7 +202,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($client->messagesSent, sizeof($calendarInstances));
         $this->assertEquals($client->topic, 'calendar:calendar:deleted');
         $message = json_decode($client->message);
-        $this->assertEquals($message->calendarPath, 'calendars/userUri/uid.ics');
+        $this->assertEquals($message->calendarPath, '/calendars/userUri/uid.ics');
         $this->assertEquals($message->type, 'delete');
         $this->assertNull($message->calendarProps);
     }
@@ -226,7 +226,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($client->messagesSent, sizeof($calendarInstances));
         $this->assertEquals($client->topic, 'calendar:calendar:created');
         $message = json_decode($client->message);
-        $this->assertEquals($message->calendarPath, 'calendars/userUri/uid.ics');
+        $this->assertEquals($message->calendarPath, '/calendars/userUri/uid.ics');
         $this->assertEquals($message->type, 'create');
 
         $sharingPlugin = $server->getPlugin('sharing');
@@ -255,7 +255,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($client->messagesSent, sizeof($calendarInstances));
         $this->assertEquals($client->topic, 'calendar:calendar:updated');
         $message = json_decode($client->message);
-        $this->assertEquals($message->calendarPath, 'calendars/userUri/uid.ics');
+        $this->assertEquals($message->calendarPath, '/calendars/userUri/uid.ics');
         $this->assertEquals($message->type, 'update');
 
         $sharingPlugin = $server->getPlugin('sharing');

@@ -121,7 +121,7 @@ class NewRealTime extends ServerPlugin {
             }
 
             $principalArray = explode('/', $instance['sharee']->principal);
-            $nodeInstance = 'calendars/' . $principalArray[2] . '/' . $instance['uri'];
+            $nodeInstance = '/calendars/' . $principalArray[2] . '/' . $instance['uri'];
 
             $this->buildCalendarBody(
                 $nodeInstance,

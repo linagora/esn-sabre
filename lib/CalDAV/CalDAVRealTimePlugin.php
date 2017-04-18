@@ -66,7 +66,7 @@ class CalDAVRealTimePlugin extends ServerPlugin {
         if ($node instanceof \Sabre\CalDAV\CalendarObject) {
             list($parentUri) = Uri\split($path);
             $nodeParent = $this->server->tree->getNodeForPath('/'.$parentUri);
-            $this->addSharedUsers($this->EVENT_TOPICS['EVENT_DELETED'], $nodeParent, $path, null);
+            $this->addSharedUsers($this->EVENT_TOPICS['EVENT_DELETED'], $nodeParent, $path, $node->get());
         }
 
         return true;
@@ -90,13 +90,8 @@ class CalDAVRealTimePlugin extends ServerPlugin {
 
                 $uriExploded = explode('/', $user->principal);
                 $path = '/calendars/' . $uriExploded[2] . '/' . $calendarUri . '/' . $objectUri;
-
-                $event = null;
-                if($data) {
-                    $event = \Sabre\VObject\Reader::read($data);
-                    $event->remove('method');
-                }
-
+                $event = \Sabre\VObject\Reader::read($data);
+                $event->remove('method');
                 $this->buildEventBody(
                     $path,
                     $event
@@ -216,12 +211,8 @@ class CalDAVRealTimePlugin extends ServerPlugin {
 
         $path = $homePath . $eventPath;
 
-        if($iTipMessage->method == 'DELETE' || $iTipMessage->method == 'CANCEL') {
-            $event = null;
-        } else {
-            $event = clone $iTipMessage->message;
-            $event->remove('method');
-        }
+        $event = clone $iTipMessage->message;
+        $event->remove('method');
 
         $this->buildEventBody(
             '/' . $path,

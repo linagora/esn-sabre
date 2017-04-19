@@ -1,5 +1,5 @@
 <?php
-namespace ESN\CalDAV;
+namespace ESN\Publisher;
 use Sabre\DAV\ServerPlugin;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
@@ -13,7 +13,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     private $icalData;
 
     private function getPlugin($server = null) {
-        $plugin = new CalDAVRealTimePluginMock($server, new CalDAVBackendMock());
+        $plugin = new CalDAVRealTimePluginMock($server, new \ESN\CalDAV\CalDAVBackendMock());
         $server = $plugin->getServer();
         $this->icalData = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a18225bc-3bfb-4e2a-a5f1-711c8d9cf531\r\nTRANSP:OPAQUE\r\nDTSTART;TZID=Europe/Berlin:20160209T113000\r\nDTEND;TZID=Europe/Berlin:20160209T140000\r\nSUMMARY:test\r\nORGANIZER;CN=admin admin:mailto:admin@open-paas.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
@@ -71,7 +71,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testItipDelegateToScheduleAndPublishMessage() {
-        $plugin = $this->getMock(CalDAVRealTimePlugin::class, ['schedule', 'publishMessage'], ['', new CalDAVBackendMock()]);
+        $plugin = $this->getMock(CalDAVRealTimePlugin::class, ['schedule', 'publishMessage'], ['', new \ESN\CalDAV\CalDAVBackendMock()]);
         $plugin->expects($this->once())->method('schedule')->will($this->returnCallback(function($message) {
             $this->assertInstanceOf(\Sabre\VObject\ITip\Message::class, $message);
 
@@ -93,7 +93,7 @@ class CalDAVRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     }
 }
 
-class RealTimeMock implements \ESN\Utils\Publisher {
+class RealTimeMock implements \ESN\Publisher\Publisher {
     public $topic;
     public $message;
 

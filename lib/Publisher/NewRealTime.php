@@ -1,5 +1,5 @@
 <?php
-namespace ESN\CalDAV;
+namespace ESN\Publisher;
 
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;

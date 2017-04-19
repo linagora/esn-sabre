@@ -1,6 +1,6 @@
 <?php
 
-namespace ESN\Utils;
+namespace ESN\Publisher;
 
 interface Publisher {
 

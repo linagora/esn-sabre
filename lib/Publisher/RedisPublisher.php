@@ -1,6 +1,6 @@
 <?php
 
-namespace ESN\Utils;
+namespace ESN\Publisher;
 
 class RedisPublisher implements Publisher {
     function __construct($client) {

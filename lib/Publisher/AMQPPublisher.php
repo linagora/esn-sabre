@@ -1,5 +1,5 @@
 <?php
-namespace ESN\Utils;
+namespace ESN\Publisher;
 
 class AMQPPublisher {
 

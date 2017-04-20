@@ -38,6 +38,7 @@
             "ESN\\CardDAV\\"    : "lib/CardDAV/",
             "ESN\\DAVACL\\"     : "lib/DAVACL/",
             "ESN\\JSON\\"       : "lib/JSON/",
+            "ESN\\Publisher\\"  : "lib/Publisher/",
             "ESN\\Utils\\"      : "lib/Utils/"
         }
     },

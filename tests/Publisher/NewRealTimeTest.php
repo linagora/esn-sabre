@@ -1,5 +1,5 @@
 <?php
-namespace ESN\CalDAV;
+namespace ESN\Publisher;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
@@ -24,19 +24,19 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testEventEmitterListening() {
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $eventEmitter = $plugin->getEventEmitter();
         $server = $plugin->getServer();
         $this->mockTree($server);
 
-        $this->assertTrue($eventEmitter->emit('esn:calendarCreated', ['/' . self::PATH]));$this->assertTrue($eventEmitter->emit('esn:calendarCreated', ['/' . self::PATH]));
+        $this->assertTrue($eventEmitter->emit('esn:calendarCreated', ['/' . self::PATH]));
         $this->assertTrue($eventEmitter->emit('esn:calendarUpdated', ['/' . self::PATH]));
         $this->assertTrue($eventEmitter->emit('esn:calendarDeleted', ['/' . self::PATH]));
         $this->assertTrue($eventEmitter->emit('esn:updateSharees', [[]]));
     }
 
     function testBuildCalendarBody() {
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $plugin->buildCalendarBody('calendarPath', 'type', 'calendarProps');
 
         $body = $plugin->getBody();
@@ -46,7 +46,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testCreateCalendarMessage() {
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $plugin->buildCalendarBody('calendarPath1', 'type1', 'calendarProps1');
         $plugin->createCalendarMessage('topic1');
         $body1 = $plugin->getBody();
@@ -73,14 +73,14 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testCreateCalendarMessageEmptyBody() {
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $this->assertTrue(empty($plugin->getMessages()));
         $plugin->createCalendarMessage('topic');
         $this->assertTrue(empty($plugin->getMessages()));
     }
 
     function testGetCalendarProps() {
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $server = $plugin->getServer();
 
         $this->mockTree($server);
@@ -90,7 +90,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testPrepareAndPublishMessage() {
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $path = 'path';
         $type = 'type';
         $props = 'props';
@@ -109,7 +109,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testCalendarCreated() {
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $server = $plugin->getServer();
         $this->mockTree($server);
 
@@ -124,7 +124,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testCalendarDeleted() {
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $server = $plugin->getServer();
         $this->mockTree($server);
 
@@ -140,7 +140,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testCalendarUpdated() {
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $server = $plugin->getServer();
         $this->mockTree($server);
 
@@ -173,7 +173,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
             ]
         ];
 
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $server = $plugin->getServer();
         $server->addPlugin(new \ESN\DAV\Sharing\Plugin());
 
@@ -192,7 +192,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
             ]
         ];
 
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $server = $plugin->getServer();
         $server->addPlugin(new \ESN\DAV\Sharing\Plugin());
 
@@ -216,7 +216,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
             ]
         ];
 
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $server = $plugin->getServer();
         $server->addPlugin(new \ESN\DAV\Sharing\Plugin());
 
@@ -245,7 +245,7 @@ class NewRealTimeTest extends \PHPUnit_Framework_TestCase {
             ]
         ];
 
-        $plugin = new NewRealTimeMock(new CalDAVBackendMock());
+        $plugin = new NewRealTimeMock(new \ESN\CalDAV\CalDAVBackendMock());
         $server = $plugin->getServer();
         $server->addPlugin(new \ESN\DAV\Sharing\Plugin());
 
@@ -276,7 +276,7 @@ class ShareeSimple {
     }
 }
 
-class RealTimeMock2 implements \ESN\Utils\Publisher {
+class RealTimeMock2 implements \ESN\Publisher\Publisher {
     public $topic;
     public $message;
     public $messagesSent = 0;

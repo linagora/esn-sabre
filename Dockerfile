@@ -28,7 +28,8 @@ COPY composer.json /var/www/composer.json
 RUN composer update
 
 COPY . /var/www
-RUN mv esn.php server.php
+RUN sed -i 's/server.php/esn.php/' /etc/nginx/sites-enabled/default
+RUN sed -i 's/server.php/esn.php/' /etc/nginx/sites-available/default
 RUN chown -R www-data:www-data /var/www
 
 EXPOSE 80

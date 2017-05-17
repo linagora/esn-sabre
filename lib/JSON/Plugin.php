@@ -344,7 +344,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $items = [];
         foreach ($calendars as $calendar) {
             if ($calendar instanceof \Sabre\CalDAV\Calendar) {
-                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . "/" . $calendar->getName(), '{' . Plugin::NS_CALDAV . '}read-free-busy', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . "/" . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
                     $items[] = $this->listCalendar($nodePath . "/" . $calendar->getName(), $calendar, $withRights);
                 }
             }

@@ -373,20 +373,14 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->checkCalendars($homes[0]->{'_embedded'}->{'dav:calendar'});
 
         $calendars = $homes[1]->{'_embedded'}->{'dav:calendar'};
+        $this->assertCount(1, $calendars);
 
-        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/calendar2.json');
+        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
         $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/1');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/2');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
-
-        $this->assertEquals($calendars[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
-        $this->assertEquals($calendars[1]->{'dav:name'}, 'Calendar');
-        $this->assertEquals($calendars[1]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[1]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/2');
-        $this->assertEquals($calendars[1]->{'apple:color'}, '#0190FFFF');
-        $this->assertEquals($calendars[1]->{'apple:order'}, '2');
 
         return $homes;
     }
@@ -407,7 +401,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
                 break;
             }
         }
-        $this->assertEquals($publicACE->privilege, '{' . Plugin::NS_CALDAV . '}read-free-busy');
+        $this->assertEquals($publicACE->privilege, '{DAV:}all');
     }
 
     private function _testCalendarList($withRightsParam = null) {

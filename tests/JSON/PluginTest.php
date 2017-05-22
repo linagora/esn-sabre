@@ -217,7 +217,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($response->status, 200);
         $jsonResponse = json_decode($response->getBodyAsString());
 
-        $this->assertEquals("/query.json", $jsonResponse->_links->self->href);
+        $this->assertEquals('/query.json', $jsonResponse->_links->self->href);
         $calendars = $jsonResponse->_embedded->{'dav:calendar'};
         $this->assertCount(1, $calendars);
 
@@ -470,11 +470,11 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ));
 
         $calendar = [
-            "id" => "ID",
-            "dav:name" => "NAME",
-            "caldav:description" => "DESCRIPTION",
-            "apple:color" => "#0190FFFF",
-            "apple:order" => "99"
+            'id' => 'ID',
+            'dav:name' => 'NAME',
+            'caldav:description' => 'DESCRIPTION',
+            'apple:color' => '#0190FFFF',
+            'apple:order' => '99'
         ];
 
         $request->setBody(json_encode($calendar));
@@ -502,11 +502,11 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ));
 
         $calendar = [
-            "id" => "ID",
-            "dav:name" => "SUB NAME",
-            "calendarserver:source" => "/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json",
-            "apple:color" => "#0190FFFF",
-            "apple:order" => "99"
+            'id' => 'ID',
+            'dav:name' => 'SUB NAME',
+            'calendarserver:source' => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json',
+            'apple:color' => '#0190FFFF',
+            'apple:order' => '99'
         ];
 
         $request->setBody(json_encode($calendar));
@@ -534,11 +534,11 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ));
 
         $calendar = [
-            "id" => "",
-            "dav:name" => "NAME",
-            "caldav:description" => "DESCRIPTION",
-            "apple:color" => "#0190FFFF",
-            "apple:order" => "99"
+            'id' => '',
+            'dav:name' => 'NAME',
+            'caldav:description' => 'DESCRIPTION',
+            'apple:color' => '#0190FFFF',
+            'apple:order' => '99'
         ];
 
         $request->setBody(json_encode($calendar));
@@ -560,10 +560,10 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ));
 
         $calendar = [
-            "dav:name" => "SUB NAME",
-            "calendarserver:source" => "/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json",
-            "apple:color" => "#0190FFFF",
-            "apple:order" => "99"
+            'dav:name' => 'SUB NAME',
+            'calendarserver:source' => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json',
+            'apple:color' => '#0190FFFF',
+            'apple:order' => '99'
         ];
 
         $request->setBody(json_encode($calendar));
@@ -585,11 +585,11 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ));
 
         $addressbook = [
-            "id" => "ID",
-            "dav:name" => "NAME",
-            "carddav:description" => "DESCRIPTION",
-            "dav:acl" => ['dav:read'],
-            "type" => 'social'
+            'id' => 'ID',
+            'dav:name' => 'NAME',
+            'carddav:description' => 'DESCRIPTION',
+            'dav:acl' => ['dav:read'],
+            'type' => 'social'
         ];
 
         $request->setBody(json_encode($addressbook));
@@ -617,7 +617,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ));
 
         $addressbook = [
-            "id" => ""
+            'id' => ''
         ];
 
         $request->setBody(json_encode($addressbook));
@@ -754,7 +754,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
-        $data = [ "dav:name" => "tested" ];
+        $data = [ 'dav:name' => 'tested' ];
         $request->setBody(json_encode($data));
 
         $response = $this->request($request);
@@ -768,7 +768,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
-        $data = [ "dav:getetag" => "no" ];
+        $data = [ 'dav:getetag' => 'no' ];
         $request->setBody(json_encode($data));
 
         $response = $this->request($request);
@@ -795,7 +795,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar.jaysun'
         ));
 
-        $data = [ "dav:name" => "tested" ];
+        $data = [ 'dav:name' => 'tested' ];
         $request->setBody(json_encode($data));
 
         $response = $this->request($request);
@@ -954,30 +954,30 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ));
 
         $sharees = [
-            "share" => [
-                "set" => [
+            'share' => [
+                'set' => [
                     [
-                        "dav:href"       => "mailto:johndoe@example.org",
-                        "common-name"    => "With John Doe",
-                        "summary"        => "Delegation",
-                        "dav:read-write" => true
+                        'dav:href'       => 'mailto:johndoe@example.org',
+                        'common-name'    => 'With John Doe',
+                        'summary'        => 'Delegation',
+                        'dav:read-write' => true
                     ],
                     [
-                        "dav:href" => "mailto:johndoe2@example.org",
-                        "dav:read" => true
+                        'dav:href' => 'mailto:johndoe2@example.org',
+                        'dav:read' => true
                     ],
                     [
-                        "dav:href" => "mailto:johndoe3@example.org",
-                        "dav:administration" => true
+                        'dav:href' => 'mailto:johndoe3@example.org',
+                        'dav:administration' => true
                     ],
                     [
-                        "dav:href" => "mailto:johndoe4@example.org",
-                        "dav:freebusy" => true
+                        'dav:href' => 'mailto:johndoe4@example.org',
+                        'dav:freebusy' => true
                     ]
                 ],
-                "remove" => [
+                'remove' => [
                     [
-                        "dav:href" => "mailto:janedoe@example.org",
+                        'dav:href' => 'mailto:janedoe@example.org',
                     ]
                 ]
             ]
@@ -990,14 +990,14 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $sharees = $this->caldavBackend->getInvites($this->cal['id']);
         $this->assertEquals(count($sharees), 5);
-        $this->assertEquals($sharees[1]->href, "mailto:johndoe@example.org");
-        $this->assertEquals($sharees[1]->properties['{DAV:}displayname'], "With John Doe");
+        $this->assertEquals($sharees[1]->href, 'mailto:johndoe@example.org');
+        $this->assertEquals($sharees[1]->properties['{DAV:}displayname'], 'With John Doe');
         $this->assertEquals($sharees[1]->access, 3);
-        $this->assertEquals($sharees[2]->href, "mailto:johndoe2@example.org");
+        $this->assertEquals($sharees[2]->href, 'mailto:johndoe2@example.org');
         $this->assertEquals($sharees[2]->access, 2);
-        $this->assertEquals($sharees[3]->href, "mailto:johndoe3@example.org");
+        $this->assertEquals($sharees[3]->href, 'mailto:johndoe3@example.org');
         $this->assertEquals($sharees[3]->access, 5);
-        $this->assertEquals($sharees[4]->href, "mailto:johndoe4@example.org");
+        $this->assertEquals($sharees[4]->href, 'mailto:johndoe4@example.org');
         $this->assertEquals($sharees[4]->access, 6);
     }
 

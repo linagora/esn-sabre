@@ -3,6 +3,7 @@
 namespace ESN\DAV;
 
 use Sabre\DAV\ServerPlugin;
+use Sabre\DAV\Xml\Property\Href;
 
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
@@ -51,6 +52,15 @@ class ServerMock extends \PHPUnit_Framework_TestCase {
         '{http://apple.com/ns/ical/}calendar-order' => '2',
         'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
         'uri' => 'delegatedCal1',
+    );
+
+    protected $caldavSubscription = array(
+        '{DAV:}displayname' => 'Subscription',
+        "{http://calendarserver.org/ns/}source" => '',
+        '{http://apple.com/ns/ical/}calendar-color' => '#33333333',
+        '{http://apple.com/ns/ical/}calendar-order' => '2',
+        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+        'uri' => 'subscription1',
     );
 
     protected $caldavCalendarObjects = array(
@@ -283,6 +293,10 @@ END:VCALENDAR'
         $this->delegatedCal = $this->delegatedCaldavCalendar;
         $this->delegatedCal['id'] = $this->caldavBackend->createCalendar($this->delegatedCal['principaluri'], $this->delegatedCal['uri'], $this->delegatedCal);
         $this->delegateCalendar();
+
+        $this->subscription = $this->caldavSubscription;
+        $this->subscription['{http://calendarserver.org/ns/}source'] = new \Sabre\DAV\Xml\Property\Href("/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json");
+        $this->subscription['id'] = $this->caldavBackend->createSubscription($this->subscription['principaluri'], $this->subscription['uri'], $this->subscription);
 
         $book = $this->carddavAddressBook;
         $book['id'] = $this->carddavBackend->createAddressBook($book['principaluri'],

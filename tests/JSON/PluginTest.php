@@ -336,7 +336,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     private function checkCalendars($calendars) {
-        $this->assertCount(2, $calendars);
+        $this->assertCount(3, $calendars);
 
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
@@ -347,6 +347,10 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $this->assertEquals($calendars[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/delegatedCal1.json');
         $this->assertEquals($calendars[1]->{'dav:name'}, 'delegatedCalendar');
+
+        $this->assertEquals($calendars[2]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json');
+        $this->assertEquals($calendars[2]->{'dav:name'}, 'Subscription');
+        $this->assertEquals($calendars[2]->{'calendarserver:source'}, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
 
         return $calendars;
     }
@@ -489,6 +493,38 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals('99', $cal['{http://apple.com/ns/ical/}calendar-order']);
     }
 
+    function testCreateSubscription() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
+        ));
+
+        $calendar = [
+            "id" => "ID",
+            "dav:name" => "SUB NAME",
+            "calendarserver:source" => "/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json",
+            "apple:color" => "#0190FFFF",
+            "apple:order" => "99"
+        ];
+
+        $request->setBody(json_encode($calendar));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 201);
+
+        $calendars = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $this->assertCount(2, $calendars);
+
+        $cal = $calendars[1];
+        $this->assertEquals('SUB NAME', $cal['{DAV:}displayname']);
+        $this->assertEquals('/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json', $cal['source']);
+        $this->assertEquals('#0190FFFF', $cal['{http://apple.com/ns/ical/}calendar-color']);
+        $this->assertEquals('99', $cal['{http://apple.com/ns/ical/}calendar-order']);
+    }
+
     function testCreateCalendarMissingId() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
@@ -513,6 +549,31 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
         $this->assertCount(2, $calendars);
+    }
+
+    function testCreateSubscriptionMissingId() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
+        ));
+
+        $calendar = [
+            "dav:name" => "SUB NAME",
+            "calendarserver:source" => "/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json",
+            "apple:color" => "#0190FFFF",
+            "apple:order" => "99"
+        ];
+
+        $request->setBody(json_encode($calendar));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 400);
+
+        $calendars = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $this->assertCount(1, $calendars);
     }
 
     function testCreateAddressbook() {
@@ -584,6 +645,40 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
         $this->assertCount(1, $calendars);
+    }
+
+    function testPatchSubscription() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPPATCH',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json',
+        ));
+        $nameUpdated = 'subscription tested';
+        $data = [ 'dav:name' => $nameUpdated ];
+        $request->setBody(json_encode($data));
+
+        $response = $this->request($request);
+        $this->assertEquals(204, $response->status);
+
+        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $this->assertEquals($nameUpdated, $subscriptions[0]['{DAV:}displayname']);
+    }
+
+    function testDeleteSubscription() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json',
+        ));
+
+        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $this->assertCount(1, $subscriptions);
+
+        $response = $this->request($request);
+        $this->assertEquals(204, $response->status);
+
+        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $this->assertCount(0, $subscriptions);
     }
 
     function testDeleteMainCalendar() {

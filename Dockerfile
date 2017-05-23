@@ -25,6 +25,7 @@ RUN echo "extension=mongo.so" >> /etc/php5/fpm/php.ini && \
 WORKDIR /var/www
 RUN rm -rf composer.json composer.lock vendor data html server.php
 COPY composer.json /var/www/composer.json
+RUN composer clearcache
 RUN composer update
 
 COPY . /var/www

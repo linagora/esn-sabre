@@ -3,6 +3,7 @@
 namespace ESN\DAV;
 
 use Sabre\DAV\ServerPlugin;
+use Sabre\DAV\Xml\Property\Href;
 
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
@@ -51,6 +52,15 @@ class ServerMock extends \PHPUnit_Framework_TestCase {
         '{http://apple.com/ns/ical/}calendar-order' => '2',
         'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
         'uri' => 'delegatedCal1',
+    );
+
+    protected $caldavSubscription = array(
+        '{DAV:}displayname' => 'Subscription',
+        '{http://calendarserver.org/ns/}source' => '',
+        '{http://apple.com/ns/ical/}calendar-color' => '#33333333',
+        '{http://apple.com/ns/ical/}calendar-order' => '2',
+        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+        'uri' => 'subscription1',
     );
 
     protected $caldavCalendarObjects = array(
@@ -148,10 +158,10 @@ END:VCALENDAR
     );
 
     protected $carddavCards = array(
-        "card1" => "BEGIN:VCARD\r\nFN:d\r\nEND:VCARD\r\n",
-        "card2" => "BEGIN:VCARD\r\nFN:c\r\nEND:VCARD",
-        "card3" => "BEGIN:VCARD\r\nFN:b\r\nEND:VCARD\r\n",
-        "card4" => "BEGIN:VCARD\nFN:a\nEND:VCARD\n",
+        'card1' => "BEGIN:VCARD\r\nFN:d\r\nEND:VCARD\r\n",
+        'card2' => "BEGIN:VCARD\r\nFN:c\r\nEND:VCARD",
+        'card3' => "BEGIN:VCARD\r\nFN:b\r\nEND:VCARD\r\n",
+        'card4' => "BEGIN:VCARD\nFN:a\nEND:VCARD\n",
     );
 
     protected $uidQueryData = [ 'uid' => '171EBEFC-C951-499D-B234-7BA7D677B45D' ];
@@ -193,38 +203,38 @@ END:VCALENDAR'
 
         $this->esndb->users->insert([
             '_id' => new \MongoId('54b64eadf6d7d8e41d263e0f'),
-            "firstname" => "Roberto",
-            "lastname" => "Carlos"
+            'firstname' => 'Roberto',
+            'lastname' => 'Carlos'
         ]);
         $this->esndb->users->insert([
             '_id' => new \MongoId('54b64eadf6d7d8e41d263e0e'),
-            "accounts" => [
+            'accounts' => [
                 [
-                    "type" => "email",
-                    "emails" => [
-                      "johndoe@example.org"
+                    'type' => 'email',
+                    'emails' => [
+                      'johndoe@example.org'
                     ]
                 ]
             ]
         ]);
         $this->esndb->users->insert([
             '_id' => new \MongoId('54b64eadf6d7d8e41d263e0d'),
-            "accounts" => [
+            'accounts' => [
                 [
-                    "type" => "email",
-                    "emails" => [
-                      "johndoe2@example.org"
+                    'type' => 'email',
+                    'emails' => [
+                      'johndoe2@example.org'
                     ]
                 ]
             ]
         ]);
         $this->esndb->users->insert([
             '_id' => new \MongoId('54b64eadf6d7d8e41d263e0c'),
-            "accounts" => [
+            'accounts' => [
                 [
-                    "type" => "email",
-                    "emails" => [
-                      "janedoe@example.org"
+                    'type' => 'email',
+                    'emails' => [
+                      'janedoe@example.org'
                     ]
                 ]
             ]
@@ -284,6 +294,10 @@ END:VCALENDAR'
         $this->delegatedCal['id'] = $this->caldavBackend->createCalendar($this->delegatedCal['principaluri'], $this->delegatedCal['uri'], $this->delegatedCal);
         $this->delegateCalendar();
 
+        $this->subscription = $this->caldavSubscription;
+        $this->subscription['{http://calendarserver.org/ns/}source'] = new \Sabre\DAV\Xml\Property\Href('/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
+        $this->subscription['id'] = $this->caldavBackend->createSubscription($this->subscription['principaluri'], $this->subscription['uri'], $this->subscription);
+
         $book = $this->carddavAddressBook;
         $book['id'] = $this->carddavBackend->createAddressBook($book['principaluri'],
             $book['uri'],
@@ -307,11 +321,11 @@ END:VCALENDAR'
         ));
 
         $sharees = [
-            "share" => [
-                "set" => [
+            'share' => [
+                'set' => [
                     [
-                        "dav:href"       => "mailto:johndoe@example.org",
-                        "dav:read-write" => true
+                        'dav:href'       => 'mailto:johndoe@example.org',
+                        'dav:read-write' => true
                     ]
                 ]
             ]

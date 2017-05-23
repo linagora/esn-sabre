@@ -29,10 +29,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function beforeMethod($request, $response) {
         $url = $request->getUrl();
-        if (strpos($url, ".json") !== false) {
-            $url = str_replace(".json","", $url);
+        if (strpos($url, '.json') !== false) {
+            $url = str_replace('.json','', $url);
         }
-        $this->acceptHeader = explode(', ', $request->getHeader("Accept"));
+        $this->acceptHeader = explode(', ', $request->getHeader('Accept'));
         $request->setUrl($url);
 
         $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
@@ -97,6 +97,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->getCalendarObjectByUID($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
             list($code, $body) = $this->getCalendarObjects($path, $node, $jsonData);
+        } else {
+            $code = 200;
+            $body = [];
         }
 
         return $this->send($code, $body);
@@ -112,12 +115,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $code = null;
         $body = null;
 
-        if ($path == "query") {
+        if ($path == 'query') {
             list($code, $body) = $this->queryCalendarObjects($path, null, $jsonData);
         } else {
             $node = $this->server->tree->getNodeForPath($path);
             if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
                 list($code, $body) = $this->updateSharees($path, $node, $jsonData);
+            } else if ($node instanceof \Sabre\CalDAV\CalendarHome && $this->isBodyForSubscription($jsonData)) {
+                list($code, $body) = $this->createSubscription($path, $node, $jsonData);
             } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
                 list($code, $body) = $this->createCalendar($path, $node, $jsonData);
             } else if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
@@ -126,6 +131,12 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return $this->send($code, $body);
+    }
+
+    function isBodyForSubscription($jsonData) {
+        $issetdef = $this->propertyOrDefault($jsonData);
+
+        return $issetdef('calendarserver:source');
     }
 
     function get($request, $response) {
@@ -146,6 +157,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->listCalendarHome($path, $node, $withRights);
         } else if ($node instanceof \Sabre\CalDAV\Calendar) {
             list($code, $body) = $this->getCalendarInformation($path, $node, $withRights);
+        } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+            list($code, $body) = $this->getSubscriptionInformation($path, $node, $withRights);
         } else if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
             list($code, $body) = $this->getAddressBooks($path, $node);
         } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
@@ -175,6 +188,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->deleteNode($path, $node);
         }
 
+        if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+            list($code, $body) = $this->deleteSubscription($node);
+        }
+
         return $this->send($code, $body);
     }
 
@@ -194,6 +211,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->changeCalendarProperties($path, $node, $jsonData);
         }
 
+        if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+            list($code, $body) = $this->changeSubscriptionProperties($path, $node, $jsonData);
+        }
+
         return $this->send($code, $body);
 
     }
@@ -207,11 +228,32 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $rt = ['{DAV:}collection', '{urn:ietf:params:xml:ns:caldav}calendar'];
         $props = [
-            "{DAV:}displayname" => $issetdef("dav:name"),
-            "{urn:ietf:params:xml:ns:caldav}calendar-description" => $issetdef("caldav:description"),
-            "{http://apple.com/ns/ical/}calendar-color" => $issetdef("apple:color"),
-            "{http://apple.com/ns/ical/}calendar-order" => $issetdef("apple:order")
+            '{DAV:}displayname' => $issetdef('dav:name'),
+            '{urn:ietf:params:xml:ns:caldav}calendar-description' => $issetdef('caldav:description'),
+            '{http://apple.com/ns/ical/}calendar-color' => $issetdef('apple:color'),
+            '{http://apple.com/ns/ical/}calendar-order' => $issetdef('apple:order')
         ];
+
+        $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
+
+        return [201, null];
+    }
+
+    function createSubscription($nodePath, $node, $jsonData) {
+        $issetdef = $this->propertyOrDefault($jsonData);
+
+        if (!isset($jsonData->id) || !$jsonData->id) {
+            return [400, null];
+        }
+
+        $rt = ['{DAV:}collection', '{http://calendarserver.org/ns/}subscribed'];
+        $props = [
+            '{DAV:}displayname' => $issetdef('dav:name'),
+            '{http://apple.com/ns/ical/}calendar-color' => $issetdef('apple:color'),
+            '{http://apple.com/ns/ical/}calendar-order' => $issetdef('apple:order'),
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href($issetdef('calendarserver:source'), false)
+        ];
+
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];
@@ -229,13 +271,19 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [204, null];
     }
 
+    function deleteSubscription($node) {
+        $node->delete();
+
+        return [204, null];
+    }
+
     function changeCalendarProperties($nodePath, $node, $jsonData) {
         $propnameMap = [
-            "dav:name" => "{DAV:}displayname",
-            "dav:getetag" => "{DAV:}getetag",
-            "caldav:description" => "{urn:ietf:params:xml:ns:caldav}calendar-description",
-            "apple:color" => "{http://apple.com/ns/ical/}calendar-color",
-            "apple:order" => "{http://apple.com/ns/ical/}calendar-order"
+            'dav:name' => '{DAV:}displayname',
+            'dav:getetag' => '{DAV:}getetag',
+            'caldav:description' => '{urn:ietf:params:xml:ns:caldav}calendar-description',
+            'apple:color' => '{http://apple.com/ns/ical/}calendar-color',
+            'apple:order' => '{http://apple.com/ns/ical/}calendar-order'
         ];
 
         $davProps = [];
@@ -258,6 +306,34 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [$returncode, null];
     }
 
+    function changeSubscriptionProperties($nodePath, $node, $jsonData) {
+        $returncode = 204;
+        $davProps = [];
+        $propnameMap = [
+            'dav:name' => '{DAV:}displayname',
+            'calendarserver:source' => '{http://calendarserver.org/ns/}source',
+            'apple:color' => '{http://apple.com/ns/ical/}calendar-color',
+            'apple:order' => '{http://apple.com/ns/ical/}calendar-order'
+        ];
+
+        foreach ($jsonData as $jsonProp => $value) {
+            if (isset($propnameMap[$jsonProp])) {
+                $davProps[$propnameMap[$jsonProp]] = $value;
+            }
+        }
+
+        $result = $this->server->updateProperties($nodePath, $davProps);
+
+        foreach ($result as $prop => $code) {
+            if ((int)$code > 299) {
+                $returncode = (int)$code;
+                break;
+            }
+        }
+
+        return [$returncode, null];
+    }
+
     function createAddressBook($node, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
@@ -267,12 +343,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $rt = ['{DAV:}collection', '{urn:ietf:params:xml:ns:carddav}addressbook'];
         $props = [
-            "{DAV:}displayname" => $issetdef("dav:name"),
-            "{urn:ietf:params:xml:ns:carddav}addressbook-description" => $issetdef("carddav:description"),
-            "{DAV:}acl" => $issetdef("dav:acl"),
-            "{http://open-paas.org/contacts}type" => $issetdef("type")
+            '{DAV:}displayname' => $issetdef('dav:name'),
+            '{urn:ietf:params:xml:ns:carddav}addressbook-description' => $issetdef('carddav:description'),
+            '{DAV:}acl' => $issetdef('dav:acl'),
+            '{http://open-paas.org/contacts}type' => $issetdef('type')
         ];
+
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
+
         return [201, null];
     }
 
@@ -289,7 +367,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         if ($node instanceof \Sabre\CardDAV\AddressBook) {
             if ($node->getProperties($jsonData['properties'])) {
-                $this->server->httpResponse->setHeader("Content-Type","application/json; charset=utf-8");
+                $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
                 $this->server->httpResponse->setBody(json_encode($node->getProperties($jsonData['properties'])));
             }
             $this->server->httpResponse->setStatus(200);
@@ -307,6 +385,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $this->send(200, $result);
             return false;
         }
+
         return true;
     }
 
@@ -318,7 +397,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $items = [];
         foreach ($homes as $home) {
             if ($home instanceof \Sabre\CalDAV\CalendarHome) {
-                $noderef = $nodePath . "/" . $home->getName();
+                $noderef = $nodePath . '/' . $home->getName();
                 list($code, $result) = $this->listCalendarHome($noderef, $home, $withRights);
                 if (!empty($result)) {
                     $items[] = $result;
@@ -326,12 +405,12 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
         }
 
-        $requestPath = $baseUri . $nodePath . ".json";
+        $requestPath = $baseUri . $nodePath . '.json';
         $result = [
-            "_links" => [
-              "self" => [ "href" => $requestPath ]
+            '_links' => [
+              'self' => [ 'href' => $requestPath ]
             ],
-            "_embedded" => [ "dav:home" => $items ]
+            '_embedded' => [ 'dav:home' => $items ]
         ];
 
         return [200, $result];
@@ -344,20 +423,26 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $items = [];
         foreach ($calendars as $calendar) {
             if ($calendar instanceof \Sabre\CalDAV\Calendar) {
-                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . "/" . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
-                    $items[] = $this->listCalendar($nodePath . "/" . $calendar->getName(), $calendar, $withRights);
+                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+                    $items[] = $this->listCalendar($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
+                }
+            }
+
+            if ($calendar instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+                    $items[] = $this->listSubscription($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
                 }
             }
         }
 
-        $requestPath = $baseUri . $nodePath . ".json";
+        $requestPath = $baseUri . $nodePath . '.json';
         $result = [];
         if (!empty($items)) {
             $result = [
-                "_links" => [
-                    "self" => [ "href" => $requestPath ]
+                '_links' => [
+                    'self' => [ 'href' => $requestPath ]
                 ],
-                "_embedded" => [ "dav:calendar" => $items ]
+                '_embedded' => [ 'dav:calendar' => $items ]
             ];
         }
 
@@ -366,8 +451,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function getCalendarInformation($nodePath, $node, $withRights) {
         $baseUri = $this->server->getBaseUri();
-        $requestPath = $baseUri . $nodePath . ".json";
+        $requestPath = $baseUri . $nodePath . '.json';
+
         return [200, $this->listCalendar($nodePath, $node, $withRights)];
+    }
+
+    function getSubscriptionInformation($nodePath, $node, $withRights) {
+        $baseUri = $this->server->getBaseUri();
+        $requestPath = $baseUri . $nodePath . '.json';
+
+        return [200, $this->listSubscription($nodePath, $node, $withRights)];
     }
 
     function listCalendar($nodePath, $calendar, $withRights = null) {
@@ -376,29 +469,29 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $node = $calendar;
 
         $calendar = [
-            "_links" => [
-                "self" => [ "href" => $baseUri . $nodePath . ".json" ],
+            '_links' => [
+                'self' => [ 'href' => $baseUri . $nodePath . '.json' ],
             ]
         ];
 
-        if (isset($calprops["{DAV:}displayname"])) {
-            $calendar["dav:name"] = $calprops["{DAV:}displayname"];
+        if (isset($calprops['{DAV:}displayname'])) {
+            $calendar['dav:name'] = $calprops['{DAV:}displayname'];
         }
 
-        if (isset($calprops["{urn:ietf:params:xml:ns:caldav}calendar-description"])) {
-            $calendar["caldav:description"] = $calprops["{urn:ietf:params:xml:ns:caldav}calendar-description"];
+        if (isset($calprops['{urn:ietf:params:xml:ns:caldav}calendar-description'])) {
+            $calendar['caldav:description'] = $calprops['{urn:ietf:params:xml:ns:caldav}calendar-description'];
         }
 
-        if (isset($calprops["{http://calendarserver.org/ns/}getctag"])) {
-            $calendar["calendarserver:ctag"] = $calprops["{http://calendarserver.org/ns/}getctag"];
+        if (isset($calprops['{http://calendarserver.org/ns/}getctag'])) {
+            $calendar['calendarserver:ctag'] = $calprops['{http://calendarserver.org/ns/}getctag'];
         }
 
-        if (isset($calprops["{http://apple.com/ns/ical/}calendar-color"])) {
-            $calendar["apple:color"] = $calprops["{http://apple.com/ns/ical/}calendar-color"];
+        if (isset($calprops['{http://apple.com/ns/ical/}calendar-color'])) {
+            $calendar['apple:color'] = $calprops['{http://apple.com/ns/ical/}calendar-color'];
         }
 
-        if (isset($calprops["{http://apple.com/ns/ical/}calendar-order"])) {
-            $calendar["apple:order"] = $calprops["{http://apple.com/ns/ical/}calendar-order"];
+        if (isset($calprops['{http://apple.com/ns/ical/}calendar-order'])) {
+            $calendar['apple:order'] = $calprops['{http://apple.com/ns/ical/}calendar-order'];
         }
 
         if ($withRights) {
@@ -414,41 +507,88 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return $calendar;
     }
 
+    function listSubscription($nodePath, $subscription, $withRights = null) {
+        $baseUri = $this->server->getBaseUri();
+        $propertiesList = [
+            '{DAV:}displayname',
+            '{http://calendarserver.org/ns/}source',
+            '{http://apple.com/ns/ical/}calendar-color',
+            '{http://apple.com/ns/ical/}calendar-order'
+        ];
+        $subprops = $subscription->getProperties($propertiesList);
+        $node = $subscription;
+
+        $subscription = [
+            '_links' => [
+                'self' => [ 'href' => $baseUri . $nodePath . '.json' ],
+            ]
+        ];
+
+        if (isset($subprops['{DAV:}displayname'])) {
+            $subscription['dav:name'] = $subprops['{DAV:}displayname'];
+        }
+
+        if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
+            $subscription['calendarserver:source'] = $subprops['{http://calendarserver.org/ns/}source']->getHref();
+        }
+
+        if (isset($subprops['{http://apple.com/ns/ical/}calendar-color'])) {
+            $subscription['apple:color'] = $subprops['{http://apple.com/ns/ical/}calendar-color'];
+        }
+
+        if (isset($subprops['{http://apple.com/ns/ical/}calendar-order'])) {
+            $subscription['apple:order'] = $subprops['{http://apple.com/ns/ical/}calendar-order'];
+        }
+
+        if ($withRights) {
+            if ($node->getACL()) {
+                $subscription['acl'] = $node->getACL();
+            }
+        }
+
+        return $subscription;
+    }
+
     function queryCalendarObjects($nodePath, $node, $jsonData) {
         if (!isset($jsonData) || !isset($jsonData->scope) ||
             !isset($jsonData->scope->calendars)) {
             return [400, null];
         }
+
         $calendars = $jsonData->scope->calendars;
         $baseUri = $this->server->getBaseUri();
         $baseUriLen = strlen($baseUri);
-
         $items = [];
+
         foreach ($calendars as $calendarPath) {
             if (substr($calendarPath, 0, $baseUriLen) == $baseUri) {
                 $calendarPath = substr($calendarPath, $baseUriLen);
             }
-            if (substr($calendarPath, -5) == ".json") {
+
+            if (substr($calendarPath, -5) == '.json') {
                 $calendarPath = substr($calendarPath, 0, -5);
             }
+
             $node = $this->server->tree->getNodeForPath($calendarPath);
+
             if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
                 $calendar = $this->listCalendar($calendarPath, $node);
                 list($code, $calendarObjects) = $this->getCalendarObjects($calendarPath, $node, $jsonData);
-                $calendar["_embedded"] = [
-                    "dav:item" => $calendarObjects["_embedded"]["dav:item"]
+                $calendar['_embedded'] = [
+                    'dav:item' => $calendarObjects['_embedded']['dav:item']
                 ];
                 $items[] = $calendar;
             }
         }
 
-        $requestPath = $this->server->getBaseUri() . $nodePath . ".json";
+        $requestPath = $this->server->getBaseUri() . $nodePath . '.json';
         $result = [
-            "_links" => [
-              "self" => [ "href" => $requestPath ]
+            '_links' => [
+              'self' => [ 'href' => $requestPath ]
             ],
-            "_embedded" => [ "dav:calendar" => $items ]
+            '_embedded' => [ 'dav:calendar' => $items ]
         ];
+
         return [200, $result];
     }
 
@@ -502,7 +642,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
         foreach ($paths as $path) {
-            list($properties) = $this->server->getPropertiesForPath($parentNodePath . "/" . $path, $props);
+            list($properties) = $this->server->getPropertiesForPath($parentNodePath . '/' . $path, $props);
 
             $vObject = VObject\Reader::read($properties[200]['{' . self::NS_CALDAV . '}calendar-data']);
 
@@ -542,19 +682,19 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
 
             $items[] = [
-                "_links" => [
-                    "self" => [ "href" => $baseUri . $properties["href" ] ]
+                '_links' => [
+                    'self' => [ 'href' => $baseUri . $properties['href' ] ]
                 ],
-                "etag" => $properties[200]['{DAV:}getetag'],
-                "data" => $vObject->jsonSerialize()
+                'etag' => $properties[200]['{DAV:}getetag'],
+                'data' => $vObject->jsonSerialize()
             ];
         }
 
         return [
-            "_links" => [
-                "self" => [ "href" => $baseUri . $parentNodePath . '.json']
+            '_links' => [
+                'self' => [ 'href' => $baseUri . $parentNodePath . '.json']
             ],
-            "_embedded" => [ "dav:item" => $items ]
+            '_embedded' => [ 'dav:item' => $items ]
         ];
     }
 
@@ -569,22 +709,22 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         if (isset($jsonData->share->set)) {
             foreach ($jsonData->share->set as $sharee) {
                 $properties = [];
-                if (isset($sharee->{"common-name"})) {
-                    $properties['{DAV:}displayname'] = $sharee->{"common-name"};
+                if (isset($sharee->{'common-name'})) {
+                    $properties['{DAV:}displayname'] = $sharee->{'common-name'};
                 }
 
-                if(isset($sharee->{"dav:administration"})) {
+                if(isset($sharee->{'dav:administration'})) {
                     $access = \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION;
-                } else if (isset($sharee->{"dav:read-write"})) {
+                } else if (isset($sharee->{'dav:read-write'})) {
                     $access = \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE;
-                } else if (isset($sharee->{"dav:read"})) {
+                } else if (isset($sharee->{'dav:read'})) {
                     $access = \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
-                } else if (isset($sharee->{"dav:freebusy"})) {
+                } else if (isset($sharee->{'dav:freebusy'})) {
                     $access = \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY;
                 }
 
                 $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([
-                    'href'       => $sharee->{"dav:href"},
+                    'href'       => $sharee->{'dav:href'},
                     'properties' => $properties,
                     'access'     => $access,
                     'comment'    => isset($sharee->summary) ? $sharee->summary : null
@@ -595,7 +735,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         if (isset($jsonData->share->remove)) {
             foreach ($jsonData->share->remove as $sharee) {
                 $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([
-                    'href'   => $sharee->{"dav:href"},
+                    'href'   => $sharee->{'dav:href'},
                     'access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS
                 ]);
             }
@@ -648,16 +788,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $items = [];
         foreach ($addressBooks as $addressBook) {
             if ($addressBook instanceof \Sabre\CardDAV\AddressBook) {
-                $items[] = $this->getAddressBookDetail($nodePath . "/" . $addressBook->getName(), $addressBook);
+                $items[] = $this->getAddressBookDetail($nodePath . '/' . $addressBook->getName(), $addressBook);
             }
         }
 
-        $requestPath = $baseUri . $nodePath . ".json";
+        $requestPath = $baseUri . $nodePath . '.json';
         $result = [
-            "_links" => [
-                "self" => [ "href" => $requestPath ]
+            '_links' => [
+                'self' => [ 'href' => $requestPath ]
             ],
-            "_embedded" => [ "dav:addressbook" => $items ]
+            '_embedded' => [ 'dav:addressbook' => $items ]
         ];
 
         return [200, $result];
@@ -665,16 +805,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function getAddressBookDetail($nodePath, \Sabre\CardDAV\AddressBook $addressBook) {
         $baseUri = $this->server->getBaseUri();
-        $bookProps = $addressBook->getProperties(["{DAV:}displayname", "{DAV:}acl", "{http://open-paas.org/contacts}type", "{urn:ietf:params:xml:ns:carddav}addressbook-description"]);
+        $bookProps = $addressBook->getProperties(['{DAV:}displayname', '{DAV:}acl', '{http://open-paas.org/contacts}type', '{urn:ietf:params:xml:ns:carddav}addressbook-description']);
 
         return [
-            "_links" => [
-                "self" => [ "href" => $baseUri . $nodePath . ".json" ],
+            '_links' => [
+                'self' => [ 'href' => $baseUri . $nodePath . '.json' ],
             ],
-            "dav:name" => $bookProps["{DAV:}displayname"],
-            "carddav:description" => $bookProps["{urn:ietf:params:xml:ns:carddav}addressbook-description"],
-            "dav:acl" => $bookProps["{DAV:}acl"],
-            "type" => $bookProps["{http://open-paas.org/contacts}type"],
+            'dav:name' => $bookProps['{DAV:}displayname'],
+            'carddav:description' => $bookProps['{urn:ietf:params:xml:ns:carddav}addressbook-description'],
+            'dav:acl' => $bookProps['{DAV:}acl'],
+            'type' => $bookProps['{http://open-paas.org/contacts}type'],
         ];
     }
 
@@ -701,27 +841,27 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $vobj = VObject\Reader::read($card->get());
             $cardItem = [
                 '_links' => [
-                  "self" => [ "href" =>  $baseUri . $nodePath . "/" . $card->getName() ]
+                  'self' => [ 'href' =>  $baseUri . $nodePath . '/' . $card->getName() ]
                 ],
-                "etag" => $card->getETag(),
-                "data" => $vobj->jsonSerialize()
+                'etag' => $card->getETag(),
+                'data' => $vobj->jsonSerialize()
             ];
             $items[] = $cardItem;
         }
 
-        $requestPath = $baseUri . $request->getPath() . ".json";
+        $requestPath = $baseUri . $request->getPath() . '.json';
 
         $result = [
-            "_links" => [
-                "self" => [ "href" => $requestPath ]
+            '_links' => [
+                'self' => [ 'href' => $requestPath ]
             ],
-            "dav:syncToken" => $node->getSyncToken(),
-            "_embedded" => [ 'dav:item' => $items ]
+            'dav:syncToken' => $node->getSyncToken(),
+            '_embedded' => [ 'dav:item' => $items ]
         ];
 
         if ($limit > 0 && ($offset + $limit < $count)) {
             $queryParams['offset'] = $offset + $limit;
-            $href = $requestPath . "?" . http_build_query($queryParams);
+            $href = $requestPath . '?' . http_build_query($queryParams);
             $result['_links']['next'] = [ 'href' => $href ];
         }
 
@@ -729,9 +869,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function acceptJson() {
-        return in_array("application/calendar+json", $this->acceptHeader) ||
-               in_array("application/vcard+json", $this->acceptHeader) ||
-               in_array("application/json", $this->acceptHeader);
+        return in_array('application/calendar+json', $this->acceptHeader) ||
+               in_array('application/vcard+json', $this->acceptHeader) ||
+               in_array('application/json', $this->acceptHeader);
     }
 
     function send($code, $body, $setContentType = true) {
@@ -741,7 +881,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         if ($body) {
             if ($setContentType) {
-                $this->server->httpResponse->setHeader("Content-Type","application/json; charset=utf-8");
+                $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
             }
             $this->server->httpResponse->setBody(json_encode($body));
         }

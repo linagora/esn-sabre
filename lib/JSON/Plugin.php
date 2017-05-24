@@ -311,7 +311,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $davProps = [];
         $propnameMap = [
             'dav:name' => '{DAV:}displayname',
-            'calendarserver:source' => '{http://calendarserver.org/ns/}source',
             'apple:color' => '{http://apple.com/ns/ical/}calendar-color',
             'apple:order' => '{http://apple.com/ns/ical/}calendar-order'
         ];

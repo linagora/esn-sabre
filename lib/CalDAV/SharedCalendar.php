@@ -92,14 +92,25 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
                 break;
         }
 
+        $acl = $this->updateAclWithPublicRight($acl);
+
+        return $acl;
+    }
+
+    private function updateAclWithPublicRight($acl) {
         $public_right = $this->getPublicRight();
 
         if (isset($public_right)) {
-            foreach ($acl as &$ace) {
-                // we know it will exist since it is hardcoded in Sabre\CalDAV\SharedCalendar
-                if ($ace['principal'] === '{DAV:}authenticated') {
-                    $ace['privilege'] = $public_right;
-                    break;
+            $index = array_search('{DAV:}authenticated', array_column($acl, 'principal'));
+            if ($index) {
+                $acl[$index]['privilege'] = $public_right;
+
+                if ($public_right === '{DAV:}write') {
+                    $acl[] = [
+                        'privilege' => '{DAV:}read',
+                        'principal' => '{DAV:}authenticated',
+                        'protected' => true,
+                    ];
                 }
             }
         }
@@ -162,15 +173,15 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
         $acl = $this->getACL();
 
-        $authenticatedACE = null;
+        $authenticatedACE = [];
         foreach ($acl as &$ace) {
             if ($ace['principal'] === '{DAV:}authenticated') {
-                $authenticatedACE = $ace;
+                $authenticatedACE[] = $ace;
             }
         }
 
-        if (isset($authenticatedACE)) {
-            array_push($childACL, $authenticatedACE);
+        if (isset($authenticatedACE) && count($authenticatedACE) > 0) {
+            return array_merge($childACL, $authenticatedACE);
         }
 
         return $childACL;

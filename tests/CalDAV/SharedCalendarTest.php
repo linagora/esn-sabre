@@ -214,6 +214,32 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($childACLOrig == $sharedCalendarESN->getChildACL());
     }
 
+    function updatePublicWriteAcl($acl) {
+        $index = array_search('{DAV:}authenticated', array_column($acl, 'principal'));
+        if ($index) {
+            $acl[$index]['privilege'] = '{DAV:}write';
+            $acl[] = [
+                'privilege' => '{DAV:}read',
+                'principal' => '{DAV:}authenticated',
+                'protected' => true,
+            ];
+        }
+
+        return $acl;
+    }
+
+    function testGetACLCalendarWithWritePublicRight() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+        
+        $childACLOrig = $sharedCalendarESN->getChildACL();
+        $sharedCalendarESN->savePublicRight('{DAV:}write');
+        
+        $this->assertTrue($this->updatePublicWriteAcl($childACLOrig) == $sharedCalendarESN->getChildACL());
+    }
+
     function testSavePublicRight() {
         $backend = $this->getBackend();
 

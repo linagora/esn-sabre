@@ -150,11 +150,12 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $code = null;
         $body = null;
         $withRights = $this->getWithRightsParameter($request);
+        $public = $this->getPublicParameter($request);
 
         if ($node instanceof \ESN\CalDAV\CalendarRoot) {
             list($code, $body) = $this->listCalendarRoot($path, $node, $withRights);
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
-            list($code, $body) = $this->listCalendarHome($path, $node, $withRights);
+            list($code, $body) = $this->listCalendarHome($path, $node, $withRights, $public);
         } else if ($node instanceof \Sabre\CalDAV\Calendar) {
             list($code, $body) = $this->getCalendarInformation($path, $node, $withRights);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
@@ -166,11 +167,19 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return $this->send($code, $body);
+
     }
 
     private function getWithRightsParameter($request) {
         $queryParams = $request->getQueryParameters();
         return isset($queryParams['withRights']) && $queryParams['withRights'] === 'true' ;
+
+    }
+
+    private function getPublicParameter($request) {
+        $queryParams = $request->getQueryParameters();
+        return isset($queryParams['public']) && $queryParams['public'] === 'true' ;
+
     }
 
     function delete($request, $response) {
@@ -386,6 +395,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return true;
+
     }
 
 
@@ -415,7 +425,33 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $result];
     }
 
-    function listCalendarHome($nodePath, $node, $withRights = null) {
+    function listCalendarHome($nodePath, $node, $withRights = null, $public = false) {
+        $calendars = $node->getChildren();
+        $baseUri = $this->server->getBaseUri();
+
+        if ($public) {
+            $items = $this->listPublicCalendars($nodePath, $node, $withRights);
+        } else {
+            $items = $this->listAllCalendarsWithReadRight($nodePath, $node, $withRights);
+        }
+
+
+        $requestPath = $baseUri . $nodePath . '.json';
+        $result = [];
+        if (!empty($items)) {
+            $result = [
+                '_links' => [
+                    'self' => [ 'href' => $requestPath ]
+                ],
+                '_embedded' => [ 'dav:calendar' => $items ]
+            ];
+        }
+
+        return [200, $result];
+
+    }
+
+    function listAllCalendarsWithReadRight($nodePath, $node, $withRights = null) {
         $calendars = $node->getChildren();
         $baseUri = $this->server->getBaseUri();
 
@@ -434,18 +470,23 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
         }
 
-        $requestPath = $baseUri . $nodePath . '.json';
-        $result = [];
-        if (!empty($items)) {
-            $result = [
-                '_links' => [
-                    'self' => [ 'href' => $requestPath ]
-                ],
-                '_embedded' => [ 'dav:calendar' => $items ]
-            ];
+        return $items;
+
+    }
+
+    function listPublicCalendars($nodePath, $node, $withRights = null) {
+        $calendars = $node->getChildren();
+        $baseUri = $this->server->getBaseUri();
+
+        $items = [];
+        foreach ($calendars as $calendar) {
+            if ($calendar instanceof \ESN\CalDAV\SharedCalendar && $calendar->isPublic()) {
+                $items[] = $this->listCalendar($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
+            }
         }
 
-        return [200, $result];
+        return $items;
+
     }
 
     function getCalendarInformation($nodePath, $node, $withRights) {

@@ -92,7 +92,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
                 break;
         }
 
-        $public_right = $this->caldavBackend->getCalendarPublicRight($this->calendarInfo['id']);
+        $public_right = $this->getPublicRight();
 
         if (isset($public_right)) {
             foreach ($acl as &$ace) {
@@ -105,6 +105,21 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         }
 
         return $acl;
+
+    }
+
+    function isPublic() {
+
+        $public = $this->getPublicRight();
+
+        return isset($public);
+
+    }
+
+    function getPublicRight() {
+
+        return $this->caldavBackend->getCalendarPublicRight($this->calendarInfo['id']);
+
     }
 
     /**
@@ -162,10 +177,14 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     }
 
     function savePublicRight($privilege) {
+
         $this->caldavBackend->saveCalendarPublicRight($this->calendarInfo['id'], $privilege);
+
     }
 
     function getCalendarId() {
+
         return $this->calendarInfo['id'][0];
+
     }
 }

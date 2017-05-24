@@ -681,6 +681,44 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertCount(0, $subscriptions);
     }
 
+    function testGetPublicCalendarsUser() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_ACCEPT'       => 'application/json',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e.json?public=true',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $this->assertEquals($response->status, 200);
+        $calendars = $jsonResponse->_embedded->{'dav:calendar'};
+        $this->assertCount(1, $calendars);
+
+        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
+        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
+        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/2');
+        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
+        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+    }
+
+    function testGetPublicCalendarsUserWithNoPublicCalendars() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_ACCEPT'       => 'application/json',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json?public=true',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $this->assertEquals($response->status, 200);
+        $this->assertNull($jsonResponse);
+    }
+
     function testDeleteMainCalendar() {
         $defaultUri = \ESN\CalDAV\Backend\Esn::EVENTS_URI;
 

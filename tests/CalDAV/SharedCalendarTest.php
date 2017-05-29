@@ -233,6 +233,39 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertTrue($isPresent);
     }
+
+    function testGetPublicRight() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+
+        $privilege = 'droit';
+        $sharedCalendarESN->savePublicRight($privilege);
+
+        $this->assertEquals($sharedCalendarESN->getPublicRight(), $privilege);
+    }
+
+    function testIsPublic() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+
+        $privilege = 'droit';
+        $sharedCalendarESN->savePublicRight($privilege);
+
+        $this->assertTrue($sharedCalendarESN->isPublic());
+    }
+
+    function testNotIsPublic() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+
+        $this->assertFalse($sharedCalendarESN->isPublic());
+    }
 }
 
 class SimpleBackendMock extends \Sabre\CalDAV\Backend\MockSharing {

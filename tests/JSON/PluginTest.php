@@ -350,7 +350,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $this->assertEquals($calendars[2]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json');
         $this->assertEquals($calendars[2]->{'dav:name'}, 'Subscription');
-        $this->assertEquals($calendars[2]->{'calendarserver:source'}, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
+        $this->assertEquals($calendars[2]->{'calendarserver:source'}->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
 
         return $calendars;
     }
@@ -504,7 +504,9 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $calendar = [
             'id' => 'ID',
             'dav:name' => 'SUB NAME',
-            'calendarserver:source' => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json',
+            'calendarserver:source' => [
+                'href' => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json'
+            ],
             'apple:color' => '#0190FFFF',
             'apple:order' => '99'
         ];

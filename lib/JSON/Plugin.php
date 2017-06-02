@@ -260,7 +260,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             '{DAV:}displayname' => $issetdef('dav:name'),
             '{http://apple.com/ns/ical/}calendar-color' => $issetdef('apple:color'),
             '{http://apple.com/ns/ical/}calendar-order' => $issetdef('apple:order'),
-            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href($issetdef('calendarserver:source'), false)
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href($issetdef('calendarserver:source')->href, false)
         ];
 
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
@@ -569,7 +569,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
-            $subscription['calendarserver:source'] = $subprops['{http://calendarserver.org/ns/}source']->getHref();
+            $sourcePath = $this->server->calculateUri($subprops['{http://calendarserver.org/ns/}source']->getHref());
+
+            if (substr($sourcePath, -5) == '.json') {
+                $sourcePath = substr($sourcePath, 0, -5);
+            }
+
+            $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+            $subscription['calendarserver:source'] = $this->listCalendar($sourcePath, $sourceNode, true);
         }
 
         if (isset($subprops['{http://apple.com/ns/ical/}calendar-color'])) {

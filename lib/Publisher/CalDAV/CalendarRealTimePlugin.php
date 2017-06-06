@@ -1,5 +1,5 @@
 <?php
-namespace ESN\Publisher;
+namespace ESN\Publisher\CalDAV;
 
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
@@ -9,11 +9,8 @@ use Sabre\VObject\Document;
 use Sabre\Uri;
 use Sabre\Event\EventEmitter;
 
-class NewRealTime extends ServerPlugin {
+class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
-    protected $server;
-    protected $message;
-    protected $body;
     protected $eventEmitter;
 
     private $CALENDAR_TOPICS = [
@@ -23,34 +20,17 @@ class NewRealTime extends ServerPlugin {
     ];
 
     function __construct($client, $eventEmitter) {
-        $this->client = $client;
+        parent::__construct($client);
         $this->eventEmitter = $eventEmitter;
     }
 
     function initialize(Server $server) {
-        $this->server = $server;
-        $this->messages = array();
-        $this->body = array();
+        parent::initialize($server);
 
         $this->eventEmitter->on('esn:calendarCreated', [$this, 'calendarCreated']);
         $this->eventEmitter->on('esn:calendarUpdated', [$this, 'calendarUpdated']);
         $this->eventEmitter->on('esn:calendarDeleted', [$this, 'calendarDeleted']);
         $this->eventEmitter->on('esn:updateSharees', [$this, 'updateSharees']);
-    }
-
-    function buildCalendarBody($calendarPath, $type, $calendarProps) {
-        $this->body['calendarPath'] = $calendarPath;
-        $this->body['type'] = $type;
-        $this->body['calendarProps'] = $calendarProps;
-    }
-
-    protected function createCalendarMessage($topic) {
-        if(!empty($this->body)) {
-            $this->messages[] = [
-                'topic' => $topic,
-                'data' => $this->body
-            ];
-        }
     }
 
     function getCalendarProps($node) {
@@ -64,40 +44,39 @@ class NewRealTime extends ServerPlugin {
         return $node->getProperties($properties);
     }
 
-    protected function publishCalendarMessage() {
-        foreach($this->messages as $message) {
-            $path = $message['data']['calendarPath'];
-            $this->client->publish($message['topic'], json_encode($message['data']));
-        }
+    function buildData($data) {
+        return $data;
     }
 
-    function prepareAndPublishMessage($path, $type, $props, $topic) {
-        $this->buildCalendarBody(
-            $path,
-            $type,
-            $props
+    function prepareAndPublishMessages($path, $props, $topic) {
+
+        $this->createMessage(
+            $topic,
+            [
+                'calendarPath' => $path,
+                'calendarProps' => $props
+            ]
         );
 
-        $this->createCalendarMessage($topic);
-        $this->publishCalendarMessage();
+        $this->publishMessages();
     }
 
     function calendarCreated($path) {
         $node = $this->server->tree->getNodeForPath($path);
         $props = $this->getCalendarProps($node);
 
-        $this->prepareAndPublishMessage($path, 'created', $props, $this->CALENDAR_TOPICS['CALENDAR_CREATED']);
+        $this->prepareAndPublishMessages($path, $props, $this->CALENDAR_TOPICS['CALENDAR_CREATED']);
     }
 
     function calendarDeleted($path) {
-        $this->prepareAndPublishMessage($path, 'deleted', null, $this->CALENDAR_TOPICS['CALENDAR_DELETED']);
+        $this->prepareAndPublishMessages($path, null, $this->CALENDAR_TOPICS['CALENDAR_DELETED']);
     }
 
     function calendarUpdated($path) {
         $node = $this->server->tree->getNodeForPath($path);
         $props = $this->getCalendarProps($node);
 
-        $this->prepareAndPublishMessage($path, 'updated', $props, $this->CALENDAR_TOPICS['CALENDAR_UPDATED']);
+        $this->prepareAndPublishMessages($path, $props, $this->CALENDAR_TOPICS['CALENDAR_UPDATED']);
     }
 
     function updateSharees($calendarInstances) {
@@ -123,15 +102,15 @@ class NewRealTime extends ServerPlugin {
             $principalArray = explode('/', $instance['sharee']->principal);
             $nodeInstance = '/calendars/' . $principalArray[2] . '/' . $instance['uri'];
 
-            $this->buildCalendarBody(
-                $nodeInstance,
-                $instance['type'],
-                $props
+            $this->createMessage(
+                $event,
+                [
+                    'calendarPath' => $nodeInstance,
+                    'calendarProps' => $props
+                ]
             );
-
-            $this->createCalendarMessage($event);
         }
 
-        $this->publishCalendarMessage();
+        $this->publishMessages();
     }
 }

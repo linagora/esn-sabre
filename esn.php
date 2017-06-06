@@ -160,10 +160,10 @@ if(!empty($config['amqp']['host'])){
 
     $channel = $connection->channel();
     $AMQPPublisher = new ESN\Publisher\AMQPPublisher($channel);
-    $caldavRealTimePlugin = new ESN\Publisher\CalDAVRealTimePlugin($AMQPPublisher, $calendarBackend);
+    $caldavRealTimePlugin = new ESN\Publisher\CalDAV\EventRealTimePlugin($AMQPPublisher, $calendarBackend);
     $server->addPlugin($caldavRealTimePlugin);
 
-    $newRealTimePlugin = new ESN\Publisher\NewRealTime($AMQPPublisher, $calendarBackend->getEventEmitter());
+    $newRealTimePlugin = new ESN\Publisher\CalDAV\CalendarRealTimePlugin($AMQPPublisher, $calendarBackend->getEventEmitter());
     $server->addPlugin($newRealTimePlugin);
 }
 

@@ -721,6 +721,44 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertNull($jsonResponse);
     }
 
+    function testGetPublicCalendarsUserWithDelegatePublicCalendar() {
+        $delegationRequest = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json',
+        ));
+
+        $sharees = [
+            'share' => [
+                'set' => [
+                    [
+                        'dav:href' => 'mailto:johndoe2@example.org',
+                        'dav:read' => true
+                    ]
+                ]
+            ]
+        ];
+
+        $delegationRequest->setBody(json_encode($sharees));
+        $response = $this->request($delegationRequest);
+
+        $this->assertEquals(200, $response->status);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_ACCEPT'       => 'application/json',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0d.json?public=true',
+        ));
+
+        $response2 = $this->request($request);
+        $jsonResponse = json_decode($response2->getBodyAsString());
+
+        $this->assertEquals($response2->status, 200);
+        $this->assertEquals($jsonResponse, null);
+    }
+
     function testDeleteMainCalendar() {
         $defaultUri = \ESN\CalDAV\Backend\Esn::EVENTS_URI;
 

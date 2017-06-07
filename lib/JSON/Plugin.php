@@ -476,11 +476,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function listPublicCalendars($nodePath, $node, $withRights = null) {
         $calendars = $node->getChildren();
-        $baseUri = $this->server->getBaseUri();
 
         $items = [];
         foreach ($calendars as $calendar) {
-            if ($calendar instanceof \ESN\CalDAV\SharedCalendar && $calendar->isPublic()) {
+            if ($calendar instanceof \ESN\CalDAV\SharedCalendar && $calendar->getShareAccess() ==  \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED && $calendar->isPublic()) {
                 $items[] = $this->listCalendar($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
             }
         }

@@ -759,6 +759,65 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($jsonResponse, null);
     }
 
+    function makeRequest($method, $uri, $body) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => $method,
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => $uri,
+        ));
+
+        if ($body) {
+            $request->setBody(json_encode($body));
+        }
+
+        return $this->request($request);
+    }
+
+    function testGetSubscriptionOfDeletedCalendar() {
+        $publicCaldavCalendar = array(
+            '{DAV:}displayname' => 'Calendar',
+            '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
+            '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
+            '{http://apple.com/ns/ical/}calendar-order' => '2',
+            'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0e',
+            'uri' => 'publicCalToRemove',
+        );
+
+        $publicCaldavCalendar['id'] = $this->caldavBackend->createCalendar($publicCaldavCalendar['principaluri'], $publicCaldavCalendar['uri'], $publicCaldavCalendar);
+        $this->caldavBackend->saveCalendarPublicRight($publicCaldavCalendar['id'], '{DAV:}read');
+
+        $subscriptionBody = [
+            'id' => 'publicCalToRemoveSubscription',
+            'dav:name' => 'SUB NAME',
+            'calendarserver:source' => [
+                'href' => '/calendars/54b64eadf6d7d8e41d263e0e/publicCalToRemove.json'
+            ],
+            'apple:color' => '#0190FFFF',
+            'apple:order' => '99'
+        ];
+
+        $subscriptionResponse = $this->makeRequest('POST', '/calendars/54b64eadf6d7d8e41d263e0f.json', $subscriptionBody);
+
+        $this->assertEquals($subscriptionResponse->status, 201);
+
+        $getAllCalendarResponse = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f.json?withRights=true', null);        
+        $jsonResponse = json_decode($getAllCalendarResponse->getBodyAsString());
+        $allCalendarsAfterSubscription = count($jsonResponse->{'_embedded'}->{'dav:calendar'});
+
+        $deleteResponse = $this->makeRequest('DELETE', '/calendars/54b64eadf6d7d8e41d263e0e/'.$publicCaldavCalendar['uri'].'.json', null);
+        $this->assertEquals($deleteResponse->status, 204);
+
+        $getSubscriptionResponse = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f/publicCalToRemoveSubscription.json?withRights=true', null);
+        $this->assertEquals($getSubscriptionResponse->status, 404);
+
+        $getAllUserCalendarResponse = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f.json?withRights=true', null);        
+        $jsonResponse = json_decode($getAllUserCalendarResponse->getBodyAsString());
+        $allCalendarsAfterRemoveSource = $jsonResponse->{'_embedded'}->{'dav:calendar'};
+
+        $this->assertCount($allCalendarsAfterSubscription - 1, $allCalendarsAfterRemoveSource);
+    }
+
     function testDeleteMainCalendar() {
         $defaultUri = \ESN\CalDAV\Backend\Esn::EVENTS_URI;
 

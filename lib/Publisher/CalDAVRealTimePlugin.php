@@ -1,5 +1,5 @@
 <?php
-namespace ESN\Publisher\CalDAV;
+namespace ESN\Publisher;
 
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
@@ -8,9 +8,12 @@ use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Document;
 use Sabre\Uri;
 
-class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
+class CalDAVRealTimePlugin extends ServerPlugin {
     const PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN = 101;
 
+    protected $server;
+    protected $message;
+    protected $body;
     protected $caldavBackend;
 
     // We use a topic per action, as in OP
@@ -24,12 +27,14 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     ];
 
     function __construct($client, $caldavBackend) {
-        parent::__construct($client);
+        $this->client = $client;
         $this->caldavBackend = $caldavBackend;
     }
 
     function initialize(Server $server) {
-        parent::initialize($server);
+        $this->server = $server;
+        $this->messages = array();
+        $this->body = array();
 
         $server->on('beforeCreateFile',   [$this, 'beforeCreateFile']);
         $server->on('afterCreateFile',    [$this, 'after']);
@@ -45,18 +50,13 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $server->on('itip', [$this, 'itip']);
     }
 
-    function buildData($data) {
-        $path = $data['eventPath'];
-
-        if($this->server->tree->nodeExists($path)) {
-            $data['etag'] = $this->server->tree->getNodeForPath($path)->getETag();
-        }
-
-        return $data;
+    function buildEventBody($eventPath, $event) {
+        $this->body['eventPath'] = $eventPath;
+        $this->body['event'] = $event;
     }
 
     function after($path) {
-        $this->publishMessages();
+        $this->publishMessage();
         return true;
     }
 
@@ -68,23 +68,6 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $nodeParent = $this->server->tree->getNodeForPath('/'.$parentUri);
             $this->addSharedUsers($this->EVENT_TOPICS['EVENT_DELETED'], $nodeParent, $path, $node->get());
         }
-
-        return true;
-    }
-
-    function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
-        $this->addSharedUsers($this->EVENT_TOPICS['EVENT_CREATED'], $parent, $path, $data);
-
-        return true;
-    }
-
-    function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {
-        list($parentUri) = Uri\split($path);
-
-        $nodeParent = $this->server->tree->getNodeForPath('/'.$parentUri);
-
-        $oldVcal = \Sabre\VObject\Reader::read($node->get());
-        $this->addSharedUsers($this->EVENT_TOPICS['EVENT_UPDATED'], $nodeParent, $path, $data, $oldVcal);
 
         return true;
     }
@@ -109,18 +92,52 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 $path = '/calendars/' . $uriExploded[2] . '/' . $calendarUri . '/' . $objectUri;
                 $event = \Sabre\VObject\Reader::read($data);
                 $event->remove('method');
-
-                $data = [
-                    'eventPath' => $path,
-                    'event' => $event
-                ];
+                $this->buildEventBody(
+                    $path,
+                    $event
+                );
 
                 if($old_event) {
-                    $data['old_event'] = $old_event;
+                    $this->body['old_event'] = $old_event;
                 }
 
-                $this->createMessage($topic, $data);
+                $this->createMessage($path, $topic);
             }
+        }
+    }
+
+    function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
+        $this->addSharedUsers($this->EVENT_TOPICS['EVENT_CREATED'], $parent, $path, $data);
+
+        return true;
+    }
+
+    function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {
+        list($parentUri) = Uri\split($path);
+
+        $nodeParent = $this->server->tree->getNodeForPath('/'.$parentUri);
+
+        $oldVcal = \Sabre\VObject\Reader::read($node->get());
+        $this->addSharedUsers($this->EVENT_TOPICS['EVENT_UPDATED'], $nodeParent, $path, $data, $oldVcal);
+
+        return true;
+    }
+
+    protected function createMessage($path, $topic) {
+        $this->messages[] = [
+            'topic' => $topic,
+            'data' => $this->body
+        ];
+        return $this->messages;
+    }
+
+    protected function publishMessage() {
+        foreach($this->messages as $message) {
+            $path = $message['data']['eventPath'];
+            if($this->server->tree->nodeExists($path)) {
+                $message['data']['etag'] = $this->server->tree->getNodeForPath($path)->getETag();
+            }
+            $this->client->publish($message['topic'], json_encode($message['data']));
         }
     }
 
@@ -197,19 +214,17 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $event = clone $iTipMessage->message;
         $event->remove('method');
 
-        $this->createMessage(
-            $this->EVENT_TOPICS['EVENT_'.$iTipMessage->method],
-            [
-                'eventPath' => '/' . $path,
-                'event' => $event
-            ]
+        $this->buildEventBody(
+            '/' . $path,
+            $event
         );
 
+        $this->createMessage($path, $this->EVENT_TOPICS['EVENT_'.$iTipMessage->method]);
         return true;
     }
 
     function itip(\Sabre\VObject\ITip\Message $iTipMessage) {
         $this->schedule($iTipMessage);
-        $this->publishMessages();
+        $this->publishMessage();
     }
 }

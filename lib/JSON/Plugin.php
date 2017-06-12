@@ -465,7 +465,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
             if ($calendar instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
                 if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
-                    $items[] = $this->listSubscription($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
+                    $subscription = $this->listSubscription($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
+
+                    if(isset($subscription)) {
+                       $items[] = $subscription;
+                    }
                 }
             }
         }
@@ -498,8 +502,13 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     function getSubscriptionInformation($nodePath, $node, $withRights) {
         $baseUri = $this->server->getBaseUri();
         $requestPath = $baseUri . $nodePath . '.json';
+        $subscription = $this->listSubscription($nodePath, $node, $withRights);
 
-        return [200, $this->listSubscription($nodePath, $node, $withRights)];
+        if(!isset($subscription)) {
+            return [404, null];
+        }
+
+        return [200, $subscription];
     }
 
     function listCalendar($nodePath, $calendar, $withRights = null) {
@@ -572,6 +581,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
             if (substr($sourcePath, -5) == '.json') {
                 $sourcePath = substr($sourcePath, 0, -5);
+            }
+
+            if (!$this->server->tree->nodeExists($sourcePath)) {
+                return null;
             }
 
             $sourceNode = $this->server->tree->getNodeForPath($sourcePath);

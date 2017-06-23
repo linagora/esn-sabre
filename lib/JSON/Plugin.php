@@ -468,7 +468,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     $subscription = $this->listSubscription($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
 
                     if(isset($subscription)) {
-                       $items[] = $subscription;
+                        $items[] = $subscription;
                     }
                 }
             }

@@ -1,0 +1,71 @@
+variables:
+  MONGOPORT: 23500
+before_script:
+  - composer install
+
+stages:
+  - phplint
+  - mongoserver
+  - configuration
+  - test
+  - cleanup
+
+phplint:
+  stage: phplint 
+  script:
+    - ./vendor/bin/phpcs -p --standard=vendor/sabre/dav/tests/phpcs/ruleset.xml --report-checkstyle=checkstyle.xml lib/
+    
+mongoserver:
+  stage: mongoserver 
+  script:
+    - rm -rf mongodb
+    - rm -f mongo.pid
+    - rm -f mongo.log
+    - mkdir -p mongodb
+    - mongod --dbpath mongodb --port $MONGOPORT --pidfilepath ${CI_PROJECT_DIR}/mongo.pid --logpath mongo.log --fork
+    - sleep 2
+
+configuration:
+  stage: configuration 
+  script:
+    - cat <<EOF > repo/config.json 
+    {
+    "webserver": {
+      "baseUri": "/",
+      "allowOrigin": "*"
+    },
+    "database": {
+      "esn": {
+        "connectionString" : "mongodb://localhost:$MONGOPORT/",
+        "db": "esn",
+        "connectionOptions": {
+          "w": 1,
+          "fsync": true,
+          "connectTimeoutMS": 10000
+        }
+      },
+      "sabre": {
+        "connectionString" : "mongodb://localhost:$MONGOPORT/",
+        "db": "sabredav",
+        "connectionOptions": {
+          "w": 1,
+          "fsync": true,
+          "connectTimeoutMS": 10000
+        }
+      }
+    },
+    "esn": {
+      "apiRoot": "http://localhost:8080/api"
+    }
+  }
+  EOF
+
+test:
+  stage: test 
+  script:
+    - cd tests
+    - ../vendor/bin/phpunit --coverage-clover=${CI_PROJECT_DIR}/clover.xml --log-junit=${CI_PROJECT_DIR}/junit.xml tests
+cleanup:
+  stage: cleanup 
+  script:
+    - kill `cat mongo.pid`

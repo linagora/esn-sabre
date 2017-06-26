@@ -7,7 +7,6 @@ class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
     const PATH = "/calendars/123123.json";
     const ETAG = 'The etag';
-    const MESSAGE_DATA = ["calendarPath" => self::PATH];
 
     protected $eventEmitter;
     protected $plugin;
@@ -35,7 +34,7 @@ class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->publisher
             ->expects($this->once())
             ->method('publish')
-            ->with('calendar:subscription:created', json_encode(self::MESSAGE_DATA));
+            ->with('calendar:subscription:created', json_encode(["calendarPath" => self::PATH]));
         $this->plugin->subscriptionCreated(self::PATH);
     }
 
@@ -43,7 +42,7 @@ class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->publisher
             ->expects($this->once())
             ->method('publish')
-            ->with('calendar:subscription:deleted', json_encode(self::MESSAGE_DATA));
+            ->with('calendar:subscription:deleted', json_encode(["calendarPath" => self::PATH]));
         $this->plugin->subscriptionDeleted(self::PATH);
     }
 
@@ -51,7 +50,7 @@ class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->publisher
             ->expects($this->once())
             ->method('publish')
-            ->with('calendar:subscription:updated', json_encode(self::MESSAGE_DATA));
+            ->with('calendar:subscription:updated', json_encode(["calendarPath" => self::PATH]));
         $this->plugin->subscriptionUpdated(self::PATH);
     }
 }

@@ -603,6 +603,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
         $collection->insert($obj);
 
+        $this->eventEmitter->emit('esn:subscriptionCreated', [$this->getCalendarPath($principalUri, $uri)]);
+        
         return (string)$obj['_id'];
     }
 
@@ -628,13 +630,30 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $query = [ '_id' => new \MongoId($subscriptionId) ];
             $collection->update($query, [ '$set' => $newValues ]);
 
+            $fields = [
+                'uri',
+                'principaluri'
+            ];
+            $row = $collection->findOne($query, $fields);
+
+            $this->eventEmitter->emit('esn:subscriptionUpdated', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
+
             return true;
         });
     }
 
     function deleteSubscription($subscriptionId) {
         $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
-        $collection->remove([ '_id' => new \MongoId($subscriptionId) ]);
+        $query = [ '_id' => new \MongoId($subscriptionId) ];
+        $fields = [
+            'uri',
+            'principaluri'
+        ];
+        $row = $collection->findOne($query, $fields);
+        $collection->remove($query);
+
+        $this->eventEmitter->emit('esn:subscriptionDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
+        
     }
 
     function getSchedulingObject($principalUri, $objectUri) {

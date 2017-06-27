@@ -1,0 +1,12 @@
+FROM php:5.6.30
+
+MAINTAINER Linagora Folks <lgs-openpaas-dev@linagora.com>
+
+RUN apt-get update
+RUN apt-get -y install unzip git php5-curl php5-dev php-amqplib
+RUN docker-php-ext-install bcmath
+RUN pecl install mongo
+RUN docker-php-ext-enable mongo
+RUN curl https://getcomposer.org/installer | php
+RUN mv composer.phar /usr/local/bin/composer.phar
+RUN ln -s /usr/local/bin/composer.phar /usr/local/bin/composer

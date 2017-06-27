@@ -741,7 +741,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             if (is_null($sharee->principal)) {
                 $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_INVALID;
             } else {
-                $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
+                $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
             }
 
             foreach($currentInvites as $oldSharee) {

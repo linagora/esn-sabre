@@ -60,6 +60,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $fields[] = 'principaluri';
         $fields[] = 'transparent';
         $fields[] = 'access';
+        $fields[] = 'share_invitestatus';
 
         $collection = $this->db->selectCollection($this->calendarInstancesTableName);
         $query = [ 'principaluri' => $principalUri ];
@@ -84,7 +85,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 '{http://sabredav.org/ns}sync-token' => $calendarInstanceRow['synctoken'] ? $calendarInstanceRow['synctoken'] : '0',
                 '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' => new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet($components),
                 '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp($row['transparent'] ? 'transparent' : 'opaque'),
-                'share-resource-uri' => '/ns/share/' . $row['_id']
+                'share-resource-uri' => '/ns/share/' . $row['_id'],
+                'share-invitestatus' => $row['share_invitestatus']
             ];
 
             // 1 = owner, 2 = readonly, 3 = readwrite

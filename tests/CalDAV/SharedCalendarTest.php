@@ -332,6 +332,16 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals(count($subscribers), 1);
 
     }
+
+    function testGetInviteStatus() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+
+        $inviteStatus = 2;
+        $this->assertEquals($sharedCalendarESN->getInviteStatus(), $inviteStatus);
+    }
 }
 
 class SimpleBackendMock extends \Sabre\CalDAV\Backend\MockSharing {

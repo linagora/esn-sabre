@@ -210,4 +210,11 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         return $this->caldavBackend->getSubscribers($source);
 
     }
+
+    function getInviteStatus() {
+
+        return $this->calendarInfo['share-invitestatus'];
+
+    }
+
 }

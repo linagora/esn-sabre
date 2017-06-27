@@ -801,7 +801,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $this->assertEquals($subscriptionResponse->status, 201);
 
-        $getAllCalendarResponse = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f.json?withRights=true', null);        
+        $getAllCalendarResponse = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f.json?withRights=true', null);
         $jsonResponse = json_decode($getAllCalendarResponse->getBodyAsString());
         $allCalendarsAfterSubscription = count($jsonResponse->{'_embedded'}->{'dav:calendar'});
 
@@ -811,7 +811,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $getSubscriptionResponse = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f/publicCalToRemoveSubscription.json?withRights=true', null);
         $this->assertEquals($getSubscriptionResponse->status, 404);
 
-        $getAllUserCalendarResponse = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f.json?withRights=true', null);        
+        $getAllUserCalendarResponse = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f.json?withRights=true', null);
         $jsonResponse = json_decode($getAllUserCalendarResponse->getBodyAsString());
         $allCalendarsAfterRemoveSource = $jsonResponse->{'_embedded'}->{'dav:calendar'};
 

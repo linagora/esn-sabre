@@ -3,10 +3,6 @@ image: linagora/php-deps-composer:5.6.30
 services:
   - mongo:3.2
 
-before_script:
-  - composer up
-  - cp config.tests.json config.json
-
 stages:
   - build
   - deploy_dev
@@ -17,6 +13,8 @@ build:
     - online.net
   stage: build
   script:
+    - composer up
+    - cp config.tests.json config.json
     - ./vendor/bin/phpcs -p --standard=vendor/sabre/dav/tests/phpcs/ruleset.xml --report-checkstyle=checkstyle.xml lib/
     - cd tests
     - ../vendor/bin/phpunit --coverage-clover=${CI_PROJECT_DIR}/clover.xml --log-junit=${CI_PROJECT_DIR}/junit.xml .
@@ -26,13 +24,15 @@ deploy_dev:
   tags:
     - dev.open-paas.org
     - deployment
+  variables:
+    GIT_STRATEGY: none
   environment:
     name: dev
     url: https://dev.open-paas.org
   only:
     - master
   script:
-    - cd /srv/${CI_PROJECT_NAME}
+    - cd /srv/sabre.dev
     - git fetch --all
     - git checkout ${CI_COMMIT_SHA}
     - composer up

@@ -656,6 +656,26 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         
     }
 
+    function getSubscribers($source) {
+        $fields[] = 'principaluri';
+        $fields[] = 'uri';
+
+        $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
+        $query = [ 'source' => $source ];
+
+        $res = $collection->find($query, $fields);
+
+        $result = [];
+        foreach ($res as $row) {
+            $result[] = [
+                'principaluri' => $row['principaluri'],
+                'uri' => $row['uri']
+            ];
+        }
+
+        return $result;
+    }
+
     function getSchedulingObject($principalUri, $objectUri) {
         $collection = $this->db->selectCollection($this->schedulingObjectTableName);
         $query = [ 'principaluri' => $principalUri, 'uri' => $objectUri ];

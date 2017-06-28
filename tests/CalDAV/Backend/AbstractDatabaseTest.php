@@ -606,6 +606,29 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals(0, count($subs));
     }
 
+    function testGetSubscribers() {
+        $subscriptionSource = 'http://example.org/cal.ics';
+        $props = [
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href($subscriptionSource, false),
+            '{DAV:}displayname' => 'cal',
+            '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
+            '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
+            '{http://calendarserver.org/ns/}subscribed-strip-todos' => true,
+            //'{http://calendarserver.org/ns/}subscribed-strip-alarms' => true,
+            '{http://calendarserver.org/ns/}subscribed-strip-attachments' => true,
+        ];
+        $subscriptionUri = 'sub1';
+        $subscriptionPrincipal = 'principals/user1/userID';
+        $backend = $this->getBackend();
+        $id = $backend->createSubscription($subscriptionPrincipal, $subscriptionUri, $props);
+
+        $subscribers = $backend->getSubscribers($subscriptionSource);
+
+        $this->assertEquals(1, count($subscribers));
+        $this->assertEquals($subscriptionPrincipal, $subscribers[0]['principaluri']);
+        $this->assertEquals($subscriptionUri, $subscribers[0]['uri']);
+    }
+
     function testSchedulingMethods() {
         $backend = $this->getBackend();
 

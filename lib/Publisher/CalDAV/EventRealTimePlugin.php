@@ -46,7 +46,11 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     function buildData($data) {
-        $path = $data['eventPath'];
+        if(isset( $data['eventSource'])) {
+            $path = '/' . $data['eventSource'];
+        } else  {
+            $path = $data['eventPath'];
+        }
 
         if($this->server->tree->nodeExists($path)) {
             $data['etag'] = $this->server->tree->getNodeForPath($path)->getETag();
@@ -91,11 +95,35 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     function addSharedUsers($topic, $calendar, $calendarPathObject, $data, $old_event = null) {
         if ($calendar instanceof \ESN\CalDAV\SharedCalendar) {
+            $options = [
+                'baseUri' => $this->server->getBaseUri(),
+                'extension' => '.json'
+            ];
+            $subscribers = $calendar->getSubscribers($options);
             $invites = $calendar->getInvites();
             $calendarid = $calendar->getCalendarId();
 
             $pathExploded = explode('/', $calendarPathObject);
             $objectUri = $pathExploded[3];
+
+            foreach($subscribers as $subscriber) {
+                $principalUriExploded = explode('/', $subscriber['principaluri']);
+                $path = '/calendars/' . $principalUriExploded[2] . '/' . $subscriber['uri'] . '/' . $objectUri;
+                $event = \Sabre\VObject\Reader::read($data);
+                $event->remove('method');
+
+                $dataMessage = [
+                    'eventPath' => $path,
+                    'eventSource' => $calendarPathObject,
+                    'event' => $event
+                ];
+
+                if($old_event) {
+                    $dataMessage['old_event'] = $old_event;
+                }
+
+                $this->createMessage($topic, $dataMessage);
+            }
 
             foreach($invites as $user) {
                 $calendars = $this->caldavBackend->getCalendarsForUser($user->principal);

@@ -30,7 +30,7 @@ deploy_dev:
     name: dev
     url: https://dev.open-paas.org
   only:
-    - master
+    - master@https://ci.linagora.com/linagora/lgs/openpaas/esn-sabre.git
   script:
     - cd /srv/sabre.dev
     - git fetch --all

@@ -230,6 +230,13 @@ A dav:root resource, expanded down to all dav:calendar resouces.
 
 List all calendars in the calendar home.
 
+**Query Parameters:**
+
+- sharedPublic: List only personal calendar that have public_right
+- personal: include only personal calendars in the result list (can be combined with `sharedPublicSubscription` and `sharedDelegationStatus`)
+- sharedPublicSubscription: include only subscritions to public calendars from the result list (can be combined with `personal` and `sharedDelegationStatus`)
+- sharedDelegationStatus: include only shared calendars with the given invite status (`accepted` or `noresponse`) (can be combined with `personal` and `sharedPublicSubscription`)
+
 **Status Codes:**
 
 - 200 OK: Query has succeeded and results are returned

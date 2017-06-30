@@ -459,13 +459,13 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         foreach ($calendars as $calendar) {
             if ($calendar instanceof \Sabre\CalDAV\Calendar) {
                 if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
-                    $items[] = $this->listCalendar($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
+                    $items[] = $this->calendarToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
                 }
             }
 
             if ($calendar instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
                 if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
-                    $subscription = $this->listSubscription($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
+                    $subscription = $this->subscriptionToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
 
                     if(isset($subscription)) {
                         $items[] = $subscription;
@@ -484,7 +484,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $items = [];
         foreach ($calendars as $calendar) {
             if ($calendar instanceof \ESN\CalDAV\SharedCalendar && !$calendar->isSharedInstance() && $calendar->isPublic()) {
-                $items[] = $this->listCalendar($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
+                $items[] = $this->calendarToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
             }
         }
 
@@ -496,13 +496,13 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $baseUri = $this->server->getBaseUri();
         $requestPath = $baseUri . $nodePath . '.json';
 
-        return [200, $this->listCalendar($nodePath, $node, $withRights)];
+        return [200, $this->calendarToJson($nodePath, $node, $withRights)];
     }
 
     function getSubscriptionInformation($nodePath, $node, $withRights) {
         $baseUri = $this->server->getBaseUri();
         $requestPath = $baseUri . $nodePath . '.json';
-        $subscription = $this->listSubscription($nodePath, $node, $withRights);
+        $subscription = $this->subscriptionToJson($nodePath, $node, $withRights);
 
         if(!isset($subscription)) {
             return [404, null];
@@ -511,7 +511,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $subscription];
     }
 
-    function listCalendar($nodePath, $calendar, $withRights = null) {
+    function calendarToJson($nodePath, $calendar, $withRights = null) {
         $baseUri = $this->server->getBaseUri();
         $calprops = $calendar->getProperties([]);
         $node = $calendar;
@@ -555,7 +555,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return $calendar;
     }
 
-    function listSubscription($nodePath, $subscription, $withRights = null) {
+    function subscriptionToJson($nodePath, $subscription, $withRights = null) {
         $baseUri = $this->server->getBaseUri();
         $propertiesList = [
             '{DAV:}displayname',
@@ -588,7 +588,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
 
             $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
-            $subscription['calendarserver:source'] = $this->listCalendar($sourcePath, $sourceNode, true);
+            $subscription['calendarserver:source'] = $this->calendarToJson($sourcePath, $sourceNode, true);
         }
 
         if (isset($subprops['{http://apple.com/ns/ical/}calendar-color'])) {
@@ -631,7 +631,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $node = $this->server->tree->getNodeForPath($calendarPath);
 
             if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
-                $calendar = $this->listCalendar($calendarPath, $node);
+                $calendar = $this->calendarToJson($calendarPath, $node);
                 list($code, $calendarObjects) = $this->getCalendarObjects($calendarPath, $node, $jsonData);
                 $calendar['_embedded'] = [
                     'dav:item' => $calendarObjects['_embedded']['dav:item']

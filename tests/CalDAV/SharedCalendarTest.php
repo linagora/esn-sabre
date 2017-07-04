@@ -332,6 +332,52 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals(count($subscribers), 1);
 
     }
+
+    function testGetInviteStatus() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+
+        $inviteStatus = 2;
+        $this->assertEquals($sharedCalendarESN->getInviteStatus(), $inviteStatus);
+    }
+
+    function testDefaultIsNotSharedInstance() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+
+        $this->assertFalse($sharedCalendarESN->isSharedInstance());
+    }
+
+    function testOwnerIsNotSharedInstance() {
+        $props = [
+            'id'                                        => 1,
+            'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $this->assertFalse($sharedCalendar->isSharedInstance());
+    }
+
+    function testReaderIsSharedInstance() {
+        $props = [
+            'id'                                        => 1,
+            'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_READ,
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $this->assertTrue($sharedCalendar->isSharedInstance());
+    }
+
 }
 
 class SimpleBackendMock extends \Sabre\CalDAV\Backend\MockSharing {

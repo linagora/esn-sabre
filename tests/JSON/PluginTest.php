@@ -442,6 +442,134 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertFalse(isset($calendars[1]->{'acl'}));
     }
 
+    private function _testFilteredCalendarList($personal = null, $subscription = null, $inviteStatusFilter = null) {
+        $delegationRequest = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json',
+        ));
+
+        $sharees = [
+            'share' => [
+                'set' => [
+                    [
+                        'dav:href' => 'mailto:robertocarlos@realmadrid.com',
+                        'dav:read' => true
+                    ]
+                ]
+            ]
+        ];
+
+        $delegationRequest->setBody(json_encode($sharees));
+        $response = $this->request($delegationRequest);
+
+        $this->assertEquals(200, $response->status);
+
+
+        $filterParams = '';
+        if (isset($personal)) {
+            $filterParams = '&personal=' . $personal;
+        };
+
+        if (isset($subscription)) {
+            $filterParams = $filterParams . '&sharedPublicSubscription=' . $subscription;
+        };
+
+        if (isset($inviteStatusFilter)) {
+            $filterParams = $filterParams . '&sharedDelegationStatus=' . $inviteStatusFilter;
+        };
+
+        $filterParams = $filterParams === '' ? '' : '?'.substr($filterParams, 1);
+
+        $requestUri = '/calendars/54b64eadf6d7d8e41d263e0f.json' . $filterParams;
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => $requestUri,
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+
+        return $jsonResponse;
+    }
+
+    function testFilteredCalendarList() {
+        $jsonResponse = $this->_testFilteredCalendarList();
+        $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
+        
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
+        $this->assertFalse(isset($calendars[1]->{'invite'}));
+        $this->assertFalse(isset($calendars[1]->{'acl'}));
+
+        $this->assertCount(3, $calendars);
+
+        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
+        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
+        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
+        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
+        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+
+        $this->assertEquals($calendars[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/delegatedCal1.json');
+        $this->assertEquals($calendars[1]->{'dav:name'}, 'delegatedCalendar');
+
+        $this->assertEquals($calendars[2]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json');
+        $this->assertEquals($calendars[2]->{'dav:name'}, 'Subscription');
+        $this->assertEquals($calendars[2]->{'calendarserver:source'}->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
+       
+    }
+
+    function testFilteredCalendarLisWithPersonalOnly() {
+        $jsonResponse = $this->_testFilteredCalendarList('true');
+        $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
+
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
+        $this->assertCount(2, $calendars);
+
+        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
+        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
+        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
+        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
+        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+
+        $this->assertEquals($calendars[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/delegatedCal1.json');
+        $this->assertEquals($calendars[1]->{'dav:name'}, 'delegatedCalendar');
+    }
+
+    function testFilteredCalendarLisWithSubscriptionOnly() {
+        $jsonResponse = $this->_testFilteredCalendarList(null, 'true');
+        $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
+
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
+        $this->assertCount(1, $calendars);
+
+        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json');
+        $this->assertEquals($calendars[0]->{'dav:name'}, 'Subscription');
+        $this->assertEquals($calendars[0]->{'calendarserver:source'}->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
+
+    }
+
+    function testFilteredCalendarLisWithSharedNoResponseOnly() {
+        $jsonResponse = $this->_testFilteredCalendarList(null, null, 'noresponse');
+        $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
+
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
+        $this->assertCount(1, $calendars);
+
+        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
+    }
+
+    function testFilteredCalendarLisWithSharedAcceptedOnly() {
+        $jsonResponse = $this->_testFilteredCalendarList(null, null, 'accepted');
+        
+        $this->assertNull($jsonResponse);
+    }
+
     function testGetCalendarConfiguration() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
@@ -688,7 +816,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_METHOD'    => 'GET',
             'HTTP_ACCEPT'       => 'application/json',
             'HTTP_CONTENT_TYPE' => 'application/json',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e.json?public=true',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e.json?sharedPublic=true',
         ));
 
         $response = $this->request($request);
@@ -711,7 +839,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_METHOD'    => 'GET',
             'HTTP_ACCEPT'       => 'application/json',
             'HTTP_CONTENT_TYPE' => 'application/json',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json?public=true',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json?sharedPublic=true',
         ));
 
         $response = $this->request($request);
@@ -749,7 +877,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_METHOD'    => 'GET',
             'HTTP_ACCEPT'       => 'application/json',
             'HTTP_CONTENT_TYPE' => 'application/json',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0d.json?public=true',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0d.json?sharedPublic=true',
         ));
 
         $response2 = $this->request($request);

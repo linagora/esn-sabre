@@ -120,7 +120,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         } else {
             $node = $this->server->tree->getNodeForPath($path);
             if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
-                list($code, $body) = $this->updateSharees($path, $node, $jsonData);
+                list($code, $body) = $this->handleJsonRequest($path, $node, $jsonData);
             } else if ($node instanceof \Sabre\CalDAV\CalendarHome && $this->isBodyForSubscription($jsonData)) {
                 list($code, $body) = $this->createSubscription($path, $node, $jsonData);
             } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
@@ -798,6 +798,39 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function isHiddenPrivateEvent($vevent, $node) {
         return $vevent->CLASS == 'PRIVATE' && $node->getOwner() != $this->currentUser;
+    }
+
+    function handleJsonRequest($path, $node, $jsonData) {
+        if (isset($jsonData->{'invite-reply'})) {
+            return $this->updateInviteStatus($path, $node, $jsonData);
+        } else if (isset($jsonData->share)) {
+            return $this->updateSharees($path, $node, $jsonData);
+        }
+
+        return [400, null];
+    }
+
+    function updateInviteStatus($path, $node, $jsonData) {
+        if(isset($jsonData->{'invite-reply'}->invitestatus)) {
+            switch ($jsonData->{'invite-reply'}->{'invitestatus'}) {
+                case 'accepted': 
+                    $inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
+                    break;
+                case 'noresponse':
+                    $inviteStatus = \ESN\DAV\Sharing\Plugin::INVITE_NORESPONSE;
+            }
+
+            if (isset($inviteStatus)) {
+                $node->updateInviteStatus($inviteStatus);
+
+                // see vendor/sabre/dav/lib/CalDAV/SharingPlugin.php:268                
+                $this->server->httpResponse->setHeader('X-Sabre-Status', 'everything-went-well');
+
+                return [200, null];
+            }
+        }
+
+        return [400, null];
     }
 
     function updateSharees($path, $node, $jsonData) {

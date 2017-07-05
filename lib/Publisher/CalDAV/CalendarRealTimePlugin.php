@@ -3,6 +3,7 @@ namespace ESN\Publisher\CalDAV;
 
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
+use \Sabre\DAV\Sharing;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Document;
@@ -83,8 +84,10 @@ class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $sharingPlugin = $this->server->getPlugin('sharing');
 
         foreach($calendarInstances as $instance) {
-
-            if ($instance['type'] == 'delete') {
+            if ($instance['sharee']->inviteStatus !== \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED) {
+                continue;
+            }
+            else if ($instance['type'] == 'delete') {
                 $event = $this->CALENDAR_TOPICS['CALENDAR_DELETED'];
                 $props = null;
             } else if ($instance['type'] == 'create') {

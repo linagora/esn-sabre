@@ -292,10 +292,118 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertFalse($sharedCalendarESN->isPublic());
     }
+
+    function testGetSubscribers() {
+        $props = [
+            'id'                                        => 1,
+            '{http://calendarserver.org/ns/}shared-url' => 'calendars/owner/original',
+            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner/54b64eadf6d7d8e41d263e0f',
+            '{http://sabredav.org/ns}read-only'         => false,
+            'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
+            'principaluri'                              => 'principals/owner/54b64eadf6d7d8e41d263e0f',
+            'uri'                                       => 'sharedcal',
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $subscribers = $sharedCalendar->getSubscribers();
+
+        $this->assertEquals(count($subscribers), 2);
+
+    }
+
+    function testGetSubscribersWithOptions() {
+        $props = [
+            'id'                                        => 1,
+            '{http://calendarserver.org/ns/}shared-url' => 'calendars/owner/original',
+            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner/54b64eadf6d7d8e41d263e0f',
+            '{http://sabredav.org/ns}read-only'         => false,
+            'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
+            'principaluri'                              => 'principals/owner/54b64eadf6d7d8e41d263e0f',
+            'uri'                                       => 'sharedcal',
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $subscribers = $sharedCalendar->getSubscribers(['baseUri' => 'baseuri/', 'extension' => '.json']);
+
+        $this->assertEquals(count($subscribers), 1);
+
+    }
+
+    function testGetInviteStatus() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+
+        $inviteStatus = 2;
+        $this->assertEquals($sharedCalendarESN->getInviteStatus(), $inviteStatus);
+    }
+
+    function testDefaultIsNotSharedInstance() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+
+        $this->assertFalse($sharedCalendarESN->isSharedInstance());
+    }
+
+    function testOwnerIsNotSharedInstance() {
+        $props = [
+            'id'                                        => 1,
+            'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $this->assertFalse($sharedCalendar->isSharedInstance());
+    }
+
+    function testReaderIsSharedInstance() {
+        $props = [
+            'id'                                        => 1,
+            'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_READ,
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $this->assertTrue($sharedCalendar->isSharedInstance());
+    }
+
 }
 
 class SimpleBackendMock extends \Sabre\CalDAV\Backend\MockSharing {
     function getCalendarPublicRight() {
         return null;
+    }
+
+    function getSubscribers($source) {
+        $subscribers = [];
+        $subscribers[] = [
+            'principaluri' => 'principals/subscriber/56664eadf6d7d8e41d263esz',
+            'uri'          => 'subscription',
+            'source'       => '/calendars/54b64eadf6d7d8e41d263e0f/sharedcal'
+        ];
+        $subscribers[] = [
+            'principaluri' => 'principals/subscriber/5sdf64eadf6d7d8e41d23e54',
+            'uri'          => 'subscription2',
+            'source'       => '/calendars/54b64eadf6d7d8e41d263e0f/sharedcal'
+        ];
+        $subscribers[] = [
+            'principaluri' => 'principals/subscriber/5sdf64eadf6d7d8e41d23e54',
+            'uri'          => 'subscription3',
+            'source'       => 'baseuri/calendars/54b64eadf6d7d8e41d263e0f/sharedcal.json'
+        ];
+
+        $match = array_keys(array_column($subscribers, 'source'), $source);
+          return $match;
     }
 }

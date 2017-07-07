@@ -1,0 +1,35 @@
+{
+  "webserver": {
+    "baseUri": "/",
+    "allowOrigin": "*",
+    "realm": "ESN"
+  },
+  "amqp": {
+    "host": "localhost",
+    "port": "5672"
+  },
+  "database": {
+    "esn": {
+      "db": "esn",
+      "connectionString" : "mongodb://mongo:27017/",
+      "connectionOptions": {
+        "w": 1,
+        "fsync": true,
+        "connectTimeoutMS": 10000
+      }
+    },
+    "sabre": {
+      "db": "sabre",
+      "connectionString" : "mongodb://mongo:27017/",
+      "connectionOptions": {
+        "w": 1,
+        "fsync": true,
+        "connectTimeoutMS": 10000
+      }
+    }
+  },
+  "esn": {
+    "apiRoot": "http://localhost:8080/api",
+    "calendarRoot": "http://localhost:8080/calendar/api"
+  }
+}

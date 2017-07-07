@@ -90,6 +90,21 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($data['etag'], self::ETAG);
         $this->assertEquals($data['event'], 'event');
     }
+
+    function testBuildDataWithSource() {
+        $path = '/path/for/calendar/event.ics';
+        $plugin = $this->getPlugin();
+        $data = $plugin->buildData([
+            'eventPath' => $path,
+            'eventSource' => self::PATH,
+            'event' => 'event'
+        ]);
+
+        $this->assertEquals($data['eventPath'], $path);
+        $this->assertEquals($data['etag'], self::ETAG);
+        $this->assertEquals($data['event'], 'event');
+    }
+
 }
 
 class RealTimeMock implements \ESN\Publisher\Publisher {

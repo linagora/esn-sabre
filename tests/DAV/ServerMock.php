@@ -204,7 +204,15 @@ END:VCALENDAR'
         $this->esndb->users->insert([
             '_id' => new \MongoId('54b64eadf6d7d8e41d263e0f'),
             'firstname' => 'Roberto',
-            'lastname' => 'Carlos'
+            'lastname' => 'Carlos',
+            'accounts' => [
+                [
+                    'type' => 'email',
+                    'emails' => [
+                      'robertocarlos@realmadrid.com'
+                    ]
+                ]
+            ]
         ]);
         $this->esndb->users->insert([
             '_id' => new \MongoId('54b64eadf6d7d8e41d263e0e'),

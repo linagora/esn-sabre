@@ -198,4 +198,29 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         return $this->calendarInfo['id'][0];
 
     }
+
+    function getSubscribers($options = null) {
+        $principalUriExploded = explode('/', $this->calendarInfo['principaluri']);
+        if($options) {
+            $source = $options['baseUri'] . 'calendars/' . $principalUriExploded[2] . '/' . $this->calendarInfo['uri'] . $options['extension'];
+        } else {
+            $source = '/calendars/' . $principalUriExploded[2] . '/' . $this->calendarInfo['uri'];
+        }
+
+        return $this->caldavBackend->getSubscribers($source);
+
+    }
+
+    function getInviteStatus() {
+
+        return $this->calendarInfo['share-invitestatus'];
+
+    }
+
+    function isSharedInstance() {
+
+        return $this->getShareAccess() !== SPlugin::ACCESS_SHAREDOWNER && $this->getShareAccess() !== SPlugin::ACCESS_NOTSHARED;
+
+    }
+
 }

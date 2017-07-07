@@ -87,17 +87,17 @@ class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     function testUpdateMultipleSharees() {
         $calendarInstances = [
             [
-                'sharee' => new ShareeSimple('/principal/user/userUri1', 1),
+                'sharee' => new ShareeSimple('/principal/user/userUri1', 1, 2),
                 'uri' => 'uid.ics',
                 'type' => 'delete'
             ],
             [
-                'sharee' => new ShareeSimple('/principal/user/userUri1', 1),
+                'sharee' => new ShareeSimple('/principal/user/userUri1', 1, 2),
                 'uri' => 'uid.ics',
                 'type' => 'create'
             ],
             [
-                'sharee' => new ShareeSimple('/principal/user/userUri1', 1),
+                'sharee' => new ShareeSimple('/principal/user/userUri1', 1, 2),
                 'uri' => 'uid.ics',
                 'type' => 'update'
             ]
@@ -110,10 +110,26 @@ class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->plugin->updateSharees($calendarInstances);
     }
 
-    function testUpdateShareesDelete() {
+    function testUpdateNotAcceptedShareesDelete() {
         $calendarInstances = [
             [
                 'sharee' => new ShareeSimple('principal/user/userUri', 1),
+                'uri' => 'uid.ics',
+                'type' => 'delete'
+            ]
+        ];
+
+        $this->publisher
+            ->expects($this->never())
+            ->method('publish');
+
+        $this->plugin->updateSharees($calendarInstances);
+    }
+
+    function testUpdateAcceptedShareesDelete() {
+        $calendarInstances = [
+            [
+                'sharee' => new ShareeSimple('principal/user/userUri', 1, 2),
                 'uri' => 'uid.ics',
                 'type' => 'delete'
             ]
@@ -126,10 +142,26 @@ class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->plugin->updateSharees($calendarInstances);
     }
 
-    function testUpdateShareesCreate() {
+    function testUpdateNotAcceptedShareesCreate() {
         $calendarInstances = [
             [
                 'sharee' => new ShareeSimple('principal/user/userUri', 1),
+                'uri' => 'uid.ics',
+                'type' => 'create'
+            ]
+        ];
+
+        $this->publisher
+            ->expects($this->never())
+            ->method('publish');
+
+        $this->plugin->updateSharees($calendarInstances);
+    }
+
+    function testUpdateAcceptedShareesCreate() {
+        $calendarInstances = [
+            [
+                'sharee' => new ShareeSimple('principal/user/userUri', 1, 2),
                 'uri' => 'uid.ics',
                 'type' => 'create'
             ]
@@ -142,10 +174,26 @@ class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->plugin->updateSharees($calendarInstances);
     }
 
-    function testUpdateShareesUpdate() {
+    function testUpdateNotAcceptedShareesUpdate() {
         $calendarInstances = [
             [
                 'sharee' => new ShareeSimple('principal/user/userUri', 1),
+                'uri' => 'uid.ics',
+                'type' => 'update'
+            ]
+        ];
+
+        $this->publisher
+            ->expects($this->never())
+            ->method('publish');
+
+        $this->plugin->updateSharees($calendarInstances);
+    }
+
+    function testUpdateAcceptedShareesUpdate() {
+        $calendarInstances = [
+            [
+                'sharee' => new ShareeSimple('principal/user/userUri', 1, 2),
                 'uri' => 'uid.ics',
                 'type' => 'update'
             ]
@@ -163,8 +211,9 @@ class ShareeSimple {
     public $principal;
     public $access;
 
-    function __construct($principal, $access) {
+    function __construct($principal, $access, $inviteStatus = null) {
         $this->principal = $principal;
         $this->access = $access;
+        $this->inviteStatus = $inviteStatus;
     }
 }

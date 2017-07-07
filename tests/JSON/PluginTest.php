@@ -1266,6 +1266,35 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($sharees[4]->access, 6);
     }
 
+    function testCalendarUpdateInviteStatus() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json',
+        ));
+
+        $invitereply = [
+            'invite-reply' => [
+                'invitestatus' => 'noresponse'
+            ]
+        ];
+
+        $request->setBody(json_encode($invitereply));
+        $response = $this->request($request);
+
+        $this->assertEquals(200, $response->status);
+
+        $calendars = $this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0e');
+
+        $this->assertCount(2, $calendars);
+
+        $this->assertEquals(2, $calendars[0]['share-invitestatus']);
+        $this->assertEquals('calendar2', $calendars[0]['uri']);
+        $this->assertEquals(1, $calendars[1]['share-invitestatus']);
+        $this->assertEquals('publicCal1', $calendars[1]['uri']);
+    }
+
     function testUIDQueryShouldReturn400WhenUIDIsMissing() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

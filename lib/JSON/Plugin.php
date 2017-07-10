@@ -813,7 +813,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     function updateInviteStatus($path, $node, $jsonData) {
         if(isset($jsonData->{'invite-reply'}->invitestatus)) {
             switch ($jsonData->{'invite-reply'}->{'invitestatus'}) {
-                case 'accepted': 
+                case 'accepted':
                     $inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
                     break;
                 case 'noresponse':
@@ -823,7 +823,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             if (isset($inviteStatus)) {
                 $node->updateInviteStatus($inviteStatus);
 
-                // see vendor/sabre/dav/lib/CalDAV/SharingPlugin.php:268                
+                // see vendor/sabre/dav/lib/CalDAV/SharingPlugin.php:268
                 $this->server->httpResponse->setHeader('X-Sabre-Status', 'everything-went-well');
 
                 return [200, null];

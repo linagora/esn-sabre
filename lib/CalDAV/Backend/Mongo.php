@@ -605,6 +605,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
         $collection->insert($obj);
 
+        $this->eventEmitter->emit('esn:subscriptionCreated', [$this->getCalendarPath($principalUri, $uri)]);
+        
         return (string)$obj['_id'];
     }
 
@@ -630,13 +632,30 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $query = [ '_id' => new \MongoId($subscriptionId) ];
             $collection->update($query, [ '$set' => $newValues ]);
 
+            $fields = [
+                'uri',
+                'principaluri'
+            ];
+            $row = $collection->findOne($query, $fields);
+
+            $this->eventEmitter->emit('esn:subscriptionUpdated', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
+
             return true;
         });
     }
 
     function deleteSubscription($subscriptionId) {
         $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
-        $collection->remove([ '_id' => new \MongoId($subscriptionId) ]);
+        $query = [ '_id' => new \MongoId($subscriptionId) ];
+        $fields = [
+            'uri',
+            'principaluri'
+        ];
+        $row = $collection->findOne($query, $fields);
+        $collection->remove($query);
+
+        $this->eventEmitter->emit('esn:subscriptionDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
+        
     }
 
     function getSubscribers($source) {
@@ -831,6 +850,17 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         list($collection, $query) = $this->prepareRequestForCalendarPublicRight($calendarId);
 
         $collection->update($query, ['$set' => ['public_right' => $privilege]]);
+    }
+
+    function saveCalendarInviteStatus($calendarId, $status) {
+        $this->_assertIsArray($calendarId);
+
+        $mongoCalendarId = new \MongoId($calendarId[1]);
+
+        $collection =$this->db->selectCollection($this->calendarInstancesTableName);
+        $query = ['_id' => $mongoCalendarId];
+
+        $collection->update($query, ['$set' => ['share_invitestatus' => $status]]);
     }
 
     function getCalendarPublicRight($calendarId) {

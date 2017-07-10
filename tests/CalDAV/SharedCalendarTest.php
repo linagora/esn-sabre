@@ -343,6 +343,21 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($sharedCalendarESN->getInviteStatus(), $inviteStatus);
     }
 
+    function testUpdateInviteStatus() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+
+        $status = 5;
+        $sharedCalendarESN->updateInviteStatus($status);
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/54b64eadf6d7d8e41d263e0f']);
+        $sharedCalendarESN =  $calendarESN->getChild('events');
+
+        $this->assertEquals($status, $sharedCalendarESN->getInviteStatus());
+    }
+
     function testDefaultIsNotSharedInstance() {
         $backend = $this->getBackend();
 

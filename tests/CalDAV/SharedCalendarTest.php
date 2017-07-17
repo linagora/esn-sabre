@@ -301,7 +301,7 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
             '{http://sabredav.org/ns}read-only'         => false,
             'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
             'principaluri'                              => 'principals/owner/54b64eadf6d7d8e41d263e0f',
-            'uri'                                       => 'sharedcal',
+            'uri'                                       => 'publicCal1',
         ];
 
         $backend = new SimpleBackendMock([$props], [], []);
@@ -310,26 +310,6 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $subscribers = $sharedCalendar->getSubscribers();
 
         $this->assertEquals(count($subscribers), 2);
-
-    }
-
-    function testGetSubscribersWithOptions() {
-        $props = [
-            'id'                                        => 1,
-            '{http://calendarserver.org/ns/}shared-url' => 'calendars/owner/original',
-            '{http://sabredav.org/ns}owner-principal'   => 'principals/owner/54b64eadf6d7d8e41d263e0f',
-            '{http://sabredav.org/ns}read-only'         => false,
-            'share-access'                              => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
-            'principaluri'                              => 'principals/owner/54b64eadf6d7d8e41d263e0f',
-            'uri'                                       => 'sharedcal',
-        ];
-
-        $backend = new SimpleBackendMock([$props], [], []);
-        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
-
-        $subscribers = $sharedCalendar->getSubscribers(['baseUri' => 'baseuri/', 'extension' => '.json']);
-
-        $this->assertEquals(count($subscribers), 1);
 
     }
 
@@ -405,17 +385,12 @@ class SimpleBackendMock extends \Sabre\CalDAV\Backend\MockSharing {
         $subscribers[] = [
             'principaluri' => 'principals/subscriber/56664eadf6d7d8e41d263esz',
             'uri'          => 'subscription',
-            'source'       => '/calendars/54b64eadf6d7d8e41d263e0f/sharedcal'
+            'source'       => 'calendars/54b64eadf6d7d8e41d263e0f/publicCal1'
         ];
         $subscribers[] = [
             'principaluri' => 'principals/subscriber/5sdf64eadf6d7d8e41d23e54',
             'uri'          => 'subscription2',
-            'source'       => '/calendars/54b64eadf6d7d8e41d263e0f/sharedcal'
-        ];
-        $subscribers[] = [
-            'principaluri' => 'principals/subscriber/5sdf64eadf6d7d8e41d23e54',
-            'uri'          => 'subscription3',
-            'source'       => 'baseuri/calendars/54b64eadf6d7d8e41d263e0f/sharedcal.json'
+            'source'       => 'calendars/54b64eadf6d7d8e41d263e0f/publicCal1'
         ];
 
         $match = array_keys(array_column($subscribers, 'source'), $source);

@@ -650,7 +650,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $cal = $calendars[1];
         $this->assertEquals('SUB NAME', $cal['{DAV:}displayname']);
-        $this->assertEquals('/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json', $cal['source']);
+        $this->assertEquals('calendars/54b64eadf6d7d8e41d263e0e/publicCal1', $cal['source']);
         $this->assertEquals('#0190FFFF', $cal['{http://apple.com/ns/ical/}calendar-color']);
         $this->assertEquals('99', $cal['{http://apple.com/ns/ical/}calendar-order']);
     }

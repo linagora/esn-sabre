@@ -226,6 +226,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             }
 
             $this->updateInvites($calendarIdArray, $currentInvites);
+            $this->deleteSubscribers($row['principaluri'], $row['uri']);
 
             $collection = $this->db->selectCollection($this->calendarObjectTableName);
             $collection->remove([ 'calendarid' => $mongoId ]);
@@ -244,6 +245,16 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         }
 
         $this->eventEmitter->emit('esn:calendarDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
+    }
+
+    function deleteSubscribers($principaluri, $uri) {
+        $principalUriExploded = explode('/', $principaluri);
+        $source = 'calendars/' . $principalUriExploded[2] . '/' . $uri;
+
+        $subscriptions = $this->getSubscribers($source);
+        foreach($subscriptions as $subscription) {
+            $this->deleteSubscription($subscription['_id']);
+        }
     }
 
     function getCalendarObjects($calendarId) {
@@ -659,6 +670,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getSubscribers($source) {
+        $fields[] = '_id';
         $fields[] = 'principaluri';
         $fields[] = 'uri';
 
@@ -670,6 +682,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $result = [];
         foreach ($res as $row) {
             $result[] = [
+                '_id' => $row['_id'],
                 'principaluri' => $row['principaluri'],
                 'uri' => $row['uri']
             ];
@@ -823,7 +836,6 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $query = [ 'calendarid' => $mongoCalendarId ];
 
         $res = $collection->find($query, $fields);
-
         $result = [];
         foreach ($res as $row) {
             $result[] = new \Sabre\DAV\Xml\Element\Sharee([

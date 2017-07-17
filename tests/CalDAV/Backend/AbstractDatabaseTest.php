@@ -478,7 +478,6 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
             '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
             '{http://calendarserver.org/ns/}subscribed-strip-todos' => true,
-            //'{http://calendarserver.org/ns/}subscribed-strip-alarms' => true,
             '{http://calendarserver.org/ns/}subscribed-strip-attachments' => true,
         ];
 
@@ -517,7 +516,6 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
             '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
             '{http://calendarserver.org/ns/}subscribed-strip-todos' => true,
-            //'{http://calendarserver.org/ns/}subscribed-strip-alarms' => true,
             '{http://calendarserver.org/ns/}subscribed-strip-attachments' => true,
         ];
 
@@ -558,7 +556,6 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
             '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
             '{http://calendarserver.org/ns/}subscribed-strip-todos' => true,
-            //'{http://calendarserver.org/ns/}subscribed-strip-alarms' => true,
             '{http://calendarserver.org/ns/}subscribed-strip-attachments' => true,
         ];
 
@@ -588,7 +585,6 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
             '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
             '{http://calendarserver.org/ns/}subscribed-strip-todos' => true,
-            //'{http://calendarserver.org/ns/}subscribed-strip-alarms' => true,
             '{http://calendarserver.org/ns/}subscribed-strip-attachments' => true,
         ];
 
@@ -614,7 +610,6 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
             '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
             '{http://calendarserver.org/ns/}subscribed-strip-todos' => true,
-            //'{http://calendarserver.org/ns/}subscribed-strip-alarms' => true,
             '{http://calendarserver.org/ns/}subscribed-strip-attachments' => true,
         ];
         $subscriptionUri = 'sub1';
@@ -627,6 +622,36 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals(1, count($subscribers));
         $this->assertEquals($subscriptionPrincipal, $subscribers[0]['principaluri']);
         $this->assertEquals($subscriptionUri, $subscribers[0]['uri']);
+    }
+
+    function testdeleteSubscribers() {
+        $backend = $this->getBackend();
+
+        $calendarId = $backend->createCalendar('principals/user1/userID', 'ancalid', []);
+
+        $subscriptionSource = 'calendars/userID/ancalid';
+        $props = [
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href($subscriptionSource, false),
+            '{DAV:}displayname' => 'cal',
+            '{http://apple.com/ns/ical/}refreshrate' => 'P1W',
+            '{http://apple.com/ns/ical/}calendar-color' => '#FF00FFFF',
+            '{http://calendarserver.org/ns/}subscribed-strip-todos' => true,
+            '{http://calendarserver.org/ns/}subscribed-strip-attachments' => true,
+        ];
+        $subscriptionUri = 'sub1';
+        $subscriptionPrincipal = 'principals/user1/userID';
+        $id = $backend->createSubscription($subscriptionPrincipal, $subscriptionUri, $props);
+
+        $subscribers = $backend->getSubscribers($subscriptionSource);
+
+        $this->assertEquals(1, count($subscribers));
+        $this->assertEquals($subscriptionPrincipal, $subscribers[0]['principaluri']);
+        $this->assertEquals($subscriptionUri, $subscribers[0]['uri']);
+
+        $backend->deleteCalendar($calendarId);
+
+        $subscribersAfterCalDeletion = $backend->getSubscribers($subscriptionSource);
+        $this->assertEquals(0, count($subscribersAfterCalDeletion));
     }
 
     function testSchedulingMethods() {

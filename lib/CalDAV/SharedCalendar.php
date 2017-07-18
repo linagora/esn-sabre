@@ -188,8 +188,11 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     }
 
     function savePublicRight($privilege) {
+        $calendarInfo = [];
+        $calendarInfo['principaluri'] = $this->calendarInfo['principaluri'];
+        $calendarInfo['uri'] = $this->calendarInfo['uri'];
 
-        $this->caldavBackend->saveCalendarPublicRight($this->calendarInfo['id'], $privilege);
+        $this->caldavBackend->saveCalendarPublicRight($this->calendarInfo['id'], $privilege, $calendarInfo);
 
     }
 
@@ -206,6 +209,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         return $this->caldavBackend->getSubscribers($source);
 
     }
+
 
     function getInviteStatus() {
 

@@ -850,9 +850,12 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     function testSetCalendarPublicRight() {
         $publicRight = 'my public right';
         $backend = $this->getBackend();
+        $calendarInfo = [];
+        $calendarInfo['principaluri'] = 'principals/user2/userID';
+        $calendarInfo['uri'] = 'somerandomid';
 
-        $newId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
-        $backend->saveCalendarPublicRight($newId, $publicRight);
+        $newId = $backend->createCalendar($calendarInfo['principaluri'] ,$calendarInfo['uri'], array());
+        $backend->saveCalendarPublicRight($newId, $publicRight, $calendarInfo);
 
         $this->assertEquals($publicRight, $backend->getCalendarPublicRight($newId));
     }
@@ -860,14 +863,17 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     function testUpdateCalendarPublicRight() {
         $publicRight = 'my public right';
         $backend = $this->getBackend();
+        $calendarInfo = [];
+        $calendarInfo['principaluri'] = 'principals/user2/userID';
+        $calendarInfo['uri'] = 'somerandomid';
 
-        $newId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
-        $backend->saveCalendarPublicRight($newId, $publicRight);
+        $newId = $backend->createCalendar($calendarInfo['principaluri'] ,$calendarInfo['uri'], array());
+        $backend->saveCalendarPublicRight($newId, $publicRight, $calendarInfo);
 
         $this->assertEquals($publicRight, $backend->getCalendarPublicRight($newId));
 
         $newPublicRight = 'my new public right';
-        $backend->saveCalendarPublicRight($newId, $newPublicRight);
+        $backend->saveCalendarPublicRight($newId, $newPublicRight, $calendarInfo);
 
         $this->assertEquals($newPublicRight, $backend->getCalendarPublicRight($newId));
     }
@@ -875,13 +881,16 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     function testRemoveCalendarPublicRight() {
         $publicRight = 'my public right';
         $backend = $this->getBackend();
+        $calendarInfo = [];
+        $calendarInfo['principaluri'] = 'principals/user2/userID';
+        $calendarInfo['uri'] = 'somerandomid';
 
-        $newId = $backend->createCalendar('principals/user2/userID','somerandomid',array());
-        $backend->saveCalendarPublicRight($newId, $publicRight);
+        $newId = $backend->createCalendar($calendarInfo['principaluri'] ,$calendarInfo['uri'], array());
+        $backend->saveCalendarPublicRight($newId, $publicRight, $calendarInfo);
 
         $this->assertEquals($publicRight, $backend->getCalendarPublicRight($newId));
 
-        $backend->saveCalendarPublicRight($newId, null);
+        $backend->saveCalendarPublicRight($newId, null, $calendarInfo);
 
         $this->assertEquals('', $backend->getCalendarPublicRight($newId));
     }
@@ -889,7 +898,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     function testSetCalendarPublicRightWithWrongAttribute() {
         $backend = $this->getBackend();
         try {
-            $backend->saveCalendarPublicRight(null, '');
+            $backend->saveCalendarPublicRight(null, '', []);
         } catch(\Exception $exception) {
             $this->assertTrue($exception instanceof \LogicException);
             $this->assertEquals($exception->getMessage(), 'The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');

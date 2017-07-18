@@ -295,7 +295,11 @@ END:VCALENDAR'
 
         $this->publicCal = $this->publicCaldavCalendar;
         $this->publicCal['id'] = $this->caldavBackend->createCalendar($this->publicCal['principaluri'], $this->publicCal['uri'], $this->publicCal);
-        $this->caldavBackend->saveCalendarPublicRight($this->publicCal['id'], '{DAV:}all');
+
+        $calendarInfo = [];
+        $calendarInfo['principaluri'] = $this->publicCal['principaluri'];
+        $calendarInfo['uri'] = $this->publicCal['uri'];
+        $this->caldavBackend->saveCalendarPublicRight($this->publicCal['id'], '{DAV:}all', $calendarInfo);
         $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'privateRecurEvent.ics', $this->privateRecurEvent);
 
         $this->delegatedCal = $this->delegatedCaldavCalendar;

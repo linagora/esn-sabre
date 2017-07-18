@@ -858,10 +858,13 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return [$this->db->selectCollection($this->calendarInstancesTableName), ['calendarid' => $mongoCalendarId]];
     }
 
-    function saveCalendarPublicRight($calendarId, $privilege) {
+    function saveCalendarPublicRight($calendarId, $privilege, $calendarInfo) {
         list($collection, $query) = $this->prepareRequestForCalendarPublicRight($calendarId);
 
         $collection->update($query, ['$set' => ['public_right' => $privilege]]);
+        if(!in_array($privilege, ['{DAV:}read', '{DAV:}write'])) {
+            $this->deleteSubscribers($calendarInfo['principaluri'], $calendarInfo['uri']);
+        }
     }
 
     function saveCalendarInviteStatus($calendarId, $status) {

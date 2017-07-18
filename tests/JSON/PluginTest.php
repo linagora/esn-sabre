@@ -912,8 +912,12 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'uri' => 'publicCalToRemove',
         );
 
+        $calendarInfo = [];
+        $calendarInfo['principaluri'] = $publicCaldavCalendar['principaluri'];
+        $calendarInfo['uri'] = $publicCaldavCalendar['uri'];
+
         $publicCaldavCalendar['id'] = $this->caldavBackend->createCalendar($publicCaldavCalendar['principaluri'], $publicCaldavCalendar['uri'], $publicCaldavCalendar);
-        $this->caldavBackend->saveCalendarPublicRight($publicCaldavCalendar['id'], '{DAV:}read');
+        $this->caldavBackend->saveCalendarPublicRight($publicCaldavCalendar['id'], '{DAV:}read', $calendarInfo);
 
         $subscriptionBody = [
             'id' => 'publicCalToRemoveSubscription',

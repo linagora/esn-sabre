@@ -303,7 +303,7 @@ END:VCALENDAR'
         $this->delegateCalendar();
 
         $this->subscription = $this->caldavSubscription;
-        $this->subscription['{http://calendarserver.org/ns/}source'] = new \Sabre\DAV\Xml\Property\Href('/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
+        $this->subscription['{http://calendarserver.org/ns/}source'] = new \Sabre\DAV\Xml\Property\Href('calendars/54b64eadf6d7d8e41d263e0e/publicCal1');
         $this->subscription['id'] = $this->caldavBackend->createSubscription($this->subscription['principaluri'], $this->subscription['uri'], $this->subscription);
 
         $book = $this->carddavAddressBook;

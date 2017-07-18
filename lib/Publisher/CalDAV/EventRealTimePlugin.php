@@ -95,11 +95,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     function addSharedUsers($topic, $calendar, $calendarPathObject, $data, $old_event = null) {
         if ($calendar instanceof \ESN\CalDAV\SharedCalendar) {
-            $options = [
-                'baseUri' => $this->server->getBaseUri(),
-                'extension' => '.json'
-            ];
-            $subscribers = $calendar->getSubscribers($options);
+
+            $subscribers = $calendar->getSubscribers();
             $invites = $calendar->getInvites();
             $calendarid = $calendar->getCalendarId();
 

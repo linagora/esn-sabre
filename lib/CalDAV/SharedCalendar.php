@@ -5,6 +5,12 @@ namespace ESN\CalDAV;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 
 class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
+    const PUBLIC_RIGHTS = [
+        '{DAV:}all',
+        '{DAV:}read',
+        '{DAV:}write',
+        '{' . Plugin::NS_CALDAV . '}read-free-busy'
+    ];
 
     function __construct(\Sabre\CalDAV\SharedCalendar $sharedCalendar) {
         parent::__construct($sharedCalendar->caldavBackend, $sharedCalendar->calendarInfo);
@@ -123,7 +129,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
         $public = $this->getPublicRight();
 
-        return isset($public);
+        return in_array($public, self::PUBLIC_RIGHTS);
 
     }
 

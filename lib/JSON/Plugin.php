@@ -902,6 +902,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
 
             $supportedPrivileges = $this->server->getPlugin('acl')->getFlatPrivilegeSet($node);
+            $supportedPrivileges[""] = "Private";
             if (!isset($supportedPrivileges[$jsonData->public_right])) {
                 throw new \Sabre\DAVACL\Exception\NotSupportedPrivilege('The privilege you specified (' . $jsonData->public_right . ') is not recognized by this server');
             }

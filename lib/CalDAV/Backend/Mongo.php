@@ -862,8 +862,12 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         list($collection, $query) = $this->prepareRequestForCalendarPublicRight($calendarId);
 
         $collection->update($query, ['$set' => ['public_right' => $privilege]]);
+
         if(!in_array($privilege, ['{DAV:}read', '{DAV:}write'])) {
+            $this->eventEmitter->emit('esn:updatePublicRight', [$this->getCalendarPath($calendarInfo['principaluri'], $calendarInfo['uri']), false]);
             $this->deleteSubscribers($calendarInfo['principaluri'], $calendarInfo['uri']);
+        } else {
+            $this->eventEmitter->emit('esn:updatePublicRight', [$this->getCalendarPath($calendarInfo['principaluri'], $calendarInfo['uri']), true]);
         }
     }
 

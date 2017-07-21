@@ -163,7 +163,7 @@ if(!empty($config['amqp']['host'])){
     $eventRealTimePlugin = new ESN\Publisher\CalDAV\EventRealTimePlugin($AMQPPublisher, $calendarBackend);
     $server->addPlugin($eventRealTimePlugin);
 
-    $calendarRealTimePlugin = new ESN\Publisher\CalDAV\CalendarRealTimePlugin($AMQPPublisher, $calendarBackend->getEventEmitter());
+    $calendarRealTimePlugin = new ESN\Publisher\CalDAV\CalendarRealTimePlugin($AMQPPublisher, $calendarBackend);
     $server->addPlugin($calendarRealTimePlugin);
 
     $subscriptionRealTimePlugin = new ESN\Publisher\CalDAV\SubscriptionRealTimePlugin($AMQPPublisher, $calendarBackend->getEventEmitter());

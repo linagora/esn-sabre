@@ -144,7 +144,7 @@ class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
             ->method('publish')
             ->with('calendar:calendar:updated', json_encode($thirdExpectedData) );
 
-        $this->plugin->updatePublicRight('/' . self::PATH, true);
+        $this->plugin->updatePublicRight('/' . self::PATH);
     }
 
     function testCalendarPublicRightUpdatedWithoutSubscribers() {

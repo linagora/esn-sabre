@@ -9,6 +9,7 @@ use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Document;
 use Sabre\Uri;
 use Sabre\Event\EventEmitter;
+use \ESN\Utils\Utils as Utils;
 
 class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
@@ -105,13 +106,12 @@ class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 ];
             }
 
-            $principalArray = explode('/', $instance['sharee']->principal);
-            $nodeInstance = '/calendars/' . $principalArray[2] . '/' . $instance['uri'];
+            $calendarPath = Utils::calendarPathFromUri($instance['sharee']->principal,  $instance['uri']);
 
             $this->createMessage(
                 $topic,
                 [
-                    'calendarPath' => $nodeInstance,
+                    'calendarPath' => $calendarPath,
                     'calendarProps' => $props
                 ]
             );
@@ -133,8 +133,7 @@ class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $subscribers = $calendar->getSubscribers();
 
             foreach($subscribers as $subscriber) {
-                $principalUriExploded = explode('/', $subscriber['principaluri']);
-                $path = '/calendars/' . $principalUriExploded[2] . '/' . $subscriber['uri'];
+                $path = Utils::calendarPathFromUri($subscriber['principaluri'], $subscriber['uri']);
 
                 $this->createMessage(
                     $topic,
@@ -154,8 +153,7 @@ class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 }
             }
 
-            $uriExploded = explode('/', $invite->principal);
-            $path = '/calendars/' . $uriExploded[2] . '/' . $calendarUri;
+            $path = Utils::calendarPathFromUri($invite->principal, $calendarUri);
 
             $this->createMessage(
             $topic,

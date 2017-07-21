@@ -7,6 +7,7 @@ use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Document;
 use Sabre\Uri;
+use \ESN\Utils\Utils as Utils;
 
 class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     const PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN = 101;
@@ -104,8 +105,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $objectUri = $pathExploded[3];
 
             foreach($subscribers as $subscriber) {
-                $principalUriExploded = explode('/', $subscriber['principaluri']);
-                $path = '/calendars/' . $principalUriExploded[2] . '/' . $subscriber['uri'] . '/' . $objectUri;
+                $path = Utils::objectPathFromUri($subscriber['principaluri'],  $subscriber['uri'], $objectUri);
+
                 $event = \Sabre\VObject\Reader::read($data);
                 $event->remove('method');
 
@@ -130,8 +131,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                     }
                 }
 
-                $uriExploded = explode('/', $user->principal);
-                $path = '/calendars/' . $uriExploded[2] . '/' . $calendarUri . '/' . $objectUri;
+                $path = Utils::objectPathFromUri($user->principal,  $calendarUri, $objectUri);
+
                 $event = \Sabre\VObject\Reader::read($data);
                 $event->remove('method');
 

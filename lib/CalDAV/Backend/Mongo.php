@@ -867,7 +867,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $this->eventEmitter->emit('esn:updatePublicRight', [$this->getCalendarPath($calendarInfo['principaluri'], $calendarInfo['uri']), false]);
             $this->deleteSubscribers($calendarInfo['principaluri'], $calendarInfo['uri']);
         } else {
-            $this->eventEmitter->emit('esn:updatePublicRight', [$this->getCalendarPath($calendarInfo['principaluri'], $calendarInfo['uri']), true]);
+            $this->eventEmitter->emit('esn:updatePublicRight', [$this->getCalendarPath($calendarInfo['principaluri'], $calendarInfo['uri'])]);
         }
     }
 

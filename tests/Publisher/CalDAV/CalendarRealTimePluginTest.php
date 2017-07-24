@@ -6,19 +6,17 @@ require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
     const PATH = "calendars/123123/uid.ics";
-    const ETAG = 'The etag';
-
     protected $eventEmitter;
     protected $plugin;
     protected $publisher;
     protected $server;
 
     function setUp() {
-        $this->eventEmitter = $this->getMock(\Sabre\Event\EventEmitter::class);
-        $this->eventEmitter->expects($this->exactly(4))->method('on');
+        $this->calendarBackend = new CalendarBackendMock();
+        $this->calendarBackend->setEventEmitter($this->getMock(\Sabre\Event\EventEmitter::class));
 
         $this->publisher = $this->getMock(\ESN\Publisher\Publisher::class);
-        $this->plugin = new CalendarRealTimePlugin($this->publisher, $this->eventEmitter);
+        $this->plugin = new CalendarRealTimePlugin($this->publisher, $this->calendarBackend, $this->getMock(\Sabre\Event\EventEmitter::class));
         
         $this->server = $this->getMock(\Sabre\DAV\Server::class);
         $this->mockTree();
@@ -34,9 +32,27 @@ class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->server->expects($this->any())->method('getPlugin')
             ->willReturn($this->getMock(\ESN\DAV\Sharing\Plugin::class));
 
-        $nodeMock = $this->getMockBuilder('\Sabre\CalDAV\Calendar')->disableOriginalConstructor()->getMock();
-        $nodeMock->expects($this->any())->method('getETag')->willReturn(self::ETAG);
+        $nodeMock = $this->getMockBuilder('\Sabre\CalDAV\Calendar')
+            ->disableOriginalConstructor()
+            ->setMethods(array('getProperties', 'getSubscribers', 'getInvites', 'getCalendarId', 'getPublicRight'))
+            ->getMock();
         $nodeMock->expects($this->any())->method('getProperties')->willReturn(array());
+        $nodeMock->expects($this->any())->method('getPublicRight')->willReturn('privilege');
+        $nodeMock->expects($this->any())->method('getCalendarId')->willReturn('calID');
+        $nodeMock->expects($this->any())->method('getSubscribers')
+            ->willReturn([
+                [
+                    'principaluri' => 'principals/users/1',
+                    'uri' => 'uri1'
+                ], [
+                    'principaluri' => 'principals/users/2',
+                    'uri' => 'uri2'
+                ]
+            ]);
+        $nodeMock->expects($this->any())->method('getInvites')
+            ->willReturn([
+                new ShareeSimple('principal/users/3', 1, 2)
+            ]);
 
         $this->server->tree->expects($this->any())->method('getNodeForPath')
             ->with('/'.self::PATH)
@@ -82,6 +98,75 @@ class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
             ->method('publish')
             ->with('calendar:calendar:updated');
         $this->plugin->calendarUpdated('/' . self::PATH);
+    }
+
+    function testCalendarPublicRightUpdatedWithSubscribers() {
+
+        $this->publisher
+            ->expects($this->exactly(3))
+            ->method('publish')
+            ->with('calendar:calendar:updated');
+
+        $firstExpectedData = [
+            'calendarPath' => '/calendars/1/uri1',
+            'calendarProps' => [
+                'public_right' => 'privilege'
+            ]
+        ];
+
+        $this->publisher
+            ->expects($this->at(0))
+            ->method('publish')
+            ->with('calendar:calendar:updated', json_encode($firstExpectedData) );
+
+
+        $secondfirstExpectedData = [
+            'calendarPath' => '/calendars/2/uri2',
+            'calendarProps' => [
+                'public_right' => 'privilege'
+            ]
+        ];
+
+        $this->publisher
+            ->expects($this->at(1))
+            ->method('publish')
+            ->with('calendar:calendar:updated', json_encode($secondfirstExpectedData) );
+
+        $thirdExpectedData = [
+            'calendarPath' => '/calendars/3/uri3',
+            'calendarProps' => [
+                'public_right' => 'privilege'
+            ]
+        ];
+
+        $this->publisher
+            ->expects($this->at(2))
+            ->method('publish')
+            ->with('calendar:calendar:updated', json_encode($thirdExpectedData) );
+
+        $this->plugin->updatePublicRight('/' . self::PATH);
+    }
+
+    function testCalendarPublicRightUpdatedWithoutSubscribers() {
+
+        $this->publisher
+            ->expects($this->exactly(1))
+            ->method('publish')
+            ->with('calendar:calendar:updated');
+
+        $expectedData = [
+            'calendarPath' => '/calendars/3/uri3',
+            'calendarProps' => [
+                'public_right' => 'privilege'
+            ]
+        ];
+
+        $this->publisher
+            ->expects($this->at(0))
+            ->method('publish')
+            ->with('calendar:calendar:updated', json_encode($expectedData) );
+
+        $this->plugin->updatePublicRight('/' . self::PATH, false);
     }
 
     function testUpdateMultipleSharees() {
@@ -215,5 +300,30 @@ class ShareeSimple {
         $this->principal = $principal;
         $this->access = $access;
         $this->inviteStatus = $inviteStatus;
+    }
+}
+
+class CalendarBackendMock extends \ESN\CalDAV\CalDAVBackendMock {
+
+    protected $eventEmitter;
+
+    function getCalendarsForUser($principalUri) {
+        return [
+            [
+                'id' => [
+                    'calID',
+                    'instanceID'
+                ],
+                'uri' => 'uri3'
+            ]
+        ];
+    }
+
+    function setEventEmitter($value) {
+        $this->eventEmitter = $value;
+    }
+
+    function getEventEmitter() {
+        return $this->eventEmitter;
     }
 }

@@ -16,4 +16,16 @@ class Utils {
         return null;
     }
 
+    static function calendarPathFromUri($principal, $calendarUri) {
+        $uriExploded = explode('/', $principal);
+
+        return '/calendars/' . $uriExploded[2] . '/' . $calendarUri;
+    }
+
+    static function objectPathFromUri($principal, $calendarUri, $objectUri) {
+        $uriExploded = explode('/', $principal);
+
+        return '/calendars/' . $uriExploded[2] . '/' . $calendarUri . '/' . $objectUri;
+    }
+
 }

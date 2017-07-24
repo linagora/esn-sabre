@@ -9,10 +9,11 @@ use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Document;
 use Sabre\Uri;
 use Sabre\Event\EventEmitter;
+use \ESN\Utils\Utils as Utils;
 
 class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
-    protected $eventEmitter;
+    protected $caldavBackend;
 
     private $CALENDAR_TOPICS = [
         'CALENDAR_CREATED' => 'calendar:calendar:created',
@@ -20,18 +21,21 @@ class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         'CALENDAR_DELETED' => 'calendar:calendar:deleted',
     ];
 
-    function __construct($client, $eventEmitter) {
+    function __construct($client, $caldavBackend) {
         parent::__construct($client);
-        $this->eventEmitter = $eventEmitter;
+        $this->caldavBackend = $caldavBackend;
     }
 
     function initialize(Server $server) {
         parent::initialize($server);
 
-        $this->eventEmitter->on('esn:calendarCreated', [$this, 'calendarCreated']);
-        $this->eventEmitter->on('esn:calendarUpdated', [$this, 'calendarUpdated']);
-        $this->eventEmitter->on('esn:calendarDeleted', [$this, 'calendarDeleted']);
-        $this->eventEmitter->on('esn:updateSharees', [$this, 'updateSharees']);
+        $eventEmitter = $this->caldavBackend->getEventEmitter();
+
+        $eventEmitter->on('esn:calendarCreated', [$this, 'calendarCreated']);
+        $eventEmitter->on('esn:calendarUpdated', [$this, 'calendarUpdated']);
+        $eventEmitter->on('esn:calendarDeleted', [$this, 'calendarDeleted']);
+        $eventEmitter->on('esn:updateSharees', [$this, 'updateSharees']);
+        $eventEmitter->on('esn:updatePublicRight', [$this, 'updatePublicRight']);
     }
 
     function getCalendarProps($node) {
@@ -88,27 +92,73 @@ class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 continue;
             }
             else if ($instance['type'] == 'delete') {
-                $event = $this->CALENDAR_TOPICS['CALENDAR_DELETED'];
+                $topic = $this->CALENDAR_TOPICS['CALENDAR_DELETED'];
                 $props = null;
             } else if ($instance['type'] == 'create') {
-                $event = $this->CALENDAR_TOPICS['CALENDAR_CREATED'];
+                $topic = $this->CALENDAR_TOPICS['CALENDAR_CREATED'];
                 $props = [
                     'access' => $sharingPlugin->accessToRightRse($instance['sharee']->access)
                 ];
             } else if ($instance['type'] == 'update') {
-                $event = $this->CALENDAR_TOPICS['CALENDAR_UPDATED'];
+                $topic = $this->CALENDAR_TOPICS['CALENDAR_UPDATED'];
                 $props = [
                     'access' => $sharingPlugin->accessToRightRse($instance['sharee']->access)
                 ];
             }
 
-            $principalArray = explode('/', $instance['sharee']->principal);
-            $nodeInstance = '/calendars/' . $principalArray[2] . '/' . $instance['uri'];
+            $calendarPath = Utils::calendarPathFromUri($instance['sharee']->principal,  $instance['uri']);
 
             $this->createMessage(
-                $event,
+                $topic,
                 [
-                    'calendarPath' => $nodeInstance,
+                    'calendarPath' => $calendarPath,
+                    'calendarProps' => $props
+                ]
+            );
+        }
+
+        $this->publishMessages();
+    }
+
+    function updatePublicRight($path, $notifySubscribers = true) {
+        $topic = $this->CALENDAR_TOPICS['CALENDAR_UPDATED'];
+        $calendar = $this->server->tree->getNodeForPath($path);
+
+        $props = ['public_right' => $calendar->getPublicRight()];
+
+        $invites = $calendar->getInvites();
+        $calendarid = $calendar->getCalendarId();
+
+        if ($notifySubscribers) {
+            $subscribers = $calendar->getSubscribers();
+
+            foreach($subscribers as $subscriber) {
+                $path = Utils::calendarPathFromUri($subscriber['principaluri'], $subscriber['uri']);
+
+                $this->createMessage(
+                    $topic,
+                    [
+                        'calendarPath' => $path,
+                        'calendarProps' => $props
+                    ]
+                );
+            }
+        }
+
+        foreach($invites as $invite) {
+            $calendars = $this->caldavBackend->getCalendarsForUser($invite->principal);
+            foreach($calendars as $calendarUser) {
+                if($calendarUser['id'][0] == $calendarid) {
+                    $calendarUri = $calendarUser['uri'];
+                }
+            }
+
+            $path = Utils::calendarPathFromUri($invite->principal, $calendarUri);
+
+            $this->createMessage(
+            $topic,
+                [
+                    'calendarPath' => $path,
                     'calendarProps' => $props
                 ]
             );

@@ -96,11 +96,12 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $plugin = $this->getPlugin();
         $data = $plugin->buildData([
             'eventPath' => $path,
-            'eventSource' => self::PATH,
+            'eventSourcePath' => self::PATH,
             'event' => 'event'
         ]);
 
         $this->assertEquals($data['eventPath'], $path);
+        $this->assertEquals($data['eventSourcePath'], self::PATH);
         $this->assertEquals($data['etag'], self::ETAG);
         $this->assertEquals($data['event'], 'event');
     }

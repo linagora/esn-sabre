@@ -47,8 +47,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     function buildData($data) {
-        if(isset( $data['eventSource'])) {
-            $path = '/' . $data['eventSource'];
+        if(isset( $data['eventSourcePath'])) {
+            $path = '/' . $data['eventSourcePath'];
         } else  {
             $path = $data['eventPath'];
         }
@@ -112,7 +112,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
                 $dataMessage = [
                     'eventPath' => $path,
-                    'eventSource' => $calendarPathObject,
+                    'eventSourcePath' => '/' . $calendarPathObject,
                     'event' => $event
                 ];
 

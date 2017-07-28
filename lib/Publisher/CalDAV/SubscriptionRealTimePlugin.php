@@ -36,8 +36,8 @@ class SubscriptionRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         return $data;
     }
 
-    function prepareAndPublishMessages($path, $topic) {
-        $this->createMessage($topic, ['calendarPath' => $path]);
+    function prepareAndPublishMessages($path, $topic, $sourcePath = null) {
+        $this->createMessage($topic, ['calendarPath' => $path, 'calendarSourcePath' => $sourcePath]);
         $this->publishMessages();
     }
 
@@ -49,7 +49,7 @@ class SubscriptionRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $this->prepareAndPublishMessages($path, $this->SUBSCRIPTION_TOPICS['SUBSCRIPTION_UPDATED']);
     }
 
-    function subscriptionDeleted($path) {
-        $this->prepareAndPublishMessages($path, $this->SUBSCRIPTION_TOPICS['SUBSCRIPTION_DELETED']);
+    function subscriptionDeleted($path, $sourcePath) {
+        $this->prepareAndPublishMessages($path, $this->SUBSCRIPTION_TOPICS['SUBSCRIPTION_DELETED'], $sourcePath);
     }
 }

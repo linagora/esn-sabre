@@ -660,12 +660,13 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $query = [ '_id' => new \MongoId($subscriptionId) ];
         $fields = [
             'uri',
-            'principaluri'
+            'principaluri',
+            'source'
         ];
         $row = $collection->findOne($query, $fields);
         $collection->remove($query);
 
-        $this->eventEmitter->emit('esn:subscriptionDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
+        $this->eventEmitter->emit('esn:subscriptionDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri']), '/' . $row['source']]);
         
     }
 

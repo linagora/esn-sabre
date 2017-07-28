@@ -5,6 +5,8 @@ services:
 
 stages:
   - build
+  - build_pkg_deb
+  - build_pkg_rpm
   - deploy_dev
 
 build:
@@ -18,6 +20,42 @@ build:
     - ./vendor/bin/phpcs -p --standard=vendor/sabre/dav/tests/phpcs/ruleset.xml --report-checkstyle=checkstyle.xml lib/
     - cd tests
     - ../vendor/bin/phpunit --coverage-clover=${CI_PROJECT_DIR}/clover.xml --log-junit=${CI_PROJECT_DIR}/junit.xml .
+
+build_pkg_deb:
+  stage: build_pkg_deb
+  variables:
+    GIT_STRATEGY: none
+  tags:
+    - master
+  only:
+    - master
+  script:
+    - curl -s -X POST
+      -F "token=40f79bcbeb736c5b211be0e42f1643"
+      -F "ref=master"
+      -F "variables[REPO]=https://ci.linagora.com/linagora/lgs/openpaas/esn-sabre.git"
+      -F "variables[VERSION_FILE]=composer.json"
+      -F "variables[PACKAGE_NAME]=openpaas-davserver"
+      -F "variables[DOCKERFILE]=debian/jessie/Dockerfile"
+      https://ci.linagora.com/api/v4/projects/338/trigger/pipeline | jq .
+
+build_pkg_rpm:
+  stage: build_pkg_rpm
+  variables:
+    GIT_STRATEGY: none
+  tags:
+    - master
+  only:
+    - master
+  script:
+    - curl -s -X POST
+      -F "token=40f79bcbeb736c5b211be0e42f1643"
+      -F "ref=master"
+      -F "variables[REPO]=https://ci.linagora.com/linagora/lgs/openpaas/esn-sabre.git"
+      -F "variables[VERSION_FILE]=composer.json"
+      -F "variables[PACKAGE_NAME]=openpaas-davserver"
+      -F "variables[DOCKERFILE]=redhat/7/Dockerfile"
+      https://ci.linagora.com/api/v4/projects/338/trigger/pipeline | jq .
 
 deploy_dev:
   stage: deploy_dev

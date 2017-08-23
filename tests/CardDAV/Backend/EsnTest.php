@@ -17,18 +17,29 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $backend = $this->getBackend();
         $books = $backend->getAddressBooksForUser('principals/user2');
 
-        $elementCheck = array(
+        $contactAddressBook = array(
             'uri'               => $backend->CONTACTS_URI,
             '{DAV:}displayname' => '',
             '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
         );
 
-        $this->assertInternalType('array',$books);
-        $this->assertEquals(1,count($books));
+        $collectedAddressBook = array(
+            'uri'               => $backend->COLLECTED_URI,
+            '{DAV:}displayname' => '',
+            '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
+        );
 
-        foreach ($elementCheck as $name => $value) {
-            $this->assertArrayHasKey($name, $books[0]);
-            $this->assertEquals($value,$books[0][$name]);
+        $this->assertInternalType('array',$books);
+        $this->assertEquals(2, count($books));
+
+        $this->checkAddressbook($contactAddressBook, $books[0]);
+        $this->checkAddressbook($collectedAddressBook, $books[1]);
+    }
+
+    private function checkAddressbook($expected, $item) {
+        foreach ($expected as $name => $value) {
+            $this->assertArrayHasKey($name, $item);
+            $this->assertEquals($value, $item[$name]);
         }
     }
 }

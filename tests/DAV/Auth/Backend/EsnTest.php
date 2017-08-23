@@ -4,8 +4,13 @@ namespace ESN\DAV\Auth\Backend;
 
 class EsnTest extends \PHPUnit_Framework_TestCase {
     function testAuthenticateTokenSuccess() {
+        $authNotificationResult = [];
         $esnauth = new EsnMock('http://localhost:8080/');
         $client = $esnauth->getClient();
+        $eventEmitter = $esnauth->getEventEmitter();
+        $eventEmitter->on("auth:success", function($principal) use (&$authNotificationResult) {
+            $authNotificationResult[] = $principal;
+        });
 
         $client->on('curlExec', function(&$return) {
             $return = "HTTP 200 OK\r\nSet-Cookie: test=passed\r\n\r\n{\"_id\":\"123456789\",\"type\":\"user\",\"firstname\":\"John\",\"lastname\":\"Doe\",\"emails\":[\"johndoe@linagora.com\"]}";
@@ -23,6 +28,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($rv);
         $this->assertEquals($esnauth->getCurrentPrincipal(), 'principals/users/123456789');
         $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
+        $this->assertEquals(['principals/users/123456789'], $authNotificationResult);
     }
 
     function testAuthenticateTokenAsTechnicalUser() {

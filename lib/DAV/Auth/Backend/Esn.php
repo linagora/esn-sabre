@@ -4,6 +4,7 @@ namespace ESN\DAV\Auth\Backend;
 
 use \Sabre\DAV;
 use \Sabre\HTTP;
+use Sabre\Event\EventEmitter;
 
 class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
@@ -20,10 +21,15 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     function __construct($apiroot, $realm = null) {
         $this->apiroot = $apiroot;
         $this->httpClient = new HTTP\Client();
+        $this->eventEmitter = new EventEmitter();
 
         if (!is_null($realm)) {
             $this->realm = $realm;
         }
+    }
+
+    public function getEventEmitter() {
+        return $this->eventEmitter;
     }
 
     private function checkAuthByToken($token) {
@@ -111,6 +117,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         if ($rv) {
+            $this->eventEmitter->emit("auth:success", [$this->getCurrentPrincipal()]);
             $msg = ($type == $this->technicalUserType) ? $this->technicalPrincipal : $this->getCurrentPrincipal();
         }
 

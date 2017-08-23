@@ -56,6 +56,11 @@ $calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb);
 $addressbookBackend = new ESN\CardDAV\Backend\Esn($sabreDb);
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
 
+// listener
+$authEmitter = $authBackend->getEventEmitter();
+$authEmitter->on("auth:success", [$addressbookBackend, "getAddressBooksForUser"]);
+$authEmitter->on("auth:success", [$calendarBackend, "getCalendarsForUser"]);
+
 // Directory structure
 $tree = [
     new Sabre\DAV\SimpleCollection(PRINCIPALS_COLLECTION, [

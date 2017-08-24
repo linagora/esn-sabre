@@ -785,6 +785,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 ])
             ]
         );
+        $backend->saveCalendarInviteStatus($calendars[0]['id'], \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED);
         $result = $backend->getInvites($calendar['id']);
         $expected = [
             $ownerSharee,
@@ -792,7 +793,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 'href'         => 'mailto:user@example.org',
                 'principal'    => 'principals/user2/userID',
                 'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
-                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
                 'properties'   => [
                     '{DAV:}displayname' => 'User 2',
                 ],

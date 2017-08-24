@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/Mock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/MockSharing.php';
 
 /**

@@ -2,7 +2,7 @@
 
 set_include_path(__DIR__ . '/../lib/' . PATH_SEPARATOR . __DIR__ . PATH_SEPARATOR . get_include_path());
 
-define('CONFIG_PATH', __DIR__ . '/../config.json');
+define('CONFIG_PATH', __DIR__ . '/../config.tests.json');
 
 $autoLoader = include __DIR__ . '/../vendor/autoload.php';
 

@@ -1258,16 +1258,12 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals(200, $response->status);
 
         $sharees = $this->caldavBackend->getInvites($this->cal['id']);
-        $this->assertEquals(count($sharees), 5);
+        $this->assertEquals(count($sharees), 3);
         $this->assertEquals($sharees[1]->href, 'mailto:johndoe@example.org');
         $this->assertEquals($sharees[1]->properties['{DAV:}displayname'], 'With John Doe');
         $this->assertEquals($sharees[1]->access, 3);
         $this->assertEquals($sharees[2]->href, 'mailto:johndoe2@example.org');
         $this->assertEquals($sharees[2]->access, 2);
-        $this->assertEquals($sharees[3]->href, 'mailto:johndoe3@example.org');
-        $this->assertEquals($sharees[3]->access, 5);
-        $this->assertEquals($sharees[4]->href, 'mailto:johndoe4@example.org');
-        $this->assertEquals($sharees[4]->access, 6);
     }
 
     function testCalendarUpdateInviteStatus() {

@@ -124,6 +124,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             }
 
             foreach($invites as $user) {
+                if($user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
+                    continue;
+                }
+
                 $calendars = $this->caldavBackend->getCalendarsForUser($user->principal);
                 foreach($calendars as $calendarUser) {
                     if($calendarUser['id'][0] == $calendarid) {

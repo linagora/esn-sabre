@@ -845,6 +845,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $res = $collection->find($query, $fields);
         $result = [];
         foreach ($res as $row) {
+            if($row['share_invitestatus'] === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
+                continue;
+            }
+
             $result[] = new \Sabre\DAV\Xml\Element\Sharee([
                 'href' => isset($row['share_href']) ? $row['share_href'] : \Sabre\HTTP\encodePath($row['principaluri']),
                 'access' => (int)$row['access'],

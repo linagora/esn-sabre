@@ -696,6 +696,18 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $backend = $this->getBackend();
         $backend->createCalendar('principals/user1/userID', 'somerandomid', []);
         $calendar = $backend->getCalendarsForUser('principals/user1/userID')[0];
+        $backend->updateInvites(
+            $calendar['id'],
+            [
+                new Sharee([
+                    'href'         => 'mailto:user2@example.org',
+                    'principal'    => null,
+                    'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+                    'properties'   => ['{DAV:}displayname' => 'User 2'],
+                ])
+            ]
+        );
+
         $result = $backend->getInvites($calendar['id']);
 
         $expected = [

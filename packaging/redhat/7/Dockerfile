@@ -17,7 +17,7 @@ RUN curl -sS https://getcomposer.org/installer | php && \
     mv composer.phar /usr/local/bin/composer.phar && \
     ln -s /usr/local/bin/composer.phar /usr/local/bin/composer
 
-RUN git clone --no-single-branch --depth=1 https://ci.open-paas.org/stash/scm/or/esn-sabre.git /package/usr/share/openpaas-davserver
+RUN git clone --no-single-branch --depth=1 https://ci.linagora.com/linagora/lgs/openpaas/esn-sabre.git /package/usr/share/openpaas-davserver
 
 ADD common/package /package
 ADD redhat/7/package /package

@@ -10,7 +10,7 @@ Those are the steps needed on an [Ubuntu](http://ubuntu.com/) distribution, but 
 
 ```bash
 cd /var/www/html
-git clone https://ci.open-paas.org/stash/scm/or/esn-sabre.git
+git clone https://ci.linagora.com/linagora/lgs/openpaas/esn-sabre.git
 ```
 
 The OpenPaaS frontend is managed through [composer](https://getcomposer.org/), all requirements can easily be set up using:

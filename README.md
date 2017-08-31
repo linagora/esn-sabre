@@ -186,3 +186,20 @@ docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=19
 ```
 
 This will launch the Sabre container, create its configuration, launch Sabre and expose on port 8001 on your host.
+
+### Test
+
+You can run the unit test with Docker to avoid to install all the PHP tools and dependencies locally.
+Unit tests need a MongoDB container to run:
+
+```
+docker run --name mongo -d mongo:3.2.0
+```
+
+Once MongoDB container is started, you can run the unit test like this:
+
+```
+docker run -a stdout -i -t -v $PWD:/var/www --link mongo:mongo linagora/esn-sabre make
+```
+
+It will use the `linagora/esn-sabre` image, you may need to rebuid it in some cases, but the `make` command will update composer dependencies automatically.

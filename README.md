@@ -79,8 +79,7 @@ apt-get install libapache2-mod-php5
 Ubuntu 16.04
 
 ```bash
-apt install php5.6
-apt install libapache2-mod-php5.6
+apt install php5.6 php5.6-bcmath libapache2-mod-php5.6
 ```
 
 -	Install mongodb & curl support in PHP

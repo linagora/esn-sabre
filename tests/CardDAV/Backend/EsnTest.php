@@ -36,6 +36,39 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $this->checkAddressbook($collectedAddressBook, $books[1]);
     }
 
+    function testGetAddressBooksForUserWhenOtherThanDefaultExists() {
+        $backend = $this->getBackend();
+
+        $backend->createAddressBook('principals/user2', 'anotheraaddressbook', []);
+
+        $anotherAddressBook = array(
+            'uri'               => 'anotheraaddressbook',
+            '{DAV:}displayname' => '',
+            '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
+        );
+
+        $contactAddressBook = array(
+            'uri'               => $backend->CONTACTS_URI,
+            '{DAV:}displayname' => '',
+            '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
+        );
+
+        $collectedAddressBook = array(
+            'uri'               => $backend->COLLECTED_URI,
+            '{DAV:}displayname' => '',
+            '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
+        );
+
+        $books = $backend->getAddressBooksForUser('principals/user2');
+
+        $this->assertInternalType('array',$books);
+        $this->assertEquals(3, count($books));
+
+        $this->checkAddressbook($anotherAddressBook, $books[0]);
+        $this->checkAddressbook($contactAddressBook, $books[1]);
+        $this->checkAddressbook($collectedAddressBook, $books[2]);
+    }
+
     private function checkAddressbook($expected, $item) {
         foreach ($expected as $name => $value) {
             $this->assertArrayHasKey($name, $item);

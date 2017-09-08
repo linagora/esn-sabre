@@ -36,6 +36,16 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         return $addressBooks;
     }
 
+    function addressBookExists($principalUri, $uri) {
+        $fields = ['_id', 'uri'];
+        $query = [ 'principaluri' => $principalUri, 'uri' => $uri];
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+
+        $doc = $collection->findOne($query, $fields);
+
+        return !empty($doc);
+    }
+
     function updateAddressBook($addressBookId, \Sabre\DAV\PropPatch $propPatch) {
         $supportedProperties = [
             '{DAV:}displayname',

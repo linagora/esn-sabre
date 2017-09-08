@@ -77,6 +77,21 @@ class MongoTest extends AbstractDatabaseTest {
         $this->assertTrue($backend instanceof Mongo);
     }
 
+    function testAddressBookExists() {
+        $book = [
+            'principaluri' => 'principals/user2',
+            'displayname' => null,
+            'uri' => 'thisoneexists',
+            'description' => null,
+            'synctoken' => 1
+        ];
+
+        $this->db->addressbooks->insert($book);
+
+        $this->assertTrue($this->backend->addressBookExists('principals/user2', 'thisoneexists'));
+        $this->assertFalse($this->backend->addressBookExists('principals/user2', 'thisonedoesnotexistsatall'));
+    }
+
     function testGetCards() {
         $result = $this->backend->getCards($this->bookId);
 

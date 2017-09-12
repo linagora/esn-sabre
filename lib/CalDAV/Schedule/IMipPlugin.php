@@ -8,6 +8,7 @@ use \Sabre\VObject\ITip;
 use \Sabre\HTTP;
 use \Sabre\HTTP\RequestInterface;
 use \Sabre\HTTP\ResponseInterface;
+use \ESN\Utils\Utils as Utils;
 
 class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     protected $server;
@@ -60,12 +61,16 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         }
 
         $calendarNode = $this->server->tree->getNodeForPath($matches[1]);
+        list($homePath, $eventPath, $eventData) = Utils::getEventPathsFromItipsMessage($iTipMessage, $this->server);
+        $fullEventPath = '/' . $homePath . $eventPath;
+
         $body = json_encode([
             'email' => substr($iTipMessage->recipient, 7),
             'method' => $iTipMessage->method,
-            'event' => $iTipMessage->message->serialize(),
+            'event' => $eventData,
             'notify' => true,
-            'calendarURI' => $calendarNode->getName()
+            'calendarURI' => $calendarNode->getName(),
+            'eventPath' => $fullEventPath
         ]);
 
         $url = $this->apiroot . '/calendars/inviteattendees';

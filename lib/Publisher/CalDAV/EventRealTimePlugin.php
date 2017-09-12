@@ -20,6 +20,11 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         'EVENT_UPDATED' => 'calendar:event:updated',
         'EVENT_DELETED' => 'calendar:event:deleted',
         'EVENT_REQUEST' => 'calendar:event:request',
+        'EVENT_ALARM_CREATED' => 'calendar:event:alarm:created',
+        'EVENT_ALARM_UPDATED' => 'calendar:event:alarm:updated',
+        'EVENT_ALARM_DELETED' => 'calendar:event:alarm:deleted',
+        'EVENT_ALARM_REQUEST' => 'calendar:event:alarm:request',
+        'EVENT_ALARM_CANCEL' => 'calendar:event:alarm:cancel',
         'EVENT_REPLY' => 'calendar:event:reply',
         'EVENT_CANCEL' => 'calendar:event:cancel'
     ];
@@ -71,14 +76,14 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         if ($node instanceof \Sabre\CalDAV\CalendarObject) {
             list($parentUri) = Uri\split($path);
             $nodeParent = $this->server->tree->getNodeForPath('/'.$parentUri);
-            $this->addSharedUsers($this->EVENT_TOPICS['EVENT_DELETED'], $nodeParent, $path, $node->get());
+            $this->addSharedUsers('DELETED', $nodeParent, $path, $node->get());
         }
 
         return true;
     }
 
     function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
-        $this->addSharedUsers($this->EVENT_TOPICS['EVENT_CREATED'], $parent, $path, $data);
+        $this->addSharedUsers('CREATED', $parent, $path, $data);
 
         return true;
     }
@@ -89,12 +94,12 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $nodeParent = $this->server->tree->getNodeForPath('/'.$parentUri);
 
         $oldVcal = \Sabre\VObject\Reader::read($node->get());
-        $this->addSharedUsers($this->EVENT_TOPICS['EVENT_UPDATED'], $nodeParent, $path, $data, $oldVcal);
+        $this->addSharedUsers('UPDATED', $nodeParent, $path, $data, $oldVcal);
 
         return true;
     }
 
-    function addSharedUsers($topic, $calendar, $calendarPathObject, $data, $old_event = null) {
+    function addSharedUsers($action, $calendar, $calendarPathObject, $data, $old_event = null) {
         if ($calendar instanceof \ESN\CalDAV\SharedCalendar) {
 
             $subscribers = $calendar->getSubscribers();
@@ -104,11 +109,18 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $pathExploded = explode('/', $calendarPathObject);
             $objectUri = $pathExploded[3];
 
+            $event = \Sabre\VObject\Reader::read($data);
+            $event->remove('method');
+
+            $dataMessage = [
+                'eventPath' => '/' . $calendarPathObject,
+                'event' => $event
+            ];
+
+            $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_'.$action], $dataMessage);
+
             foreach($subscribers as $subscriber) {
                 $path = Utils::objectPathFromUri($subscriber['principaluri'],  $subscriber['uri'], $objectUri);
-
-                $event = \Sabre\VObject\Reader::read($data);
-                $event->remove('method');
 
                 $dataMessage = [
                     'eventPath' => $path,
@@ -120,7 +132,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                     $dataMessage['old_event'] = $old_event;
                 }
 
-                $this->createMessage($topic, $dataMessage);
+                $this->createMessage($this->EVENT_TOPICS['EVENT_'.$action], $dataMessage);
             }
 
             foreach($invites as $user) {
@@ -137,9 +149,6 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
                 $path = Utils::objectPathFromUri($user->principal,  $calendarUri, $objectUri);
 
-                $event = \Sabre\VObject\Reader::read($data);
-                $event->remove('method');
-
                 $dataMessage = [
                     'eventPath' => $path,
                     'event' => $event
@@ -149,91 +158,34 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                     $dataMessage['old_event'] = $old_event;
                 }
 
-                $this->createMessage($topic, $dataMessage);
+                $this->createMessage($this->EVENT_TOPICS['EVENT_'.$action], $dataMessage);
             }
         }
     }
 
     function schedule(\Sabre\VObject\ITip\Message $iTipMessage) {
-        $aclPlugin = $this->server->getPlugin('acl');
-
-        if (!$aclPlugin) {
-            error_log('No aclPlugin');
-            return true;
-        }
-
-        $caldavNS = '{' . \Sabre\CalDAV\Schedule\Plugin::NS_CALDAV . '}';
-        $principalUri = $aclPlugin->getPrincipalByUri($iTipMessage->recipient);
-        if (!$principalUri) {
-            error_log('3.7;Could not find principal.');
-            return true;
-        }
-        // We found a principal URL, now we need to find its inbox.
-        // Unfortunately we may not have sufficient privileges to find this, so
-        // we are temporarily turning off ACL to let this come through.
-        //
-        // Once we support PHP 5.5, this should be wrapped in a try..finally
-        // block so we can ensure that this privilege gets added again after.
-        $this->server->removeListener('propFind', [$aclPlugin, 'propFind']);
-        $result = $this->server->getProperties(
-            $principalUri,
-            [
-                '{DAV:}principal-URL',
-                 $caldavNS . 'calendar-home-set',
-                 $caldavNS . 'schedule-inbox-URL',
-                 $caldavNS . 'schedule-default-calendar-URL',
-                '{http://sabredav.org/ns}email-address',
-            ]
-        );
-        // Re-registering the ACL event
-        $this->server->on('propFind', [$aclPlugin, 'propFind'], 20);
-        if (!isset($result[$caldavNS . 'schedule-inbox-URL'])) {
-            error_log('5.2;Could not find local inbox');
-            return;
-        }
-        if (!isset($result[$caldavNS . 'calendar-home-set'])) {
-            error_log('5.2;Could not locate a calendar-home-set');
-            return;
-        }
-        if (!isset($result[$caldavNS . 'schedule-default-calendar-URL'])) {
-            error_log('5.2;Could not find a schedule-default-calendar-URL property');
-            return true;
-        }
-        $calendarPath = $result[$caldavNS . 'schedule-default-calendar-URL']->getHref();
-        $homePath = $result[$caldavNS . 'calendar-home-set']->getHref();
-        $inboxPath = $result[$caldavNS . 'schedule-inbox-URL']->getHref();
-        if ($iTipMessage->method === 'REPLY') {
-            $privilege = 'schedule-deliver-reply';
-        } else {
-            $privilege = 'schedule-deliver-invite';
-        }
-        if (!$aclPlugin->checkPrivileges($inboxPath, $caldavNS . $privilege, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
-            error_log('3.8;organizer did not have the ' . $privilege . ' privilege on the attendees inbox');
-            return;
-        }
-        // Next, we're going to find out if the item already exits in one of
-        // the users' calendars.
-        $uid = $iTipMessage->uid;
-        $home = $this->server->tree->getNodeForPath($homePath);
-        $eventPath = $home->getCalendarObjectByUID($uid);
-
-        if (!$eventPath) {
-            error_log("5.0;Event $uid not found in home $homePath.");
-            return;
-        }
-
+        list($homePath, $eventPath) = Utils::getEventPathsFromItipsMessage($iTipMessage, $this->server);
         $path = $homePath . $eventPath;
 
         $event = clone $iTipMessage->message;
         $event->remove('method');
 
+        $dataMessage = [
+            'eventPath' => '/' . $path,
+            'event' => $event
+        ];
+
         $this->createMessage(
             $this->EVENT_TOPICS['EVENT_'.$iTipMessage->method],
-            [
-                'eventPath' => '/' . $path,
-                'event' => $event
-            ]
+            $dataMessage
         );
+
+        if($iTipMessage->method !== 'REPLY'){
+            $this->createMessage(
+                $this->EVENT_TOPICS['EVENT_ALARM_'.$iTipMessage->method],
+                $dataMessage
+            );
+        }
 
         return true;
     }

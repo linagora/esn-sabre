@@ -14,7 +14,7 @@ MAINTAINER Linagora Folks <openpaas@linagora.com>
 # Install Packages
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \
-    DEBIAN_FRONTEND=noninteractive apt-get -y install git php5-curl php-pear php5-dev make
+    DEBIAN_FRONTEND=noninteractive apt-get -y install git php5-curl php-pear php5-dev make pkg-config
 RUN pecl install mongo
 
 # Configure PHP

@@ -7,6 +7,7 @@ class CalendarRoot extends \Sabre\DAV\Collection {
     const USER_PREFIX = 'principals/users';
     const COMMUNITY_PREFIX = 'principals/communities';
     const PROJECT_PREFIX = 'principals/projects';
+    const RESOURCES_PREFIX = 'principals/resources';
 
     function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CalDAV\Backend\BackendInterface $caldavBackend, \MongoDB $db) {
         $this->principalBackend = $principalBackend;
@@ -36,6 +37,11 @@ class CalendarRoot extends \Sabre\DAV\Collection {
             $principal = [ 'uri' => self::PROJECT_PREFIX . '/' . $project['_id'] ];
             $homes[] = new CalendarHome($this->caldavBackend, $principal);
         }
+        $res = $this->db->resources->find(array(), array("_id"));
+        foreach ($res as $resource) {
+            $principal = [ 'uri' => self::RESOURCES_PREFIX . '/' . $resource['_id'] ];
+            $homes[] = new CalendarHome($this->caldavBackend, $principal);
+        }
 
         return $homes;
     }
@@ -62,6 +68,12 @@ class CalendarRoot extends \Sabre\DAV\Collection {
         $res = $this->db->projects->findOne(array('_id' => $mongoName), []);
         if ($res) {
             $principal = [ 'uri' => self::PROJECT_PREFIX . '/' . $name ];
+            return new CalendarHome($this->caldavBackend, $principal);
+        }
+
+        $res = $this->db->resources->findOne(array('_id' => $mongoName), []);
+        if ($res) {
+            $principal = [ 'uri' => self::RESOURCES_PREFIX . '/' . $name ];
             return new CalendarHome($this->caldavBackend, $principal);
         }
 

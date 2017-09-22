@@ -248,6 +248,12 @@ END:VCALENDAR'
             ]
         ]);
 
+        $this->esndb->resources->insert([
+            '_id' => new \MongoId('62b64eadf6d7d8e41d263e0c'),
+            'type' => 'calendar',
+            'name' => 'cal resource'
+        ]);
+
         $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);

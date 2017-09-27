@@ -500,7 +500,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
     function testFilteredCalendarList() {
         $jsonResponse = $this->_testFilteredCalendarList();
         $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
-        
+
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
         $this->assertFalse(isset($calendars[1]->{'invite'}));
         $this->assertFalse(isset($calendars[1]->{'acl'}));
@@ -513,14 +513,16 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+        $this->assertFalse(property_exists($calendars[0], 'calendarserver:delegatedsource'));
 
         $this->assertEquals($calendars[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/delegatedCal1.json');
         $this->assertEquals($calendars[1]->{'dav:name'}, 'delegatedCalendar');
+        $this->assertFalse(property_exists($calendars[1], 'calendarserver:delegatedsource'));
 
         $this->assertEquals($calendars[2]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json');
         $this->assertEquals($calendars[2]->{'dav:name'}, 'Subscription');
         $this->assertEquals($calendars[2]->{'calendarserver:source'}->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
-       
+        $this->assertFalse(property_exists($calendars[2], 'calendarserver:delegatedsource'));
     }
 
     function testFilteredCalendarLisWithPersonalOnly() {
@@ -536,9 +538,11 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
         $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
         $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+        $this->assertFalse(property_exists($calendars[0], 'calendarserver:delegatedsource'));
 
         $this->assertEquals($calendars[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/delegatedCal1.json');
         $this->assertEquals($calendars[1]->{'dav:name'}, 'delegatedCalendar');
+        $this->assertFalse(property_exists($calendars[1], 'calendarserver:delegatedsource'));
     }
 
     function testFilteredCalendarLisWithSubscriptionOnly() {
@@ -551,7 +555,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Subscription');
         $this->assertEquals($calendars[0]->{'calendarserver:source'}->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
-
+        $this->assertFalse(property_exists($calendars[0], 'calendarserver:delegatedsource'));
     }
 
     function testFilteredCalendarLisWithSharedNoResponseOnly() {
@@ -562,11 +566,12 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertCount(1, $calendars);
 
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
+        $this->assertEquals($calendars[0]->{'calendarserver:delegatedsource'}, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
     }
 
     function testFilteredCalendarLisWithSharedAcceptedOnly() {
         $jsonResponse = $this->_testFilteredCalendarList(null, null, 'accepted');
-        
+
         $this->assertNull($jsonResponse);
     }
 

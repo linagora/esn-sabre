@@ -40,6 +40,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     ];
 
     const MAX_DATE = '2038-01-01';
+    const RESOURCE_CALENDAR_PUBLIC_PRIVILEGE = '{DAV:}write';
 
     function __construct(\MongoDB $db) {
         $this->db = $db;
@@ -149,11 +150,25 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             }
         }
 
+        if($this->isPrincipalResource($obj['principaluri'])) {
+            $obj['public_right'] = self::RESOURCE_CALENDAR_PUBLIC_PRIVILEGE;
+        }
+
         $collection = $this->db->selectCollection($this->calendarInstancesTableName);
         $collection->insert($obj);
 
         $this->eventEmitter->emit('esn:calendarCreated', [$this->getCalendarPath($principalUri, $calendarUri)]);
         return [$calendarId, (string)$obj['_id']];
+    }
+
+    private function isPrincipalResource($principalUri) {
+        if(!$principalUri) {
+            return false;
+        }
+
+        $uriExploded = explode('/', $principalUri);
+
+        return $uriExploded[1] === 'resources';
     }
 
     private function getCalendarPath($principalUri, $calendarUri) {

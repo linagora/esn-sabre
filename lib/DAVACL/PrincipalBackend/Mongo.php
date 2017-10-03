@@ -10,7 +10,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $this->collectionMap = [
             'users' => $this->db->users,
             'communities' => $this->db->communities,
-            'projects' => $this->db->projects
+            'projects' => $this->db->projects,
+            'resources' => $this->db->resources
         ];
     }
 
@@ -50,6 +51,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return $this->searchGroupPrincipals('communities', $searchProperties, $test);
         } else if ($prefixPath == "principals/projects") {
             return $this->searchGroupPrincipals('projects', $searchProperties, $test);
+        }else if ($prefixPath == "principals/resources") {
+            return $this->searchGroupPrincipals('resources', $searchProperties, $test);
         } else {
             return [];
         }
@@ -119,6 +122,17 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     '{DAV:}displayname' => $obj['title'],
                 ];
                 break;
+            case "resources":
+                $displayname = "";
+                if (isset($obj['name'])) {
+                    $displayname = $obj['name'];
+                }
+
+                $principal = [
+                    'id' => (string)$obj['_id'],
+                    '{DAV:}displayname' => $displayname
+                ];
+                break;
         }
 
         $principal['uri'] = 'principals/' . $type . '/' . $obj['_id'];
@@ -149,6 +163,17 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             switch ($property) {
                 case '{DAV:}displayname':
                     $query[] = [ 'title' => [ '$regex' => $value, '$options' => 'i' ] ];
+                    break;
+                case '{http://sabredav.org/ns}email-address':
+                    if($groupName === 'resources') {
+                        list($resourceId) = explode('@', $value);
+                        $query[] = [ '_id' =>  new \MongoId($resourceId) ];
+                        break;
+                    }
+
+                    $query[] = [ 'email' => [
+                        '$elemMatch' => ['$regex' => $value, '$options' => 'i' ]
+                    ] ];
                     break;
             }
         }

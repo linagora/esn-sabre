@@ -13,7 +13,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
     const USER_WITH_NO_FIRSTNAME = '54313fcc398fef406b0041c1';
     const USER_WITH_NO_LASTNAME = '54313fcc398fef406b0041c2';
     const COMMUNITY_ID = '54313fcc398fef406b0041b4';
-    const PROJECT_ID= '54b64eadf6d7d8e41d263e0f';
+    const PROJECT_ID = '54b64eadf6d7d8e41d263e0f';
+    const RESOURCE_ID = '82113fcc398fef406b0041b7';
 
     static function setUpBeforeClass() {
         $mc = new \MongoClient(ESN_MONGO_ESNURI);
@@ -95,6 +96,11 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
                 ]
               ]
             ]
+        ]);
+
+        self::$esndb->resources->insert([
+            '_id' => new \MongoId(self::RESOURCE_ID),
+            'name' => 'resource'
         ]);
     }
 
@@ -222,6 +228,27 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'id' => self::PROJECT_ID,
             '{DAV:}displayname' => 'project',
         ];
+        $this->assertEquals($expected, $principals[0]);
+        $this->assertEquals($expected, $principal);
+
+        // Extra check to make sure no mongo ids are used
+        $this->assertSame($expected['id'], $principals[0]['id']);
+        $this->assertSame($expected['id'], $principal['id']);
+    }
+
+    function testResourcesPrincipalsByPrefix() {
+        $backend = new Mongo(self::$esndb);
+
+        $principals = $backend->getPrincipalsByPrefix('principals/resources');
+        $principal = $backend->getPrincipalByPath('principals/resources/' . self::RESOURCE_ID);
+        $this->assertEquals(count($principals), 1);
+
+        $expected = [
+            'uri' => 'principals/resources/' . self::RESOURCE_ID,
+            'id' => self::RESOURCE_ID,
+            '{DAV:}displayname' => 'resource'
+        ];
+
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);
 

@@ -21,10 +21,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $parts = explode('/', trim($principalUrl, '/'));
         if (count($parts) !== 3) return;
         if ($parts[0] !== 'principals') return;
-        if ($parts[1] !== 'users') return;
+        if ($parts[1] !== 'users' || $parts[1] !== 'resources' ) {
+            return self::CALENDAR_ROOT . '/' . $parts[2];
+        }
 
-        return self::CALENDAR_ROOT . '/' . $parts[2];
-
+        return;
     }
 
 }

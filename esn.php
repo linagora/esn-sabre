@@ -20,6 +20,7 @@ define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
 define('PRINCIPALS_COMMUNITIES', 'principals/communities');
 define('PRINCIPALS_PROJECTS', 'principals/projects');
+define('PRINCIPALS_RESOURCES', 'principals/resources');
 define('JSON_ROOT', 'json');
 
 //Mapping PHP errors to exceptions
@@ -67,6 +68,7 @@ $tree = [
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_USERS),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_COMMUNITIES),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_PROJECTS),
+      new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_RESOURCES),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_TECHNICAL_USER),
     ]),
     new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $esnDb),
@@ -86,7 +88,8 @@ $aclPlugin = new Sabre\DAVACL\Plugin();
 $aclPlugin->principalCollectionSet = [
     PRINCIPALS_USERS,
     PRINCIPALS_COMMUNITIES,
-    PRINCIPALS_PROJECTS
+    PRINCIPALS_PROJECTS,
+    PRINCIPALS_RESOURCES
 ];
 $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
 $server->addPlugin($aclPlugin);

@@ -506,7 +506,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     }
                 }
             }
-            
+
             // Subscriptions
             if ($calendar instanceof \Sabre\CalDAV\Subscriptions\Subscription && $includeSharedPublicSubscription) {
                 if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
@@ -561,11 +561,39 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $calprops = $calendar->getProperties([]);
         $node = $calendar;
 
+        if ($calendar instanceof \ESN\CalDAV\SharedCalendar && $calendar->isSharedInstance()) {
+            $calendarid = $calendar->getCalendarId();
+            $invites = $calendar->getInvites();
+
+            foreach($invites as $user) {
+                if ($user->access == \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER) {
+                    $uriExploded = explode('/', $user->principal);
+                    $sourceCalendarOwner = $uriExploded[2];
+                    $ownerHomePath = '/calendars/' . $sourceCalendarOwner;
+
+                    $myNode = $this->server->tree->getNodeForPath($ownerHomePath);
+                    $ownerCalendars = $myNode->getChildren();
+
+                    foreach($ownerCalendars as $ownerCalendar) {
+                        if ($ownerCalendar instanceof \ESN\CalDAV\SharedCalendar && $ownerCalendar->getCalendarId() == $calendarid) {
+                            $sourceCalendarUri = $ownerCalendar->getName();
+
+                            break 2;
+                        }
+                    }
+                }
+            }
+        }
+
         $calendar = [
             '_links' => [
                 'self' => [ 'href' => $baseUri . $nodePath . '.json' ],
             ]
         ];
+
+        if (isset($sourceCalendarUri)) {
+            $calendar['calendarserver:delegatedsource'] = $baseUri . 'calendars/' . $sourceCalendarOwner . '/' . $sourceCalendarUri . '.json';
+        }
 
         if (isset($calprops['{DAV:}displayname'])) {
             $calendar['dav:name'] = $calprops['{DAV:}displayname'];

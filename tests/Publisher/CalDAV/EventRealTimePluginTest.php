@@ -1,6 +1,7 @@
 <?php
 namespace ESN\Publisher\CalDAV;
 use Sabre\DAV\ServerPlugin;
+use \Sabre\CalDAV\Schedule\IMipPlugin;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
@@ -64,6 +65,18 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($server->emit('beforeUnbind', [self::PATH]));
         $this->assertTrue($server->emit('afterUnbind', [self::PATH]));
         $this->assertNull($client->message);
+    }
+
+    function testItipDoSendMessageIfScheduleFail() {
+        $plugin = $this->getMock(EventRealTimePlugin::class, ['publishMessages'], ['', new \ESN\CalDAV\CalDAVBackendMock()]);
+        $plugin->expects($this->never())->method('publishMessages');
+
+        $message = new \Sabre\VObject\ITip\Message();
+        $message->scheduleStatus = \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_TEMPORARY;
+
+        $plugin->itip($message);
+
+        $this->verifyMockObjects();
     }
 
     function testItipDelegateToScheduleAndPublishMessage() {

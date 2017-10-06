@@ -276,7 +276,7 @@ END:VCALENDAR'
         $this->server->sapi = new \Sabre\HTTP\SapiMock();
         $this->server->debugExceptions = true;
 
-        $caldavPlugin = new \Sabre\CalDAV\Plugin();
+        $caldavPlugin = new \ESN\CalDAV\Plugin();
         $this->server->addPlugin($caldavPlugin);
 
         $this->carddavPlugin = new \Sabre\CardDAV\Plugin();

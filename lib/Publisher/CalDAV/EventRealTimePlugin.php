@@ -8,6 +8,7 @@ use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Document;
 use Sabre\Uri;
 use \ESN\Utils\Utils as Utils;
+use \ESN\CalDAV\Schedule\IMipPlugin;
 
 class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     const PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN = 101;
@@ -164,8 +165,20 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     function schedule(\Sabre\VObject\ITip\Message $iTipMessage) {
+        switch($iTipMessage->scheduleStatus) {
+            case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_SUCCESS_PENDING:
+            case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_TEMPORARY:
+            case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_PERMANENT:
+
+                return false;
+        }
+
         list($homePath, $eventPath) = Utils::getEventPathsFromItipsMessage($iTipMessage, $this->server);
         $path = $homePath . $eventPath;
+
+        if (!$homePath || !$eventPath) {
+            return false;
+        }
 
         $event = clone $iTipMessage->message;
         $event->remove('method');
@@ -191,7 +204,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     function itip(\Sabre\VObject\ITip\Message $iTipMessage) {
-        $this->schedule($iTipMessage);
-        $this->publishMessages();
+        if ($this->schedule($iTipMessage)) {
+            $this->publishMessages();
+        }
     }
 }

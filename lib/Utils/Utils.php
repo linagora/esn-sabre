@@ -33,17 +33,18 @@ class Utils {
 
     static function getEventPathsFromItipsMessage($iTipMessage, \Sabre\DAV\Server $server) {
         $aclPlugin = $server->getPlugin('acl');
-        
+
         if (!$aclPlugin) {
             error_log('No aclPlugin');
             return true;
         }
 
         $caldavNS = '{' . \Sabre\CalDAV\Schedule\Plugin::NS_CALDAV . '}';
-                
+
         $principalUri = $aclPlugin->getPrincipalByUri($iTipMessage->recipient);
         if (!$principalUri) {
-            error_log('3.7;Could not find principal.');
+            error_log("3.7;Could not find principal for $iTipMessage->recipient.");
+
             return true;
         }
         // We found a principal URL, now we need to find its inbox.
@@ -94,15 +95,15 @@ class Utils {
         $uid = $iTipMessage->uid;
         $home = $server->tree->getNodeForPath($homePath);
         $eventPath = $home->getCalendarObjectByUID($uid);
-        $uriExploded = explode('/', $eventPath);
-
-        $calendar = $home->getChild($uriExploded[0]);
-        $event = $calendar->getChild($uriExploded[1]);
 
         if (!$eventPath) {
             error_log("5.0;Event $uid not found in home $homePath.");
             return;
         }
+
+        $uriExploded = explode('/', $eventPath);
+        $calendar = $home->getChild($uriExploded[0]);
+        $event = $calendar->getChild($uriExploded[1]);
 
         return [$homePath, $eventPath, $event->get()];
     }

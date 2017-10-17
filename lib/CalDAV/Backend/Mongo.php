@@ -40,7 +40,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     ];
 
     const MAX_DATE = '2038-01-01';
-    const RESOURCE_CALENDAR_PUBLIC_PRIVILEGE = '{DAV:}write';
+    const RESOURCE_CALENDAR_PUBLIC_PRIVILEGE = '{DAV:}read';
 
     function __construct(\MongoDB $db) {
         $this->db = $db;

@@ -27,7 +27,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         'EVENT_ALARM_REQUEST' => 'calendar:event:alarm:request',
         'EVENT_ALARM_CANCEL' => 'calendar:event:alarm:cancel',
         'EVENT_REPLY' => 'calendar:event:reply',
-        'EVENT_CANCEL' => 'calendar:event:cancel'
+        'EVENT_CANCEL' => 'calendar:event:cancel',
+        'RESOURCE_EVENT_CREATED' => 'resource:calendar:event:created'
     ];
 
     function __construct($client, $caldavBackend) {
@@ -173,7 +174,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 return false;
         }
 
-        list($homePath, $eventPath) = Utils::getEventPathsFromItipsMessage($iTipMessage, $this->server);
+        list($homePath, $eventPath, $data, $principalUri) = Utils::getEventPathsFromItipsMessage($iTipMessage, $this->server);
         $path = $homePath . $eventPath;
 
         if (!$homePath || !$eventPath) {
@@ -196,6 +197,21 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         if($iTipMessage->method !== 'REPLY'){
             $this->createMessage(
                 $this->EVENT_TOPICS['EVENT_ALARM_'.$iTipMessage->method],
+                $dataMessage
+            );
+        }
+
+        if($iTipMessage->method === 'REQUEST' && strpos($principalUri, 'resources') !==false) {
+            $pathExploded = explode('/', $path);
+
+            $dataMessage = [
+                'resourceId' => $pathExploded[1],
+                'eventId' => $pathExploded[3],
+                'eventPath' => '/' . $path,
+                'ics' => $data
+            ];
+            $this->createMessage(
+                $this->EVENT_TOPICS['RESOURCE_EVENT_CREATED'],
                 $dataMessage
             );
         }

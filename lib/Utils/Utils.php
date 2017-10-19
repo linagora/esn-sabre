@@ -105,7 +105,7 @@ class Utils {
         $calendar = $home->getChild($uriExploded[0]);
         $event = $calendar->getChild($uriExploded[1]);
 
-        return [$homePath, $eventPath, $event->get()];
+        return [$homePath, $eventPath, $event->get(), $principalUri];
     }
 
 }

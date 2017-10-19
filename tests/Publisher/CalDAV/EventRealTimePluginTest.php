@@ -7,8 +7,8 @@ require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
 class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
-    const PATH = "calendars/123123/uid.ics";
-    const PARENT = 'calendars/123123';
+    const PATH = "calendars/456456/123123/uid.ics";
+    const PARENT = 'calendars/456456/123123';
     const ETAG = 'The etag';
 
     private $icalData;
@@ -46,6 +46,29 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($server->emit('beforeCreateFile', ["test", &$this->icalData, $parent, &$modified]));
         $this->assertTrue($server->emit('afterCreateFile', ["test", $parent]));
         $this->assertNull($client->message);
+    }
+
+    function testCreateFileEvent() {
+        $calendarInfo = [
+            'uri' => 'calendars/456456/123123',
+            'id' => '123123',
+            'principaluri' => 'principals/users/456456'
+        ];
+
+        $parent = new \ESN\CalDAV\SharedCalendar(new \Sabre\CalDAV\SharedCalendar(new \ESN\CalDAV\CalDAVBackendMock(), $calendarInfo));
+
+        $server = new \Sabre\DAV\Server([
+            new \Sabre\DAV\SimpleCollection("calendars", [
+                $parent
+            ])
+        ]);
+
+        $plugin = $this->getPlugin($server);
+        $client = $plugin->getClient();
+
+        $this->assertTrue($server->emit('beforeCreateFile', ["calendars/456456/123123/uid.ics", &$this->icalData, $parent, &$modified]));
+        $this->assertTrue($server->emit('afterCreateFile', ["/calendars/456456/123123/uid.ics", $parent]));
+        $this->assertNotNull($client->message);
     }
 
     function testUnbindNonCalendarObject() {
@@ -121,7 +144,7 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
 }
 
-class RealTimeMock implements \ESN\Publisher\Publisher {
+class ClientMock implements \ESN\Publisher\Publisher {
     public $topic;
     public $message;
 
@@ -136,7 +159,7 @@ class EventRealTimePluginMock extends EventRealTimePlugin {
     function __construct($server, $backend) {
         if (!$server) $server = new \Sabre\DAV\Server([]);
         $this->initialize($server);
-        $this->client = new RealTimeMock();
+        $this->client = new ClientMock();
         $this->server = $server;
     }
 

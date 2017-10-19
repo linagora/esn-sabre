@@ -14,6 +14,7 @@ class CalDAVBackendMock extends \Sabre\CalDAV\Backend\AbstractBackend {
     function updateCalendarObject($calendarId,$objectUri,$calendarData) { return null; }
     function deleteCalendarObject($calendarId,$objectUri) {}
     function getInvites() { return []; }
+    function getSubscribers() { return []; }
     // @codingStandardsIgnoreEnd
 }
 

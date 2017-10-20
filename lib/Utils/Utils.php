@@ -31,6 +31,10 @@ class Utils {
         return '/calendars/' . $uriExploded[2] . '/' . $calendarUri . '/' . $objectUri;
     }
 
+    static function isResourceFromPrincipal($principal) {
+        return strpos($principal, 'resources') !== false;
+    }
+
     static function getEventPathsFromItipsMessage($iTipMessage, \Sabre\DAV\Server $server) {
         $aclPlugin = $server->getPlugin('acl');
 

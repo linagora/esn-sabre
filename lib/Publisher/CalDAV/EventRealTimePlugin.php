@@ -103,13 +103,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     function addSharedUsers($action, $calendar, $calendarPathObject, $data, $old_event = null) {
         if ($calendar instanceof \ESN\CalDAV\SharedCalendar) {
-
-            $subscribers = $calendar->getSubscribers();
-            $invites = $calendar->getInvites();
             $calendarid = $calendar->getCalendarId();
-
             $pathExploded = explode('/', $calendarPathObject);
             $objectUri = $pathExploded[3];
+            $calendarUri = $pathExploded[2];
 
             $event = \Sabre\VObject\Reader::read($data);
             $event->remove('method');
@@ -119,49 +116,56 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 'event' => $event
             ];
 
+            if($old_event) {
+                $dataMessage['old_event'] = $old_event;
+            }
+
+            $options = [
+                'action' => $action,
+                'eventSourcePath' => $calendarPathObject,
+                'calendarid' => $calendarid,
+                'objectUri' => $objectUri,
+                'calendarUri' => $calendarUri
+            ];
+
             $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_'.$action], $dataMessage);
+            $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+            $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
+        }
+    }
 
-            foreach($subscribers as $subscriber) {
-                $path = Utils::objectPathFromUri($subscriber['principaluri'],  $subscriber['uri'], $objectUri);
+    private function notifySubscribers($subscribers, $dataMessage, $options) {
+        foreach($subscribers as $subscriber) {
+            $dataMessage['eventPath'] = Utils::objectPathFromUri($subscriber['principaluri'],  $subscriber['uri'], $options['objectUri']);
+            $dataMessage['eventSourcePath'] = '/' . $options['eventSourcePath'];
 
-                $dataMessage = [
-                    'eventPath' => $path,
-                    'eventSourcePath' => '/' . $calendarPathObject,
-                    'event' => $event
-                ];
+            $this->createMessage($this->EVENT_TOPICS['EVENT_'.$options['action']], $dataMessage);
+        }
+    }
 
-                if($old_event) {
-                    $dataMessage['old_event'] = $old_event;
-                }
+    private function notifyInvites($invites, $dataMessage, $options) {
+        foreach($invites as $user) {
+            $sendingFirst = false;
 
-                $this->createMessage($this->EVENT_TOPICS['EVENT_'.$action], $dataMessage);
+            if($user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
+                continue;
             }
 
-            foreach($invites as $user) {
-                if($user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
-                    continue;
+            $calendars = $this->caldavBackend->getCalendarsForUser($user->principal);
+
+            foreach($calendars as $calendarUser) {
+                if($calendarUser['id'][0] == $options['calendarid']) {
+                    $calendarUri = $calendarUser['uri'];
                 }
 
-                $calendars = $this->caldavBackend->getCalendarsForUser($user->principal);
-                foreach($calendars as $calendarUser) {
-                    if($calendarUser['id'][0] == $calendarid) {
-                        $calendarUri = $calendarUser['uri'];
-                    }
+                if ($calendarUri == $calendarUser['uri']) {
+                    $sendingFirst = true;
                 }
-
-                $path = Utils::objectPathFromUri($user->principal,  $calendarUri, $objectUri);
-
-                $dataMessage = [
-                    'eventPath' => $path,
-                    'event' => $event
-                ];
-
-                if($old_event) {
-                    $dataMessage['old_event'] = $old_event;
-                }
-
-                $this->createMessage($this->EVENT_TOPICS['EVENT_'.$action], $dataMessage);
             }
+
+            $dataMessage['eventPath'] = Utils::objectPathFromUri($user->principal,  $calendarUri, $options['objectUri']);
+
+            $this->createMessage($this->EVENT_TOPICS['EVENT_'.$options['action']], $dataMessage);
         }
     }
 
@@ -193,6 +197,21 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $this->EVENT_TOPICS['EVENT_'.$iTipMessage->method],
             $dataMessage
         );
+
+        list($namespace, $homeId, $calendarUri, $objectUri) = explode('/', $path);
+        $calendar = $this->server->tree->getNodeForPath('/'. substr($path,0,strrpos($path,'/')));
+        $calendarid = $calendar->getCalendarId();
+
+        $options = [
+            'action' => $iTipMessage->method,
+            'eventSourcePath' => $path,
+            'calendarid' => $calendarid,
+            'objectUri' => $objectUri,
+            'calendarUri' => $calendarUri
+        ];
+
+        $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+        $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
 
         if($iTipMessage->method !== 'REPLY'){
             $this->createMessage(

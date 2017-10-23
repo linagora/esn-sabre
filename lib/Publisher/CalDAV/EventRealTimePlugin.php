@@ -201,7 +201,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             );
         }
 
-        if($iTipMessage->method === 'REQUEST' && strpos($principalUri, 'resources') !==false) {
+        if($iTipMessage->method === 'REQUEST' && Utils::isResourceFromPrincipal($principalUri)) {
             $pathExploded = explode('/', $path);
 
             $dataMessage = [

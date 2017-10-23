@@ -56,6 +56,12 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         $authPlugin = $this->server->getPlugin('auth');
         $principal = !is_null($authPlugin) ? $authPlugin->getCurrentPrincipal() : $calendarNode->getOwner();
+
+        // Because technical user does not interfere here, just initialize some action for someone.
+        if(strpos($principal, PRINCIPALS_TECHNICAL_USER) !== false) {
+            $principal = $calendarNode->getOwner();
+        }
+
         $addresses = $this->getAddressesForPrincipal($principal);
 
         if (!$isNew) {
@@ -86,6 +92,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         $authPlugin = $this->server->getPlugin('auth');
         $principal = !is_null($authPlugin) ? $authPlugin->getCurrentPrincipal() : $calendarNode->getOwner();
+
         $addresses = $this->getAddressesForPrincipal($principal);
 
         $broker = new ITip\Broker();

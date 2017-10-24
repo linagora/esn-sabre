@@ -814,6 +814,23 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertCount(1, $calendars);
     }
 
+    function testDeleteCalendarsOfHome() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
+        $this->assertCount(2, $calendars);
+
+        $response = $this->request($request);
+        $this->assertEquals(204, $response->status);
+
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
+        $this->assertCount(0, $calendars);
+    }
+
     function testPatchSubscription() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',

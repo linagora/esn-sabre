@@ -223,6 +223,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $code = null;
         $body = null;
 
+        if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+            list($code, $body) = $this->deleteHomeNode($node);
+        }
+
         if ($node instanceof \Sabre\CalDAV\Calendar) {
             list($code, $body) = $this->deleteNode($path, $node);
         }
@@ -318,6 +322,18 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function deleteSubscription($node) {
         $node->delete();
+
+        return [204, null];
+    }
+
+    function deleteHomeNode($node) {
+        $children = $node->getChildren();
+
+        foreach ($children as $child) {
+            if($child instanceof \Sabre\CalDAV\Calendar) {
+                $child->delete();
+            }
+        }
 
         return [204, null];
     }

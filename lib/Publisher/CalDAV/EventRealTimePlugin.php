@@ -28,7 +28,9 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         'EVENT_ALARM_CANCEL' => 'calendar:event:alarm:cancel',
         'EVENT_REPLY' => 'calendar:event:reply',
         'EVENT_CANCEL' => 'calendar:event:cancel',
-        'RESOURCE_EVENT_CREATED' => 'resource:calendar:event:created'
+        'RESOURCE_EVENT_CREATED' => 'resource:calendar:event:created',
+        'RESOURCE_EVENT_ACCEPTED' => 'resource:calendar:event:accepted',
+        'RESOURCE_EVENT_DECLINED' => 'resource:calendar:event:declined'
     ];
 
     function __construct($client, $caldavBackend) {
@@ -178,7 +180,12 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 return false;
         }
 
-        list($homePath, $eventPath, $data, $principalUri) = Utils::getEventPathsFromItipsMessage($iTipMessage, $this->server);
+        $recipientPrincipalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
+        if (!$recipientPrincipalUri) {
+            return false;
+        }
+
+        list($homePath, $eventPath, $data) = Utils::getEventPathForItip($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
         $path = $homePath . $eventPath;
 
         if (!$homePath || !$eventPath) {
@@ -220,7 +227,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             );
         }
 
-        if($iTipMessage->method === 'REQUEST' && Utils::isResourceFromPrincipal($principalUri)) {
+        if($iTipMessage->method === 'REQUEST' && Utils::isResourceFromPrincipal($recipientPrincipalUri)) {
             $pathExploded = explode('/', $path);
 
             $dataMessage = [
@@ -233,6 +240,52 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 $this->EVENT_TOPICS['RESOURCE_EVENT_CREATED'],
                 $dataMessage
             );
+        }
+
+        $senderPrincipalUri = Utils::getPrincipalByUri($iTipMessage->sender, $this->server);
+        if (!$senderPrincipalUri) {
+            return false;
+        }
+
+        if($iTipMessage->method === 'REPLY' && Utils::isResourceFromPrincipal($senderPrincipalUri)) {
+            list($homePath, $eventPath, $data) = Utils::getEventPathForItip($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+            $path = $homePath . $eventPath;
+
+            if (!$homePath || !$eventPath) {
+                return false;
+            }
+
+            $explodedSenderPrincipalUri = explode('/', $senderPrincipalUri);
+
+            foreach ($iTipMessage->message->VEVENT->ATTENDEE as $attendee) {
+                if ($attendee->getValue() === $iTipMessage->sender) {
+                    switch($attendee['PARTSTAT']->getValue()) {
+                        case 'ACCEPTED':
+                            $dataMessage = [
+                                'resourceId' => $explodedSenderPrincipalUri[2],
+                                'eventId' => $iTipMessage->uid,
+                                'eventPath' => '/' . $path,
+                                'ics' => $data
+                            ];
+                            $this->createMessage(
+                                $this->EVENT_TOPICS['RESOURCE_EVENT_ACCEPTED'],
+                                $dataMessage
+                            );
+                            break;
+                        case 'DECLINED':
+                            $dataMessage = [
+                                'resourceId' => $explodedSenderPrincipalUri[2],
+                                'eventId' => $iTipMessage->uid,
+                                'eventPath' => '/' . $path,
+                                'ics' => $data
+                            ];
+                            $this->createMessage(
+                                $this->EVENT_TOPICS['RESOURCE_EVENT_DECLINED'],
+                                $dataMessage
+                            );
+                    }
+                }
+            }
         }
 
         return true;

@@ -59,7 +59,7 @@ config="{
     }
   },
   \"esn\": {
-    \"apiRoot\": \"http://${esn_host}:${esn_port}/api\",
+    \"apiRoot\": \"http://${esn_host}:${esn_port}\",
     \"calendarRoot\": \"http://${esn_host}:${esn_port}/calendar/api\"
   }
 }"

@@ -62,7 +62,7 @@ class CollaborationMembersPluginTest extends \Sabre\DAVServerTest {
     }
 
     function setUpBackends() {
-        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
+        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\EsnRequest($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Esn($this->sabredb);
     }
 

@@ -33,7 +33,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     }
 
     private function checkAuthByToken($token) {
-        $url = $this->apiroot . '/authenticationtoken/' . $token . '/user';
+        $url = $this->apiroot . '/api/authenticationtoken/' . $token . '/user';
         $request = new HTTP\Request('GET', $url);
         return $this->decodeResponse($this->httpClient->send($request));
     }
@@ -86,7 +86,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     protected function validateUserPass($username, $password) {
         $user = trim($username);
-        $url = $this->apiroot . '/login';
+        $url = $this->apiroot . '/api/login';
         $headers = [ 'Content-Type' => 'application/json' ];
         $body = json_encode([
             'username' => $username,

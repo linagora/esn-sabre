@@ -35,23 +35,35 @@ class Utils {
         return strpos($principal, 'resources') !== false;
     }
 
-    static function getEventPathsFromItipsMessage($iTipMessage, \Sabre\DAV\Server $server) {
+    static function getPrincipalByUri($uri, \Sabre\DAV\Server $server) {
         $aclPlugin = $server->getPlugin('acl');
 
         if (!$aclPlugin) {
             error_log('No aclPlugin');
-            return true;
+            return;
+        }
+
+        $principalUri = $aclPlugin->getPrincipalByUri($uri);
+        if (!$principalUri) {
+            error_log("3.7;Could not find principal for $uri.");
+
+            return;
+        }
+
+        return $principalUri;
+    }
+
+    static function getEventPathForItip($principalUri, $eventUid, $method, \Sabre\DAV\Server $server) {
+        $aclPlugin = $server->getPlugin('acl');
+
+        if (!$aclPlugin) {
+            error_log('No aclPlugin');
+            return;
         }
 
         $caldavNS = '{' . \Sabre\CalDAV\Schedule\Plugin::NS_CALDAV . '}';
 
-        $principalUri = $aclPlugin->getPrincipalByUri($iTipMessage->recipient);
-        if (!$principalUri) {
-            error_log("3.7;Could not find principal for $iTipMessage->recipient.");
-
-            return true;
-        }
-        // We found a principal URL, now we need to find its inbox.
+        // We have a principal URL, now we need to find its inbox.
         // Unfortunately we may not have sufficient privileges to find this, so
         // we are temporarily turning off ACL to let this come through.
         //
@@ -80,12 +92,12 @@ class Utils {
         }
         if (!isset($result[$caldavNS . 'schedule-default-calendar-URL'])) {
             error_log('5.2;Could not find a schedule-default-calendar-URL property');
-            return true;
+            return;
         }
         $calendarPath = $result[$caldavNS . 'schedule-default-calendar-URL']->getHref();
         $homePath = $result[$caldavNS . 'calendar-home-set']->getHref();
         $inboxPath = $result[$caldavNS . 'schedule-inbox-URL']->getHref();
-        if ($iTipMessage->method === 'REPLY') {
+        if ($method === 'REPLY') {
             $privilege = 'schedule-deliver-reply';
         } else {
             $privilege = 'schedule-deliver-invite';
@@ -96,12 +108,11 @@ class Utils {
         }
         // Next, we're going to find out if the item already exits in one of
         // the users' calendars.
-        $uid = $iTipMessage->uid;
         $home = $server->tree->getNodeForPath($homePath);
-        $eventPath = $home->getCalendarObjectByUID($uid);
+        $eventPath = $home->getCalendarObjectByUID($eventUid);
 
         if (!$eventPath) {
-            error_log("5.0;Event $uid not found in home $homePath.");
+            error_log("5.0;Event $eventUid not found in home $homePath.");
             return;
         }
 
@@ -109,7 +120,7 @@ class Utils {
         $calendar = $home->getChild($uriExploded[0]);
         $event = $calendar->getChild($uriExploded[1]);
 
-        return [$homePath, $eventPath, $event->get(), $principalUri];
+        return [$homePath, $eventPath, $event->get()];
     }
 
 }

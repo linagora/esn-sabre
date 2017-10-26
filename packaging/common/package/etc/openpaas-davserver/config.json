@@ -29,7 +29,7 @@
     }
   },
   "esn": {
-    "apiRoot": "http://localhost:8080/api",
+    "apiRoot": "http://localhost:8080",
     "calendarRoot": "http://localhost:8080/calendar/api"
   }
 }

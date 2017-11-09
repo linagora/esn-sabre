@@ -254,7 +254,7 @@ END:VCALENDAR'
             'name' => 'cal resource'
         ]);
 
-        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
+        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\EsnRequest($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
 

@@ -61,7 +61,15 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         }
 
         $calendarNode = $this->server->tree->getNodeForPath($matches[1]);
-        list($homePath, $eventPath, $eventData, $principalUri) = Utils::getEventPathsFromItipsMessage($iTipMessage, $this->server);
+
+        $principalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
+        if (!$principalUri) {
+            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
+
+            return false;
+        }
+
+        list($homePath, $eventPath, $eventData) = Utils::getEventPathForItip($principalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
 
         if (!$homePath || !$eventPath || !$eventData || Utils::isResourceFromPrincipal($principalUri)) {
             $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;

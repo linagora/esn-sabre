@@ -21,7 +21,7 @@ class CalendarRootTest extends \PHPUnit_Framework_TestCase {
         $this->esndb->drop();
         $this->sabredb->drop();
 
-        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
+        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\EsnRequest($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
 
         $this->root = new CalendarRoot($this->principalBackend,

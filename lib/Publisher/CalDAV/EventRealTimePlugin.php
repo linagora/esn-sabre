@@ -145,8 +145,6 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     private function notifyInvites($invites, $dataMessage, $options) {
         foreach($invites as $user) {
-            $sendingFirst = false;
-
             if($user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
                 continue;
             }
@@ -156,10 +154,6 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             foreach($calendars as $calendarUser) {
                 if($calendarUser['id'][0] == $options['calendarid']) {
                     $calendarUri = $calendarUser['uri'];
-                }
-
-                if ($calendarUri == $calendarUser['uri']) {
-                    $sendingFirst = true;
                 }
             }
 

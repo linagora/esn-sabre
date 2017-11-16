@@ -19,8 +19,8 @@ class EsnRequest extends Mongo {
             $this->httpClient = new HTTP\Client();
         }
 
+        //Deactivate all REST calls until technicalUser can do authenticated REST calls.
         $this->apiEndpointMap = [
-            'resources' => '/linagora.esn.resource/api/resources/'
         ];
     }
 

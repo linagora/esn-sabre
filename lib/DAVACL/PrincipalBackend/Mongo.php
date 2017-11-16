@@ -33,6 +33,11 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         if ($parts[0] == 'principals' && isset($this->collectionMap[$parts[1]]) && count($parts) == 3) {
             $collection = $this->collectionMap[$parts[1]];
             $obj = $collection->findOne(['_id' => new \MongoId($parts[2])]);
+
+            if ($parts[1] == 'resources') {
+                $domain = $this->db->domains->findOne(['_id' => $obj['domain']]);
+                $obj['domain'] = $domain;
+            }
             return $obj ? $this->objectToPrincipal($obj, $parts[1]) : null;
         } else {
             return null;
@@ -51,7 +56,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return $this->searchGroupPrincipals('communities', $searchProperties, $test);
         } else if ($prefixPath == "principals/projects") {
             return $this->searchGroupPrincipals('projects', $searchProperties, $test);
-        }else if ($prefixPath == "principals/resources") {
+        } else if ($prefixPath == "principals/resources") {
             return $this->searchGroupPrincipals('resources', $searchProperties, $test);
         } else {
             return [];
@@ -132,6 +137,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     'id' => (string)$obj['_id'],
                     '{DAV:}displayname' => $displayname
                 ];
+
+                if (isset($obj['domain']) && is_array($obj['domain'])) {
+                    $principal['{http://sabredav.org/ns}email-address'] = $obj['_id'] . '@' . $obj['domain']['name'];
+                }
                 break;
         }
 

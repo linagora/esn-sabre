@@ -15,12 +15,17 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
     const COMMUNITY_ID = '54313fcc398fef406b0041b4';
     const PROJECT_ID = '54b64eadf6d7d8e41d263e0f';
     const RESOURCE_ID = '82113fcc398fef406b0041b7';
+    const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
 
     static function setUpBeforeClass() {
         $mc = new \MongoClient(ESN_MONGO_ESNURI);
         self::$esndb = $mc->selectDB(ESN_MONGO_ESNDB);
         self::$esndb->drop();
 
+        self::$esndb->domains->insert([
+            '_id' => new \MongoId(self::DOMAIN_ID),
+            'name' => 'test',
+        ]);
         self::$esndb->users->insert([
             '_id' => new \MongoId(self::USER_ID),
             'firstname' => 'first',
@@ -100,7 +105,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
 
         self::$esndb->resources->insert([
             '_id' => new \MongoId(self::RESOURCE_ID),
-            'name' => 'resource'
+            'name' => 'resource',
+            'domain' => new \MongoId(self::DOMAIN_ID)
         ]);
     }
 
@@ -246,14 +252,21 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $expected = [
             'uri' => 'principals/resources/' . self::RESOURCE_ID,
             'id' => self::RESOURCE_ID,
+            '{DAV:}displayname' => 'resource',
+            '{http://sabredav.org/ns}email-address' => self::RESOURCE_ID . '@test'
+        ];
+
+        $expectedFromPrefix = [
+            'uri' => 'principals/resources/' . self::RESOURCE_ID,
+            'id' => self::RESOURCE_ID,
             '{DAV:}displayname' => 'resource'
         ];
 
-        $this->assertEquals($expected, $principals[0]);
+        $this->assertEquals($expectedFromPrefix, $principals[0]);
         $this->assertEquals($expected, $principal);
 
         // Extra check to make sure no mongo ids are used
-        $this->assertSame($expected['id'], $principals[0]['id']);
+        $this->assertSame($expectedFromPrefix['id'], $principals[0]['id']);
         $this->assertSame($expected['id'], $principal['id']);
     }
 

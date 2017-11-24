@@ -51,7 +51,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $server->on('afterUnbind',        [$this, 'after']);
 
         //we want that the schedule plugin get called before so attendee's event are created
-        $server->on('schedule',           [$this, 'schedule'], self::PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN);
+        $server->on('schedule', [$this, 'schedule'], self::PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN);
         $server->on('itip', [$this, 'itip']);
     }
 
@@ -176,7 +176,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         $recipientPrincipalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
         if (!$recipientPrincipalUri) {
-            return false;
+            return true;
         }
 
         list($homePath, $eventPath, $data) = Utils::getEventPathForItip($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);

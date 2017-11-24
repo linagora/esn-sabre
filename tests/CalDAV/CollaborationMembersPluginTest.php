@@ -76,7 +76,7 @@ class CollaborationMembersPluginTest extends \Sabre\DAVServerTest {
         $modified = false;
         $vobj = \Sabre\VObject\Reader::read($data);
         if (is_null($parentPath)) {
-            $parentPath = 'calendars/' . $this->commMongoId . '/events';
+            $parentPath = 'calendars/' . $this->commMongoId . '/' . $this->commMongoId;
         }
         $this->server->emit(
             'calendarObjectChange',
@@ -142,7 +142,7 @@ class CollaborationMembersPluginTest extends \Sabre\DAVServerTest {
             'END:VEVENT',
             'END:VCALENDAR'
         ]);
-        $parentPath = 'calendars/' . $this->userMongoId . '/events';
+        $parentPath = 'calendars/' . $this->userMongoId . '/' . $this->userMongoId;
         list($modified, $vcal) = $this->emitObjectChange($data, $parentPath);
         $this->assertFalse($modified);
     }
@@ -157,7 +157,7 @@ class CollaborationMembersPluginTest extends \Sabre\DAVServerTest {
         ]);
 
         $this->plugin->setCollection("projects");
-        $parentPath = 'calendars/' . $this->projMongoId . '/events';
+        $parentPath = 'calendars/' . $this->projMongoId . '/' . $this->projMongoId;
         list($modified, $vcal) = $this->emitObjectChange($data, $parentPath);
         $this->checkModified($modified, $vcal);
     }

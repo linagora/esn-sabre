@@ -174,9 +174,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     $query[] = [ 'title' => [ '$regex' => $value, '$options' => 'i' ] ];
                     break;
                 case '{http://sabredav.org/ns}email-address':
-                    if($groupName === 'resources') {
-                        list($resourceId) = explode('@', $value);
-                        $query[] = [ '_id' =>  new \MongoId($resourceId) ];
+                    list($possibleId) = explode('@', $value);
+
+                    if($groupName === 'resources' && \MongoId::isValid ($possibleId)) {
+                        $query[] = [ '_id' =>  new \MongoId($possibleId) ];
                         break;
                     }
 

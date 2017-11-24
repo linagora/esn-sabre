@@ -18,7 +18,7 @@ class CalendarHomeTest extends \PHPUnit_Framework_TestCase {
         $backend = $this->getBackend();
         $calendar = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user2/userID']);
 
-        $this->assertTrue($calendar->getChild('events') instanceof \ESN\CalDAV\SharedCalendar);
+        $this->assertTrue($calendar->getChild('userID') instanceof \ESN\CalDAV\SharedCalendar);
     }
 
     function testGetAcl() {

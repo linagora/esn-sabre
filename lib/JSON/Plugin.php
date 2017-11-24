@@ -309,7 +309,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function deleteNode($nodePath, $node) {
-        if ($node->getName() === \ESN\CalDAV\Backend\Esn::EVENTS_URI) {
+        $mainCalendarId = explode('/', $this->currentUser);
+        if ($node->getName() === \ESN\CalDAV\Backend\Esn::EVENTS_URI || $node->getName() === $mainCalendarId[2]) {
             return [403, [
                 'status' => 403,
                 'message' => 'Forbidden: You can not delete your main calendar'

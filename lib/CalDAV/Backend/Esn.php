@@ -11,7 +11,8 @@ class Esn extends Mongo {
 
         if (count($calendars) == 0) {
             // No calendars yet, inject our default calendars
-            parent::createCalendar($principalUri, self::EVENTS_URI, []);
+            $principalExploded = explode('/', $principalUri);
+            parent::createCalendar($principalUri, $principalExploded[2], []);
 
             $calendars = parent::getCalendarsForUser($principalUri);
         }

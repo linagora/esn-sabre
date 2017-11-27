@@ -63,26 +63,25 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $calendarNode = $this->server->tree->getNodeForPath($matches[1]);
 
         $principalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
-        if (!$principalUri) {
-            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
-
-            return false;
-        }
-
-        list($homePath, $eventPath, $eventData) = Utils::getEventPathForItip($principalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
-
-        if (!$homePath || !$eventPath || !$eventData || Utils::isResourceFromPrincipal($principalUri)) {
+        
+        if (Utils::isResourceFromPrincipal($principalUri)) {
             $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
 
             return;
         }
 
-        $fullEventPath = '/' . $homePath . $eventPath;
+        list($homePath, $eventPath, $eventData) = Utils::getEventPathForItip($principalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+
+        if (!$homePath || !$eventPath) {
+            $fullEventPath = '/' . $matches[1] . '/' . $iTipMessage->uid . '.ics';
+        } else {
+            $fullEventPath = '/' . $homePath . $eventPath;
+        }
 
         $body = json_encode([
             'email' => substr($iTipMessage->recipient, 7),
             'method' => $iTipMessage->method,
-            'event' => $eventData,
+            'event' => $iTipMessage->message->serialize(),
             'notify' => true,
             'calendarURI' => $calendarNode->getName(),
             'eventPath' => $fullEventPath

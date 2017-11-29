@@ -107,7 +107,24 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return $calendars;
     }
 
+    private function checkIfCalendarInstanceExist($principalUri, $calendarUri) {
+        $query = [
+            'principaluri' => $principalUri,
+            'uri' => $calendarUri,
+            'access' => 1
+        ];
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+        $calendar = $collection->findOne($query, ['_id', 'calendarid']);
+
+        return isset($calendar['_id']) ? [(string)$calendar['calendarid'], (string)$calendar['_id']] : false;
+    }
+
     function createCalendar($principalUri, $calendarUri, array $properties) {
+        $calendar = $this->checkIfCalendarInstanceExist($principalUri, $calendarUri);
+
+        if($calendar) {
+            return $calendar;
+        }
         // Default value
         $sccs = '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set';
 

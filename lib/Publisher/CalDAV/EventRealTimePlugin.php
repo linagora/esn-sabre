@@ -237,11 +237,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         }
 
         $senderPrincipalUri = Utils::getPrincipalByUri($iTipMessage->sender, $this->server);
-        if (!$senderPrincipalUri) {
-            return false;
-        }
 
-        if($iTipMessage->method === 'REPLY' && Utils::isResourceFromPrincipal($senderPrincipalUri)) {
+        if($senderPrincipalUri && $iTipMessage->method === 'REPLY' && Utils::isResourceFromPrincipal($senderPrincipalUri)) {
             list($homePath, $eventPath, $data) = Utils::getEventPathForItip($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
             $path = $homePath . $eventPath;
 

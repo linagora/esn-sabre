@@ -171,7 +171,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         foreach ($searchProperties as $property => $value) {
             switch ($property) {
                 case '{DAV:}displayname':
-                    $query[] = [ 'title' => [ '$regex' => $value, '$options' => 'i' ] ];
+                    $query[] = [ 'title' => [ '$regex' => preg_quote($value), '$options' => 'i' ] ];
                     break;
                 case '{http://sabredav.org/ns}email-address':
                     list($possibleId) = explode('@', $value);
@@ -182,7 +182,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     }
 
                     $query[] = [ 'email' => [
-                        '$elemMatch' => ['$regex' => $value, '$options' => 'i' ]
+                        '$elemMatch' => ['$regex' => '^' . preg_quote($value) . '$', '$options' => 'i' ]
                     ] ];
                     break;
             }
@@ -198,13 +198,13 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             switch ($property) {
                 case '{DAV:}displayname':
                     $query[] = [ '$or' => [
-                        [ 'firstname' => [ '$regex' => $value, '$options' => 'i' ] ],
-                        [ 'lastname' => [ '$regex' => $value, '$options' => 'i' ] ]
+                        [ 'firstname' => [ '$regex' => preg_quote($value), '$options' => 'i' ] ],
+                        [ 'lastname' => [ '$regex' => preg_quote($value), '$options' => 'i' ] ]
                     ] ];
                     break;
                 case '{http://sabredav.org/ns}email-address':
                     $query[] = [ 'accounts.emails' => [
-                        '$elemMatch' => ['$regex' => $value, '$options' => 'i' ]
+                        '$elemMatch' => ['$regex' => '^' . preg_quote($value) . '$', '$options' => 'i' ]
                     ] ];
                     break;
             }

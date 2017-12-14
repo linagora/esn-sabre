@@ -316,10 +316,10 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $result = $backend->searchPrincipals('principals/projects', array('{DAV:}displayname' => 'proj'));
         $this->assertEquals(array('principals/projects/' . self::PROJECT_ID), $result);
 
-        $result = $backend->searchPrincipals('principals/users', array('{DAV:}displayname' => 'FIrST', '{http://sabredav.org/ns}email-address' => 'USER@EXAMPLE'));
+        $result = $backend->searchPrincipals('principals/users', array('{DAV:}displayname' => 'FIrST', '{http://sabredav.org/ns}email-address' => 'USER@EXAMPLE.CoM'));
         $this->assertEquals(array('principals/users/' . self::USER_ID), $result);
 
-        $result = $backend->searchPrincipals('mom', array('{DAV:}displayname' => 'FIrST', '{http://sabredav.org/ns}email-address' => 'USER@EXAMPLE'));
+        $result = $backend->searchPrincipals('mom', array('{DAV:}displayname' => 'FIrST', '{http://sabredav.org/ns}email-address' => 'USER@EXAMPLE.CoM'));
         $this->assertEquals(array(), $result);
 
         $result = $backend->searchPrincipals('principals/users', array('{DAV:}displayname' => 'FIrST', '{http://sabredav.org/ns}email-address' => 'NOTFOUND'), 'anyof');

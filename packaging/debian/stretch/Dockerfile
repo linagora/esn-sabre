@@ -1,8 +1,8 @@
 #
-# Docker container for building openpaas-davserver Debian Jessie package
+# Docker container for building openpaas-davserver Debian Stretch package
 #
 
-FROM linagora/fpm-debian-jessie
+FROM linagora/fpm-debian-stretch
 MAINTAINER Linagora Folks <lgs-openpaas-dev@linagora.com>
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -10,7 +10,11 @@ ARG VERSION=0.0.0
 ARG ITERATION=1
 ARG TREEISH=master
 
-RUN apt-get update && apt-get -y install git php5-curl php5-dev php5-mongo
+RUN apt-get install -y curl apt-transport-https && \
+    curl -s https://packages.sury.org/php/apt.gpg | apt-key add - && \
+    echo "deb https://packages.sury.org/php/ stretch main" > /etc/apt/sources.list.d/sury.org.list && \
+    apt-get update && \
+    apt-get -y install git php5.6-curl php5.6-dev php5.6-mbstring php5.6-bcmath php5.6-xml php-mongo
 
 RUN curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/local/bin/composer.phar && ln -s /usr/local/bin/composer.phar /usr/local/bin/composer
 
@@ -48,7 +52,7 @@ RUN fpm \
   --depends php5.6-mbstring \
   --depends php5.6-bcmath \
   --depends php5.6-xml \
-  --depends mongodb-org \
+  --depends mongodb \
   --depends rabbitmq-server \
   --before-install /root/openpaas-davserver.preinst \
   --after-install /root/openpaas-davserver.postinst \

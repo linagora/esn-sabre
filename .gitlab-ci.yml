@@ -28,7 +28,7 @@ build_pkg_deb_jessie:
   tags:
     - master
   only:
-    - master
+    - master@linagora/lgs/openpaas/esn-sabre
   script:
     - curl -s -X POST
       -F "token=40f79bcbeb736c5b211be0e42f1643"
@@ -46,7 +46,7 @@ build_pkg_deb_stretch:
   tags:
     - master
   only:
-    - master
+    - master@linagora/lgs/openpaas/esn-sabre
   script:
     - curl -s -X POST
       -F "token=40f79bcbeb736c5b211be0e42f1643"
@@ -64,7 +64,7 @@ build_pkg_rpm:
   tags:
     - master
   only:
-    - master
+    - master@linagora/lgs/openpaas/esn-sabre
   script:
     - curl -s -X POST
       -F "token=40f79bcbeb736c5b211be0e42f1643"
@@ -86,7 +86,7 @@ deploy_dev:
     name: dev
     url: https://dev.open-paas.org
   only:
-    - master
+    - master@linagora/lgs/openpaas/esn-sabre
   script:
     - cd /srv/sabre.dev
     - git fetch --all

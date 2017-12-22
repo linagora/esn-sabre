@@ -5,7 +5,8 @@ services:
 
 stages:
   - build
-  - build_pkg_deb
+  - build_pkg_deb_jessie
+  - build_pkg_deb_stretch
   - build_pkg_rpm
   - deploy_dev
 
@@ -20,8 +21,8 @@ build:
     - cd tests
     - ../vendor/bin/phpunit --coverage-clover=${CI_PROJECT_DIR}/clover.xml --log-junit=${CI_PROJECT_DIR}/junit.xml .
 
-build_pkg_deb:
-  stage: build_pkg_deb
+build_pkg_deb_jessie:
+  stage: build_pkg_deb_jessie
   variables:
     GIT_STRATEGY: none
   tags:
@@ -36,6 +37,24 @@ build_pkg_deb:
       -F "variables[VERSION_FILE]=composer.json"
       -F "variables[PACKAGE_NAME]=openpaas-davserver"
       -F "variables[DOCKERFILE]=debian/jessie/Dockerfile"
+      https://ci.linagora.com/api/v4/projects/338/trigger/pipeline | jq .
+
+build_pkg_deb_stretch:
+  stage: build_pkg_deb_stretch
+  variables:
+    GIT_STRATEGY: none
+  tags:
+    - master
+  only:
+    - master
+  script:
+    - curl -s -X POST
+      -F "token=40f79bcbeb736c5b211be0e42f1643"
+      -F "ref=master"
+      -F "variables[REPO]=https://ci.linagora.com/linagora/lgs/openpaas/esn-sabre.git"
+      -F "variables[VERSION_FILE]=composer.json"
+      -F "variables[PACKAGE_NAME]=openpaas-davserver"
+      -F "variables[DOCKERFILE]=debian/stretch/Dockerfile"
       https://ci.linagora.com/api/v4/projects/338/trigger/pipeline | jq .
 
 build_pkg_rpm:

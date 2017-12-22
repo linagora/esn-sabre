@@ -492,14 +492,19 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function getCalendarObjectByUID($principalUri, $uid) {
         $collection = $this->db->selectCollection($this->calendarInstancesTableName);
         $query = [ 'principaluri' => $principalUri ];
-        $fields = ['calendarid', 'uri'];
+        $fields = ['calendarid', 'uri', 'access'];
 
         $calendarInstances = $collection->find($query, $fields);
         if (!$calendarInstances || !$calendarInstances->hasNext()) return null;
 
         $calendarUris = array();
         foreach($calendarInstances as $calendarInstance) {
-            $calendarUris[(string) $calendarInstance['calendarid']] = (string) $calendarInstance['uri'];
+            // Because we do not want retrieve event from delegation
+            // This check make sense only for event where I am attendee and also have a delegation
+            // So we are able to retrieve event from delegation and add new event in default calendar because I am attendee
+            if ($calendarInstance['access'] === 1) {
+                $calendarUris[(string) $calendarInstance['calendarid']] = (string) $calendarInstance['uri'];
+            }
         }
 
         $collection = $this->db->selectCollection($this->calendarObjectTableName);

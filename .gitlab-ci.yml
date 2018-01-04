@@ -31,7 +31,7 @@ build_pkg_deb_jessie:
     - master@linagora/lgs/openpaas/esn-sabre
   script:
     - curl -s -X POST
-      -F "token=40f79bcbeb736c5b211be0e42f1643"
+      -F "token=${BUILD_PACKAGE_CI_TOKEN}"
       -F "ref=master"
       -F "variables[REPO]=https://ci.linagora.com/linagora/lgs/openpaas/esn-sabre.git"
       -F "variables[VERSION_FILE]=composer.json"
@@ -49,7 +49,7 @@ build_pkg_deb_stretch:
     - master@linagora/lgs/openpaas/esn-sabre
   script:
     - curl -s -X POST
-      -F "token=40f79bcbeb736c5b211be0e42f1643"
+      -F "token=${BUILD_PACKAGE_CI_TOKEN}"
       -F "ref=master"
       -F "variables[REPO]=https://ci.linagora.com/linagora/lgs/openpaas/esn-sabre.git"
       -F "variables[VERSION_FILE]=composer.json"
@@ -67,7 +67,7 @@ build_pkg_rpm:
     - master@linagora/lgs/openpaas/esn-sabre
   script:
     - curl -s -X POST
-      -F "token=40f79bcbeb736c5b211be0e42f1643"
+      -F "token=${BUILD_PACKAGE_CI_TOKEN}"
       -F "ref=master"
       -F "variables[REPO]=https://ci.linagora.com/linagora/lgs/openpaas/esn-sabre.git"
       -F "variables[VERSION_FILE]=composer.json"

@@ -1,7 +1,5 @@
 #! /bin/sh -e
 
-echo "127.0.0.1 dav.openpaas.local" | tee -a /etc/hosts
-
 setsebool -P httpd_can_network_connect 1
 
 service nginx restart

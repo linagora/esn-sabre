@@ -1,7 +1,5 @@
 #! /bin/sh -e
 
-echo "127.0.0.1 dav.openpaas.local" | tee -a /etc/hosts
-
 service nginx reload
 service rabbitmq-server status > /dev/null || service rabbitmq-server start
 

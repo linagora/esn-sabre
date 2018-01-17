@@ -99,6 +99,22 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($response->status, 400);
     }
 
+    function testGetDefaultCalendar() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/events.json',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeData));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $this->assertCount(1, $jsonResponse->_embedded->{'dav:item'});
+    }
+
     function testGetAnonimizedCalendarObjects() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

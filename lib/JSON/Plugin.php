@@ -33,11 +33,29 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $url = str_replace('.json','', $url);
         }
         $this->acceptHeader = explode(', ', $request->getHeader('Accept'));
-        $request->setUrl($url);
-
         $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
 
+        if ($this->_isOldDefaultCalendarUriNotFound($url)) {
+            $defaultCalendarUri = $this->_getDefaultCalendarUri($this->currentUser,  $request->getPath());
+            $url = str_replace(\ESN\CalDAV\Backend\Esn::EVENTS_URI, $defaultCalendarUri, $url);
+        }
+
+        $request->setUrl($url);
+
         return true;
+    }
+
+    function _isOldDefaultCalendarUriNotFound($url) {
+        return strpos($url, \ESN\CalDAV\Backend\Esn::EVENTS_URI) && !$this->server->tree->nodeExists($url);
+    }
+
+    function _getDefaultCalendarUri($user, $path) {
+        $homePath = substr($path, 0, strpos($path, \ESN\CalDAV\Backend\Esn::EVENTS_URI));
+        $node = $this->server->tree->getNodeForPath($homePath);
+
+        $calendars = $node->getChildren();
+
+        return $calendars[0]->getName();
     }
 
     function beforeUnbind($path) {

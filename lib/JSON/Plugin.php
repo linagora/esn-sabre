@@ -253,6 +253,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->deleteSubscription($node);
         }
 
+        if ($node instanceof \Sabre\CardDAV\AddressBook) {
+            list($code, $body) = $this->deleteAddressBook($node);
+        }
+
         return $this->send($code, $body);
     }
 
@@ -431,6 +435,26 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];
+    }
+
+    function deleteAddressBook($node) {
+        if ($node->getName() === \ESN\CardDAV\Backend\Esn::CONTACTS_URI) {
+            return [403, [
+                'status' => 403,
+                'message' => 'Forbidden: You can not delete your default address book'
+            ]];
+        }
+
+        if ($node->getName() === \ESN\CardDAV\Backend\Esn::COLLECTED_URI) {
+            return [403, [
+                'status' => 403,
+                'message' => 'Forbidden: You can not delete your collected address book'
+            ]];
+        }
+
+        $node->delete();
+
+        return [204, null];
     }
 
     function findProperties($request) {

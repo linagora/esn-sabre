@@ -795,7 +795,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertCount(1, $calendars);
     }
 
-    function testCreateAddressbook() {
+    function testCreateAddressBook() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -827,7 +827,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals('social', $book['{http://open-paas.org/contacts}type']);
     }
 
-    function testCreateAddressbookMissingId() {
+    function testCreateAddressBookMissingId() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -847,6 +847,84 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
         $this->assertCount(1, $addressbooks);
+    }
+
+    function testDeleteDefaultAddressBook() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/contacts.json',
+        ));
+
+        $contactsAddressBook = array(
+            'uri' => 'contacts',
+            'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+        );
+
+        $this->carddavBackend->createAddressBook($contactsAddressBook['principaluri'],
+            $contactsAddressBook['uri'],
+            [
+                '{DAV:}displayname' => 'contacts',
+                '{urn:ietf:params:xml:ns:carddav}addressbook-description' => 'Contacts description'
+            ]);
+
+        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
+        $this->assertCount(2, $addressbooks);
+
+        $response = $this->request($request);
+        $this->assertEquals(403, $response->status);
+
+        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
+        $this->assertCount(2, $addressbooks);
+    }
+
+    function testDeleteCollectedAddressBook() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/collected.json',
+        ));
+
+        $collectedAddressBook = array(
+            'uri' => 'collected',
+            'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+        );
+
+        $this->carddavBackend->createAddressBook($collectedAddressBook['principaluri'],
+            $collectedAddressBook['uri'],
+            [
+                '{DAV:}displayname' => 'collected',
+                '{urn:ietf:params:xml:ns:carddav}addressbook-description' => 'Collected description'
+            ]);
+
+        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
+        $this->assertCount(2, $addressbooks);
+
+        $response = $this->request($request);
+        $this->assertEquals(403, $response->status);
+
+        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
+        $this->assertCount(2, $addressbooks);
+    }
+
+    function testDeleteAddressBook() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
+        ));
+
+        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
+        $this->assertCount(1, $addressbooks);
+
+        $response = $this->request($request);
+        $this->assertEquals(204, $response->status);
+
+        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
+        $this->assertCount(0, $addressbooks);
     }
 
     function testDeleteCalendar() {
@@ -1114,7 +1192,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_METHOD'    => 'DELETE',
             'HTTP_CONTENT_TYPE' => 'application/json',
             'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book2.json',
+            'REQUEST_URI'       => '/unsupportednode/54b64eadf6d7d8e41d263e0f/resource.json',
         ));
 
         $request->setBody(json_encode($this->timeRangeData));

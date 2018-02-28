@@ -18,13 +18,13 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $books = $backend->getAddressBooksForUser('principals/user2');
 
         $contactAddressBook = array(
-            'uri'               => $backend->CONTACTS_URI,
+            'uri'               => $backend::CONTACTS_URI,
             '{DAV:}displayname' => '',
             '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
         );
 
         $collectedAddressBook = array(
-            'uri'               => $backend->COLLECTED_URI,
+            'uri'               => $backend::COLLECTED_URI,
             '{DAV:}displayname' => '',
             '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
         );
@@ -48,13 +48,13 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         );
 
         $contactAddressBook = array(
-            'uri'               => $backend->CONTACTS_URI,
+            'uri'               => $backend::CONTACTS_URI,
             '{DAV:}displayname' => '',
             '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
         );
 
         $collectedAddressBook = array(
-            'uri'               => $backend->COLLECTED_URI,
+            'uri'               => $backend::COLLECTED_URI,
             '{DAV:}displayname' => '',
             '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
         );

@@ -280,6 +280,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->changeSubscriptionProperties($path, $node, $jsonData);
         }
 
+        if ($node instanceof \Sabre\CardDAV\AddressBook) {
+            list($code, $body) = $this->changeAddressBookProperties($path, $node, $jsonData);
+        }
+
         return $this->send($code, $body);
 
     }
@@ -438,23 +442,59 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function deleteAddressBook($node) {
-        if ($node->getName() === \ESN\CardDAV\Backend\Esn::CONTACTS_URI) {
-            return [403, [
-                'status' => 403,
-                'message' => 'Forbidden: You can not delete your default address book'
-            ]];
-        }
+        $protectedAddressBook = array(
+            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
+            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
+        );
 
-        if ($node->getName() === \ESN\CardDAV\Backend\Esn::COLLECTED_URI) {
+        if (in_array($node->getName(), $protectedAddressBook)) {
             return [403, [
                 'status' => 403,
-                'message' => 'Forbidden: You can not delete your collected address book'
+                'message' => 'Forbidden: You can not delete '.$node->getName().' address book'
             ]];
         }
 
         $node->delete();
 
         return [204, null];
+    }
+
+    function changeAddressBookProperties($nodePath, $node, $jsonData) {
+        $protectedAddressBook = array(
+            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
+            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
+        );
+
+        if (in_array($node->getName(), $protectedAddressBook)) {
+            return [403, [
+                'status' => 403,
+                'message' => 'Forbidden: You can not update '.$node->getName().' address book'
+            ]];
+        }
+
+        $propnameMap = [
+            'dav:name' => '{DAV:}displayname',
+            'carddav:description' => '{urn:ietf:params:xml:ns:carddav}addressbook-description'
+        ];
+
+        $davProps = [];
+        foreach ($jsonData as $jsonProp => $value) {
+            if (isset($propnameMap[$jsonProp])) {
+                $davProps[$propnameMap[$jsonProp]] = $value;
+            }
+        }
+
+        $result = $this->server->updateProperties($nodePath, $davProps);
+
+        $returncode = 204;
+        foreach ($result as $prop => $code) {
+            if ((int)$code > 299) {
+                $returncode = (int)$code;
+                break;
+            }
+        }
+
+        return [$returncode, null];
     }
 
     function findProperties($request) {

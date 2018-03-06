@@ -78,33 +78,55 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             $fullEventPath = '/' . $homePath . $eventPath;
         }
 
-        $body = json_encode([
-            'email' => substr($iTipMessage->recipient, 7),
-            'method' => $iTipMessage->method,
-            'event' => $iTipMessage->message->serialize(),
-            'notify' => true,
-            'calendarURI' => $calendarNode->getName(),
-            'eventPath' => $fullEventPath
-        ]);
+        $eventMessages = $this->explodeItipMessageEvents($iTipMessage->message);
 
-        $url = $this->apiroot . '/calendars/inviteattendees';
-        $request = new HTTP\Request('POST', $url);
-        $request->setHeader('Content-type', 'application/json');
-        $request->setHeader('Content-length', strlen($body));
-        $cookie = $this->authBackend->getAuthCookies();
-        $request->setHeader('Cookie', $cookie);
-        $request->setBody($body);
+        foreach ($eventMessages as $eventMessage) {
+            $body = json_encode([
+                'email' => substr($iTipMessage->recipient, 7),
+                'method' => $iTipMessage->method,
+                'event' => $eventMessage->serialize(),
+                'notify' => true,
+                'calendarURI' => $calendarNode->getName(),
+                'eventPath' => $fullEventPath
+            ]);
 
-        $response = $this->httpClient->send($request);
-        $status = $response->getStatus();
+            $url = $this->apiroot . '/calendars/inviteattendees';
+            $request = new HTTP\Request('POST', $url);
+            $request->setHeader('Content-type', 'application/json');
+            $request->setHeader('Content-length', strlen($body));
+            $cookie = $this->authBackend->getAuthCookies();
+            $request->setHeader('Cookie', $cookie);
+            $request->setBody($body);
 
-        if (floor($status / 100) == 2) {
-            $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_DELIVERED;
-        } else {
-            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
-            error_log("iTip Delivery failed for " . $iTipMessage->recipient .
-                      ": " . $status . " " . $response->getStatusText());
+            $response = $this->httpClient->send($request);
+            $status = $response->getStatus();
+
+            if (floor($status / 100) == 2) {
+                $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_DELIVERED;
+            } else {
+                $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
+                error_log("iTip Delivery failed for " . $iTipMessage->recipient .
+                    ": " . $status . " " . $response->getStatusText());
+            }
         }
+
+    }
+
+    private function explodeItipMessageEvents($message) {
+        $messages = [];
+
+        $vevents = $message->select('VEVENT');
+
+        foreach($vevents as $vevent) {
+            $currentMessage = clone $message;
+
+            $currentMessage->remove('VEVENT');
+            $currentMessage->add($vevent);
+
+            $messages[] = $currentMessage;
+        }
+
+        return $messages;
     }
 
     function initialize(DAV\Server $server) {

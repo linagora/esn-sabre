@@ -84,6 +84,25 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             'END:VCALENDAR',
             '']);
 
+        $this->icalRec = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'BEGIN:VEVENT',
+            'UID:e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1550',
+            'DTSTART:20180305T120000Z',
+            'DTEND:20180305T130000Z',
+            'SUMMARY:Lunch',
+            'RRULE:FREQ=DAILY;COUNT=8',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1550',
+            'DTSTART:20180306T120000Z',
+            'DTEND:20180306T140000Z',
+            'SUMMARY:Lunch',
+            'RECURRENCE-ID:20180306T120000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            '']);
+
         $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\EsnRequest($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
@@ -122,7 +141,8 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->cal = $this->caldavCalendar;
         $this->cal['id'] = $this->caldavBackend->createCalendar($this->cal['principaluri'], $this->cal['uri'], $this->cal);
         $this->caldavBackend->createCalendarObject($this->cal['id'], 'simple.ics', $this->ical);
-
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'rec.ics', $this->icalRec);
+        
         $this->calUser2 = $this->caldavCalendarUser2;
         $this->calUser2['id'] = $this->caldavBackend->createCalendar($this->calUser2['principaluri'], $this->calUser2['uri'], $this->calUser2);
         $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'simple.ics', $this->ical);
@@ -265,10 +285,90 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             $requestCalled = true;
         });
 
-
         $plugin->schedule($this->msg);
         $this->assertEquals('5.1', $this->msg->scheduleStatus);
         $this->assertTrue($requestCalled);
+    }
+
+    function testSendRecToOpUser() {
+        $plugin = $this->getPlugin();
+        $client = $plugin->getClient();
+
+        $this->msg->message = \Sabre\VObject\Reader::read($this->icalRec);
+        $this->msg->sender = 'mailto:test@example.com';
+        $this->msg->recipient = 'mailto:johndoe@example.org';
+        $this->msg->method = "REQUEST";
+        $this->msg->uid = "e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1550";
+
+        $requestCalled = false;
+        $self = $this;
+
+        $client->on('doRequest', function($request, &$response) use ($self, &$requestCalled) {
+            $jsondata = json_decode($request->getBodyAsString());
+            $self->assertEquals($jsondata->method, 'REQUEST');
+            $self->assertEquals($jsondata->email, 'johndoe@example.org');
+            $self->assertEquals($jsondata->event, $self->icalRec);
+            $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
+            $self->assertTrue($jsondata->notify);
+            $requestCalled = true;
+        });
+
+        $plugin->schedule($this->msg);
+        $this->assertEquals('1.2', $this->msg->scheduleStatus);
+        $this->assertTrue($requestCalled);
+    }
+    
+    function testSendRecToExternalUser() {
+        $messages[] = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'BEGIN:VEVENT',
+            'UID:e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1550',
+            'DTSTART:20180305T120000Z',
+            'DTEND:20180305T130000Z',
+            'SUMMARY:Lunch',
+            'RRULE:FREQ=DAILY;COUNT=8',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            '']);
+
+        $messages[] = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'BEGIN:VEVENT',
+            'UID:e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1550',
+            'DTSTART:20180306T120000Z',
+            'DTEND:20180306T140000Z',
+            'SUMMARY:Lunch',
+            'RECURRENCE-ID:20180306T120000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            '']);
+
+        $plugin = $this->getPlugin();
+        $client = $plugin->getClient();
+
+        $this->msg->message = \Sabre\VObject\Reader::read($this->icalRec);
+        $this->msg->sender = 'mailto:test@example.com';
+        $this->msg->recipient = 'mailto:johndoe@other.org';
+        $this->msg->method = "REQUEST";
+        $this->msg->uid = "e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1550";
+
+        $timesCalled = 0;
+        $self = $this;
+
+        $client->on('doRequest', function($request, &$response) use ($self, &$timesCalled, $messages) {
+            $jsondata = json_decode($request->getBodyAsString());
+            $self->assertEquals($jsondata->method, 'REQUEST');
+            $self->assertEquals($jsondata->email, 'johndoe@other.org');
+            $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
+            $self->assertTrue($jsondata->notify);
+            $self->assertEquals($jsondata->event, $messages[$timesCalled]);
+
+            $timesCalled++;
+        });
+
+        $plugin->schedule($this->msg);
+        $this->assertEquals('1.2', $this->msg->scheduleStatus);
+        $this->assertEquals(2, $timesCalled);
     }
 }
 

@@ -3,11 +3,8 @@
 namespace ESN\CalDAV\Schedule;
 
 use \Sabre\DAV;
-use \Sabre\VObject;
 use \Sabre\VObject\ITip;
 use \Sabre\HTTP;
-use \Sabre\HTTP\RequestInterface;
-use \Sabre\HTTP\ResponseInterface;
 use \ESN\Utils\Utils as Utils;
 
 class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
@@ -78,7 +75,13 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             $fullEventPath = '/' . $homePath . $eventPath;
         }
 
-        $eventMessages = $this->explodeItipMessageEvents($iTipMessage->message);
+        // No need to split iTip message for Sabre User
+        // Sabre can handle multiple event iTip message
+        if ($principalUri) {
+            $eventMessages = [$iTipMessage->message];
+        } else {
+            $eventMessages = $this->explodeItipMessageEvents($iTipMessage->message);
+        }
 
         foreach ($eventMessages as $eventMessage) {
             $body = json_encode([

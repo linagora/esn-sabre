@@ -5,7 +5,7 @@ use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
-use Sabre\VObject\Document;
+use Sabre\VObject;
 use Sabre\Uri;
 use \ESN\Utils\Utils as Utils;
 use \ESN\CalDAV\Schedule\IMipPlugin;
@@ -185,13 +185,18 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         if (!$homePath || !$eventPath) {
             return false;
         }
-
+        
         $event = clone $iTipMessage->message;
         $event->remove('method');
+        $master = VObject\Reader::read($data);
+
+        if(count($master->select('VEVENT')) === 1 && isset($event->VEVENT->{'RECURRENCE-ID'})) {
+            $master->add($event->VEVENT);
+        }
 
         $dataMessage = [
             'eventPath' => '/' . $path,
-            'event' => $event
+            'event' => $master
         ];
 
         $this->createMessage(

@@ -23,7 +23,7 @@ mongo_timeout="10000"
 [ -z "$ESN_PORT" ] || esn_port="$ESN_PORT"
 [ -z "$AMQP_HOST" ] || amqp_host="$AMQP_HOST"
 [ -z "$AMQP_PORT" ] || amqp_port="$AMQP_PORT"
-[ -z "$AMQP_LOGIN" ] || amqp_login"=$AMQP_LOGIN"
+[ -z "$AMQP_LOGIN" ] || amqp_login="$AMQP_LOGIN"
 [ -z "$AMQP_PASSWORD" ] || amqp_password="$AMQP_PASSWORD"
 
 config="{

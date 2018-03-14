@@ -78,8 +78,8 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             'BEGIN:VEVENT',
             'UID:daab17fe-fac4-4946-9105-0f2cdb30f5ab',
             'SUMMARY:Hello',
-            'DTSTART:20150228T030000',
-            'DTEND:20150228T040000',
+            'DTSTART:20150228T030000Z',
+            'DTEND:20150228T040000Z',
             'END:VEVENT',
             'END:VCALENDAR',
             '']);

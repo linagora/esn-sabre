@@ -2,10 +2,14 @@
 
 namespace ESN\CalDAV\Schedule;
 
+use DateTimeInterface;
+use DateTimeZone;
 use \Sabre\DAV;
 use \Sabre\VObject\ITip;
+use \Sabre\VObject\Property;
 use \Sabre\HTTP;
 use \ESN\Utils\Utils as Utils;
+
 
 class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     protected $server;
@@ -30,7 +34,16 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_PERMANENT;
             return;
         }
-  
+
+        foreach ($iTipMessage->message->VEVENT->children() as $componentChild) {
+            if ($componentChild instanceof Property\ICalendar\DateTime && $componentChild->hasTime()) {
+
+                $dt = $componentChild->getDateTimes(new DateTimeZone('UTC'));
+                $dt[0] = $dt[0]->setTimeZone(new DateTimeZone('UTC'));
+                $componentChild->setDateTimes($dt);
+            }
+        }
+
         // Not sending any emails if the system considers the update
         // insignificant.
         if (!$iTipMessage->significantChange) {

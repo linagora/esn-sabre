@@ -1756,6 +1756,28 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($response->status, 204);
     }
 
+    function testITIPShouldDefaultForCounter() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ITIP',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+        $this->itipRequestData['method'] = 'COUNTER';
+        $this->itipRequestData['sequence'] = null;
+
+        $schedulePlugin = $this->getMock(ServerPlugin::class, ['getPluginName', 'scheduleLocalDelivery', 'initialize']);
+        $schedulePlugin->expects($this->any())->method('getPluginName')->will($this->returnValue('caldav-schedule'));
+        $schedulePlugin->expects($this->never())->method('scheduleLocalDelivery');
+
+        $this->server->addPlugin($schedulePlugin);
+
+        $request->setBody(json_encode($this->itipRequestData));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 204);
+    }
+
     function testACLShouldReturn404IfCalendarDoesNotExist() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'ACL',

@@ -30,7 +30,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_PERMANENT;
             return;
         }
-
+  
         // Not sending any emails if the system considers the update
         // insignificant.
         if (!$iTipMessage->significantChange) {
@@ -77,7 +77,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
         // No need to split iTip message for Sabre User
         // Sabre can handle multiple event iTip message
-        if ($principalUri) {
+        if ($iTipMessage->method === 'COUNTER' || $principalUri) {
             $eventMessages = [$iTipMessage->message];
         } else {
             $eventMessages = $this->explodeItipMessageEvents($iTipMessage->message);
@@ -112,7 +112,6 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                     ": " . $status . " " . $response->getStatusText());
             }
         }
-
     }
 
     private function explodeItipMessageEvents($message) {

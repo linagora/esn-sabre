@@ -166,6 +166,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     function schedule(\Sabre\VObject\ITip\Message $iTipMessage) {
+        if($iTipMessage->method === 'COUNTER') {
+            return true;
+        }
+
         switch($iTipMessage->scheduleStatus) {
             case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_SUCCESS_PENDING:
             case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_TEMPORARY:

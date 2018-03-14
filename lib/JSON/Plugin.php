@@ -93,8 +93,12 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $message->recipient = 'mailto:' . $payload->recipient;
         $message->message = VObject\Reader::read($payload->ical);
 
-        $this->server->getPlugin('caldav-schedule')->scheduleLocalDelivery($message);
-        $this->server->emit('itip', [$message]);
+        if($message->method !== 'COUNTER'){
+            $this->server->getPlugin('caldav-schedule')->scheduleLocalDelivery($message);
+            $this->server->emit('itip', [$message]);
+        } else {
+            $this->server->emit('schedule', [$message]);
+        }
 
         return $this->send(204, null);
     }

@@ -886,6 +886,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 // of the fact that the object getter for VEVENT will always return
                 // the first one.
                 $vevent = $vObject->VEVENT;
+
+                // This hack is to fix the prod. We need to investigate more about this bug
+                if (!is_object($vevent)) {
+                    error_log('/!\ vevent is not an object');
+
+                    continue;
+                }
+                    
                 if (!!$vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
                     $recurid = clone $vevent->DTSTART;
                     $recurid->name = 'RECURRENCE-ID';

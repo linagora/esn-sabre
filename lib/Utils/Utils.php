@@ -53,7 +53,7 @@ class Utils {
         return $principalUri;
     }
 
-    static function getEventPathForItip($principalUri, $eventUid, $method, \Sabre\DAV\Server $server) {
+    static function getEventForItip($principalUri, $eventUid, $method, \Sabre\DAV\Server $server) {
         $aclPlugin = $server->getPlugin('acl');
 
         if (!$aclPlugin) {

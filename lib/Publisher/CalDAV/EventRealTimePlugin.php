@@ -179,24 +179,16 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             return true;
         }
 
-        list($homePath, $eventPath, $data) = Utils::getEventPathForItip($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+        list($homePath, $eventPath, $upToDateEventIcs) = Utils::getEventForItip($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
         $path = $homePath . $eventPath;
 
         if (!$homePath || !$eventPath) {
             return false;
         }
         
-        $event = clone $iTipMessage->message;
-        $event->remove('method');
-        $master = VObject\Reader::read($data);
-
-        if(count($master->select('VEVENT')) === 1 && isset($event->VEVENT->{'RECURRENCE-ID'})) {
-            $master->add($event->VEVENT);
-        }
-
         $dataMessage = [
             'eventPath' => '/' . $path,
-            'event' => $master
+            'event' => VObject\Reader::read($upToDateEventIcs)
         ];
 
         $this->createMessage(
@@ -233,7 +225,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 'resourceId' => $pathExploded[1],
                 'eventId' => $pathExploded[3],
                 'eventPath' => '/' . $path,
-                'ics' => $data
+                'ics' => $upToDateEventIcs
             ];
             $this->createMessage(
                 $this->EVENT_TOPICS['RESOURCE_EVENT_CREATED'],
@@ -244,7 +236,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $senderPrincipalUri = Utils::getPrincipalByUri($iTipMessage->sender, $this->server);
 
         if($senderPrincipalUri && $iTipMessage->method === 'REPLY' && Utils::isResourceFromPrincipal($senderPrincipalUri)) {
-            list($homePath, $eventPath, $data) = Utils::getEventPathForItip($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+            list($homePath, $eventPath, $upToDateEventIcs) = Utils::getEventForItip($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
             $path = $homePath . $eventPath;
 
             if (!$homePath || !$eventPath) {
@@ -261,7 +253,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                                 'resourceId' => $explodedSenderPrincipalUri[2],
                                 'eventId' => $iTipMessage->uid,
                                 'eventPath' => '/' . $path,
-                                'ics' => $data
+                                'ics' => $upToDateEventIcs
                             ];
                             $this->createMessage(
                                 $this->EVENT_TOPICS['RESOURCE_EVENT_ACCEPTED'],
@@ -273,7 +265,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                                 'resourceId' => $explodedSenderPrincipalUri[2],
                                 'eventId' => $iTipMessage->uid,
                                 'eventPath' => '/' . $path,
-                                'ics' => $data
+                                'ics' => $upToDateEventIcs
                             ];
                             $this->createMessage(
                                 $this->EVENT_TOPICS['RESOURCE_EVENT_DECLINED'],

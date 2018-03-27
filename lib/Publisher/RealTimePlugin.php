@@ -41,6 +41,6 @@ abstract class RealTimePlugin extends ServerPlugin {
             $this->client->publish($message['topic'], json_encode($message['data']));
         }
 
-        $this->message = array();
+        $this->messages = array();
     }
 }

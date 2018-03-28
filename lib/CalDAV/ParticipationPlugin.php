@@ -54,7 +54,7 @@ class ParticipationPlugin extends ServerPlugin {
         list($data, $modified) = Utils::formatIcal($data, $modified);
 
         $addresses = $this->getAddressesForPrincipal(
-            $node->getOwner()
+            $this->server->getPlugin('auth')->getCurrentPrincipal()
         );
         
         $newInstances = $this->getAllInstancePartstatForAttendee($data, $addresses[0]);

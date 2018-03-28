@@ -187,5 +187,7 @@ $server->addPlugin($communityMembersPlugin);
 $projectMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'projects');
 $server->addPlugin($projectMembersPlugin);
 
+$server->addPlugin(new ESN\CalDAV\ParticipationPlugin());
+
 // And off we go!
 $server->exec();

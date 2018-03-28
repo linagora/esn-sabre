@@ -80,7 +80,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             return;
         }
 
-        list($homePath, $eventPath, $eventData) = Utils::getEventPathForItip($principalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+        list($homePath, $eventPath, $eventData) = Utils::getEventForItip($principalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
 
         if (!$homePath || !$eventPath) {
             $fullEventPath = '/' . $matches[1] . '/' . $iTipMessage->uid . '.ics';

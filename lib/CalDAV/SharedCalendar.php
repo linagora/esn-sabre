@@ -106,7 +106,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     private function updateAclWithPublicRight($acl) {
         $public_right = $this->getPublicRight();
 
-        if (isset($public_right)) {
+        if (isset($public_right) && strlen($public_right) > 0) {
             $index = array_search('{DAV:}authenticated', array_column($acl, 'principal'));
             if ($index) {
                 $acl[$index]['privilege'] = $public_right;

@@ -123,4 +123,26 @@ class Utils {
         return [$homePath, $eventPath, $event->get()];
     }
 
+    static function formatIcal($data, $modified) {
+        if (is_resource($data)) {
+            $data = stream_get_contents($data);
+        }
+
+        try {
+            // If the data starts with a [, we can reasonably assume we're dealing
+            // with a jCal object.
+            if (substr($data, 0, 1) === '[') {
+                $data = \Sabre\VObject\Reader::readJson($data);
+
+                $modified = true;
+            } else {
+                $data = \Sabre\VObject\Reader::read($data);
+            }
+        } catch (\Sabre\VObject\ParseException $e) {
+            throw new \Sabre\DAV\Exception\UnsupportedMediaType('This resource only supports valid iCalendar 2.0 data. Parse error: ' . $e->getMessage());
+        }
+
+        return [$data, $modified];
+    }
+
 }

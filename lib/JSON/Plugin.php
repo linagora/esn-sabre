@@ -31,12 +31,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $url = $request->getUrl();
         if (strpos($url, '.json') !== false) {
             $url = str_replace('.json','', $url);
+            $request->setUrl($url);
         }
+
         $this->acceptHeader = explode(', ', $request->getHeader('Accept'));
         $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
 
-        if ($this->_isOldDefaultCalendarUriNotFound($url)) {
-            $defaultCalendarUri = $this->_getDefaultCalendarUri($this->currentUser,  $request->getPath());
+        if ($this->_isOldDefaultCalendarUriNotFound($request->getPath())) {
+            $defaultCalendarUri = $this->_getDefaultCalendarUri($this->currentUser, $request->getPath());
             $url = str_replace(\ESN\CalDAV\Backend\Esn::EVENTS_URI, $defaultCalendarUri, $url);
         }
 
@@ -119,6 +121,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->getCalendarObjectByUID($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
             list($code, $body) = $this->getCalendarObjects($path, $node, $jsonData);
+        } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+            list($code, $body) = $this->getCalendarObjectsForSubscription($path, $node, $jsonData);
         } else {
             $code = 200;
             $body = [];
@@ -835,6 +839,26 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return [200, $this->getMultipleDAVItems($nodePath, $node, [$eventPath])];
+    }
+
+    function getCalendarObjectsForSubscription($nodePath, $subscription, $jsonData) {
+        $propertiesList = ['{http://calendarserver.org/ns/}source'];
+        $subprops = $subscription->getProperties($propertiesList);
+        $node = $subscription;
+
+        if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
+            $sourcePath = $subprops['{http://calendarserver.org/ns/}source']->getHref();
+
+            if (!$this->server->tree->nodeExists($sourcePath)) {
+                return [404, null];
+            }
+
+            $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+
+            return $this->getCalendarObjects($sourcePath, $sourceNode, $jsonData);
+        }
+
+        return [404, null];
     }
 
     function getCalendarObjects($nodePath, $node, $jsonData) {

@@ -137,6 +137,28 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($vevents[2]->CLASS, 'PRIVATE');
     }
 
+    function testGetSubscriptionObjects() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeDataRecur));
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $vcalendar = \Sabre\VObject\Reader::readJson($jsonResponse->_embedded->{'dav:item'}[0]->{'data'});
+        $vevents = $vcalendar->select('VEVENT');
+        $this->assertCount(3, $vevents);
+        $this->assertEquals($vevents[0]->SUMMARY, 'Busy');
+        $this->assertEquals($vevents[0]->CLASS, 'PRIVATE');
+        $this->assertEquals($vevents[1]->SUMMARY, 'Exception');
+        $this->assertEquals($vevents[2]->SUMMARY, 'Busy');
+        $this->assertEquals($vevents[2]->CLASS, 'PRIVATE');
+    }
+
     function testGetAnonimizedCalendarObjectByUID() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

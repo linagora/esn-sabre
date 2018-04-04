@@ -279,8 +279,11 @@ END:VCALENDAR'
         $caldavPlugin = new \ESN\CalDAV\Plugin();
         $this->server->addPlugin($caldavPlugin);
 
-        $this->carddavPlugin = new \Sabre\CardDAV\Plugin();
+        $this->carddavPlugin = new \ESN\CardDAV\Plugin();
         $this->server->addPlugin($this->carddavPlugin);
+
+        $this->carddavSubscriptionsPlugin = new \ESN\CardDAV\Subscriptions\Plugin();
+        $this->server->addPlugin($this->carddavSubscriptionsPlugin);
 
         $this->server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
         $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());

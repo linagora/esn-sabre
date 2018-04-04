@@ -54,7 +54,7 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
         $expectedACL = [
             [
                 'privilege' => '{DAV:}all',
-                'principal' => "{DAV:}owner",
+                'principal' => "principals/user1",
                 'protected' => true,
             ]
         ];
@@ -80,7 +80,7 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
         $expectedACL = [
             [
                 'privilege' => '{DAV:}all',
-                'principal' => "{DAV:}owner",
+                'principal' => "principals/user1",
                 'protected' => true,
             ]
         ];

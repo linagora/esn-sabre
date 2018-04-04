@@ -3,12 +3,23 @@
 namespace ESN\CardDAV\Backend;
 
 class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
+    \ESN\CardDAV\Backend\SubscriptionSupport,
     \Sabre\CardDAV\Backend\SyncSupport {
 
     public $addressBooksTableName = 'addressbooks';
     public $cardsTableName = 'cards';
     public $addressBookChangesTableName = 'addressbookchanges';
+    public $addressBookSubscriptionsTableName = 'addressbooksubscriptions';
     public $CharAPI;
+
+    public $subscriptionPropertyMap = [
+        '{DAV:}displayname' => 'displayname'
+    ];
+    public $PUBLIC_RIGHTS = [
+        '{DAV:}all',
+        '{DAV:}read',
+        '{DAV:}write'
+    ];
 
     function __construct(\MongoDB $db) {
         $this->db = $db;
@@ -120,8 +131,15 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     function deleteAddressBook($addressBookId) {
         $mongoId = new \MongoId($addressBookId);
+
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $query = [ '_id' => $mongoId ];
+        $row = $collection->findOne($query);
+
         $collection = $this->db->selectCollection($this->cardsTableName);
         $collection->remove([ 'addressbookid' => $mongoId ]);
+
+        $this->deleteSubscriptions($row['principaluri'], $row['uri']);
 
         $collection = $this->db->selectCollection($this->addressBooksTableName);
         $collection->remove([ '_id' => $mongoId ]);
@@ -305,6 +323,160 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             $result['added'] = $added;
         }
         return $result;
+    }
+
+    function saveAddressBookPublicRight($addressBookId, $privilege, $addressbookInfo) {
+        $mongoAddressBookId = new \MongoId($addressBookId);
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $query = ['_id' => $mongoAddressBookId];
+
+        $collection->update($query, ['$set' => ['public_right' => $privilege]]);
+
+        if (!in_array($privilege, $this->PUBLIC_RIGHTS)) {
+            $this->deleteSubscriptions($addressbookInfo['principaluri'], $addressbookInfo['uri']);
+        }
+    }
+
+    function getSubscriptionsForUser($principalUri) {
+        $fields[] = '_id';
+        $fields[] = 'displayname';
+        $fields[] = 'uri';
+        $fields[] = 'source';
+        $fields[] = 'principaluri';
+        $fields[] = 'lastmodified';
+        $fields[] = 'privilege';
+
+        // Making fields a comma-delimited list
+        $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
+        $query = [ 'principaluri' => $principalUri ];
+        $res = $collection->find($query, $fields);
+
+        $subscriptions = [];
+        foreach ($res as $row) {
+            $subscription = [
+                'id'           => (string)$row['_id'],
+                '{DAV:}displayname' => $row['displayname'],
+                'uri'          => $row['uri'],
+                'principaluri' => $row['principaluri'],
+                '{http://open-paas.org/contacts}source' => $row['source'],
+                'lastmodified' => $row['lastmodified'],
+                '{DAV:}acl'    => $this->getValue($row, 'privilege', ['dav:read', 'dav:write']),
+                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getValue($row, 'description', '')
+            ];
+
+            $subscriptions[] = $subscription;
+        }
+
+        return $subscriptions;
+    }
+
+    function createSubscription($principalUri, $uri, array $properties) {
+        if (!isset($properties['{http://open-paas.org/contacts}source'])) {
+            throw new \Sabre\DAV\Exception\Forbidden('The {http://open-paas.org/contacts}source property is required when creating subscriptions');
+        }
+
+        $obj = [
+            'displayname'  => '',
+            'description'  => '',
+            'principaluri' => $principalUri,
+            'uri'          => $uri,
+            'privilege' => ['dav:read', 'dav:write'],
+            'source'       => $properties['{http://open-paas.org/contacts}source']->getHref(),
+            'lastmodified' => time(),
+        ];
+
+        foreach($properties as $property=>$newValue) {
+            switch($property) {
+                case '{DAV:}displayname' :
+                    $obj['displayname'] = $newValue;
+                    break;
+                case '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' :
+                    $obj['description'] = $newValue;
+                    break;
+                case '{DAV:}acl' :
+                    $obj['privilege'] = $newValue;
+                    break;
+            }
+        }
+
+        $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
+        $collection->insert($obj);
+
+        return (string)$obj['_id'];
+    }
+
+    function updateSubscription($subscriptionId, \Sabre\DAV\PropPatch $propPatch) {
+        $supportedProperties = array_keys($this->subscriptionPropertyMap);
+        $supportedProperties[] = '{http://open-paas.org/contacts}source';
+
+        $propPatch->handle($supportedProperties, function($mutations) use ($subscriptionId) {
+            $newValues = [];
+            $newValues['lastmodified'] = time();
+
+            foreach($mutations as $propertyName=>$propertyValue) {
+                if ($propertyName === '{http://open-paas.org/contacts}source') {
+                    $newValues['source'] = $propertyValue->getHref();
+                } else {
+                    $fieldName = $this->subscriptionPropertyMap[$propertyName];
+                    $newValues[$fieldName] = $propertyValue;
+                }
+            }
+
+            $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
+            $query = [ '_id' => new \MongoId($subscriptionId) ];
+            $collection->update($query, [ '$set' => $newValues ]);
+
+            return true;
+        });
+    }
+
+    function deleteSubscription($subscriptionId) {
+        $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
+        $query = [ '_id' => new \MongoId($subscriptionId) ];
+        $collection->remove($query);
+    }
+
+    function deleteSubscriptions($principaluri, $uri) {
+        $principalUriExploded = explode('/', $principaluri);
+        $source = 'addressbooks/' . $principalUriExploded[2] . '/' . $uri;
+
+        $subscriptions = $this->getSubscriptionsBySource($source);
+        foreach($subscriptions as $subscription) {
+            $this->deleteSubscription($subscription['_id']);
+        }
+    }
+
+    function getSubscriptionsBySource($source) {
+        $fields[] = '_id';
+        $fields[] = 'principaluri';
+        $fields[] = 'uri';
+
+        $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
+        $query = [ 'source' => $source ];
+
+        $res = $collection->find($query, $fields);
+
+        $result = [];
+        foreach ($res as $row) {
+            $result[] = [
+                '_id' => $row['_id'],
+                'principaluri' => $row['principaluri'],
+                'uri' => $row['uri']
+            ];
+        }
+
+        return $result;
+    }
+
+    function getAddressBookPublicRight($addressBookId) {
+        $addressBookId = new \MongoId($addressBookId);
+
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $query = ['_id' => $addressBookId];
+
+        $res = $collection->findOne($query, ['public_right']);
+
+        return isset($res['public_right']) ? $res['public_right'] : null;
     }
 
     protected function addChange($addressBookId, $objectUri, $operation) {

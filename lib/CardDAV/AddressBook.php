@@ -4,7 +4,6 @@ namespace ESN\CardDAV;
 
 
 class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection {
-
     function getChildACL() {
         return $this->getACL();
     }
@@ -19,17 +18,28 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
     function getACL() {
         if($properties = $this->getProperties(['{DAV:}acl'])) {
             if (!in_array('dav:write', $properties['{DAV:}acl'])) {
-                return [
+                $acl = [
                     [
                         'privilege' => '{DAV:}read',
                         'principal' => $this->getOwner(),
-                        'protected' => true,
+                        'protected' => true
                     ]
                 ];
+
+                $acl = $this->updateAclWithPublicRight($acl);
+                return $acl;
             }
         }
 
-        return parent::getACL();
+        $acl = parent::getACL();
+        $acl = $this->updateAclWithPublicRight($acl);
+
+        $index = array_search('{DAV:}owner', array_column($acl, 'principal'));
+        if ($index >= 0) {
+            $acl[$index]['principal'] = $this->getOwner();
+        }
+
+        return $acl;
     }
 
     function getChildren($offset = 0, $limit = 0, $sort = null, $filters = null) {
@@ -46,5 +56,45 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return $this->carddavBackend->getCardCount($this->addressBookInfo['id']);
     }
 
+    function savePublicRight($privilege) {
+        $addressBookInfo = [];
+        $addressBookInfo['principaluri'] = $this->addressBookInfo['principaluri'];
+        $addressBookInfo['uri'] = $this->addressBookInfo['uri'];
 
+        $this->carddavBackend->saveAddressBookPublicRight($this->addressBookInfo['id'], $privilege, $addressBookInfo);
+    }
+
+    function isPublic() {
+        $public = $this->getPublicRight();
+
+        return in_array($public, $this->carddavBackend->PUBLIC_RIGHTS);
+    }
+
+    function getPublicRight() {
+
+        return $this->carddavBackend->getAddressBookPublicRight($this->addressBookInfo['id']);
+
+    }
+
+    private function updateAclWithPublicRight($acl) {
+        $public_right = $this->getPublicRight();
+
+        if (isset($public_right) && strlen($public_right) > 0) {
+            $acl[] = [
+                'privilege' => $public_right,
+                'principal' => '{DAV:}authenticated',
+                'protected' => true,
+            ];
+
+            if ($public_right === '{DAV:}write') {
+                $acl[] = [
+                    'privilege' => '{DAV:}read',
+                    'principal' => '{DAV:}authenticated',
+                    'protected' => true,
+                ];
+            }
+        }
+
+        return $acl;
+    }
 }

@@ -13,7 +13,7 @@ class MongoTest extends AbstractDatabaseTest {
         parent::setUp();
 
         $book = [
-            'principaluri' => 'principals/user1',
+            'principaluri' => 'principals/users/user1',
             'displayname' => 'book1',
             'uri' => 'book1',
             'description' => 'addressbook 1',
@@ -23,7 +23,7 @@ class MongoTest extends AbstractDatabaseTest {
         $this->book = $book;
 
         $book1 = [
-            'principaluri' => 'principals/user2',
+            'principaluri' => 'principals/users/user2',
             'displayname' => null,
             'uri' => 'book2',
             'description' => null,
@@ -79,7 +79,7 @@ class MongoTest extends AbstractDatabaseTest {
 
     function testAddressBookExists() {
         $book = [
-            'principaluri' => 'principals/user2',
+            'principaluri' => 'principals/users/user2',
             'displayname' => null,
             'uri' => 'thisoneexists',
             'description' => null,
@@ -88,8 +88,8 @@ class MongoTest extends AbstractDatabaseTest {
 
         $this->db->addressbooks->insert($book);
 
-        $this->assertTrue($this->backend->addressBookExists('principals/user2', 'thisoneexists'));
-        $this->assertFalse($this->backend->addressBookExists('principals/user2', 'thisonedoesnotexistsatall'));
+        $this->assertTrue($this->backend->addressBookExists('principals/users/user2', 'thisoneexists'));
+        $this->assertFalse($this->backend->addressBookExists('principals/users/user2', 'thisonedoesnotexistsatall'));
     }
 
     function testGetCards() {

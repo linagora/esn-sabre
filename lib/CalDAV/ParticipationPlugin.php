@@ -67,7 +67,7 @@ class ParticipationPlugin extends ServerPlugin {
                 }
 
                 foreach ($vevent->ATTENDEE as $attendee) {
-                    if ($attendee->getValue() == $addresses[0]) {
+                    if (strtolower($attendee->getValue()) == $addresses[0]) {
                         $attendee['PARTSTAT']->setValue($newInstances['master']['partstat']);
                     }
                 }
@@ -134,7 +134,7 @@ class ParticipationPlugin extends ServerPlugin {
         $partstat= null;
 
         foreach ($event->ATTENDEE as $attendee) {
-            if ($attendee->getValue() == $email) {
+            if (strtolower($attendee->getValue()) == $email) {
                 $partstat = $attendee['PARTSTAT']->getValue();
             }
         }

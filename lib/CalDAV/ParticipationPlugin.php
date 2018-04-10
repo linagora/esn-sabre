@@ -60,7 +60,7 @@ class ParticipationPlugin extends ServerPlugin {
         $newInstances = $this->getAllInstancePartstatForAttendee($data, $addresses[0]);
         $oldInstances = $this->getAllInstancePartstatForAttendee($oldCal, $addresses[0]);
 
-        if ($newInstances['master']['partstat'] !== $oldInstances['master']['partstat']) {
+        if ($newInstances['master']['partstat'] && $oldInstances['master']['partstat'] && $newInstances['master']['partstat'] !== $oldInstances['master']['partstat']) {
             foreach ($data->VEVENT as $vevent) {
                 if (!isset($vevent->{'RECURRENCE-ID'})) {
                     continue;
@@ -133,9 +133,11 @@ class ParticipationPlugin extends ServerPlugin {
     private function getParstatFromEmail($event, $email) {
         $partstat= null;
 
-        foreach ($event->ATTENDEE as $attendee) {
-            if (strtolower($attendee->getValue()) == $email) {
-                $partstat = $attendee['PARTSTAT']->getValue();
+        if ($event->ATTENDEE) {
+            foreach ($event->ATTENDEE as $attendee) {
+                if (strtolower($attendee->getValue()) == $email) {
+                    $partstat = $attendee['PARTSTAT']->getValue();
+                }
             }
         }
 

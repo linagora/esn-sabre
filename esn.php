@@ -183,6 +183,9 @@ if(!empty($config['amqp']['host'])){
 
     $contactRealTimePlugin = new ESN\Publisher\CardDAV\ContactRealTimePlugin($AMQPPublisher);
     $server->addPlugin($contactRealTimePlugin);
+
+    $addressBookRealTimePlugin = new ESN\Publisher\CardDAV\AddressBookRealTimePlugin($AMQPPublisher, $addressbookBackend);
+    $server->addPlugin($addressBookRealTimePlugin);
 }
 
 $communityMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'communities');

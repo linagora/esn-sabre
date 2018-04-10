@@ -2,9 +2,13 @@
 
 namespace ESN\CardDAV\Backend;
 
+use Sabre\Event\EventEmitter;
+
 class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     \ESN\CardDAV\Backend\SubscriptionSupport,
     \Sabre\CardDAV\Backend\SyncSupport {
+
+    protected $eventEmitter;
 
     public $addressBooksTableName = 'addressbooks';
     public $cardsTableName = 'cards';
@@ -24,7 +28,12 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     function __construct(\MongoDB $db) {
         $this->db = $db;
+        $this->eventEmitter = new EventEmitter();
         $this->CharAPI = new \ESN\Utils\CharAPI();
+    }
+
+    function getEventEmitter() {
+        return $this->eventEmitter;
     }
 
     function getAddressBooksForUser($principalUri) {
@@ -136,18 +145,26 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $collection = $this->db->selectCollection($this->addressBooksTableName);
         $query = [ '_id' => $mongoId ];
         $row = $collection->findOne($query);
+        $collection->remove([ '_id' => $mongoId ]);
 
         $collection = $this->db->selectCollection($this->cardsTableName);
         $collection->remove([ 'addressbookid' => $mongoId ]);
 
         $this->deleteSubscriptions($row['principaluri'], $row['uri']);
 
-        $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $collection->remove([ '_id' => $mongoId ]);
-
         $collection = $this->db->selectCollection($this->addressBookChangesTableName);
         $collection->remove([ '_id' => $mongoId ]);
 
+        $this->eventEmitter->emit('sabre:addressBookDeleted', [
+            $this->buildAddressBookPath($row['principaluri'], $row['uri']),
+            $row['principaluri']
+        ]);
+    }
+
+    private function buildAddressBookPath($principalUri, $addressBookUri) {
+        $uriExploded = explode('/', $principalUri);
+
+        return 'addressbooks/' . $uriExploded[2] . '/' . $addressBookUri;
     }
 
     function getCards($addressBookId, $offset = 0, $limit = 0, $sort = null, $filters = null) {

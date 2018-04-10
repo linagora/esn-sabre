@@ -29,13 +29,13 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     }
 
     public function testGetAddressBooksForUser() {
-        $result = $this->backend->getAddressBooksForUser('principals/user1');
+        $result = $this->backend->getAddressBooksForUser('principals/users/user1');
 
         $expected = array(
             array(
                 'id' => $this->bookId,
                 'uri' => 'book1',
-                'principaluri' => 'principals/user1',
+                'principaluri' => 'principals/users/user1',
                 '{DAV:}displayname' => 'book1',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 1',
                 '{http://calendarserver.org/ns/}getctag' => 1,
@@ -49,13 +49,13 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     }
 
     public function testGetAddressBooksWithEmptyPropertiesForUser() {
-        $result = $this->backend->getAddressBooksForUser('principals/user2');
+        $result = $this->backend->getAddressBooksForUser('principals/users/user2');
 
         $expected = array(
             array(
                 'id' => $this->missingPropertiesBookId,
                 'uri' => 'book2',
-                'principaluri' => 'principals/user2',
+                'principaluri' => 'principals/users/user2',
                 '{DAV:}displayname' => '',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => '',
                 '{http://calendarserver.org/ns/}getctag' => 1,
@@ -80,13 +80,13 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertFalse($result);
 
-        $result = $this->backend->getAddressBooksForUser('principals/user1');
+        $result = $this->backend->getAddressBooksForUser('principals/users/user1');
 
         $expected = array(
             array(
                 'id' => $this->bookId,
                 'uri' => 'book1',
-                'principaluri' => 'principals/user1',
+                'principaluri' => 'principals/users/user1',
                 '{DAV:}acl' => ['dav:read', 'dav:write'],
                 '{DAV:}displayname' => 'book1',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 1',
@@ -107,13 +107,13 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $result = $propPatch->commit();
         $this->assertTrue($result);
 
-        $result = $this->backend->getAddressBooksForUser('principals/user1');
+        $result = $this->backend->getAddressBooksForUser('principals/users/user1');
 
         $expected = array(
             array(
                 'id' => $this->bookId,
                 'uri' => 'book1',
-                'principaluri' => 'principals/user1',
+                'principaluri' => 'principals/users/user1',
                 '{DAV:}displayname' => 'book1',
                 '{DAV:}acl' => ['dav:read', 'dav:write'],
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 1',
@@ -138,13 +138,13 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertTrue($result);
 
-        $result = $this->backend->getAddressBooksForUser('principals/user1');
+        $result = $this->backend->getAddressBooksForUser('principals/users/user1');
 
         $expected = array(
             array(
                 'id' => $this->bookId,
                 'uri' => 'book1',
-                'principaluri' => 'principals/user1',
+                'principaluri' => 'principals/users/user1',
                 '{DAV:}displayname' => 'updated',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'updated',
                 '{DAV:}acl' => ['dav:read'],
@@ -159,20 +159,20 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
 
     public function testDeleteAddressBook() {
         $this->backend->deleteAddressBook($this->bookId);
-        $this->assertEquals(array(), $this->backend->getAddressBooksForUser('principals/user1'));
+        $this->assertEquals(array(), $this->backend->getAddressBooksForUser('principals/users/user1'));
     }
 
     /**
      * @expectedException Sabre\DAV\Exception\BadRequest
      */
     public function testCreateAddressBookUnsupportedProp() {
-        $this->backend->createAddressBook('principals/user1','book2', array(
+        $this->backend->createAddressBook('principals/users/user1','book2', array(
             '{DAV:}foo' => 'bar',
         ));
     }
 
     public function testCreateAddressBookSuccess() {
-        $book2Id = $this->backend->createAddressBook('principals/user1','book2', array(
+        $book2Id = $this->backend->createAddressBook('principals/users/user1','book2', array(
             '{DAV:}displayname' => 'book2',
             '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 2',
             '{DAV:}acl' => ['dav:read'],
@@ -183,7 +183,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             array(
                 'id' => $this->bookId,
                 'uri' => 'book1',
-                'principaluri' => 'principals/user1',
+                'principaluri' => 'principals/users/user1',
                 '{DAV:}displayname' => 'book1',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 1',
                 '{DAV:}acl' => ['dav:read', 'dav:write'],
@@ -194,7 +194,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             array(
                 'id' => $book2Id,
                 'uri' => 'book2',
-                'principaluri' => 'principals/user1',
+                'principaluri' => 'principals/users/user1',
                 '{DAV:}displayname' => 'book2',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 2',
                 '{DAV:}acl' => ['dav:read'],
@@ -203,7 +203,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 '{http://open-paas.org/contacts}type' => 'social'
             )
         );
-        $result = $this->backend->getAddressBooksForUser('principals/user1');
+        $result = $this->backend->getAddressBooksForUser('principals/users/user1');
         $this->assertEquals($expected, $result);
     }
 
@@ -298,7 +298,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     function testGetChanges() {
         $backend = $this->backend;
         $id = $backend->createAddressBook(
-            'principals/user1',
+            'principals/users/user1',
             'bla',
             []
         );
@@ -341,7 +341,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     public function testDecapitalizeFn() {
         $backend = $this->backend;
         $id = $backend->createAddressBook(
-            'principals/admin',
+            'principals/users/admin',
             'admin',
             []
         );
@@ -358,7 +358,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     public function testConvertFnToASCII() {
         $backend = $this->backend;
         $id = $backend->createAddressBook(
-            'principals/admin',
+            'principals/users/admin',
             'admin',
             []
         );
@@ -375,7 +375,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     public function testgetCardsShouldReturnNonAlphabeticFnFirst() {
         $backend = $this->backend;
         $id = $backend->createAddressBook(
-            'principals/admin',
+            'principals/users/admin',
             'admin',
             []
         );

@@ -13,7 +13,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     public $CharAPI;
 
     public $subscriptionPropertyMap = [
-        '{DAV:}displayname' => 'displayname'
+        '{DAV:}displayname' => 'displayname',
+        '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'description'
     ];
     public $PUBLIC_RIGHTS = [
         '{DAV:}all',
@@ -340,6 +341,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     function getSubscriptionsForUser($principalUri) {
         $fields[] = '_id';
         $fields[] = 'displayname';
+        $fields[] = 'description';
         $fields[] = 'uri';
         $fields[] = 'source';
         $fields[] = 'principaluri';

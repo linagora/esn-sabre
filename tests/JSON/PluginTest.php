@@ -2155,7 +2155,11 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book3.json',
         ));
         $nameUpdated = 'subscription tested';
-        $data = [ 'dav:name' => $nameUpdated ];
+        $descriptionUpdated = 'description updated';
+        $data = [
+            'dav:name' => $nameUpdated,
+            'carddav:description' => $descriptionUpdated
+        ];
         $request->setBody(json_encode($data));
 
         $response = $this->request($request);
@@ -2163,6 +2167,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $subscriptions = $this->carddavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
         $this->assertEquals($nameUpdated, $subscriptions[0]['{DAV:}displayname']);
+        $this->assertEquals($descriptionUpdated, $subscriptions[0]['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
     }
 
     function testPropFindRequestSubscriptionAddressBook() {

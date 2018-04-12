@@ -27,11 +27,12 @@ class CalendarRoot extends \Sabre\DAV\Collection {
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $user['_id'] ];
             $homes[] = new CalendarHome($this->caldavBackend, $principal);
         }
-        $res = $this->db->communities->find(array(), array("_id"));
+        //@Chamerling Here to reactivate the fetch of communities calendar
+        /*$res = $this->db->communities->find(array(), array("_id"));
         foreach ($res as $community) {
             $principal = [ 'uri' => self::COMMUNITY_PREFIX . '/' . $community['_id'] ];
             $homes[] = new CalendarHome($this->caldavBackend, $principal);
-        }
+        }*/
         $res = $this->db->projects->find(array(), array("_id"));
         foreach ($res as $project) {
             $principal = [ 'uri' => self::PROJECT_PREFIX . '/' . $project['_id'] ];
@@ -59,11 +60,12 @@ class CalendarRoot extends \Sabre\DAV\Collection {
             return new CalendarHome($this->caldavBackend, $principal);
         }
 
-        $res = $this->db->communities->findOne(array('_id' => $mongoName), []);
+        //@Chamerling Here to reactivate the fetch of communities calendar
+        /*$res = $this->db->communities->findOne(array('_id' => $mongoName), []);
         if ($res) {
             $principal = [ 'uri' => self::COMMUNITY_PREFIX . '/' . $name ];
             return new CalendarHome($this->caldavBackend, $principal);
-        }
+        }*/
 
         $res = $this->db->projects->findOne(array('_id' => $mongoName), []);
         if ($res) {

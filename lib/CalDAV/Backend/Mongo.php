@@ -97,6 +97,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 $calendar['read-only'] = (int)$row['access'] === \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
             }
 
+            if (!$row['displayname'] ) {
+                $row['displayname'] = 'Events';
+            }
+
             foreach($this->propertyMap as $xmlName=>$dbName) {
                 $calendar[$xmlName] = $row[$dbName];
             }

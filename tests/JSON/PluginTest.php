@@ -2036,7 +2036,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($response->status, 404);
     }
 
-    function testAddressBookACLShouldReturn400IfBodyIsBadlyFormatted() {
+    function testAddressBookACLShouldReturn400IfBodyIsEmpty() {
         $this->setUpToTestAddressBookSubscriptionSupport();
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'ACL',
@@ -2045,7 +2045,29 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
         ));
 
-        $request->setBody(json_encode(['key' => 'value']));
+        $body = '';
+
+        $request->setBody($body);
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 400);
+    }
+
+    function testAddressBookACLShouldReturn400IfUnsupportedPrincipal() {
+        $this->setUpToTestAddressBookSubscriptionSupport();
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ACL',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
+        ));
+
+        $body = '[{
+          "principal": "/unsupported/principal",
+          "privilege": "{DAV:}read"
+        }]';
+
+        $request->setBody($body);
         $response = $this->request($request);
 
         $this->assertEquals($response->status, 400);
@@ -2060,7 +2082,12 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
         ));
 
-        $request->setBody(json_encode(['public_right' => '{DAV}:doesnotexist']));
+        $body = '[{
+          "principal": "{DAV:}authenticated",
+          "privilege": "{DAV:}unsupportedPrivilege"
+        }]';
+
+        $request->setBody($body);
         $response = $this->request($request);
 
         $this->assertEquals($response->status, 412);
@@ -2075,7 +2102,15 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
         ));
 
-        $request->setBody(json_encode(['public_right' => '{DAV:}write']));
+        $body = '[{
+          "principal": "{DAV:}authenticated",
+          "privilege": "{DAV:}write"
+        }, {
+          "principal": "{DAV:}authenticated",
+          "privilege": "{DAV:}read"
+        }]';
+
+        $request->setBody($body);
         $response = $this->request($request);
 
         $this->assertEquals($response->status, 200);
@@ -2086,6 +2121,30 @@ class PluginTest extends \ESN\DAV\ServerMock {
             }
         }
         $this->assertEquals($publicPrivileges, ['{DAV:}write', '{DAV:}read']);
+    }
+
+    function testAddressBookACLShouldReturn200WhenRemoveAuthenticatedPrivilege() {
+        $this->setUpToTestAddressBookSubscriptionSupport();
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ACL',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
+        ));
+
+        $body = '[]';
+
+        $request->setBody($body);
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 200);
+        $publicPrivileges = [];
+        foreach (json_decode($response->body) as &$ace) {
+            if ($ace->principal === '{DAV:}authenticated') {
+                $publicPrivileges[] = $ace->privilege;
+            }
+        }
+        $this->assertEquals(sizeof($publicPrivileges), 0);
     }
 
     function testCreateSubscriptionAddressBook() {

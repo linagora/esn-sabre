@@ -102,23 +102,34 @@ class Plugin extends \Sabre\CardDAV\Plugin {
         $node = $this->server->tree->getNodeForPath($path);
 
         if ($node instanceof \ESN\CardDAV\AddressBook) {
-            $jsonData = json_decode($request->getBodyAsString());
+            $acl = json_decode($request->getBodyAsString());
 
-            if (!isset($jsonData->public_right)) {
+            if (!isset($acl)) {
                 throw new DAV\Exception\BadRequest('JSON body expected in ACL request');
             }
 
-            $supportedPrivileges = $this->server->getPlugin('acl')->getFlatPrivilegeSet($node);
-            $supportedPrivileges[""] = "Private";
-            if (!isset($supportedPrivileges[$jsonData->public_right])) {
-                throw new \Sabre\DAVACL\Exception\NotSupportedPrivilege('The privilege you specified (' . $jsonData->public_right . ') is not recognized by this server');
+            $supportedPublicRights = $node->getSupportedPublicRights();
+
+            foreach ($acl as $ace) {
+                if (!isset($ace->principal)) {
+                    throw new DAV\Exception\BadRequest('Authenticated ACE\'s principal is required');
+                }
+
+                if (!isset($ace->privilege) || strlen($ace->privilege) === 0) {
+                    throw new DAV\Exception\BadRequest('Authenticated ACE\'s privilege is required');
+                }
+
+                if (!in_array($ace->privilege, $supportedPublicRights)) {
+                    throw new \Sabre\DAVACL\Exception\NotSupportedPrivilege('The privilege you specified (' . $ace->privilege . ') is not recognized by this server');
+                }
             }
 
-            $node->savePublicRight($jsonData->public_right);
-
+            $node->setACL($acl);
             $this->send(200, $node->getACL());
+
             return false;
         }
+
         return true;
     }
 

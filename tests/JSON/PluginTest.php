@@ -13,6 +13,8 @@ require_once ESN_TEST_BASE. '/DAV/ServerMock.php';
  */
 class PluginTest extends \ESN\DAV\ServerMock {
 
+    use \Sabre\VObject\PHPUnitAssertions;
+
     protected $userTestId = '5aa1f6639751b711008b4567';
 
     function setUp() {
@@ -115,6 +117,24 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $jsonResponse = json_decode($response->getBodyAsString());
 
         $this->assertCount(1, $jsonResponse->_embedded->{'dav:item'});
+    }
+
+    function testFreebusyReport() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/events.json',
+        ));
+
+        $request->setBody(json_encode($this->freeBusyTimeRangeData));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $vobjResponse = \Sabre\VObject\Reader::readJson($jsonResponse->data);
+
+        $this->assertVObjectEqualsVObject($this->freeBusyReport, $vobjResponse);
     }
 
     function testGetAnonimizedCalendarObjects() {

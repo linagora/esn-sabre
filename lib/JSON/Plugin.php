@@ -25,6 +25,50 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $server->on('method:PROPFIND', [$this, 'findProperties'], 80);
         $server->on('method:ITIP', [$this, 'itip'], 80);
         $server->on('method:ACL', [$this, 'changePublicRights'], 80);
+        $server->on('afterMethod:REPORT', [$this, 'afterMethodReport']);
+    }
+
+    function afterMethodReport($request, $response) {
+        if (!$this->acceptJson()) {
+            return true;
+        }
+
+        $data = $response->getBodyAsString();
+
+        if (isset($data) && $data !== "") {
+            $contentTypes = $response->getHeaderAsArray('Content-Type');
+
+            $isIcal = in_array('text/calendar', $contentTypes);
+            $isXml = in_array('application/xml', $contentTypes);
+
+            if ($isIcal || $isXml) {
+                if ($isIcal) {
+                    $result = \Sabre\VObject\Reader::read($data);
+                } else {
+                    $result = $this->server->xml->parse($data);
+                }
+
+                $path = $request->getPath();
+                $body = [
+                    '_links' => [
+                        'self' => [ 'href' =>  $this->server->getBaseUri().$path ]
+                    ],
+                    'data' => $result
+                ];
+
+                $json_encode = json_encode($body);
+
+                $response->removeHeader('Content-Type');
+                $response->setHeader('Content-Type', 'application/json; charset=utf-8');
+
+                $response->removeHeader('Content-Length');
+                $response->setHeader('Content-Length', strlen($json_encode));
+
+                $response->setBody($json_encode);
+            }
+        }
+
+        return true;
     }
 
     function beforeMethod($request, $response) {
@@ -114,10 +158,35 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             return true;
         }
 
+        $jsonData = json_decode($request->getBodyAsString());
+
+        if (isset($jsonData->type)) {
+            $type = $jsonData->type;
+
+            if ($type === 'free-busy-query') {
+                if (!isset($jsonData->match) || !isset($jsonData->match->start) ||
+                    !isset($jsonData->match->end)) {
+                    throw new DAV\Exception\BadRequest('Missing report parameters in JSON body');
+                }
+
+                $writer = new \Sabre\Xml\Writer();
+                $writer->openMemory();
+                $writer->startDocument('1.0', 'UTF-8');
+                $writer->startElement('{' . Plugin::NS_CALDAV . '}' . $type);
+                $writer->startElement('{' . Plugin::NS_CALDAV . '}time-range');
+                $writer->writeAttributes(['start' => $jsonData->match->start, 'end' => $jsonData->match->end]);
+                $writer->endElement();
+                $writer->endElement();
+
+                $request->setBody($writer->outputMemory());
+            }
+
+            return true;
+        }
+
         $code = null;
         $body = null;
         $path = $request->getPath();
-        $jsonData = json_decode($request->getBodyAsString());
 
         $node = $this->server->tree->getNodeForPath($path);
 

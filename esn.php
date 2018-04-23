@@ -65,7 +65,7 @@ $authEmitter->on("auth:success", [$calendarBackend, "getCalendarsForUser"]);
 // Directory structure
 $tree = [
     new Sabre\DAV\SimpleCollection(PRINCIPALS_COLLECTION, [
-      new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_USERS),
+      new ESN\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_USERS),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_COMMUNITIES),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_PROJECTS),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_RESOURCES),

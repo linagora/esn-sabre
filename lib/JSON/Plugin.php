@@ -260,6 +260,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $body = null;
 
         $queryParams = $request->getQueryParameters();
+        $withFreeBusy = $this->getBooleanParameter($queryParams, 'withFreeBusy');
         $withRights = $this->getBooleanParameter($queryParams, 'withRights');
         $sharedPublic = $this->getBooleanParameter($queryParams, 'sharedPublic');
         $calendarFilterParameters = $this->getCalendarFilterParameters($queryParams);
@@ -267,7 +268,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         if ($node instanceof \ESN\CalDAV\CalendarRoot) {
             list($code, $body) = $this->listCalendarRoot($path, $node, $withRights, $calendarFilterParameters);
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
-            list($code, $body) = $this->listCalendarHome($path, $node, $withRights, $calendarFilterParameters, $sharedPublic);
+            list($code, $body) = $this->listCalendarHome($path, $node, $withRights, $calendarFilterParameters, $sharedPublic, $withFreeBusy);
         } else if ($node instanceof \Sabre\CalDAV\Calendar) {
             list($code, $body) = $this->getCalendarInformation($path, $node, $withRights);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
@@ -631,13 +632,13 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $result];
     }
 
-    function listCalendarHome($nodePath, $node, $withRights, $calendarTypeOptions, $sharedPublic = false) {
+    function listCalendarHome($nodePath, $node, $withRights, $calendarTypeOptions, $sharedPublic = false, $withFreeBusy = false) {
         $baseUri = $this->server->getBaseUri();
 
         if ($sharedPublic) {
             $items = $this->listPublicCalendars($nodePath, $node, $withRights);
         } else {
-            $items = $this->listAllCalendarsWithReadRight($nodePath, $node, $withRights, $calendarTypeOptions);
+            $items = $this->listAllCalendarsWithReadRight($nodePath, $node, $withRights, $calendarTypeOptions, $withFreeBusy);
         }
 
         $requestPath = $baseUri . $nodePath . '.json';
@@ -655,13 +656,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     }
 
-    function listAllCalendarsWithReadRight($nodePath, $node, $withRights, $calendarTypeOptions) {
+    function listAllCalendarsWithReadRight($nodePath, $node, $withRights, $calendarTypeOptions, $withFreeBusy) {
+        $right = $withFreeBusy ? '{' . Plugin::NS_CALDAV . '}read-free-busy' : '{DAV:}read';
+
         $calendars = $node->getChildren();
 
         $items = [];
         foreach ($calendars as $calendar) {
             if ($calendar instanceof \Sabre\CalDAV\Calendar) {
-                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false) &&
+                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), $right, \Sabre\DAVACL\Plugin::R_PARENT, false) &&
                   ($calendar instanceof \ESN\CalDAV\SharedCalendar)) {
                     //Personnal Calendars
                     if (!$calendar->isSharedInstance() && !empty($calendarTypeOptions['includePersonal'])) {
@@ -677,7 +680,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
             // Subscriptions
             if ($calendar instanceof \Sabre\CalDAV\Subscriptions\Subscription && !empty($calendarTypeOptions['includeSharedPublicSubscription'])) {
-                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), $right, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
                     $subscription = $this->subscriptionToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
 
                     if(isset($subscription)) {

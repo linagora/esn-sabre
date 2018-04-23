@@ -489,6 +489,35 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->_testCalendarList();
     }
 
+    function testCalendarListWithFreeBusy() {
+        $requestUri = '/calendars/54b64eadf6d7d8e41d263e0f.json?withFreeBusy=true';
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => $requestUri,
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
+
+        $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
+
+        $this->assertCount(2, $calendars);
+
+        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
+        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
+        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
+        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
+        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
+        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
+
+        $this->assertEquals($calendars[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/delegatedCal1.json');
+        $this->assertEquals($calendars[1]->{'dav:name'}, 'delegatedCalendar');
+    }
+
     function testCalendarListWithRights() {
         $calendars = $this->_testCalendarList('true');
         $this->assertNotNull($calendars[1]->{'dav:name'});

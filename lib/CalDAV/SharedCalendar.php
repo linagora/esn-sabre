@@ -229,11 +229,20 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
     }
 
-
     function isSharedInstance() {
 
         return $this->getShareAccess() !== SPlugin::ACCESS_SHAREDOWNER && $this->getShareAccess() !== SPlugin::ACCESS_NOTSHARED;
 
+    }
+
+    function getOwner() {
+        $sharees = $this->getInvites();
+
+        foreach ($sharees as $sharee) {
+            if ($sharee->access === SPlugin::ACCESS_SHAREDOWNER) {
+                return $sharee->principal;
+            }
+        }
     }
 
 }

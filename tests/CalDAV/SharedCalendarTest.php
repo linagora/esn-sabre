@@ -400,6 +400,15 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($sharedCalendar->isSharedInstance());
     }
 
+    function testGetOwner() {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
+        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+
+        $this->assertEquals($sharedCalendarESN->getOwner(), 'principals/user/54b64eadf6d7d8e41d263e0f');
+    }
+
 }
 
 class SimpleBackendMock extends \Sabre\CalDAV\Backend\MockSharing {

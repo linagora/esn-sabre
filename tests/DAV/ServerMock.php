@@ -137,10 +137,33 @@ END:VEVENT
 END:VCALENDAR
 ';
 
+    protected $freeBusyReport =
+        'BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject 4.1.3//EN
+CALSCALE:GREGORIAN
+BEGIN:VFREEBUSY
+DTSTART:20120101T000000Z
+DTEND:20150101T000000Z
+DTSTAMP:**ANY**
+FREEBUSY:20120226T230000Z/20120226T230000Z
+FREEBUSY:20130401T000000Z/20130401T010000Z
+END:VFREEBUSY
+END:VCALENDAR
+';
+
     protected $timeRangeData = [
           'match' => [ 'start' => '20120225T230000Z', 'end' => '20130228T225959Z' ],
           'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
         ];
+
+    protected $freeBusyTimeRangeData = [
+        'type' => 'free-busy-query',
+        'match' => [
+            'start' => '20120101T000000Z',
+            'end' => '20150101T000000Z'
+        ]
+    ];
 
     protected $timeRangeDataBothEvents = [
         'match' => [ 'start' => '20120101T000000Z', 'end' => '20150101T000000Z' ],

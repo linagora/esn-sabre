@@ -25,6 +25,50 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $server->on('method:PROPFIND', [$this, 'findProperties'], 80);
         $server->on('method:ITIP', [$this, 'itip'], 80);
         $server->on('method:ACL', [$this, 'changePublicRights'], 80);
+        $server->on('afterMethod:REPORT', [$this, 'afterMethodReport']);
+    }
+
+    function afterMethodReport($request, $response) {
+        if (!$this->acceptJson()) {
+            return true;
+        }
+
+        $data = $response->getBodyAsString();
+
+        if (isset($data) && $data !== "") {
+            $contentTypes = $response->getHeaderAsArray('Content-Type');
+
+            $isIcal = in_array('text/calendar', $contentTypes);
+            $isXml = in_array('application/xml', $contentTypes);
+
+            if ($isIcal || $isXml) {
+                if ($isIcal) {
+                    $result = \Sabre\VObject\Reader::read($data);
+                } else {
+                    $result = $this->server->xml->parse($data);
+                }
+
+                $path = $request->getPath();
+                $body = [
+                    '_links' => [
+                        'self' => [ 'href' =>  $this->server->getBaseUri().$path ]
+                    ],
+                    'data' => $result
+                ];
+
+                $json_encode = json_encode($body);
+
+                $response->removeHeader('Content-Type');
+                $response->setHeader('Content-Type', 'application/json; charset=utf-8');
+
+                $response->removeHeader('Content-Length');
+                $response->setHeader('Content-Length', strlen($json_encode));
+
+                $response->setBody($json_encode);
+            }
+        }
+
+        return true;
     }
 
     function beforeMethod($request, $response) {
@@ -114,10 +158,35 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             return true;
         }
 
+        $jsonData = json_decode($request->getBodyAsString());
+
+        if (isset($jsonData->type)) {
+            $type = $jsonData->type;
+
+            if ($type === 'free-busy-query') {
+                if (!isset($jsonData->match) || !isset($jsonData->match->start) ||
+                    !isset($jsonData->match->end)) {
+                    throw new DAV\Exception\BadRequest('Missing report parameters in JSON body');
+                }
+
+                $writer = new \Sabre\Xml\Writer();
+                $writer->openMemory();
+                $writer->startDocument('1.0', 'UTF-8');
+                $writer->startElement('{' . Plugin::NS_CALDAV . '}' . $type);
+                $writer->startElement('{' . Plugin::NS_CALDAV . '}time-range');
+                $writer->writeAttributes(['start' => $jsonData->match->start, 'end' => $jsonData->match->end]);
+                $writer->endElement();
+                $writer->endElement();
+
+                $request->setBody($writer->outputMemory());
+            }
+
+            return true;
+        }
+
         $code = null;
         $body = null;
         $path = $request->getPath();
-        $jsonData = json_decode($request->getBodyAsString());
 
         $node = $this->server->tree->getNodeForPath($path);
 
@@ -190,14 +259,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $code = null;
         $body = null;
 
-        $withRights = $this->getWithRightsParameter($request);
-        $sharedPublic = $this->getSharedPublicParameter($request);
-        list($includePersonal, $includeSharedPublicSubscription, $includeShared, $sharedDelegationStatus) = $this->getCalendarFilterParameters($request);
+        $queryParams = $request->getQueryParameters();
+        $withFreeBusy = $this->getBooleanParameter($queryParams, 'withFreeBusy');
+        $withRights = $this->getBooleanParameter($queryParams, 'withRights');
+        $sharedPublic = $this->getBooleanParameter($queryParams, 'sharedPublic');
+        $calendarFilterParameters = $this->getCalendarFilterParameters($queryParams);
 
         if ($node instanceof \ESN\CalDAV\CalendarRoot) {
-            list($code, $body) = $this->listCalendarRoot($path, $node, $withRights);
+            list($code, $body) = $this->listCalendarRoot($path, $node, $withRights, $calendarFilterParameters);
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
-            list($code, $body) = $this->listCalendarHome($path, $node, $withRights, $sharedPublic, $includePersonal, $includeShared, $includeSharedPublicSubscription, $sharedDelegationStatus);
+            list($code, $body) = $this->listCalendarHome($path, $node, $withRights, $calendarFilterParameters, $sharedPublic, $withFreeBusy);
         } else if ($node instanceof \Sabre\CalDAV\Calendar) {
             list($code, $body) = $this->getCalendarInformation($path, $node, $withRights);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
@@ -210,44 +281,29 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     }
 
-    private function getWithRightsParameter($request) {
-        $queryParams = $request->getQueryParameters();
-
-        return isset($queryParams['withRights']) && $queryParams['withRights'] === 'true' ;
-
-    }
-
-    private function getSharedPublicParameter($request) {
-        $queryParams = $request->getQueryParameters();
-
-        return isset($queryParams['sharedPublic']) && $queryParams['sharedPublic'] === 'true' ;
-
-    }
-
-    private function getCalendarFilterParameters($request) {
-        $queryParams = $request->getQueryParameters();
+    private function getCalendarFilterParameters($queryParams) {
 
         $filter = isset($queryParams['personal']) || isset($queryParams['sharedPublicSubscription']) || isset($queryParams['sharedDelegationStatus']);
 
-        $personal = isset($queryParams['personal']) ? $queryParams['personal'] === 'true' : !$filter;
-        $sharedPublicSubscription = isset($queryParams['sharedPublicSubscription']) ? $queryParams['sharedPublicSubscription'] === 'true' : !$filter;
-        $inviteStatus = null;
+        $includePersonal = isset($queryParams['personal']) ? $queryParams['personal'] === 'true' : !$filter;
+        $includeSharedPublicSubscription = isset($queryParams['sharedPublicSubscription']) ? $queryParams['sharedPublicSubscription'] === 'true' : !$filter;
+        $sharedDelegationStatus = null;
 
-        $shared = isset($queryParams['sharedDelegationStatus']) || !$filter;
+        $includeShared = isset($queryParams['sharedDelegationStatus']) || !$filter;
 
         if (isset($queryParams['sharedDelegationStatus'])) {
             switch ($queryParams['sharedDelegationStatus']) {
                 case "accepted":
-                    $inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
+                    $sharedDelegationStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
                     break;
                 case "noresponse":
-                    $inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
+                    $sharedDelegationStatus = \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
             }
         } else {
-            $shared = false;
+            $includeShared = false;
         }
 
-        return [$personal, $sharedPublicSubscription, $shared, $inviteStatus];
+        return compact('includePersonal', 'includeSharedPublicSubscription', 'includeShared', 'sharedDelegationStatus');
     }
 
     function delete($request, $response) {
@@ -550,7 +606,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return true;
     }
 
-    function listCalendarRoot($nodePath, $node, $withRights = null) {
+    function listCalendarRoot($nodePath, $node, $withRights, $calendarTypeOptions) {
         $homes = $node->getChildren();
         $baseUri = $this->server->getBaseUri();
 
@@ -558,7 +614,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         foreach ($homes as $home) {
             if ($home instanceof \Sabre\CalDAV\CalendarHome) {
                 $noderef = $nodePath . '/' . $home->getName();
-                list($code, $result) = $this->listCalendarHome($noderef, $home, $withRights);
+                list($code, $result) = $this->listCalendarHome($noderef, $home, $withRights, $calendarTypeOptions);
                 if (!empty($result)) {
                     $items[] = $result;
                 }
@@ -576,14 +632,13 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $result];
     }
 
-    function listCalendarHome($nodePath, $node, $withRights = null, $sharedPublic = false, $includePersonal = true, $includeShared = true, $includeSharedPublicSubscription = true, $sharedDelegationStatus = null) {
-        $calendars = $node->getChildren();
+    function listCalendarHome($nodePath, $node, $withRights, $calendarTypeOptions, $sharedPublic = false, $withFreeBusy = false) {
         $baseUri = $this->server->getBaseUri();
 
         if ($sharedPublic) {
             $items = $this->listPublicCalendars($nodePath, $node, $withRights);
         } else {
-            $items = $this->listAllCalendarsWithReadRight($nodePath, $node, $withRights, $includePersonal, $includeShared, $includeSharedPublicSubscription, $sharedDelegationStatus);
+            $items = $this->listAllCalendarsWithReadRight($nodePath, $node, $withRights, $calendarTypeOptions, $withFreeBusy);
         }
 
         $requestPath = $baseUri . $nodePath . '.json';
@@ -601,30 +656,31 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     }
 
-    function listAllCalendarsWithReadRight($nodePath, $node, $withRights = null, $includePersonal, $includeShared, $includeSharedPublicSubscription, $sharedDelegationStatus) {
+    function listAllCalendarsWithReadRight($nodePath, $node, $withRights, $calendarTypeOptions, $withFreeBusy) {
+        $right = $withFreeBusy ? '{' . Plugin::NS_CALDAV . '}read-free-busy' : '{DAV:}read';
+
         $calendars = $node->getChildren();
-        $baseUri = $this->server->getBaseUri();
 
         $items = [];
         foreach ($calendars as $calendar) {
             if ($calendar instanceof \Sabre\CalDAV\Calendar) {
-                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false) &&
+                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), $right, \Sabre\DAVACL\Plugin::R_PARENT, false) &&
                   ($calendar instanceof \ESN\CalDAV\SharedCalendar)) {
                     //Personnal Calendars
-                    if (!$calendar->isSharedInstance() && $includePersonal) {
+                    if (!$calendar->isSharedInstance() && !empty($calendarTypeOptions['includePersonal'])) {
                         $items[] = $this->calendarToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
                     }
 
                     //Shared Calendars
-                    if ($calendar->isSharedInstance() && $includeShared && (!isset($sharedDelegationStatus) || $calendar->getInviteStatus() === $sharedDelegationStatus )) {
+                    if ($calendar->isSharedInstance() && !empty($calendarTypeOptions['includeShared']) && (!isset($calendarTypeOptions['sharedDelegationStatus']) || $calendar->getInviteStatus() === $calendarTypeOptions['sharedDelegationStatus'] )) {
                         $items[] = $this->calendarToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
                     }
                 }
             }
 
             // Subscriptions
-            if ($calendar instanceof \Sabre\CalDAV\Subscriptions\Subscription && $includeSharedPublicSubscription) {
-                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+            if ($calendar instanceof \Sabre\CalDAV\Subscriptions\Subscription && !empty($calendarTypeOptions['includeSharedPublicSubscription'])) {
+                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), $right, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
                     $subscription = $this->subscriptionToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
 
                     if(isset($subscription)) {
@@ -1162,5 +1218,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return function($key, $default = null) use ($jsonData) {
             return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
         };
+    }
+
+    private function getBooleanParameter($queryParams, $str) {
+        return isset($queryParams[$str]) && $queryParams[$str] === 'true';
     }
 }

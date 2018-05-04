@@ -98,6 +98,10 @@ $server->addPlugin($aclPlugin);
 $jsonPlugin = new ESN\JSON\Plugin(JSON_ROOT);
 $server->addPlugin($jsonPlugin);
 
+// TEXT api support (iphone)
+$textPlugin = new ESN\CalDAV\TextPlugin("text");
+$server->addPlugin($textPlugin);
+
 // CalDAV support
 $caldavPlugin = new ESN\CalDAV\Plugin();
 $server->addPlugin($caldavPlugin);

@@ -44,7 +44,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             ->method('checkPrivileges')
             ->with(
                 $this->equalTo($path),
-                $this->equalTo('{DAV:}write-acl')
+                $this->equalTo('{DAV:}share')
             );
 
         $this->sharePlugin->shareResource($path, $sharees);

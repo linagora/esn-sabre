@@ -79,12 +79,12 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
                     'protected' => true,
                 ];
                 $acl[] = [
-                    'privilege' => '{DAV:}write-acl',
+                    'privilege' => '{DAV:}share',
                     'principal' => $this->calendarInfo['principaluri'],
                     'protected' => true,
                 ];
                 $acl[] = [
-                    'privilege' => '{DAV:}write-acl',
+                    'privilege' => '{DAV:}share',
                     'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-write',
                     'protected' => true,
                 ];

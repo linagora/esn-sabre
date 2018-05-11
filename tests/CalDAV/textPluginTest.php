@@ -48,7 +48,7 @@ class TextPluginTest extends \ESN\DAV\ServerMock {
 
         $response = $this->request($request);
         $this->assertEquals($response->status, 204);
-        $this->assertEquals($response->body, null);        
+        $this->assertEquals($response->body, null);
     }
 
     function testGetSubscriptionCalendarTextReturnNotFoundWhenWrongRequest() {

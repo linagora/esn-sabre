@@ -329,10 +329,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->deleteSubscription($node);
         }
 
-        if ($node instanceof \Sabre\CardDAV\AddressBook) {
-            list($code, $body) = $this->deleteAddressBook($node);
-        }
-
         return $this->send($code, $body);
     }
 
@@ -506,24 +502,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return [$returncode, null];
-    }
-
-    function deleteAddressBook($node) {
-        $protectedAddressBook = array(
-            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
-            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
-        );
-
-        if (in_array($node->getName(), $protectedAddressBook)) {
-            return [403, [
-                'status' => 403,
-                'message' => 'Forbidden: You can not delete '.$node->getName().' address book'
-            ]];
-        }
-
-        $node->delete();
-
-        return [204, null];
     }
 
     function changeAddressBookProperties($nodePath, $node, $jsonData) {

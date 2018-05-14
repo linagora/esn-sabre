@@ -45,9 +45,12 @@ class Plugin extends \ESN\JSON\BasePlugin {
         ];
     }
 
+    protected function getSupportedHeaders() {
+        return array('application/json', 'application/vcard+json');
+    }
+
     function httpGet($request, $response) {
-        $acceptHeader = explode(', ', $request->getHeader('Accept'));
-        if (!$this->acceptJson($acceptHeader)) {
+        if (!$this->acceptJson()) {
             return true;
         }
 
@@ -81,8 +84,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     function httpPropfind($request, $response) {
-        $acceptHeader = explode(', ', $request->getHeader('Accept'));
-        if (!$this->acceptJson($acceptHeader)) {
+        if (!$this->acceptJson()) {
             return true;
         }
 
@@ -131,8 +133,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     function httpAcl($request, $response) {
-        $acceptHeader = explode(', ', $request->getHeader('Accept'));
-        if (!$this->acceptJson($acceptHeader)) {
+        if (!$this->acceptJson()) {
             return true;
         }
 
@@ -172,8 +173,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     function httpPost($request, $response) {
-        $acceptHeader = explode(', ', $request->getHeader('Accept'));
-        if (!$this->acceptJson($acceptHeader)) {
+        if (!$this->acceptJson()) {
             return true;
         }
 
@@ -355,11 +355,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return $sourcePath;
-    }
-
-    function acceptJson($acceptHeader) {
-        return in_array('application/vcard+json', $acceptHeader) ||
-               in_array('application/json', $acceptHeader);
     }
 
     private function propertyOrDefault($jsonData) {

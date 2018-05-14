@@ -18,7 +18,18 @@ class BasePlugin extends ServerPlugin {
             $request->setUrl($url);
         }
 
+        $this->acceptHeader = explode(', ', $request->getHeader('Accept'));
+        $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
+
         return true;
+    }
+
+    protected function acceptJson() {
+        return count(array_intersect($this->getSupportedHeaders(), $this->acceptHeader)) > 0;
+    }
+
+    protected function getSupportedHeaders() {
+        return array('application/json');
     }
 
     /**

@@ -574,22 +574,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $body = null;
         $node = $this->server->tree->getNodeForPath($path);
 
-        if ($node instanceof \Sabre\CardDAV\AddressBook) {
-            $jsonData = json_decode($request->getBodyAsString(), true);
-
-            if ($node->getProperties($jsonData['properties'])) {
-                $result = $node->getProperties($jsonData['properties']);
-                if (in_array('acl', $jsonData['properties'])) {
-                    $result['acl'] = $node->getACL();
-                }
-
-                $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
-                $this->server->httpResponse->setBody(json_encode($result));
-            }
-            $this->server->httpResponse->setStatus(200);
-            return false;
-        }
-        else if ($node instanceof \Sabre\CalDAV\SharedCalendar) {
+        if ($node instanceof \Sabre\CalDAV\SharedCalendar) {
             $jsonData = json_decode($request->getBodyAsString(), true);
             $result = array();
             if (in_array('cs:invite', $jsonData['prop'])) {

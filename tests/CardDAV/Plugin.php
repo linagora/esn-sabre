@@ -37,4 +37,27 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals(['dav:read', 'dav:write'], $jsonResponse['{DAV:}acl']);
         $this->assertEquals('book1', $jsonResponse['uri']);
     }
+
+    function testPropFindAclOfAddressBook() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPFIND',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
+        ));
+
+        $body = '{"properties": ["acl"]}';
+        $request->setBody($body);
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+
+        $this->assertEquals(200, $response->status);
+        $this->assertEquals([
+            [
+                'privilege' => '{DAV:}all',
+                'principal' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'protected' => true
+            ]
+        ], $jsonResponse['acl']);
+    }
 }

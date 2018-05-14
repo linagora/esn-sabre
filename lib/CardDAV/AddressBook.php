@@ -43,6 +43,27 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return $acl;
     }
 
+    /**
+     * Returns a list of properties for this nodes.
+     *
+     * The properties list is a list of propertynames the client requested,
+     * encoded in clark-notation {xmlnamespace}tagname
+     *
+     * If the array is empty, it means 'all properties' were requested.
+     *
+     * @param array $properties
+     * @return array
+     */
+    function getProperties($properties) {
+        $response = parent::getProperties($properties);
+
+        if (in_array('acl', $properties)) {
+            $response['acl'] = $this->getACL();
+        }
+
+        return $response;
+    }
+
     function setACL(array $acl) {
         $authenticatedPrivileges = [];
 

@@ -12,6 +12,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $server->on('method:GET', [$this, 'httpGet'], 80);
         $server->on('method:ACL', [$this, 'httpAcl'], 80);
         $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
+        $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
         $server->on('method:POST', [$this, 'httpPost'], 80);
     }
 
@@ -149,6 +150,28 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return true;
+    }
+
+    function httpProppatch($request, $response) {
+        if (!$this->acceptJson()) {
+            return true;
+        }
+
+        $path = $request->getPath();
+        $node = $this->server->tree->getNodeForPath($path);
+
+        $code = null;
+        $body = null;
+
+        if ($node instanceof \Sabre\CardDAV\AddressBook) {
+            list($code, $body) = $this->changeAddressBookProperties(
+                $path,
+                $node,
+                json_decode($request->getBodyAsString())
+            );
+        }
+
+        return $this->send($code, $body);
     }
 
     function httpAcl($request, $response) {
@@ -368,6 +391,44 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         $this->server->tree->delete($nodePath);
         return [204, null];
+    }
+
+    private function changeAddressBookProperties($nodePath, $node, $jsonData) {
+        $protectedAddressBook = array(
+            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
+            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
+        );
+
+        if (in_array($node->getName(), $protectedAddressBook)) {
+            return [403, [
+                'status' => 403,
+                'message' => 'Forbidden: You can not update '.$node->getName().' address book'
+            ]];
+        }
+
+        $propnameMap = [
+            'dav:name' => '{DAV:}displayname',
+            'carddav:description' => '{urn:ietf:params:xml:ns:carddav}addressbook-description'
+        ];
+
+        $davProps = [];
+        foreach ($jsonData as $jsonProp => $value) {
+            if (isset($propnameMap[$jsonProp])) {
+                $davProps[$propnameMap[$jsonProp]] = $value;
+            }
+        }
+
+        $result = $this->server->updateProperties($nodePath, $davProps);
+
+        $returncode = 204;
+        foreach ($result as $prop => $code) {
+            if ((int)$code > 299) {
+                $returncode = (int)$code;
+                break;
+            }
+        }
+
+        return [$returncode, null];
     }
 
     private function qualifySourcePath($sourcePath) {

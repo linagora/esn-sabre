@@ -359,14 +359,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             );
         }
 
-        if ($node instanceof \Sabre\CardDAV\AddressBook) {
-            list($code, $body) = $this->changeAddressBookProperties(
-                $path,
-                $node,
-                json_decode($request->getBodyAsString())
-            );
-        }
-
         return $this->send($code, $body);
 
     }
@@ -494,44 +486,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $result = $this->server->updateProperties($nodePath, $davProps);
 
-        foreach ($result as $prop => $code) {
-            if ((int)$code > 299) {
-                $returncode = (int)$code;
-                break;
-            }
-        }
-
-        return [$returncode, null];
-    }
-
-    function changeAddressBookProperties($nodePath, $node, $jsonData) {
-        $protectedAddressBook = array(
-            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
-            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
-        );
-
-        if (in_array($node->getName(), $protectedAddressBook)) {
-            return [403, [
-                'status' => 403,
-                'message' => 'Forbidden: You can not update '.$node->getName().' address book'
-            ]];
-        }
-
-        $propnameMap = [
-            'dav:name' => '{DAV:}displayname',
-            'carddav:description' => '{urn:ietf:params:xml:ns:carddav}addressbook-description'
-        ];
-
-        $davProps = [];
-        foreach ($jsonData as $jsonProp => $value) {
-            if (isset($propnameMap[$jsonProp])) {
-                $davProps[$propnameMap[$jsonProp]] = $value;
-            }
-        }
-
-        $result = $this->server->updateProperties($nodePath, $davProps);
-
-        $returncode = 204;
         foreach ($result as $prop => $code) {
             if ((int)$code > 299) {
                 $returncode = (int)$code;

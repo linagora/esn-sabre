@@ -146,24 +146,26 @@ class Subscription extends Collection implements ISubscription, IACL {
      * @return array
      */
     function getProperties($properties) {
-        $r = [];
+        $response = [];
 
         foreach ($properties as $prop) {
 
             switch ($prop) {
                 case '{http://open-paas.org/contacts}source' :
-                    $r[$prop] = new Href($this->subscriptionInfo[$prop]);
+                    $response[$prop] = new Href($this->subscriptionInfo[$prop]);
                     break;
+                case 'acl':
+                    $response['acl'] = $this->getACL();
                 default :
                     if (array_key_exists($prop, $this->subscriptionInfo)) {
-                        $r[$prop] = $this->subscriptionInfo[$prop];
+                        $response[$prop] = $this->subscriptionInfo[$prop];
                     }
                     break;
             }
 
         }
 
-        return $r;
+        return $response;
 
     }
 

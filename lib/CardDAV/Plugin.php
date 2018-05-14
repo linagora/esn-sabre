@@ -3,15 +3,46 @@ namespace ESN\CardDAV;
 
 use Sabre\DAV;
 
-class Plugin extends \Sabre\CardDAV\Plugin {
+class Plugin extends \ESN\JSON\BasePlugin {
 
-    function initialize(DAV\Server $server) {
+    function initialize(\Sabre\DAV\Server $server) {
         parent::initialize($server);
 
         $server->on('method:GET', [$this, 'get'], 80);
         $server->on('method:ACL', [$this, 'acl'], 80);
         $server->on('method:PROPFIND', [$this, 'propfind'], 80);
         $server->on('method:POST', [$this, 'post'], 80);
+    }
+
+    /**
+     * Returns a plugin name.
+     *
+     * Using this name other plugins will be able to access other plugins
+     * using DAV\Server::getPlugin
+     *
+     * @return string
+     */
+    function getPluginName() {
+        return 'carddav-json';
+    }
+
+    /**
+     * Returns a bunch of meta-data about the plugin.
+     *
+     * Providing this information is optional, and is mainly displayed by the
+     * Browser plugin.
+     *
+     * The description key in the returned array may contain html and will not
+     * be sanitized.
+     *
+     * @return array
+     */
+    function getPluginInfo() {
+        return [
+            'name'        => $this->getPluginName(),
+            'description' => 'Adds JSON support for CardDAV',
+            'link'        => 'http://sabre.io/dav/carddav/',
+        ];
     }
 
     function get($request, $response) {
@@ -59,6 +90,22 @@ class Plugin extends \Sabre\CardDAV\Plugin {
         $node = $this->server->tree->getNodeForPath($path);
         $code = null;
         $body = null;
+
+        if ($node instanceof \Sabre\CardDAV\AddressBook) {
+            $jsonData = json_decode($request->getBodyAsString(), true);
+
+            if ($node->getProperties($jsonData['properties'])) {
+                $result = $node->getProperties($jsonData['properties']);
+                if (in_array('acl', $jsonData['properties'])) {
+                    $result['acl'] = $node->getACL();
+                }
+
+                $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
+                $this->server->httpResponse->setBody(json_encode($result));
+            }
+            $this->server->httpResponse->setStatus(200);
+            return false;
+        }
 
         if ($node instanceof \ESN\CardDAV\Subscriptions\Subscription) {
             $jsonData = json_decode($request->getBodyAsString(), true);

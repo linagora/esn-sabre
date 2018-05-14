@@ -107,8 +107,11 @@ $caldavPlugin = new ESN\CalDAV\Plugin();
 $server->addPlugin($caldavPlugin);
 
 // CardDAV support
-$carddavPlugin = new ESN\CardDAV\Plugin();
+$carddavPlugin = new Sabre\CardDAV\Plugin();
 $server->addPlugin($carddavPlugin);
+
+$carddavJsonPlugin = new ESN\CardDAV\Plugin();
+$server->addPlugin($carddavJsonPlugin);
 
 // CardDAV subscription support
 $carddavSubscriptionPlugin = new ESN\CardDAV\Subscriptions\Plugin();

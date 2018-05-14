@@ -10,7 +10,7 @@ ARG VERSION=0.0.0
 ARG ITERATION=1
 ARG TREEISH=master
 
-RUN apt-get update && install -y curl apt-transport-https && \
+RUN apt-get update && apt-get install -y curl apt-transport-https && \
     curl -s https://packages.sury.org/php/apt.gpg | apt-key add - && \
     echo "deb https://packages.sury.org/php/ stretch main" > /etc/apt/sources.list.d/sury.org.list && \
     apt-get update && \

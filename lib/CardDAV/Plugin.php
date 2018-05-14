@@ -8,10 +8,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
     function initialize(\Sabre\DAV\Server $server) {
         parent::initialize($server);
 
-        $server->on('method:GET', [$this, 'get'], 80);
-        $server->on('method:ACL', [$this, 'acl'], 80);
-        $server->on('method:PROPFIND', [$this, 'propfind'], 80);
-        $server->on('method:POST', [$this, 'post'], 80);
+        $server->on('method:GET', [$this, 'httpGet'], 80);
+        $server->on('method:ACL', [$this, 'httpAcl'], 80);
+        $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
+        $server->on('method:POST', [$this, 'httpPost'], 80);
     }
 
     /**
@@ -45,7 +45,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         ];
     }
 
-    function get($request, $response) {
+    function httpGet($request, $response) {
         $acceptHeader = explode(', ', $request->getHeader('Accept'));
         if (!$this->acceptJson($acceptHeader)) {
             return true;
@@ -80,7 +80,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return $this->send($code, $body);
     }
 
-    function propfind($request, $response) {
+    function httpPropfind($request, $response) {
         $acceptHeader = explode(', ', $request->getHeader('Accept'));
         if (!$this->acceptJson($acceptHeader)) {
             return true;
@@ -139,7 +139,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return true;
     }
 
-    function acl($request, $response) {
+    function httpAcl($request, $response) {
         $acceptHeader = explode(', ', $request->getHeader('Accept'));
         if (!$this->acceptJson($acceptHeader)) {
             return true;
@@ -180,7 +180,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return true;
     }
 
-    function post($request, $response) {
+    function httpPost($request, $response) {
         $acceptHeader = explode(', ', $request->getHeader('Accept'));
         if (!$this->acceptJson($acceptHeader)) {
             return true;

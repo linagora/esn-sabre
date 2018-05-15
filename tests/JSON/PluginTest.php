@@ -868,60 +868,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertCount(1, $calendars);
     }
 
-    function testCreateAddressBook() {
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json',
-        ));
-
-        $addressbook = [
-            'id' => 'ID',
-            'dav:name' => 'NAME',
-            'carddav:description' => 'DESCRIPTION',
-            'dav:acl' => ['dav:read'],
-            'type' => 'social'
-        ];
-
-        $request->setBody(json_encode($addressbook));
-        $response = $this->request($request);
-
-        $jsonResponse = json_decode($response->getBodyAsString());
-        $this->assertEquals(201, $response->status);
-
-        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(2, $addressbooks);
-
-        $book = $addressbooks[1];
-        $this->assertEquals('NAME', $book['{DAV:}displayname']);
-        $this->assertEquals('DESCRIPTION', $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
-        $this->assertEquals(['dav:read'], $book['{DAV:}acl']);
-        $this->assertEquals('social', $book['{http://open-paas.org/contacts}type']);
-    }
-
-    function testCreateAddressBookMissingId() {
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json',
-        ));
-
-        $addressbook = [
-            'id' => ''
-        ];
-
-        $request->setBody(json_encode($addressbook));
-        $response = $this->request($request);
-
-        $jsonResponse = json_decode($response->getBodyAsString());
-        $this->assertEquals(400, $response->status);
-
-        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(1, $addressbooks);
-    }
-
     function testDeleteCalendar() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',

@@ -270,6 +270,70 @@ class PluginTest extends PluginTestBase {
         $this->assertCount(3, $jsonResponse['_embedded']['dav:item']);
     }
 
+    function testGetContactsUnknownAddressBook() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.jaysun'
+        ));
+
+        $request->setBody(json_encode($this->timeRangeData));
+        $response = $this->request($request);
+        $this->assertEquals($response->status, 404);
+    }
+
+    function testGetContactsWrongCollection() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar2.json'
+        ));
+
+        $request->setBody(json_encode($this->timeRangeData));
+        $response = $this->request($request);
+        $this->assertEquals($response->status, 404);
+    }
+
+    function testGetAllContacts() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json');
+        $cards = $jsonResponse->{'_embedded'}->{'dav:item'};
+        $this->assertEquals(count($cards), 4);
+        $this->assertEquals($cards[0]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1/card1');
+        $this->assertEquals($cards[0]->data[0], 'vcard');
+        $this->assertEquals($cards[0]->data[1][0][3], 'd');
+    }
+
+    function testGetContactsOffset() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json?limit=1&offset=1&sort=fn'
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json');
+        $cards = $jsonResponse->{'_embedded'}->{'dav:item'};
+        $this->assertCount(1, $cards);
+        $this->assertEquals($cards[0]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1/card3');
+        $this->assertEquals($cards[0]->data[0], 'vcard');
+        $this->assertEquals($cards[0]->data[1][0][3], 'b');
+    }
+
     function testCreateAddressBook() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',

@@ -255,4 +255,18 @@ class PluginTest extends PluginTestBase {
         $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/'. $this->userTestId);
         $this->assertCount(0, $subscriptions);
     }
+
+    function testGetContacts() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json?limit=3',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+
+        $this->assertEquals(200, $response->status);
+        $this->assertCount(3, $jsonResponse['_embedded']['dav:item']);
+    }
 }

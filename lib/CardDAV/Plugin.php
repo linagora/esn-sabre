@@ -2,6 +2,7 @@
 namespace ESN\CardDAV;
 
 use Sabre\DAV;
+use \Sabre\VObject;
 
 class Plugin extends \ESN\JSON\BasePlugin {
 
@@ -98,6 +99,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
                 list($code, $body) = $this->getAddressBooks($path, $node, $options);
             }
+        } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
+            list($code, $body) = $this->getContacts($request, $response, $path, $node);
         }
 
         return $this->send($code, $body);
@@ -429,6 +432,56 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return [$returncode, null];
+    }
+
+    private function getContacts($request, $response, $nodePath, $node) {
+        $queryParams = $request->getQueryParameters();
+        $offset = isset($queryParams['offset']) ? $queryParams['offset'] : 0;
+        $limit = isset($queryParams['limit']) ? $queryParams['limit'] : 0;
+        $sort = isset($queryParams['sort']) ? $queryParams['sort'] : null;
+        $modifiedBefore = isset($queryParams['modifiedBefore']) ? (int)$queryParams['modifiedBefore'] : 0;
+
+        $filters = null;
+        if ($modifiedBefore > 0) {
+            $filters = [
+                'modifiedBefore' => $modifiedBefore
+            ];
+        }
+
+        $cards = $node->getChildren($offset, $limit, $sort, $filters);
+        $count = $node->getChildCount();
+
+        $items = [];
+        $baseUri = $this->server->getBaseUri();
+        foreach ($cards as $card) {
+            $vobj = VObject\Reader::read($card->get());
+            $cardItem = [
+                '_links' => [
+                  'self' => [ 'href' =>  $baseUri . $nodePath . '/' . $card->getName() ]
+                ],
+                'etag' => $card->getETag(),
+                'data' => $vobj->jsonSerialize()
+            ];
+            $items[] = $cardItem;
+        }
+
+        $requestPath = $baseUri . $request->getPath() . '.json';
+
+        $result = [
+            '_links' => [
+                'self' => [ 'href' => $requestPath ]
+            ],
+            'dav:syncToken' => $node->getSyncToken(),
+            '_embedded' => [ 'dav:item' => $items ]
+        ];
+
+        if ($limit > 0 && ($offset + $limit < $count)) {
+            $queryParams['offset'] = $offset + $limit;
+            $href = $requestPath . '?' . http_build_query($queryParams);
+            $result['_links']['next'] = [ 'href' => $href ];
+        }
+
+        return [200, $result];
     }
 
     private function qualifySourcePath($sourcePath) {

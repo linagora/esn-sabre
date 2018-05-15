@@ -10,8 +10,6 @@ require_once ESN_TEST_BASE. '/CardDAV/PluginTestBase.php';
 
 class PluginTest extends PluginTestBase {
 
-    protected $userTestId = '5aa1f6639751b711008b4567';
-
     function setUp() {
         parent::setUp();
 
@@ -211,21 +209,8 @@ class PluginTest extends PluginTestBase {
     }
 
     function testDeleteAddressBook() {
-        $this->esndb->users->insert([
-            '_id'       => new \MongoId($this->userTestId),
-            'firstname' => 'user',
-            'lastname'  => 'test',
-            'accounts'  => [
-                [
-                    'type' => 'email',
-                    'emails' => [
-                      'usertest@mail.com'
-                    ]
-                ]
-            ]
-        ]);
         $this->carddavBackend->createSubscription(
-            'principals/users/' . $this->userTestId,
+            'principals/users/' . $this->userTestId2,
             'book2',
             [
                 '{DAV:}displayname' => 'Book 1',
@@ -233,7 +218,7 @@ class PluginTest extends PluginTestBase {
             ]
         );
 
-        $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/'. $this->userTestId);
+        $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/'. $this->userTestId2);
         $this->assertCount(1, $subscriptions);
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
@@ -252,7 +237,7 @@ class PluginTest extends PluginTestBase {
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
         $this->assertCount(0, $addressbooks);
 
-        $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/'. $this->userTestId);
+        $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/'. $this->userTestId2);
         $this->assertCount(0, $subscriptions);
     }
 

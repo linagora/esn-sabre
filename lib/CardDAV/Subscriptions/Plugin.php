@@ -13,7 +13,7 @@ use Sabre\DAV\ServerPlugin;
  * Some clients support 'managed subscriptions' server-side. This is basically
  * a list of subscription urls a user is using.
  */
-class Plugin extends ServerPlugin {
+class Plugin extends \ESN\JSON\BasePlugin {
 
     /**
      * This initializes the plugin.
@@ -27,15 +27,46 @@ class Plugin extends ServerPlugin {
      * @return void
      */
     function initialize(Server $server) {
-        $this->server = $server;
+        parent::initialize($server);
 
-        $server->on('method:DELETE', [$this, 'delete'], 80);
-        $server->on('method:PROPPATCH', [$this, 'proppatch'], 80);
+        $server->on('method:DELETE', [$this, 'httpDelete'], 80);
+        $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
     }
 
-    function delete($request, $response) {
-        $acceptHeader = explode(', ', $request->getHeader('Accept'));
-        if (!$this->acceptJson($acceptHeader)) {
+    /**
+     * Returns a plugin name.
+     *
+     * Using this name other plugins will be able to access other plugins
+     * using \Sabre\DAV\Server::getPlugin
+     *
+     * @return string
+     */
+    function getPluginName() {
+        return 'carddav-subscription-json';
+    }
+
+    /**
+     * Returns a bunch of meta-data about the plugin.
+     *
+     * Providing this information is optional, and is mainly displayed by the
+     * Browser plugin.
+     *
+     * The description key in the returned array may contain html and will not
+     * be sanitized.
+     *
+     * @return array
+     */
+    function getPluginInfo() {
+        return [
+            'name'        => $this->getPluginName(),
+            'description' => 'Adds JSON support for CardDAV subscription.',
+            'link'        => null,
+        ];
+
+    }
+
+    function httpDelete($request, $response) {
+        if (!$this->acceptJson()) {
             return true;
         }
 
@@ -52,9 +83,8 @@ class Plugin extends ServerPlugin {
         return $this->send($code, $body);
     }
 
-    function proppatch($request, $response) {
-        $acceptHeader = explode(', ', $request->getHeader('Accept'));
-        if (!$this->acceptJson($acceptHeader)) {
+    function httpProppatch($request, $response) {
+        if (!$this->acceptJson()) {
             return true;
         }
 
@@ -105,72 +135,5 @@ class Plugin extends ServerPlugin {
         $node->delete();
 
         return [204, null];
-    }
-
-    private function send($code, $body, $setContentType = true) {
-        if (!isset($code)) {
-            return true;
-        }
-
-        if ($body) {
-            if ($setContentType) {
-                $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
-            }
-            $this->server->httpResponse->setBody(json_encode($body));
-        }
-        $this->server->httpResponse->setStatus($code);
-        return false;
-    }
-
-    protected function isBodyForSubscription($jsonData) {
-        $issetdef = $this->propertyOrDefault($jsonData);
-
-        return $issetdef('openpaas:source');
-    }
-
-    private function propertyOrDefault($jsonData) {
-        return function($key, $default = null) use ($jsonData) {
-            return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
-        };
-    }
-
-    private function acceptJson($acceptHeader) {
-        return in_array('application/vcard+json', $acceptHeader) ||
-               in_array('application/json', $acceptHeader);
-    }
-
-    /**
-     * Returns a plugin name.
-     *
-     * Using this name other plugins will be able to access other plugins
-     * using \Sabre\DAV\Server::getPlugin
-     *
-     * @return string
-     */
-    function getPluginName() {
-
-        return 'address book subscriptions';
-
-    }
-
-    /**
-     * Returns a bunch of meta-data about the plugin.
-     *
-     * Providing this information is optional, and is mainly displayed by the
-     * Browser plugin.
-     *
-     * The description key in the returned array may contain html and will not
-     * be sanitized.
-     *
-     * @return array
-     */
-    function getPluginInfo() {
-
-        return [
-            'name'        => $this->getPluginName(),
-            'description' => 'This plugin allows users to store iCalendar subscriptions in their calendar-home.',
-            'link'        => null,
-        ];
-
     }
 }

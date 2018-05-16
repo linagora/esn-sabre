@@ -2,15 +2,18 @@
 namespace ESN\CardDAV;
 
 use Sabre\DAV;
+use \Sabre\VObject;
 
 class Plugin extends \ESN\JSON\BasePlugin {
 
     function initialize(\Sabre\DAV\Server $server) {
         parent::initialize($server);
 
+        $server->on('method:DELETE', [$this, 'httpDelete'], 80);
         $server->on('method:GET', [$this, 'httpGet'], 80);
         $server->on('method:ACL', [$this, 'httpAcl'], 80);
         $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
+        $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
         $server->on('method:POST', [$this, 'httpPost'], 80);
     }
 
@@ -45,9 +48,30 @@ class Plugin extends \ESN\JSON\BasePlugin {
         ];
     }
 
+    protected function getSupportedHeaders() {
+        return array('application/json', 'application/vcard+json');
+    }
+
+    function httpDelete($request, $response) {
+        if (!$this->acceptJson()) {
+            return true;
+        }
+
+        $path = $request->getPath();
+        $node = $this->server->tree->getNodeForPath($path);
+
+        $code = null;
+        $body = null;
+
+        if ($node instanceof \Sabre\CardDAV\AddressBook) {
+            list($code, $body) = $this->deleteNode($path, $node);
+        }
+
+        return $this->send($code, $body);
+    }
+
     function httpGet($request, $response) {
-        $acceptHeader = explode(', ', $request->getHeader('Accept'));
-        if (!$this->acceptJson($acceptHeader)) {
+        if (!$this->acceptJson()) {
             return true;
         }
 
@@ -75,14 +99,15 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
                 list($code, $body) = $this->getAddressBooks($path, $node, $options);
             }
+        } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
+            list($code, $body) = $this->getContacts($request, $response, $path, $node);
         }
 
         return $this->send($code, $body);
     }
 
     function httpPropfind($request, $response) {
-        $acceptHeader = explode(', ', $request->getHeader('Accept'));
-        if (!$this->acceptJson($acceptHeader)) {
+        if (!$this->acceptJson()) {
             return true;
         }
 
@@ -130,9 +155,30 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return true;
     }
 
+    function httpProppatch($request, $response) {
+        if (!$this->acceptJson()) {
+            return true;
+        }
+
+        $path = $request->getPath();
+        $node = $this->server->tree->getNodeForPath($path);
+
+        $code = null;
+        $body = null;
+
+        if ($node instanceof \Sabre\CardDAV\AddressBook) {
+            list($code, $body) = $this->changeAddressBookProperties(
+                $path,
+                $node,
+                json_decode($request->getBodyAsString())
+            );
+        }
+
+        return $this->send($code, $body);
+    }
+
     function httpAcl($request, $response) {
-        $acceptHeader = explode(', ', $request->getHeader('Accept'));
-        if (!$this->acceptJson($acceptHeader)) {
+        if (!$this->acceptJson()) {
             return true;
         }
 
@@ -172,8 +218,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     function httpPost($request, $response) {
-        $acceptHeader = explode(', ', $request->getHeader('Accept'));
-        if (!$this->acceptJson($acceptHeader)) {
+        if (!$this->acceptJson()) {
             return true;
         }
 
@@ -291,21 +336,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
         ];
     }
 
-    function send($code, $body, $setContentType = true) {
-        if (!isset($code)) {
-            return true;
-        }
-
-        if ($body) {
-            if ($setContentType) {
-                $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
-            }
-            $this->server->httpResponse->setBody(json_encode($body));
-        }
-        $this->server->httpResponse->setStatus($code);
-        return false;
-    }
-
     function createAddressBook($node, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
@@ -349,17 +379,117 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return [201, null];
     }
 
+    private function deleteNode($nodePath, $node) {
+        $protectedAddressBook = array(
+            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
+            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
+        );
+
+        if (in_array($node->getName(), $protectedAddressBook)) {
+            return [403, [
+                'status' => 403,
+                'message' => 'Forbidden: You can not delete '.$node->getName().' address book'
+            ]];
+        }
+
+        $this->server->tree->delete($nodePath);
+        return [204, null];
+    }
+
+    private function changeAddressBookProperties($nodePath, $node, $jsonData) {
+        $protectedAddressBook = array(
+            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
+            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
+        );
+
+        if (in_array($node->getName(), $protectedAddressBook)) {
+            return [403, [
+                'status' => 403,
+                'message' => 'Forbidden: You can not update '.$node->getName().' address book'
+            ]];
+        }
+
+        $propnameMap = [
+            'dav:name' => '{DAV:}displayname',
+            'carddav:description' => '{urn:ietf:params:xml:ns:carddav}addressbook-description'
+        ];
+
+        $davProps = [];
+        foreach ($jsonData as $jsonProp => $value) {
+            if (isset($propnameMap[$jsonProp])) {
+                $davProps[$propnameMap[$jsonProp]] = $value;
+            }
+        }
+
+        $result = $this->server->updateProperties($nodePath, $davProps);
+
+        $returncode = 204;
+        foreach ($result as $prop => $code) {
+            if ((int)$code > 299) {
+                $returncode = (int)$code;
+                break;
+            }
+        }
+
+        return [$returncode, null];
+    }
+
+    private function getContacts($request, $response, $nodePath, $node) {
+        $queryParams = $request->getQueryParameters();
+        $offset = isset($queryParams['offset']) ? $queryParams['offset'] : 0;
+        $limit = isset($queryParams['limit']) ? $queryParams['limit'] : 0;
+        $sort = isset($queryParams['sort']) ? $queryParams['sort'] : null;
+        $modifiedBefore = isset($queryParams['modifiedBefore']) ? (int)$queryParams['modifiedBefore'] : 0;
+
+        $filters = null;
+        if ($modifiedBefore > 0) {
+            $filters = [
+                'modifiedBefore' => $modifiedBefore
+            ];
+        }
+
+        $cards = $node->getChildren($offset, $limit, $sort, $filters);
+        $count = $node->getChildCount();
+
+        $items = [];
+        $baseUri = $this->server->getBaseUri();
+        foreach ($cards as $card) {
+            $vobj = VObject\Reader::read($card->get());
+            $cardItem = [
+                '_links' => [
+                  'self' => [ 'href' =>  $baseUri . $nodePath . '/' . $card->getName() ]
+                ],
+                'etag' => $card->getETag(),
+                'data' => $vobj->jsonSerialize()
+            ];
+            $items[] = $cardItem;
+        }
+
+        $requestPath = $baseUri . $request->getPath() . '.json';
+
+        $result = [
+            '_links' => [
+                'self' => [ 'href' => $requestPath ]
+            ],
+            'dav:syncToken' => $node->getSyncToken(),
+            '_embedded' => [ 'dav:item' => $items ]
+        ];
+
+        if ($limit > 0 && ($offset + $limit < $count)) {
+            $queryParams['offset'] = $offset + $limit;
+            $href = $requestPath . '?' . http_build_query($queryParams);
+            $result['_links']['next'] = [ 'href' => $href ];
+        }
+
+        return [200, $result];
+    }
+
     private function qualifySourcePath($sourcePath) {
         if (substr($sourcePath, -5) == '.json') {
             return substr($sourcePath, 0, -5);
         }
 
         return $sourcePath;
-    }
-
-    function acceptJson($acceptHeader) {
-        return in_array('application/vcard+json', $acceptHeader) ||
-               in_array('application/json', $acceptHeader);
     }
 
     private function propertyOrDefault($jsonData) {

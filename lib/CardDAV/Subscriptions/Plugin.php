@@ -30,6 +30,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         parent::initialize($server);
 
         $server->on('method:DELETE', [$this, 'httpDelete'], 80);
+        $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
         $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
     }
 
@@ -78,6 +79,34 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         if ($node instanceof \ESN\CardDAV\Subscriptions\Subscription) {
             list($code, $body) = $this->deleteSubscription($node);
+        }
+
+        return $this->send($code, $body);
+    }
+
+    function httpPropfind($request, $response) {
+        if (!$this->acceptJson()) {
+            return true;
+        }
+
+        $path = $request->getPath();
+        $node = $this->server->tree->getNodeForPath($path);
+        $code = null;
+        $body = null;
+
+        if ($node instanceof Subscription) {
+            $jsonData = json_decode($request->getBodyAsString(), true);
+
+            $bookProps = $node->getProperties($jsonData['properties']);
+
+            if (isset($bookProps['{http://open-paas.org/contacts}source'])) {
+                $baseUri = $this->server->getBaseUri();
+                $sourcePath = $bookProps['{http://open-paas.org/contacts}source']->getHref();
+                $bookProps['{http://open-paas.org/contacts}source'] = $baseUri . $sourcePath . '.json';
+            }
+
+            $code = 200;
+            $body = $bookProps;
         }
 
         return $this->send($code, $body);

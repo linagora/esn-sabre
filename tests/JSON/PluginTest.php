@@ -1949,30 +1949,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($descriptionUpdated, $subscriptions[0]['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
     }
 
-    function testPropFindRequestSubscriptionAddressBook() {
-        $this->setUpToTestAddressBookSubscriptionSupport();
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'PROPFIND',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book3.json',
-        ));
-
-        $body = '{"properties": ["uri","{http://open-paas.org/contacts}source","acl"]}';
-        $request->setBody($body);
-        $response = $this->request($request);
-        $jsonResponse = json_decode($response->getBodyAsString(), true);
-
-        $this->assertEquals(200, $response->status);
-        $this->assertEquals($jsonResponse['uri'], 'book3');
-        $this->assertEquals($jsonResponse['{http://open-paas.org/contacts}source']['_links']['self']['href'], '/addressbooks/5aa1f6639751b711008b4567/book2.json');
-        $this->assertEquals($jsonResponse['acl'][0], array(
-            "privilege" => "{DAV:}all",
-            "principal" => "principals/users/54b64eadf6d7d8e41d263e0f",
-            "protected" => true
-        ));
-    }
-
     private function getAddressBookAcl($addressBook) {
         $result = [];
         foreach( $addressBook->{'acl'} as $ace ) {

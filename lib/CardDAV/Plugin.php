@@ -118,41 +118,11 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         if ($node instanceof \Sabre\CardDAV\AddressBook) {
             $jsonData = json_decode($request->getBodyAsString(), true);
-            $result = $node->getProperties($jsonData['properties']);
-
-            $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
-            $this->server->httpResponse->setBody(json_encode($result));
-            $this->server->httpResponse->setStatus(200);
-            return false;
+            $body = $node->getProperties($jsonData['properties']);
+            $code = 200;
         }
 
-        if ($node instanceof \ESN\CardDAV\Subscriptions\Subscription) {
-            $jsonData = json_decode($request->getBodyAsString(), true);
-
-            if ($node->getProperties($jsonData['properties'])) {
-                $bookProps = $node->getProperties($jsonData['properties']);
-
-                if (isset($bookProps['{http://open-paas.org/contacts}source'])) {
-                    $sourcePath = $bookProps['{http://open-paas.org/contacts}source']->getHref();
-
-                    if (!$this->server->tree->nodeExists($sourcePath)) {
-                        return null;
-                    }
-
-                    $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
-                    $bookProps['{http://open-paas.org/contacts}source'] = $this->getAddressBookDetail($sourcePath, $sourceNode, true);
-                }
-
-                $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
-                $this->server->httpResponse->setBody(json_encode($bookProps));
-            }
-
-
-            $this->server->httpResponse->setStatus(200);
-            return false;
-        }
-
-        return true;
+        return $this->send($code, $body);
     }
 
     function httpProppatch($request, $response) {

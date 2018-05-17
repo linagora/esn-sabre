@@ -6,6 +6,7 @@ require_once ESN_TEST_BASE. '/DAV/ServerMock.php';
 
 class PluginTestBase extends \ESN\DAV\ServerMock {
 
+    protected $userTestId1 = '54b64eadf6d7d8e41d263e0f';
     protected $userTestId2 = '5aa1f6639751b711008b4567';
 
     function setUp() {

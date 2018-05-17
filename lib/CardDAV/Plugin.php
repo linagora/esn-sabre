@@ -3,6 +3,7 @@ namespace ESN\CardDAV;
 
 use Sabre\DAV;
 use \Sabre\VObject;
+use \ESN\Utils\Utils as Utils;
 
 class Plugin extends \ESN\JSON\BasePlugin {
 
@@ -242,7 +243,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             if ($options->personal && $addressBook instanceof \Sabre\CardDAV\AddressBook) {
                 $items[] = $this->getAddressBookDetail($nodePath . '/' . $addressBook->getName(), $addressBook);
             } else if ($options->subscribed && $addressBook instanceof \ESN\CardDAV\Subscriptions\Subscription) {
-                $items[] = $this->addressBookSubscriptionToJson($nodePath . '/' . $addressBook->getName(), $addressBook);
+                $items[] = $this->getAddressBookDetail($nodePath . '/' . $addressBook->getName(), $addressBook);
             }
         }
 
@@ -257,53 +258,34 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return [200, $result];
     }
 
-    function addressBookSubscriptionToJson($nodePath, $addressBook) {
+    function getAddressBookDetail($nodePath, \Sabre\DAV\Collection $addressBook) {
         $baseUri = $this->server->getBaseUri();
         $bookProps = $addressBook->getProperties([
-          '{http://open-paas.org/contacts}source',
-          '{DAV:}displayname',
-          '{urn:ietf:params:xml:ns:carddav}addressbook-description',
-          '{DAV:}acl'
+            '{urn:ietf:params:xml:ns:carddav}addressbook-description',
+            '{DAV:}displayname',
+            '{DAV:}acl',
+            '{http://open-paas.org/contacts}source',
+            '{http://open-paas.org/contacts}type',
+            'acl'
         ]);
 
-        $subscription = [
+        $output = [
             '_links' => [
                 'self' => [ 'href' => $baseUri . $nodePath . '.json' ],
             ],
-            'dav:name' => $bookProps['{DAV:}displayname'],
-            'carddav:description' => $bookProps['{urn:ietf:params:xml:ns:carddav}addressbook-description'],
-            'dav:acl' => $bookProps['{DAV:}acl'],
-            'acl' => $addressBook->getACL()
+            'dav:name' => Utils::getArrayValue($bookProps, '{DAV:}displayname'),
+            'carddav:description' => Utils::getArrayValue($bookProps, '{urn:ietf:params:xml:ns:carddav}addressbook-description'),
+            'dav:acl' => Utils::getArrayValue($bookProps, '{DAV:}acl'),
+            'type' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}type'),
+            'acl' => Utils::getArrayValue($bookProps, 'acl'),
         ];
 
         if (isset($bookProps['{http://open-paas.org/contacts}source'])) {
             $sourcePath = $bookProps['{http://open-paas.org/contacts}source']->getHref();
-
-            if (!$this->server->tree->nodeExists($sourcePath)) {
-                return null;
-            }
-
-            $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
-            $subscription['openpaas:source'] = $this->getAddressBookDetail($sourcePath, $sourceNode, true);
+            $output['openpaas:source'] = $baseUri . $sourcePath . '.json';
         }
 
-        return $subscription;
-    }
-
-    function getAddressBookDetail($nodePath, \Sabre\CardDAV\AddressBook $addressBook) {
-        $baseUri = $this->server->getBaseUri();
-        $bookProps = $addressBook->getProperties(['{DAV:}displayname', '{DAV:}acl', '{http://open-paas.org/contacts}type', '{urn:ietf:params:xml:ns:carddav}addressbook-description']);
-
-        return [
-            '_links' => [
-                'self' => [ 'href' => $baseUri . $nodePath . '.json' ],
-            ],
-            'dav:name' => $bookProps['{DAV:}displayname'],
-            'carddav:description' => $bookProps['{urn:ietf:params:xml:ns:carddav}addressbook-description'],
-            'dav:acl' => $bookProps['{DAV:}acl'],
-            'type' => $bookProps['{http://open-paas.org/contacts}type'],
-            'acl' => $addressBook->getACL()
-        ];
+        return $output;
     }
 
     function createAddressBook($node, $jsonData) {

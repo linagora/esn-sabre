@@ -145,4 +145,8 @@ class Utils {
         return [$data, $modified];
     }
 
+    static function getArrayValue($array, $key, $default = null){
+        return isset($array[$key]) ? $array[$key] : $default;
+    }
+
 }

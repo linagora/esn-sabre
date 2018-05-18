@@ -85,21 +85,12 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $body = null;
 
         if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
-            if (isset($queryParams['public']) && $queryParams['public'] === 'true') {
-                list($code, $body) = $this->getPublicAddressBooks($path, $node);
-            } else {
-                $options = new \stdClass();
-                $options->subscribed = isset($queryParams['subscribed']) && $queryParams['subscribed'] === 'true';
-                $options->personal = isset($queryParams['personal']) && $queryParams['personal'] === 'true';
+            $options = new \stdClass();
+            $options->public = Utils::getArrayValue($queryParams, 'public') === 'true';
+            $options->subscribed = Utils::getArrayValue($queryParams, 'subscribed') === 'true';
+            $options->personal = Utils::getArrayValue($queryParams, 'personal') === 'true';
 
-                // If there is no params is given, get all address books
-                if (!$options->subscribed && !$options->personal) {
-                    $options->subscribed = true;
-                    $options->personal = true;
-                }
-
-                list($code, $body) = $this->getAddressBooks($path, $node, $options);
-            }
+            list($code, $body) = $this->getAddressBooks($path, $node, $options);
         } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
             list($code, $body) = $this->getContacts($request, $response, $path, $node);
         }
@@ -212,37 +203,27 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return $this->send($code, $body);
     }
 
-    function getPublicAddressBooks($nodePath, $node) {
+    private function getAddressBooks($nodePath, $node, $options) {
         $addressBooks = $node->getChildren();
         $baseUri = $this->server->getBaseUri();
 
         $items = [];
         foreach ($addressBooks as $addressBook) {
-            if ($addressBook instanceof \Sabre\CardDAV\AddressBook && $addressBook->isPublic()) {
-                $items[] = $this->getAddressBookDetail($nodePath . '/' . $addressBook->getName(), $addressBook);
+            $shouldInclude = false;
+
+            if ($addressBook instanceof AddressBook) {
+                if ($options->personal) {
+                    $shouldInclude = true;
+                }
+
+                if ($options->public) {
+                    $shouldInclude = $addressBook->isPublic();
+                }
+            } else if ($addressBook instanceof Subscriptions\Subscription) {
+                $shouldInclude = $options->subscribed;
             }
-        }
 
-        $requestPath = $baseUri . $nodePath . '.json';
-        $result = [
-            '_links' => [
-                'self' => [ 'href' => $requestPath ]
-            ],
-            '_embedded' => [ 'dav:addressbook' => $items ]
-        ];
-
-        return [200, $result];
-    }
-
-    function getAddressBooks($nodePath, $node, $options) {
-        $addressBooks = $node->getChildren();
-        $baseUri = $this->server->getBaseUri();
-
-        $items = [];
-        foreach ($addressBooks as $addressBook) {
-            if ($options->personal && $addressBook instanceof \Sabre\CardDAV\AddressBook) {
-                $items[] = $this->getAddressBookDetail($nodePath . '/' . $addressBook->getName(), $addressBook);
-            } else if ($options->subscribed && $addressBook instanceof \ESN\CardDAV\Subscriptions\Subscription) {
+            if ($shouldInclude) {
                 $items[] = $this->getAddressBookDetail($nodePath . '/' . $addressBook->getName(), $addressBook);
             }
         }

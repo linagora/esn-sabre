@@ -13,6 +13,12 @@ require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CardDAV/Backend/Mock.php'
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
 
+define('PRINCIPALS_USERS', 'principals/users');
+define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
+define('PRINCIPALS_COMMUNITIES', 'principals/communities');
+define('PRINCIPALS_PROJECTS', 'principals/projects');
+define('PRINCIPALS_RESOURCES', 'principals/resources');
+
 /**
  * @medium
  */
@@ -315,6 +321,16 @@ END:VCALENDAR'
         $authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0f');
         $authPlugin = new \Sabre\DAV\Auth\Plugin($authBackend);
         $this->server->addPlugin($authPlugin);
+
+        $aclPlugin = new \Sabre\DAVACL\Plugin();
+        $aclPlugin->principalCollectionSet = [
+            PRINCIPALS_USERS,
+            PRINCIPALS_COMMUNITIES,
+            PRINCIPALS_PROJECTS,
+            PRINCIPALS_RESOURCES
+        ];
+        $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
+        $this->server->addPlugin($aclPlugin);
 
         $this->cal = $this->caldavCalendar;
         $this->cal['id'] = $this->caldavBackend->createCalendar($this->cal['principaluri'], $this->cal['uri'], $this->cal);

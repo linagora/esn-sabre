@@ -8,6 +8,13 @@ use Sabre\VObject\ITip\Message;
 
 class Plugin extends \Sabre\CalDAV\Plugin {
 
+    const FREE_BUSY_QUERY = 'free-busy-query';
+    const ACCEPT_JSON_VALUES = [
+        'application/calendar+json',
+        'application/vcard+json',
+        'application/json'
+    ];
+
     function __construct($root) {
         $this->root = $root;
     }
@@ -160,26 +167,23 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $jsonData = json_decode($request->getBodyAsString());
 
-        if (isset($jsonData->type)) {
-            $type = $jsonData->type;
-
-            if ($type === 'free-busy-query') {
-                if (!isset($jsonData->match) || !isset($jsonData->match->start) ||
-                    !isset($jsonData->match->end)) {
-                    throw new DAV\Exception\BadRequest('Missing report parameters in JSON body');
-                }
-
-                $writer = new \Sabre\Xml\Writer();
-                $writer->openMemory();
-                $writer->startDocument('1.0', 'UTF-8');
-                $writer->startElement('{' . Plugin::NS_CALDAV . '}' . $type);
-                $writer->startElement('{' . Plugin::NS_CALDAV . '}time-range');
-                $writer->writeAttributes(['start' => $jsonData->match->start, 'end' => $jsonData->match->end]);
-                $writer->endElement();
-                $writer->endElement();
-
-                $request->setBody($writer->outputMemory());
+        if (isset($jsonData->type) && $jsonData->type === self::FREE_BUSY_QUERY) {
+            if (!isset($jsonData->match) ||
+                !isset($jsonData->match->start) ||
+                !isset($jsonData->match->end)) {
+                throw new DAV\Exception\BadRequest('Missing report parameters in JSON body');
             }
+
+            $writer = new \Sabre\Xml\Writer();
+            $writer->openMemory();
+            $writer->startDocument('1.0', 'UTF-8');
+            $writer->startElement('{' . Plugin::NS_CALDAV . '}' . self::FREE_BUSY_QUERY);
+            $writer->startElement('{' . Plugin::NS_CALDAV . '}time-range');
+            $writer->writeAttributes(['start' => $jsonData->match->start, 'end' => $jsonData->match->end]);
+            $writer->endElement();
+            $writer->endElement();
+
+            $request->setBody($writer->outputMemory());
 
             return true;
         }
@@ -1059,9 +1063,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function acceptJson() {
-        return in_array('application/calendar+json', $this->acceptHeader) ||
-               in_array('application/vcard+json', $this->acceptHeader) ||
-               in_array('application/json', $this->acceptHeader);
+        return count(array_intersect(self::ACCEPT_JSON_VALUES, $this->acceptHeader)) > 0;
     }
 
     function send($code, $body, $setContentType = true) {

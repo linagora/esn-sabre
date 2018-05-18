@@ -1638,8 +1638,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             )
         );
 
-        $subscriptionSource = $addressBooks[2]->{'openpaas:source'};
-        $this->assertEquals($subscriptionSource->{'_links'}->self->href, '/addressbooks/' . $this->userTestId . '/book2.json');
+        $this->assertEquals($addressBooks[2]->{'openpaas:source'}, '/addressbooks/' . $this->userTestId . '/book2.json');
     }
 
     function testGETPuclicAddressBooks() {
@@ -1697,8 +1696,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             )
         );
 
-        $subscriptionSource = $addressBooks[0]->{'openpaas:source'};
-        $this->assertEquals($subscriptionSource->{'_links'}->self->href, '/addressbooks/' . $this->userTestId . '/book2.json');
+        $this->assertEquals($addressBooks[0]->{'openpaas:source'}, '/addressbooks/' . $this->userTestId . '/book2.json');
     }
 
     function testGetPersonalAddressBooks() {

@@ -358,9 +358,8 @@ END:VCALENDAR'
         $this->subscription['{http://calendarserver.org/ns/}source'] = new \Sabre\DAV\Xml\Property\Href('calendars/54b64eadf6d7d8e41d263e0e/publicCal1');
         $this->subscription['id'] = $this->caldavBackend->createSubscription($this->subscription['principaluri'], $this->subscription['uri'], $this->subscription);
 
-        $book = $this->carddavAddressBook;
-        $book['id'] = $this->carddavBackend->createAddressBook($book['principaluri'],
-            $book['uri'],
+        $this->carddavAddressBook['id'] = $this->carddavBackend->createAddressBook($this->carddavAddressBook['principaluri'],
+            $this->carddavAddressBook['uri'],
             [
                 '{DAV:}displayname' => 'Book 1',
                 '{urn:ietf:params:xml:ns:carddav}addressbook-description' => 'Book 1 description',
@@ -368,7 +367,7 @@ END:VCALENDAR'
             ]);
 
         foreach ($this->carddavCards as $card => $data) {
-            $this->carddavBackend->createCard($book['id'], $card, $data);
+            $this->carddavBackend->createCard($this->carddavAddressBook['id'], $card, $data);
         }
     }
 

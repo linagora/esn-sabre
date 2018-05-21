@@ -5,12 +5,14 @@ namespace ESN\CardDAV\Backend;
 use Sabre\Event\EventEmitter;
 
 class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
-    \ESN\CardDAV\Backend\SubscriptionSupport,
-    \Sabre\CardDAV\Backend\SyncSupport {
+    \Sabre\CardDAV\Backend\SyncSupport,
+    SubscriptionSupport,
+    SharingSupport {
 
     protected $eventEmitter;
 
     public $addressBooksTableName = 'addressbooks';
+    public $sharedAddressBooksTableName = 'sharedaddressbooks';
     public $cardsTableName = 'cards';
     public $addressBookChangesTableName = 'addressbookchanges';
     public $addressBookSubscriptionsTableName = 'addressbooksubscriptions';
@@ -20,6 +22,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         '{DAV:}displayname' => 'displayname',
         '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'description'
     ];
+    public $sharedAddressBookPropertyMap = [
+        '{DAV:}displayname' => 'displayname',
+        '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'description'
+    ];
+
     public $PUBLIC_RIGHTS = [
         '{DAV:}all',
         '{DAV:}read',
@@ -377,6 +384,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 '{DAV:}displayname' => $row['displayname'],
                 'uri'          => $row['uri'],
                 'principaluri' => $row['principaluri'],
+                '{http://open-paas.org/contacts}subscription-type' => 'public',
                 '{http://open-paas.org/contacts}source' => $row['source'],
                 'lastmodified' => $row['lastmodified'],
                 '{DAV:}acl'    => $this->getValue($row, 'privilege', ['dav:read', 'dav:write']),
@@ -496,6 +504,237 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $res = $collection->findOne($query, ['public_right']);
 
         return isset($res['public_right']) ? $res['public_right'] : null;
+    }
+
+    /**
+     *
+     * @param  string $principalUri
+     * @return array
+     */
+    function getSharedAddressBooksForUser($principalUri) {
+        $fields[] = '_id';
+        $fields[] = 'displayname';
+        $fields[] = 'description';
+        $fields[] = 'uri';
+        $fields[] = 'principaluri';
+        $fields[] = 'addressbookid';
+        $fields[] = 'lastmodified';
+        $fields[] = 'privilege';
+        $fields[] = 'share_access';
+        $fields[] = 'share_invitestatus';
+        $fields[] = 'share_href';
+        $fields[] = 'share_displayname';
+
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $query = [ 'principaluri' => $principalUri ];
+        $res = $collection->find($query, $fields);
+
+        $addressBooks = [];
+        foreach ($res as $row) {
+            $collection = $this->db->selectCollection($this->addressBooksTableName);
+            $query = [ '_id' => new \MongoId((string)$row['addressbookid'])];
+            $fields = [ 'principaluri', 'uri', 'synctoken', 'type' ];
+            $addressBookInstance = $collection->findOne($query, $fields);
+
+            $addressBook = [
+                'id'           => (string)$row['_id'],
+                '{DAV:}displayname' => $row['displayname'],
+                'uri'          => $row['uri'],
+                'principaluri' => $row['principaluri'],
+                'addressbookid' => $row['addressbookid'],
+                'lastmodified' => $this->getValue($row, 'lastmodified', ''),
+                '{DAV:}acl'    => $this->getValue($row, 'privilege', ['dav:read', 'dav:write']),
+                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getValue($row, 'description', ''),
+                '{http://open-paas.org/contacts}subscription-type' => 'delegation',
+                '{http://open-paas.org/contacts}type' => $this->getValue($addressBookInstance, 'type', ''),
+                '{http://calendarserver.org/ns/}getctag' => $this->getValue($addressBookInstance, 'synctoken', '0'),
+                '{http://sabredav.org/ns}sync-token' => $this->getValue($addressBookInstance, 'synctoken', '0'),
+                'share_access' => $this->getValue($row, 'share_access', \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS),
+                'share_invitestatus' => $this->getValue($row, 'share_invitestatus', \Sabre\DAV\Sharing\Plugin::INVITE_INVALID),
+                'share_href' => $this->getValue($row, 'share_href', \Sabre\HTTP\encodePath($row['principaluri'])),
+                'share_displayname' => $this->getValue($row, 'share_displayname', ''),
+                'share_owner' => $this->getValue($addressBookInstance, 'principaluri'),
+                'share_resource_uri' => $this->getValue($addressBookInstance, 'uri')
+            ];
+
+            $addressBooks[] = $addressBook;
+        }
+
+        return $addressBooks;
+    }
+
+    function updateSharedAddressBook($addressBookId, \Sabre\DAV\PropPatch $propPatch) {
+        $supportedProperties = array_keys($this->sharedAddressBookPropertyMap);
+
+        $propPatch->handle($supportedProperties, function($mutations) use ($addressBookId) {
+            $newValues = [];
+            $newValues['lastmodified'] = time();
+
+            foreach($mutations as $propertyName=>$propertyValue) {
+                $fieldName = $this->sharedAddressBookPropertyMap[$propertyName];
+                $newValues[$fieldName] = $propertyValue;
+            }
+
+            $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+            $query = [ '_id' => new \MongoId($addressBookId) ];
+            $collection->update($query, [ '$set' => $newValues ]);
+
+            return true;
+        });
+    }
+
+    function deleteSharedAddressBook($addressBookId) {
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $query = [ '_id' => new \MongoId($addressBookId) ];
+        $collection->remove($query);
+    }
+
+    /**
+     * Updates the list of shares.
+     *
+     * @param string $addressBookId
+     * @param \Sabre\DAV\Xml\Element\Sharee[] $sharees
+     * @return void
+     */
+    function updateInvites($addressBookId, array $sharees) {
+        $currentInvites = $this->getInvites($addressBookId);
+        $mongoAddressBookId = new \MongoId($addressBookId);
+
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $sharerAddressBook = $collection->findOne([ '_id' => $mongoAddressBookId ]);
+
+        $shareeCollection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+
+        $shareesToCreate = [];
+        $shareesToUpdate = [];
+        $shareesToRemove = [];
+
+        foreach($sharees as $sharee) {
+            if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS) {
+                $shareesToRemove[] = $sharee;
+                continue;
+            }
+
+            // restrict on available accesses
+            if ($sharee->access !== \Sabre\DAV\Sharing\Plugin::ACCESS_READ &&
+                $sharee->access !== \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE) {
+                continue;
+            }
+
+            // you cannot share to no one
+            if (is_null($sharee->principal)) {
+                continue;
+            }
+
+            $isShareeExisting = false;
+            foreach($currentInvites as $oldSharee) {
+                if ($oldSharee->href === $sharee->href) {
+                    $isShareeExisting = true;
+                    break;
+                }
+            }
+
+            if ($isShareeExisting) {
+                $shareesToUpdate[] = $sharee;
+            } else {
+                $shareesToCreate[] = $sharee;
+            }
+        }
+
+        foreach ($shareesToRemove as $sharee) {
+            $shareeCollection->remove([
+                'addressbookid' => $mongoAddressBookId,
+                'share_href' => $sharee->href
+            ]);
+        }
+
+        foreach ($shareesToUpdate as $sharee) {
+            $shareeCollection->update([
+                'addressbookid' => $mongoAddressBookId,
+                'share_href' => $sharee->href
+            ], [ '$set' => [
+                'share_access' => $sharee->access,
+                'share_displayname' => isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null
+            ]]);
+        }
+
+        foreach ($shareesToCreate as $sharee) {
+            $newShareeAddressBook = [
+                'addressbookid' => $mongoAddressBookId,
+                'principaluri' => $sharee->principal,
+                'uri' => \Sabre\DAV\UUIDUtil::getUUID(),
+                'displayname' => $sharerAddressBook['displayname'],
+                'description' => $sharerAddressBook['description'],
+                'share_access' => $sharee->access,
+                'share_href' => $sharee->href,
+                'share_invitestatus' => $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE,
+                'share_displayname' => $this->getValue($sharee->properties, '{DAV:}displayname')
+            ];
+            $shareeCollection->insert($newShareeAddressBook);
+        }
+    }
+
+    /**
+     * Returns the list of people whom this address book is shared with.
+     *
+     * Every item in the returned list must be a Sharee object with at
+     * least the following properties set:
+     *   $href
+     *   $shareAccess
+     *   $inviteStatus
+     *
+     * and optionally:
+     *   $properties
+     *
+     * @param mixed $addressBookId
+     * @return \Sabre\DAV\Xml\Element\Sharee[]
+     */
+    function getInvites($addressBookId) {
+        $fields[] = 'principaluri';
+        $fields[] = 'share_access';
+        $fields[] = 'share_href';
+        $fields[] = 'share_invitestatus';
+        $fields[] = 'share_displayname';
+
+        $query = [ 'addressbookid' => new \MongoId($addressBookId) ];
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+
+        $res = $collection->find($query, $fields);
+        $result = [];
+        foreach ($res as $row) {
+            if ($row['share_invitestatus'] === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
+                continue;
+            }
+
+            $result[] = new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => $this->getValue($row, 'share_href', \Sabre\HTTP\encodePath($row['principaluri'])),
+                'access' => (int)$row['share_access'],
+                'inviteStatus' => (int)$row['share_invitestatus'],
+                'properties' => !empty($row['share_displayname']) ? [ '{DAV:}displayname' => $row['share_displayname'] ] : [],
+                'principal' => $row['principaluri']
+            ]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Publishes an address book
+     *
+     * @param mixed $addressBookId
+     * @param bool $value
+     * @return void
+    */
+    function setPublishStatus($addressBookId, $value) {
+    }
+
+    function updateInviteStatus($addressBookId, $status) {
+        $mongoAddressBookId = new \MongoId($addressBookId);
+
+        $collection =$this->db->selectCollection($this->sharedAddressBooksTableName);
+        $query = ['_id' => $mongoAddressBookId];
+
+        $collection->update($query, ['$set' => ['share_invitestatus' => $status]]);
     }
 
     protected function addChange($addressBookId, $objectUri, $operation) {

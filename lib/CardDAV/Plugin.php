@@ -90,6 +90,19 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $options->subscribed = Utils::getArrayValue($queryParams, 'subscribed') === 'true';
             $options->personal = Utils::getArrayValue($queryParams, 'personal') === 'true';
 
+            // TODO: these should be in sharing plugin but we still do not find a effective way to do it
+            $options->shared = Utils::getArrayValue($queryParams, 'shared') === 'true';
+            $options->inviteStatus = Utils::getArrayValue($queryParams, 'inviteStatus', null);
+            $options->shareOwner = Utils::getArrayValue($queryParams, 'shareOwner', null);
+
+            if ($options->inviteStatus !== null) {
+                $options->inviteStatus = (int)$options->inviteStatus;
+            }
+
+            if ($options->shareOwner !== null) {
+                $options->shareOwner = 'principals/users/' . $options->shareOwner;
+            }
+
             list($code, $body) = $this->getAddressBooks($path, $node, $options);
         } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
             list($code, $body) = $this->getContacts($request, $response, $path, $node);
@@ -108,7 +121,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $code = null;
         $body = null;
 
-        if ($node instanceof \Sabre\CardDAV\AddressBook) {
+        if ($node instanceof AddressBook) {
             $jsonData = json_decode($request->getBodyAsString(), true);
             $body = $node->getProperties($jsonData['properties']);
             $code = 200;
@@ -221,6 +234,16 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 }
             } else if ($addressBook instanceof Subscriptions\Subscription) {
                 $shouldInclude = $options->subscribed;
+            } else if ($addressBook instanceof Sharing\SharedAddressBook) {
+                $shouldInclude = $options->shared;
+
+                if ($options->inviteStatus !== null) {
+                    $shouldInclude =  $shouldInclude && $addressBook->getInviteStatus() === $options->inviteStatus;
+                }
+
+                if ($options->shareOwner !== null) {
+                    $shouldInclude =  $shouldInclude && $addressBook->getShareOwner() === $options->shareOwner;
+                }
             }
 
             if ($shouldInclude) {
@@ -245,6 +268,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             '{urn:ietf:params:xml:ns:carddav}addressbook-description',
             '{DAV:}displayname',
             '{DAV:}acl',
+            '{DAV:}share-access',
+            '{http://open-paas.org/contacts}subscription-type',
             '{http://open-paas.org/contacts}source',
             '{http://open-paas.org/contacts}type',
             'acl'
@@ -257,6 +282,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             'dav:name' => Utils::getArrayValue($bookProps, '{DAV:}displayname'),
             'carddav:description' => Utils::getArrayValue($bookProps, '{urn:ietf:params:xml:ns:carddav}addressbook-description'),
             'dav:acl' => Utils::getArrayValue($bookProps, '{DAV:}acl'),
+            'dav:share-access' => Utils::getArrayValue($bookProps, '{DAV:}share-access'),
+            'openpaas:subscription-type' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}subscription-type'),
             'type' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}type'),
             'acl' => Utils::getArrayValue($bookProps, 'acl'),
         ];

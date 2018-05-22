@@ -728,13 +728,18 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     function setPublishStatus($addressBookId, $value) {
     }
 
-    function updateInviteStatus($addressBookId, $status) {
+    function replyInvite($addressBookId, $status, $options) {
         $mongoAddressBookId = new \MongoId($addressBookId);
 
         $collection =$this->db->selectCollection($this->sharedAddressBooksTableName);
         $query = ['_id' => $mongoAddressBookId];
+        $set = ['share_invitestatus' => $status];
 
-        $collection->update($query, ['$set' => ['share_invitestatus' => $status]]);
+        if ($slug = $this->getValue($options, 'dav:slug')) {
+            $set['displayname'] = $slug;
+        }
+
+        $collection->update($query, ['$set' => $set]);
     }
 
     protected function addChange($addressBookId, $objectUri, $operation) {

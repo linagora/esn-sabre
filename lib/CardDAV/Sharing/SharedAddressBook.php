@@ -99,8 +99,8 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
         return $this->addressBookInfo['share_invitestatus'];
     }
 
-    function updateInviteStatus($inviteStatus) {
-        $this->carddavBackend->updateInviteStatus($this->addressBookInfo['id'], $inviteStatus);
+    function replyInvite($inviteStatus, $options) {
+        $this->carddavBackend->replyInvite($this->addressBookInfo['id'], $inviteStatus, $options);
     }
 
     function getShareOwner() {

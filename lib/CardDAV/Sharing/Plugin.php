@@ -115,7 +115,13 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 $accepted = Utils::getJsonValue($data, 'dav:invite-accepted', false);
 
                 if ($accepted) {
-                    $node->updateInviteStatus(\Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED);
+                    $options = [];
+
+                    if ($slug = Utils::getJsonValue($data, 'dav:slug', false)) {
+                        $options['dav:slug'] = $slug;
+                    }
+
+                    $node->replyInvite(\Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED, $options);
                 }
 
                 $code = 204;

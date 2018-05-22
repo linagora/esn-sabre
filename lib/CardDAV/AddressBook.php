@@ -3,8 +3,10 @@
 namespace ESN\CardDAV;
 
 use Sabre\DAV;
+use \ESN\Utils\Utils as Utils;
+use \Sabre\DAV\Sharing\Plugin as SPlugin;
 
-class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection {
+class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection, Sharing\ISharedAddressBook {
     function getChildACL() {
         return $this->getACL();
     }
@@ -28,12 +30,14 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
                 ];
 
                 $acl = $this->updateAclWithPublicRight($acl);
+                $acl = $this->updateAclWithShareAccess($acl);
                 return $acl;
             }
         }
 
         $acl = parent::getACL();
         $acl = $this->updateAclWithPublicRight($acl);
+        $acl = $this->updateAclWithShareAccess($acl);
 
         $index = array_search('{DAV:}owner', array_column($acl, 'principal'));
         if ($index >= 0) {
@@ -59,6 +63,14 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
 
         if (in_array('acl', $properties)) {
             $response['acl'] = $this->getACL();
+        }
+
+        if (in_array('{DAV:}invite', $properties)) {
+            $response['{DAV:}invite'] = $this->getInvites();
+        }
+
+        if (in_array('{DAV:}share-access', $properties)) {
+            $response['{DAV:}share-access'] = $this->getShareAccess();
         }
 
         return $response;
@@ -116,6 +128,87 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
 
     }
 
+    function getShareOwner() {
+        return $this->getOwner();
+    }
+
+    function getInviteStatus() {
+        return SPlugin::INVITE_ACCEPTED;
+    }
+
+    function updateInviteStatus($inviteStatus) {
+        throw new DAV\Exception\MethodNotAllowed('This is not a shared address book');
+    }
+
+    /**
+     * Returns the 'access level' for the instance of this shared resource.
+     *
+     * The value should be one of the Sabre\DAV\Sharing\Plugin::ACCESS_
+     * constants.
+     *
+     * @return int
+     */
+    function getShareAccess() {
+        return SPlugin::ACCESS_SHAREDOWNER;
+    }
+
+    /**
+     * This function must return a URI that uniquely identifies the shared
+     * resource. This URI should be identical across instances, and is
+     * also used in several other XML bodies to connect invites to
+     * resources.
+     *
+     * This may simply be a relative reference to the original shared instance,
+     * but it could also be a urn. As long as it's a valid URI and unique.
+     *
+     * @return string
+     */
+    function getShareResourceUri() {
+        return '/addressbooks/' . Utils::getUserIdFromPrincipalUri($this->getShareOwner()) . '/' . $this->addressBookInfo['uri'];
+    }
+
+    /**
+     * Updates the list of sharees.
+     *
+     * Every item must be a Sharee object.
+     *
+     * @param \Sabre\DAV\Xml\Element\Sharee[] $sharees
+     * @return void
+     */
+    function updateInvites(array $sharees) {
+        $this->carddavBackend->updateInvites($this->addressBookInfo['id'], $sharees);
+    }
+
+    /**
+     * Returns the list of people whom this resource is shared with.
+     *
+     * Every item in the returned array must be a Sharee object with
+     * at least the following properties set:
+     *
+     * * $href
+     * * $shareAccess
+     * * $inviteStatus
+     *
+     * and optionally:
+     *
+     * * $properties
+     *
+     * @return \Sabre\DAV\Xml\Element\Sharee[]
+     */
+    function getInvites() {
+        $invites = $this->carddavBackend->getInvites($this->addressBookInfo['id']);
+
+        $invites[] = new \Sabre\DAV\Xml\Element\Sharee([
+            'href' => \Sabre\HTTP\encodePath($this->getOwner()),
+            'access' => $this->getShareAccess(),
+            'inviteStatus' => SPlugin::INVITE_ACCEPTED,
+            'properties' => [],
+            'principal' => $this->getOwner()
+        ]);
+
+        return $invites;
+    }
+
     private function getHighestPublicRight($privileges) {
         $privilegeScores = [
             '{DAV:}read'  => 1,
@@ -155,4 +248,49 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
 
         return $acl;
     }
+
+    private function updateAclWithShareAccess($acl) {
+        $sharees = $this->getInvites();
+
+        foreach ($sharees as $sharee) {
+            if ($sharee->inviteStatus !== SPlugin::INVITE_ACCEPTED) {
+                continue;
+            }
+
+            switch($sharee->access) {
+                case SPlugin::ACCESS_READ:
+                    $acl[] = [
+                        'privilege' => '{DAV:}read',
+                        'principal' => $sharee->principal,
+                        'protected' => true
+                    ];
+                    break;
+                case SPlugin::ACCESS_READWRITE:
+                    $acl[] = [
+                        'privilege' => '{DAV:}read',
+                        'principal' => $sharee->principal,
+                        'protected' => true
+                    ];
+                    $acl[] = [
+                        'privilege' => '{DAV:}write-content',
+                        'principal' => $sharee->principal,
+                        'protected' => true
+                    ];
+                    $acl[] = [
+                        'privilege' => '{DAV:}bind',
+                        'principal' => $sharee->principal,
+                        'protected' => true
+                    ];
+                    $acl[] = [
+                        'privilege' => '{DAV:}unbind',
+                        'principal' => $sharee->principal,
+                        'protected' => true
+                    ];
+                    break;
+            }
+        }
+
+        return $acl;
+    }
+
 }

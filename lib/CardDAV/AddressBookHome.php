@@ -26,6 +26,13 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
             }
         }
 
+        // If the backend supports shared address books, we'll add those as well
+        if ($this->carddavBackend instanceof Backend\SharingSupport) {
+            foreach ($this->carddavBackend->getSharedAddressBooksForUser($this->principalUri) as $sharedAddressBook) {
+                $objs[] = new Sharing\SharedAddressBook($this->carddavBackend, $sharedAddressBook);
+            }
+        }
+
         return $objs;
     }
 

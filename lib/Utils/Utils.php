@@ -145,8 +145,22 @@ class Utils {
         return [$data, $modified];
     }
 
+    static function getUserIdFromPrincipalUri($principalUri) {
+        $parts = explode('/', trim($principalUri, '/'));
+
+        if (count($parts) !== 3) return;
+        if ($parts[0] !== 'principals') return;
+        if ($parts[1] !== 'users') return;
+
+        return $parts[2];
+    }
+
     static function getArrayValue($array, $key, $default = null){
         return isset($array[$key]) ? $array[$key] : $default;
+    }
+
+    static function getJsonValue($jsonData, $key, $default = null) {
+        return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
     }
 
 }

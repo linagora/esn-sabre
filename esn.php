@@ -117,6 +117,10 @@ $server->addPlugin($carddavJsonPlugin);
 $carddavSubscriptionPlugin = new ESN\CardDAV\Subscriptions\Plugin();
 $server->addPlugin($carddavSubscriptionPlugin);
 
+// CardDAV sharing support
+$carddavSharingPlugin = new ESN\CardDAV\Sharing\Plugin();
+$server->addPlugin($carddavSharingPlugin);
+
 // Calendar subscription support
 $server->addPlugin(
     new Sabre\CalDAV\Subscriptions\Plugin()

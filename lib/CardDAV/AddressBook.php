@@ -3,8 +3,8 @@
 namespace ESN\CardDAV;
 
 use Sabre\DAV;
-use \ESN\Utils\Utils as Utils;
-use \Sabre\DAV\Sharing\Plugin as SPlugin;
+use ESN\Utils\Utils as Utils;
+use ESN\DAV\Sharing\Plugin as SPlugin;
 
 class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection, Sharing\ISharedAddressBook {
     function getChildACL() {
@@ -258,19 +258,13 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
             }
 
             switch($sharee->access) {
-                case SPlugin::ACCESS_READ:
+                case SPlugin::ACCESS_ADMINISTRATION:
                     $acl[] = [
-                        'privilege' => '{DAV:}read',
+                        'privilege' => '{DAV:}share',
                         'principal' => $sharee->principal,
                         'protected' => true
                     ];
-                    break;
                 case SPlugin::ACCESS_READWRITE:
-                    $acl[] = [
-                        'privilege' => '{DAV:}read',
-                        'principal' => $sharee->principal,
-                        'protected' => true
-                    ];
                     $acl[] = [
                         'privilege' => '{DAV:}write-content',
                         'principal' => $sharee->principal,
@@ -283,6 +277,12 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
                     ];
                     $acl[] = [
                         'privilege' => '{DAV:}unbind',
+                        'principal' => $sharee->principal,
+                        'protected' => true
+                    ];
+                case SPlugin::ACCESS_READ:
+                    $acl[] = [
+                        'privilege' => '{DAV:}read',
                         'principal' => $sharee->principal,
                         'protected' => true
                     ];

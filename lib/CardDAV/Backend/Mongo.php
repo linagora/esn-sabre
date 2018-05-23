@@ -3,6 +3,7 @@
 namespace ESN\CardDAV\Backend;
 
 use Sabre\Event\EventEmitter;
+use ESN\DAV\Sharing\Plugin as SPlugin;
 
 class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     \Sabre\CardDAV\Backend\SyncSupport,
@@ -549,8 +550,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 '{http://open-paas.org/contacts}type' => $this->getValue($addressBookInstance, 'type', ''),
                 '{http://calendarserver.org/ns/}getctag' => $this->getValue($addressBookInstance, 'synctoken', '0'),
                 '{http://sabredav.org/ns}sync-token' => $this->getValue($addressBookInstance, 'synctoken', '0'),
-                'share_access' => $this->getValue($row, 'share_access', \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS),
-                'share_invitestatus' => $this->getValue($row, 'share_invitestatus', \Sabre\DAV\Sharing\Plugin::INVITE_INVALID),
+                'share_access' => $this->getValue($row, 'share_access', SPlugin::ACCESS_NOACCESS),
+                'share_invitestatus' => $this->getValue($row, 'share_invitestatus', SPlugin::INVITE_INVALID),
                 'share_href' => $this->getValue($row, 'share_href', \Sabre\HTTP\encodePath($row['principaluri'])),
                 'share_displayname' => $this->getValue($row, 'share_displayname', ''),
                 'share_owner' => $this->getValue($addressBookInstance, 'principaluri'),
@@ -610,14 +611,15 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $shareesToRemove = [];
 
         foreach($sharees as $sharee) {
-            if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS) {
+            if ($sharee->access === SPlugin::ACCESS_NOACCESS) {
                 $shareesToRemove[] = $sharee;
                 continue;
             }
 
             // restrict on available accesses
-            if ($sharee->access !== \Sabre\DAV\Sharing\Plugin::ACCESS_READ &&
-                $sharee->access !== \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE) {
+            if ($sharee->access !== SPlugin::ACCESS_READ &&
+                $sharee->access !== SPlugin::ACCESS_READWRITE &&
+                $sharee->access !== SPlugin::ACCESS_ADMINISTRATION) {
                 continue;
             }
 
@@ -667,7 +669,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'description' => $sharerAddressBook['description'],
                 'share_access' => $sharee->access,
                 'share_href' => $sharee->href,
-                'share_invitestatus' => $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE,
+                'share_invitestatus' => $sharee->inviteStatus ?: SPlugin::INVITE_NORESPONSE,
                 'share_displayname' => $this->getValue($sharee->properties, '{DAV:}displayname')
             ];
             $shareeCollection->insert($newShareeAddressBook);
@@ -702,7 +704,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $res = $collection->find($query, $fields);
         $result = [];
         foreach ($res as $row) {
-            if ($row['share_invitestatus'] === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
+            if ($row['share_invitestatus'] === SPlugin::INVITE_INVALID) {
                 continue;
             }
 

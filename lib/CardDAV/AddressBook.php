@@ -136,7 +136,7 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return SPlugin::INVITE_ACCEPTED;
     }
 
-    function updateInviteStatus($inviteStatus) {
+    function replyInvite($inviteStatus, $options) {
         throw new DAV\Exception\MethodNotAllowed('This is not a shared address book');
     }
 

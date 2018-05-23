@@ -66,6 +66,6 @@ interface SharingSupport extends BackendInterface {
      */
     function setPublishStatus($addressBookId, $value);
 
-    function updateInviteStatus($addressBookId, $inviteStatus);
+    function replyInvite($addressBookId, $inviteStatus, $options);
 
 }

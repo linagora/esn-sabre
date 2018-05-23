@@ -6,6 +6,6 @@ use Sabre\DAV\Sharing\ISharedNode;
 
 interface ISharedAddressBook extends ISharedNode {
     function getInviteStatus();
-    function updateInviteStatus($inviteStatus);
+    function replyInvite($inviteStatus, $options);
     function getShareOwner();
 }

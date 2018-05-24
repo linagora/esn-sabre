@@ -5,7 +5,7 @@ use \Sabre\VObject;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 
-class TextPlugin extends \ESN\JSON\Plugin {
+class TextPlugin extends \ESN\JSON\BasePlugin {
 
     /**
      * This is the official CalDAV namespace
@@ -14,7 +14,39 @@ class TextPlugin extends \ESN\JSON\Plugin {
 
     function initialize(Server $server) {
         parent::initialize($server);
+
         $server->on('method:GET', [$this, 'httpGet'], 80);
+    }
+
+    /**
+     * Returns a plugin name.
+     *
+     * Using this name other plugins will be able to access other plugins
+     * using DAV\Server::getPlugin
+     *
+     * @return string
+     */
+    function getPluginName() {
+        return 'caldav-text';
+    }
+
+    /**
+     * Returns a bunch of meta-data about the plugin.
+     *
+     * Providing this information is optional, and is mainly displayed by the
+     * Browser plugin.
+     *
+     * The description key in the returned array may contain html and will not
+     * be sanitized.
+     *
+     * @return array
+     */
+    function getPluginInfo() {
+        return [
+            'name'        => $this->getPluginName(),
+            'description' => 'Adds Text support for CalDAV',
+            'link'        => 'http://sabre.io/dav/caldav/',
+        ];
     }
 
     function httpGet($request, $response) {
@@ -36,7 +68,7 @@ class TextPlugin extends \ESN\JSON\Plugin {
             $body = [];
         }
 
-        return $this->sendText($code, $body);
+        return $this->send($code, $body);
     }
 
     function getCalendarObjects($path, $node, $jsonData = null) {
@@ -92,7 +124,7 @@ class TextPlugin extends \ESN\JSON\Plugin {
         return $vcal->serialize();
     }
 
-    function sendText($code, $body, $setContentType = true) {
+    function send($code, $body, $setContentType = true) {
         if (!isset($code)) {
             return true;
         }

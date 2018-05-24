@@ -2,7 +2,7 @@
 
 namespace ESN\CardDAV\Sharing;
 
-use \Sabre\DAV\Sharing\Plugin as SPlugin;
+use ESN\DAV\Sharing\Plugin as SPlugin;
 
 require_once ESN_TEST_BASE. '/CardDAV/PluginTestBase.php';
 
@@ -88,6 +88,43 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
 
         $this->assertEquals(403, $response->status);
         $this->assertContains('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
+    }
+
+    function testShareAddressBookOfOtherUserWithAdminAccessResponds204() {
+        $this->carddavBackend->updateInvites($this->user2Book1Id, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => 'mailto:' . $this->userTestEmail1,
+                'principal' => 'principals/users/' . $this->userTestId1,
+                'access' => SPlugin::ACCESS_ADMINISTRATION,
+                'inviteStatus' => SPlugin::INVITE_ACCEPTED,
+                'properties' => []
+            ])
+        ]);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $this->userTestId2 . '/user2book1.json',
+        ));
+
+        $body = array(
+            'dav:share-resource' => array(
+                'dav:sharee' => array([
+                    'dav:href' => 'mailto:'.$this->userTestEmail3,
+                    'dav:share-access' => SPlugin::ACCESS_READ
+                ])
+            )
+        );
+        $request->setBody(json_encode($body));
+        $response = $this->request($request);
+
+        $this->assertEquals(204, $response->status);
+
+        $shareAddressBooks = $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId3);
+        $this->assertCount(1, $shareAddressBooks);
+        $this->assertEquals($shareAddressBooks[0]['share_access'], SPlugin::ACCESS_READ);
+        $this->assertEquals($shareAddressBooks[0]['share_owner'], 'principals/users/' . $this->userTestId2); // owner is still user test 2
     }
 
     function testShareASharedAddressBookResponds403() {

@@ -628,6 +628,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 continue;
             }
 
+            // you can not share to yourself
+            if ($sharee->principal === $sharerAddressBook['principaluri']) {
+                continue;
+            }
+
             $isShareeExisting = false;
             foreach($currentInvites as $oldSharee) {
                 if ($oldSharee->href === $sharee->href) {

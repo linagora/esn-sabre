@@ -67,6 +67,31 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertCount(0, $shareAddressBooks);
     }
 
+    function testShareAddressBookToOwnerDoesNothing() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $this->userTestId1 . '/book1.json',
+        ));
+
+        $body = array(
+            'dav:share-resource' => array(
+                'dav:sharee' => array([
+                    'dav:href' => 'mailto:'.$this->userTestEmail1,
+                    'dav:share-access' => SPlugin::ACCESS_READ
+                ])
+            )
+        );
+        $request->setBody(json_encode($body));
+
+        $response = $this->request($request);
+        $this->assertEquals(204, $response->status); // still responds 204 but does nothing, see below assertion
+
+        $shareAddressBooks = $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId1);
+        $this->assertCount(0, $shareAddressBooks);
+    }
+
     function testShareAddressBookOfOtherUserResponds403() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',

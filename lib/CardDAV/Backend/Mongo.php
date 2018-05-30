@@ -593,6 +593,12 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $collection->remove($query);
     }
 
+    function deleteAddressBooksSharedFrom($addressBookId) {
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $query = [ 'addressbookid' => new \MongoId($addressBookId) ];
+        $collection->remove($query);
+    }
+
     /**
      * Updates the list of shares.
      *

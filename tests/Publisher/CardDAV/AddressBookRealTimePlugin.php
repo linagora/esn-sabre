@@ -29,7 +29,10 @@ class AddressBookRealTimePluginTest extends \PHPUnit_Framework_TestCase {
             ->expects($this->once())
             ->method('publish')
             ->with('sabre:addressbook:deleted');
-        $this->plugin->onAddressBookDeleted(self::PATH, self::PRINCIPAL_URI);
+        $this->plugin->onAddressBookDeleted([
+            'path' => self::PATH,
+            'principaluri' => self::PRINCIPAL_URI
+        ]);
     }
 }
 

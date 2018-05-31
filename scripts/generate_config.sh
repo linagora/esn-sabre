@@ -1,10 +1,8 @@
 #!/bin/bash
 
-sabre_mongo_host="sabre_mongo"
-sabre_mongo_port="27017"
-esn_mongo_host="esn_mongo"
-esn_mongo_port="27017"
 esn_mongo_dbname="esn"
+esn_mongo_connectionstring="mongodb://${ESN_MONGO_HOST:-esn_mongo}:${ESN_MONGO_PORT:-27017}/"
+sabre_mongo_connectionstring="mongodb://${SABRE_MONGO_HOST:-sabre_mongo}:${SABRE_MONGO_PORT:-27017}/"
 esn_host="esn_host"
 esn_port="8080"
 amqp_host='amqp_host'
@@ -13,10 +11,14 @@ amqp_login='guest'
 amqp_password='guest'
 mongo_timeout="10000"
 
-[ -z "$SABRE_MONGO_HOST" ] || sabre_mongo_host="$SABRE_MONGO_HOST"
-[ -z "$SABRE_MONGO_PORT" ] || sabre_mongo_port="$SABRE_MONGO_PORT"
-[ -z "$ESN_MONGO_HOST" ] || esn_mongo_host="$ESN_MONGO_HOST"
-[ -z "$ESN_MONGO_PORT" ] || esn_mongo_port="$ESN_MONGO_PORT"
+if [ ! -z $ESN_MONGO_CONNECTION_STRING ] ; then
+  esn_mongo_connectionstring="$ESN_MONGO_CONNECTION_STRING"
+fi
+
+if [ ! -z $SABRE_MONGO_CONNECTION_STRING ] ; then
+  sabre_mongo_connectionstring="$SABRE_MONGO_CONNECTION_STRING"
+fi
+
 [ -z "$ESN_MONGO_DBNAME" ] || esn_mongo_dbname="$ESN_MONGO_DBNAME"
 [ -z "$MONGO_TIMEOUT" ] || mongo_timeout="$MONGO_TIMEOUT"
 [ -z "$ESN_HOST" ] || esn_host="$ESN_HOST"
@@ -41,7 +43,7 @@ config="{
   \"database\": {
     \"esn\": {
       \"db\": \"${esn_mongo_dbname}\",
-      \"connectionString\" : \"mongodb://${esn_mongo_host}:${esn_mongo_port}/\",
+      \"connectionString\" : \"${esn_mongo_connectionstring}\",
       \"connectionOptions\": {
         \"w\": 1,
         \"fsync\": true,
@@ -50,7 +52,7 @@ config="{
     },
     \"sabre\": {
       \"db\": \"sabre\",
-      \"connectionString\" : \"mongodb://${sabre_mongo_host}:${sabre_mongo_port}/\",
+      \"connectionString\" : \"${sabre_mongo_connectionstring}\",
       \"connectionOptions\": {
         \"w\": 1,
         \"fsync\": true,

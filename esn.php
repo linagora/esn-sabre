@@ -121,6 +121,9 @@ $server->addPlugin($carddavSubscriptionPlugin);
 $carddavSharingPlugin = new ESN\CardDAV\Sharing\Plugin();
 $server->addPlugin($carddavSharingPlugin);
 
+$carddavSharingListenerPlugin = new ESN\CardDAV\Sharing\ListenerPlugin($addressbookBackend);
+$server->addPlugin($carddavSharingListenerPlugin);
+
 // Calendar subscription support
 $server->addPlugin(
     new Sabre\CalDAV\Subscriptions\Plugin()

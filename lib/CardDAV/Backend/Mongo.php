@@ -164,8 +164,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $collection->remove([ '_id' => $mongoId ]);
 
         $this->eventEmitter->emit('sabre:addressBookDeleted', [
-            $this->buildAddressBookPath($row['principaluri'], $row['uri']),
-            $row['principaluri']
+            [
+                'addressbookid' => $addressBookId,
+                'principaluri' => $row['principaluri'],
+                'path' => $this->buildAddressBookPath($row['principaluri'], $row['uri'])
+            ]
         ]);
     }
 
@@ -587,6 +590,12 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     function deleteSharedAddressBook($addressBookId) {
         $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
         $query = [ '_id' => new \MongoId($addressBookId) ];
+        $collection->remove($query);
+    }
+
+    function deleteAddressBooksSharedFrom($addressBookId) {
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $query = [ 'addressbookid' => new \MongoId($addressBookId) ];
         $collection->remove($query);
     }
 

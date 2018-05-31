@@ -31,12 +31,12 @@ class AddressBookRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         return $data;
     }
 
-    function onAddressBookDeleted($path, $owner) {
+    function onAddressBookDeleted($data) {
         $this->createMessage(
             $this->PUBSUB_TOPICS['ADDRESSBOOK_DELETED'],
             [
-                'path' => $path,
-                'owner' => $owner
+                'path' => $data['path'],
+                'owner' => $data['principaluri']
             ]
         );
 

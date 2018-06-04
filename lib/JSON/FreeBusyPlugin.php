@@ -45,7 +45,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
     function getPluginInfo() {
         return [
             'name'        => $this->getPluginName(),
-            'description' => 'Adds Text support for CalDAV',
+            'description' => 'Adds Freebusy support for CalDAV',
             'link'        => 'http://sabre.io/dav/caldav/',
         ];
     }
@@ -131,9 +131,9 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
                     ];
                 }, $busyEventUris);
 
-                $filteredBusyEvent = isset($params->uid)
+                $filteredBusyEvent = isset($params->uids)
                     ? array_filter($busyEvents, function ($busy) use ($params) {
-                        return $busy->uid != $params->uid;
+                        return !in_array($busy->uid, $params->uids);
                     })
                     : $busyEvents;
 

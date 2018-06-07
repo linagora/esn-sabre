@@ -218,5 +218,7 @@ $server->addPlugin($projectMembersPlugin);
 
 $server->addPlugin(new ESN\CalDAV\ParticipationPlugin());
 
+$server->addPlugin(new ESN\CalDAV\MobileRequestPlugin());
+
 // And off we go!
 $server->exec();

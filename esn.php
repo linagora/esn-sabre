@@ -117,6 +117,10 @@ $server->addPlugin($carddavPlugin);
 $carddavJsonPlugin = new ESN\CardDAV\Plugin();
 $server->addPlugin($carddavJsonPlugin);
 
+// vCard export plugin
+$vcfPlugin = new Sabre\CardDAV\VCFExportPlugin();
+$server->addPlugin($vcfPlugin);
+
 // CardDAV subscription support
 $carddavSubscriptionPlugin = new ESN\CardDAV\Subscriptions\Plugin();
 $server->addPlugin($carddavSubscriptionPlugin);

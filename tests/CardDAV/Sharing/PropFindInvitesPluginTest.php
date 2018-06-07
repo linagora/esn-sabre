@@ -40,7 +40,7 @@ class PropFindInvitesPluginTest extends \ESN\CardDAV\PluginTestBase {
             [
                 'principal' => 'principals/users/' . $this->userTestId2,
                 'href' => 'mailto:' . $this->userTestEmail2,
-                'properties' => Array (),
+                'properties' => array (),
                 'access' => SPlugin::ACCESS_READ,
                 'comment' => null,
                 'inviteStatus' => SPlugin::INVITE_ACCEPTED
@@ -49,7 +49,7 @@ class PropFindInvitesPluginTest extends \ESN\CardDAV\PluginTestBase {
             [
                 'principal' => 'principals/users/' . $this->userTestId1,
                 'href' => 'principals/users/' . $this->userTestId1,
-                'properties' => Array (),
+                'properties' => array (),
                 'access' => SPlugin::ACCESS_SHAREDOWNER,
                 'comment' => null,
                 'inviteStatus' => SPlugin::INVITE_ACCEPTED
@@ -84,7 +84,7 @@ class PropFindInvitesPluginTest extends \ESN\CardDAV\PluginTestBase {
             [
                 'principal' => 'principals/users/' . $this->userTestId1,
                 'href' => 'mailto:' . $this->userTestEmail1,
-                'properties' => Array (),
+                'properties' => array (),
                 'access' => SPlugin::ACCESS_READ,
                 'comment' => null,
                 'inviteStatus' => SPlugin::INVITE_ACCEPTED

@@ -102,6 +102,10 @@ $server->addPlugin($jsonPlugin);
 $textPlugin = new ESN\CalDAV\TextPlugin("text");
 $server->addPlugin($textPlugin);
 
+// FREEBUSY api support
+$freeBusyPlugin = new ESN\JSON\FreeBusyPlugin();
+$server->addPlugin($freeBusyPlugin);
+
 // CalDAV support
 $caldavPlugin = new ESN\CalDAV\Plugin();
 $server->addPlugin($caldavPlugin);

@@ -75,7 +75,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                                     $responseProps[200]['{http://calendarserver.org/ns/}source']->getHref()
                                     : $xmlResponse->getHref();
 
-                    $sharedNode = $this->server->tree->getNodeForPath($sourceHref);
+                    $sharedNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
                     $userPrincipal = $this->server->tree->getNodeForPath($sharedNode->getOwner());
 
                     $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));

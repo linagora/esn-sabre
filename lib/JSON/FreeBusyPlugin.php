@@ -84,7 +84,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
             $calendars = $this->getFreeBusyCalendars($nodePath, $node, $params);
 
             array_push($body->users, (object) [
-                'id' => $params->start,
+                'id' => $userId,
                 'calendars' => $calendars
             ]);
         }
@@ -153,7 +153,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
 
     function hasFreebusyRight($nodePath, $calendar) {
         $right = '{' . Plugin::NS_CALDAV . '}read-free-busy';
-        
+
         return $this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), $right, \Sabre\DAVACL\Plugin::R_PARENT, false);
     }
 }

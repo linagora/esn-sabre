@@ -35,8 +35,10 @@ class PluginTestBase extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => $uri,
         ));
 
+        $body = json_encode($body);
+
         if ($body) {
-            $request->setBody(json_encode($body));
+            $request->setBody($body);
         }
 
         return $this->request($request);

@@ -51,4 +51,84 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
             "protected" => true
         ));
     }
+
+    function testCreateSubscriptionAddressBook() {
+        $addressBook = [
+            'id' => 'ID',
+            'dav:name' => 'SUB NAME',
+            'openpaas:source' => [
+                '_links' => [
+                     'self' => [
+                          'href' => '/addressbooks/' . $this->userTestId1 . '/book1.json'
+                     ]
+                ]
+            ]
+        ];
+        $response = $this->makeRequest(
+          'POST',
+          '/addressbooks/' . $this->userTestId2 . '.json',
+          $addressBook
+        );
+
+        $this->assertEquals($response->status, 201);
+
+        $addressBooks = $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId2);
+        $this->assertCount(1, $addressBooks);
+
+        $this->assertEquals($addressBooks[0]['{DAV:}displayname'], 'SUB NAME');
+        $this->assertEquals($addressBooks[0]['uri'], 'ID');
+        $this->assertEquals($addressBooks[0]['principaluri'], 'principals/users/' . $this->userTestId2);
+        $this->assertEquals($addressBooks[0]['{http://open-paas.org/contacts}source'], 'addressbooks/' . $this->userTestId1 . '/book1');
+    }
+
+    function testDeleteSubscriptionAddressBook() {
+        $this->carddavBackend->createSubscription(
+            'principals/users/' . $this->userTestId1,
+            'subscription1',
+            [
+                '{DAV:}displayname' => 'Subscription 1',
+                '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/' . $this->userTestId2 . '/user2book1', false)
+            ]
+        );
+
+
+        $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId1);
+        $this->assertCount(1, $subscriptions);
+
+        $response = $this->makeRequest(
+          'DELETE',
+          '/addressbooks/' . $this->userTestId1 . '/subscription1.json'
+        );
+
+        $this->assertEquals($response->status, 204);
+
+        $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId1);
+        $this->assertCount(0, $subscriptions);
+    }
+
+    function testPropPatchSubscriptionAddressBook() {
+        $this->carddavBackend->createSubscription(
+            'principals/users/' . $this->userTestId1,
+            'subscription1',
+            [
+                '{DAV:}displayname' => 'Subscription 1',
+                '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/' . $this->userTestId2 . '/user2book1', false)
+            ]
+        );
+
+        $response = $this->makeRequest(
+          'PROPPATCH',
+          '/addressbooks/' . $this->userTestId1 . '/subscription1.json',
+          [
+              'dav:name' => 'subscription tested',
+              'carddav:description' => 'description updated'
+          ]
+        );
+
+        $this->assertEquals(204, $response->status);
+
+        $subscriptions = $this->carddavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $this->assertEquals('subscription tested', $subscriptions[0]['{DAV:}displayname']);
+        $this->assertEquals('description updated', $subscriptions[0]['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+    }
 }

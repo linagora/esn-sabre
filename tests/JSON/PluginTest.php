@@ -15,8 +15,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
     use \Sabre\VObject\PHPUnitAssertions;
 
-    protected $userTestId = '5aa1f6639751b711008b4567';
-
     function setUp() {
         parent::setUp();
 
@@ -249,19 +247,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $request->setBody(json_encode($this->timeRangeData));
         $response = $this->request($request);
         $this->assertEquals($response->status, 404);
-    }
-
-    function testTimeRangeWrongNode() {
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
-        ));
-
-        $request->setBody(json_encode($this->timeRangeData));
-        $response = $this->request($request);
-        $this->assertEquals($response->status, 501);
     }
 
     function testMultiQuery() {
@@ -1589,7 +1574,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     function testAddressBookACLShouldReturn404IfAddressBookDoesNotExist() {
-        $this->setUpToTestAddressBookSubscriptionSupport();
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'ACL',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -1602,7 +1586,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     function testAddressBookACLShouldReturn400IfBodyIsEmpty() {
-        $this->setUpToTestAddressBookSubscriptionSupport();
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'ACL',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -1619,7 +1602,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     function testAddressBookACLShouldReturn400IfUnsupportedPrincipal() {
-        $this->setUpToTestAddressBookSubscriptionSupport();
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'ACL',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -1639,7 +1621,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     function testAddressBookACLShouldReturn412IfPrivilegeIsNotSupported() {
-        $this->setUpToTestAddressBookSubscriptionSupport();
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'ACL',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -1659,7 +1640,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     function testAddressBookACLShouldReturn200WithModifiedPrivileges() {
-        $this->setUpToTestAddressBookSubscriptionSupport();
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'ACL',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -1689,7 +1669,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     function testAddressBookACLShouldReturn200WhenRemoveAuthenticatedPrivilege() {
-        $this->setUpToTestAddressBookSubscriptionSupport();
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'ACL',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -1710,132 +1689,5 @@ class PluginTest extends \ESN\DAV\ServerMock {
             }
         }
         $this->assertEquals(sizeof($publicPrivileges), 0);
-    }
-
-    function testCreateSubscriptionAddressBook() {
-        $this->setUpToTestAddressBookSubscriptionSupport();
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/addressbooks/' . $this->userTestId .'.json',
-        ));
-
-        $addressBook = [
-            'id' => 'ID',
-            'dav:name' => 'SUB NAME',
-            'openpaas:source' => [
-                '_links' => [
-                     'self' => [
-                          'href' => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json'
-                     ]
-                ]
-            ]
-        ];
-
-        $request->setBody(json_encode($addressBook));
-        $response = $this->request($request);
-
-        $jsonResponse = json_decode($response->getBodyAsString());
-        $this->assertEquals($response->status, 201);
-
-        $addressBooks = $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId);
-        $this->assertCount(1, $addressBooks);
-
-        $cal = $addressBooks[0];
-        $this->assertEquals($addressBooks[0]['{DAV:}displayname'], 'SUB NAME');
-        $this->assertEquals($addressBooks[0]['uri'], 'ID');
-        $this->assertEquals($addressBooks[0]['principaluri'], 'principals/users/' . $this->userTestId);
-        $this->assertEquals($addressBooks[0]['{http://open-paas.org/contacts}source'], 'addressbooks/54b64eadf6d7d8e41d263e0f/book1');
-    }
-
-    function testDeleteSubscriptionAddressBook() {
-        $this->setUpToTestAddressBookSubscriptionSupport();
-
-        $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/54b64eadf6d7d8e41d263e0f');
-        $this->assertCount(1, $subscriptions);
-
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'DELETE',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book3.json',
-        ));
-
-        $response = $this->request($request);
-
-        $jsonResponse = json_decode($response->getBodyAsString());
-        $this->assertEquals($response->status, 204);
-
-        $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/54b64eadf6d7d8e41d263e0f');
-        $this->assertCount(0, $subscriptions);
-    }
-
-    function testPatchSubscriptionAddressBook() {
-        $this->setUpToTestAddressBookSubscriptionSupport();
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'PROPPATCH',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book3.json',
-        ));
-        $nameUpdated = 'subscription tested';
-        $descriptionUpdated = 'description updated';
-        $data = [
-            'dav:name' => $nameUpdated,
-            'carddav:description' => $descriptionUpdated
-        ];
-        $request->setBody(json_encode($data));
-
-        $response = $this->request($request);
-        $this->assertEquals(204, $response->status);
-
-        $subscriptions = $this->carddavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
-        $this->assertEquals($nameUpdated, $subscriptions[0]['{DAV:}displayname']);
-        $this->assertEquals($descriptionUpdated, $subscriptions[0]['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
-    }
-
-    private function setUpToTestAddressBookSubscriptionSupport() {
-        $this->esndb->users->insert([
-            '_id'       => new \MongoId($this->userTestId),
-            'firstname' => 'user',
-            'lastname'  => 'test',
-            'accounts'  => [
-                [
-                    'type' => 'email',
-                    'emails' => [
-                      'usertest@mail.com'
-                    ]
-                ]
-            ]
-        ]);
-        $this->carddavBackend->createAddressBook(
-            'principals/users/' . $this->userTestId,
-            'book2',
-            [
-                '{DAV:}displayname' => 'Book 2',
-                '{urn:ietf:params:xml:ns:carddav}addressbook-description' => 'Book 2 description',
-                '{http://open-paas.org/contacts}type' => 'Book2 type',
-            ]
-        );
-
-        $this->carddavBackend->createSubscription(
-            'principals/users/54b64eadf6d7d8e41d263e0f',
-            'book3',
-            [
-                '{DAV:}displayname' => 'Book 3',
-                '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/' . $this->userTestId . '/book2', false)
-            ]
-        );
-        $publicBookId = $this->carddavBackend->createAddressBook(
-            'principals/users/54b64eadf6d7d8e41d263e0f',
-            'publicBook',
-            [
-                '{DAV:}displayname' => 'Public book',
-                '{urn:ietf:params:xml:ns:carddav}addressbook-description' => 'Public book',
-                '{http://open-paas.org/contacts}type' => 'social',
-            ]
-        );
-
-        $this->carddavBackend->saveAddressBookPublicRight($publicBookId, '{DAV:}read', array());
     }
 }

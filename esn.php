@@ -157,6 +157,10 @@ $server->addPlugin(new Sabre\DAV\Sync\Plugin());
 $browser = new Sabre\DAV\Browser\Plugin();
 $server->addPlugin($browser);
 
+// Calendar Ics Export support
+$icsExportPlugin = new Sabre\CalDAV\ICSExportPlugin();
+$server->addPlugin($icsExportPlugin);
+
 // Support CORS
 $corsPlugin = new ESN\DAV\CorsPlugin();
 if (isset($config['webserver']['corsAllowMethods'])) {

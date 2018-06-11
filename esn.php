@@ -189,11 +189,14 @@ $server->addPlugin($esnHookPlugin);
 
 // Rabbit Caldav publisher plugin
 if(!empty($config['amqp']['host'])){
+    $amqpLogin = !empty($config['amqp']['login']) ? $config['amqp']['login'] : 'guest';
+    $amqpPassword = !empty($config['amqp']['password']) ? $config['amqp']['password'] : 'guest';
+
     $connection = new AMQPStreamConnection(
       $config['amqp']['host'],
       $config['amqp']['port'],
-      'guest',
-      'guest'
+      $amqpLogin,
+      $amqpPassword
     );
 
     $channel = $connection->channel();

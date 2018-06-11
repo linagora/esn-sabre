@@ -176,6 +176,8 @@ In order to run, the ESN sabre instance must access to the ESN, and mongo instan
 - ESN_PORT: Port of the ESN API, defaults to '8080'
 - AMQP_HOST: AMQP instance used by Sabre and the ESN, defaults to 'amqp_host'
 - AMQP_PORT: Port of the instance defined just above, defaults to '5672'
+- AMQP_LOGIN: login used to connect to the message broker defined above, defaults to 'guest'
+- AMQP_PASSWORD: password used to connect to the message broker defined above, defaults to 'guest'
 - MONGO_TIMEOUT: Timeout to connect to Mongodb, defaults to 10000 ms
 
 For example:

@@ -187,6 +187,10 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return $invites;
     }
 
+    function setPublishStatus($value) {
+        $this->carddavBackend->setPublishStatus($this->addressBookInfo, $value);
+    }
+
     private function updateAclWithPublicRight($acl) {
         $public_right = $this->getPublicRight();
 

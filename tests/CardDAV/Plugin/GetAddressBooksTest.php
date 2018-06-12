@@ -66,7 +66,7 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
             ]
         );
 
-        $this->carddavBackend->saveAddressBookPublicRight($publicBookId, '{DAV:}read', array());
+        $this->carddavBackend->setPublishStatus(array( 'id' => $publicBookId ), '{DAV:}read');
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',

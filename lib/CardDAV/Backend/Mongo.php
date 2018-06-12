@@ -354,18 +354,6 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         return $result;
     }
 
-    function saveAddressBookPublicRight($addressBookId, $privilege, $addressbookInfo) {
-        $mongoAddressBookId = new \MongoId($addressBookId);
-        $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $query = ['_id' => $mongoAddressBookId];
-
-        $collection->update($query, ['$set' => ['public_right' => $privilege]]);
-
-        if (!in_array($privilege, $this->PUBLIC_RIGHTS)) {
-            $this->deleteSubscriptions($addressbookInfo['principaluri'], $addressbookInfo['uri']);
-        }
-    }
-
     function getSubscriptionsForUser($principalUri) {
         $fields[] = '_id';
         $fields[] = 'displayname';

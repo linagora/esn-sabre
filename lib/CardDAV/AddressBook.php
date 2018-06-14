@@ -76,20 +76,6 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return $response;
     }
 
-    function setACL(array $acl) {
-        $authenticatedPrivileges = [];
-
-        foreach ($acl as $ace) {
-            if ($ace->principal !== '{DAV:}authenticated') {
-                throw new DAV\Exception\BadRequest('The privilege you specified (' . $ace->principal . ') is not supported on this node');
-            }
-
-            $authenticatedPrivileges[] = $ace->privilege;
-        }
-
-        $this->savePublicRight($this->getHighestPublicRight($authenticatedPrivileges));
-    }
-
     function getChildren($offset = 0, $limit = 0, $sort = null, $filters = null) {
         $objs = $this->carddavBackend->getCards($this->addressBookInfo['id'], $offset, $limit, $sort, $filters);
         $children = [];
@@ -102,14 +88,6 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
 
     function getChildCount() {
         return $this->carddavBackend->getCardCount($this->addressBookInfo['id']);
-    }
-
-    private function savePublicRight($privilege) {
-        $addressBookInfo = [];
-        $addressBookInfo['principaluri'] = $this->addressBookInfo['principaluri'];
-        $addressBookInfo['uri'] = $this->addressBookInfo['uri'];
-
-        $this->carddavBackend->saveAddressBookPublicRight($this->addressBookInfo['id'], $privilege, $addressBookInfo);
     }
 
     public function getSupportedPublicRights() {
@@ -209,24 +187,8 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return $invites;
     }
 
-    private function getHighestPublicRight($privileges) {
-        $privilegeScores = [
-            '{DAV:}read'  => 1,
-            '{DAV:}write' => 2,
-            '{DAV:}all'   => 3
-        ];
-
-        $highestScore = 0;
-        $result = '';
-
-        foreach ($privileges as $privilege) {
-            if ($privilegeScores[$privilege] > $highestScore) {
-                $highestScore = $privilegeScores[$privilege];
-                $result = $privilege;
-            }
-        }
-
-        return $result;
+    function setPublishStatus($value) {
+        $this->carddavBackend->setPublishStatus($this->addressBookInfo, $value);
     }
 
     private function updateAclWithPublicRight($acl) {

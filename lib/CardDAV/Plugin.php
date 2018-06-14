@@ -12,7 +12,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         $server->on('method:DELETE', [$this, 'httpDelete'], 80);
         $server->on('method:GET', [$this, 'httpGet'], 80);
-        $server->on('method:ACL', [$this, 'httpAcl'], 80);
         $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
         $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
         $server->on('method:POST', [$this, 'httpPost'], 80);
@@ -150,46 +149,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return $this->send($code, $body);
-    }
-
-    function httpAcl($request, $response) {
-        if (!$this->acceptJson()) {
-            return true;
-        }
-
-        $path = $request->getPath();
-        $node = $this->server->tree->getNodeForPath($path);
-
-        if ($node instanceof \ESN\CardDAV\AddressBook) {
-            $acl = json_decode($request->getBodyAsString());
-
-            if (!isset($acl)) {
-                throw new DAV\Exception\BadRequest('JSON body expected in ACL request');
-            }
-
-            $supportedPublicRights = $node->getSupportedPublicRights();
-
-            foreach ($acl as $ace) {
-                if (!isset($ace->principal)) {
-                    throw new DAV\Exception\BadRequest('Authenticated ACE\'s principal is required');
-                }
-
-                if (!isset($ace->privilege) || strlen($ace->privilege) === 0) {
-                    throw new DAV\Exception\BadRequest('Authenticated ACE\'s privilege is required');
-                }
-
-                if (!in_array($ace->privilege, $supportedPublicRights)) {
-                    throw new \Sabre\DAVACL\Exception\NotSupportedPrivilege('The privilege you specified (' . $ace->privilege . ') is not recognized by this server');
-                }
-            }
-
-            $node->setACL($acl);
-            $this->send(200, $node->getACL());
-
-            return false;
-        }
-
-        return true;
     }
 
     function httpPost($request, $response) {

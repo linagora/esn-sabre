@@ -342,6 +342,46 @@ A dav:addressbook resource, with items expanded. The resource may also contain
 a next link, if the offset/limit query parameters are used.
 
 
+## POST /addressbooks/{addressbookHomeId}/{addressbookId}.json
+
+#### Publish addressBook
+
+**Request JSON Object:**
+
+A dav:publish-addressbook object, with a privilege value that can be either `{DAV:}read` or `{DAV:}write`
+
+```json
+{
+    "dav:publish-addressbook": {
+      "privilege": "{DAV:}read"
+    }
+}
+```
+
+**Status Codes:**
+
+- 204 No Content: Published addressbook with the privilege
+- 400 Bad Request: Invalid privilege
+- 403 Forbidden: Princial user does not have `{DAV:}share` privilege
+
+#### Unpublish addressBook
+
+**Request JSON Object:**
+
+A dav:unpublish-addressbook object.
+
+```json
+{
+    "dav:unpublish-addressbook": true
+}
+```
+
+**Status Codes:**
+
+- 204 No Content: Addressbook is unpublished
+- 403 Forbidden: Princial user does not have `{DAV:}share` privilege
+
+
 ## PROPFIND /addressbooks/{addressbookHomeId}/{addressbookId}.json
 
 List all properties of the addressbook.
@@ -450,7 +490,7 @@ Requests that Sabre processes a iTip message.
 
 **Request JSON Object:**
 
-An iTip processing request object.  
+An iTip processing request object.
 All keys in the request object except `method` (defaults to _REQUEST_) and `sequence` (defaults to _0_) are required.
 
 ```json

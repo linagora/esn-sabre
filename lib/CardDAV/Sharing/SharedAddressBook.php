@@ -143,7 +143,7 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
      * @return void
      */
     function updateInvites(array $sharees) {
-        throw new DAV\Exception\MethodNotAllowed('You are not allowd to share a shared address book');
+        throw new DAV\Exception\MethodNotAllowed('You are not allowed to share a shared address book');
     }
 
     /**
@@ -172,5 +172,9 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
         ]);
 
         return $result;
+    }
+
+    function setPublishStatus($value) {
+        throw new DAV\Exception\MethodNotAllowed('You are not allowed to publish a shared address book');
     }
 }

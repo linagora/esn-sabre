@@ -354,18 +354,6 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         return $result;
     }
 
-    function saveAddressBookPublicRight($addressBookId, $privilege, $addressbookInfo) {
-        $mongoAddressBookId = new \MongoId($addressBookId);
-        $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $query = ['_id' => $mongoAddressBookId];
-
-        $collection->update($query, ['$set' => ['public_right' => $privilege]]);
-
-        if (!in_array($privilege, $this->PUBLIC_RIGHTS)) {
-            $this->deleteSubscriptions($addressbookInfo['principaluri'], $addressbookInfo['uri']);
-        }
-    }
-
     function getSubscriptionsForUser($principalUri) {
         $fields[] = '_id';
         $fields[] = 'displayname';
@@ -735,13 +723,23 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     /**
-     * Publishes an address book
+     * Set publish status on an address book
      *
-     * @param mixed $addressBookId
-     * @param bool $value
+     * @param mixed   $addressbookInfo  Information of the target addressbook
+     * @param mixed   $value            Value of privilege on published address book
+     *                                  false for unpublishing address book
      * @return void
     */
-    function setPublishStatus($addressBookId, $value) {
+    function setPublishStatus($addressbookInfo, $value) {
+        $mongoAddressBookId = new \MongoId($addressbookInfo['id']);
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $query = ['_id' => $mongoAddressBookId];
+
+        $collection->update($query, ['$set' => ['public_right' => $value]]);
+
+        if (!$value) {
+            $this->deleteSubscriptions($addressbookInfo['principaluri'], $addressbookInfo['uri']);
+        }
     }
 
     function replyInvite($addressBookId, $status, $options) {

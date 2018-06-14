@@ -128,6 +128,30 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 return $this->send($code, $body);
             }
 
+            if ($data = Utils::getJsonValue($jsonData, 'dav:publish-addressbook')) {
+                $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
+
+                $privilege = Utils::getJsonValue($data, 'privilege', false);
+
+                if (!in_array($privilege, ['{DAV:}read', '{DAV:}write'])) {
+                    throw new \Sabre\DAV\Exception\BadRequest('Privilege must be either {DAV:}read or {DAV:}write');
+                }
+
+                $node->setPublishStatus($privilege);
+
+                $code = 204;
+                return $this->send($code, $body);
+            }
+
+            if ($data = Utils::getJsonValue($jsonData, 'dav:unpublish-addressbook')) {
+                $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
+
+                $node->setPublishStatus(false);
+
+                $code = 204;
+                return $this->send($code, $body);
+            }
+
             // If this request handler could not deal with this POST request, it
             // will return 'null' and other plugins get a chance to handle the
             // request.

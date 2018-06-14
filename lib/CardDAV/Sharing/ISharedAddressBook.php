@@ -8,4 +8,5 @@ interface ISharedAddressBook extends ISharedNode {
     function getInviteStatus();
     function replyInvite($inviteStatus, $options);
     function getShareOwner();
+    function setPublishStatus($value);
 }

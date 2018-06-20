@@ -91,7 +91,7 @@ and may be omitted on some requests.
 
 ### dav:addressbook
 
-Describes the properties of a carddav addressbook.
+Describes the properties of a carddav address book.
 
 ```json
 {
@@ -103,7 +103,7 @@ Describes the properties of a carddav addressbook.
 
 ### dav:item
 
-This may be a calendar item or an addressbook card. The format used is
+This may be a calendar item or an address book card. The format used is
 [jCal](https://tools.ietf.org/html/rfc7265) or
 [jCard](https://tools.ietf.org/html/rfc7095), respectively.
 
@@ -275,7 +275,16 @@ be used in the calendar url.
 
 ## GET /addressbooks/{addressbookHomeId}.json
 
-List all addressbooks in the addressbookHome.
+List all address books in the addressbookHome.
+
+**Query Parameters:**
+
+- public: To include public address books.
+- personal: To include personal address books.
+- subscribed: To include subscribed address books.
+- shared: To list only shared address books.
+- shareOwner: To list only shared address books from shareOwner's Id.
+- inviteStatus: To list only shared address books having matching invite status.
 
 **Status Codes:**
 
@@ -298,12 +307,11 @@ List all addressbooks in the addressbookHome.
 
 ## POST /addressbooks/{addressbookHomeId}.json
 
-Create a addressbook in the specified addressbook home.
+Create an address book in the specified addressbook home.
 
 **Request JSON Object:**
 
-A dav:addressbook object, with an additional member "id" which specifies the id to
-be used in the addressbook url and "privilege" which determines the addressbook's privilege
+A dav:addressbook object, with an additional member "id" which specifies the id to be used in the address book's url and "privilege" which determines the address book's privilege
 
 ```json
 {
@@ -317,13 +325,13 @@ be used in the addressbook url and "privilege" which determines the addressbook'
 
 **Status Codes:**
 
-- 201 Created: New addressbook has been created
+- 201 Created: New address book has been created
 - 400 Bad Request: Missing keys in the request object
 
 
 ## GET /addressbooks/{addressbookHomeId}/{addressbookId}.json
 
-List all contacts in the addressbook.
+List all contacts in the address book.
 
 **Status Codes:**
 
@@ -344,7 +352,7 @@ a next link, if the offset/limit query parameters are used.
 
 ## POST /addressbooks/{addressbookHomeId}/{addressbookId}.json
 
-#### Publish addressBook
+#### Publish an address book
 
 **Request JSON Object:**
 
@@ -360,11 +368,11 @@ A dav:publish-addressbook object, with a privilege value that can be either `{DA
 
 **Status Codes:**
 
-- 204 No Content: Published addressbook with the privilege
+- 204 No Content: Address book is published
 - 400 Bad Request: Invalid privilege
 - 403 Forbidden: Princial user does not have `{DAV:}share` privilege
 
-#### Unpublish addressBook
+#### Unpublish an address book
 
 **Request JSON Object:**
 
@@ -378,13 +386,72 @@ A dav:unpublish-addressbook object.
 
 **Status Codes:**
 
-- 204 No Content: Addressbook is unpublished
+- 204 No Content: Address book is unpublished
 - 403 Forbidden: Princial user does not have `{DAV:}share` privilege
+
+#### Share an address book
+
+Share an address book to a list of users each with a specific privilege
+
+**Request JSON Object:**
+
+A dav:share-resource object with an array dav:sharee contains delegation objects:
+ - `dav:href`: email of user whom is delegated to the source address book.
+ - `dav:share-access`: privilege code of delegated user in the source address book.
+
+Privilege codes:
+ - Read only: 2
+ - Read/Write: 3
+ - Read/Write and Administration: 5
+ - No access for sharee: 4
+
+```json
+{
+    "dav:share-resource": {
+      "dav:sharee": [{
+        "dav:href": "mailto:user1@example.org",
+        "dav:share-access": 3
+      }, {
+        "dav:href": "mailto:user2@example.org",
+        "dav:share-access": 5
+      }]
+    }
+}
+```
+
+**Status Codes:**
+
+- 204 No Content
+- 403 Forbidden: Princial user does not have `{DAV:}share` privilege
+
+
+#### Accept address book sharing invitation
+
+Set the sharing invitation of an address book to accepted.
+
+**Request JSON Object:**
+
+A dav:invite-reply object contains these properties:
+ - `dav:invite-accepted`: must be true to set invitation accepted.
+ - `dav:slug`: (optional) to set the display name of the new shared address book.
+
+```json
+{
+    "dav:invite-reply": {
+      "dav:invite-accepted": true,
+      "dav:slug": "My new address book"
+    }
+}
+```
+
+**Status Codes:**
+
+- 204 No Content: Invitation is accepted.
 
 
 ## PROPFIND /addressbooks/{addressbookHomeId}/{addressbookId}.json
 
-List all properties of the addressbook.
+List all properties of the address book.
 
 **Status Codes:**
 
@@ -392,7 +459,7 @@ List all properties of the addressbook.
 
 **Request JSON Object:**
 
-An object with an array member "property" which specifies list of property of the addressbook.
+An object with an array member "property" which specifies list of property of the address book.
 
 **Response:**
 
@@ -405,6 +472,19 @@ A json resource containing the values of all requested properties
   "{http://open-paas.org/contacts}type": "social"
 }
 ```
+
+## DELETE /addressbooks/{addressbookHomeId}/{addressbookId}.json
+
+Delete an address book.
+
+**Status Codes:**
+
+- 204 No Content: Successfully deleted an address book.
+- 403 Forbidden: The address book is protected which can not be deleted by default
+
+**Request JSON Object:**
+
+None.
 
 ## PROPFIND /calendars/{calendarHomeId}/{calendarHomeId}.json
 

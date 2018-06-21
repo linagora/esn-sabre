@@ -124,11 +124,23 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
 
                     $timeZone = new DateTimeZone('UTC');
 
-                    return  (object) [
+                    $freebusy = [
                         'uid' => $vevent->UID->getValue(),
-                        'start' => $vevent->DTSTART->getDateTime()->format('Ymd\\THis\\Z'),
-                        'end' => $vevent->DTEND->getDateTime()->format('Ymd\\THis\\Z'),
+                        'start' => $vevent->DTSTART->getDateTime()->format('Ymd\\THis\\Z')
                     ];
+
+                    if (isset($vevent->DTEND)) {
+                        $endDate = $vevent->DTEND->getDateTime();
+                    } elseif (isset($vevent->DURATION)) {
+                        $endDate = clone $vevent->DTSTART->getDateTime();
+                        $endDate = $endDate->add(VObject\DateTimeParser::parse($vevent->DURATION->getValue()));
+                    }
+
+                    if (isset($endDate)) {
+                        $freebusy['end'] = $endDate->format('Ymd\\THis\\Z');
+                    }
+
+                    return (object) $freebusy;
                 }, $busyEventUris);
 
                 $filteredBusyEvent = isset($params->uids)

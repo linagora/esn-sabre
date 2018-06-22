@@ -144,9 +144,9 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
                 }, $busyEventUris);
 
                 $filteredBusyEvent = isset($params->uids)
-                    ? array_filter($busyEvents, function ($busy) use ($params) {
+                    ? array_values(array_filter($busyEvents, function ($busy) use ($params) {
                         return !in_array($busy->uid, $params->uids);
-                    })
+                    }))
                     : $busyEvents;
 
                 $items[] = (object) [

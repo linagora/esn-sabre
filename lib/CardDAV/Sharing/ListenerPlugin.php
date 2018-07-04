@@ -18,7 +18,7 @@ class ListenerPlugin extends ServerPlugin {
 
         $eventEmitter = $this->carddavBackend->getEventEmitter();
 
-        $eventEmitter->on('sabre:addressBookDeleted', [$this, 'onAddressBookDeleted']);
+        $eventEmitter->on('sabre:local:addressBookDeleted', [$this, 'onAddressBookDeleted']);
     }
 
     function onAddressBookDeleted($data) {

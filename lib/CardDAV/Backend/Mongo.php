@@ -152,24 +152,23 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         $collection = $this->db->selectCollection($this->addressBooksTableName);
         $query = [ '_id' => $mongoId ];
-        $row = $collection->findOne($query);
+        $addressBook = $collection->findOne($query);
         $collection->remove([ '_id' => $mongoId ]);
+        $this->onAddressBookDeleted($addressBook);
+
+        $this->eventEmitter->emit('sabre:local:addressBookDeleted', [
+            [
+                'addressbookid' => $addressBook['_id']
+            ]
+        ]);
 
         $collection = $this->db->selectCollection($this->cardsTableName);
         $collection->remove([ 'addressbookid' => $mongoId ]);
 
-        $this->deleteSubscriptions($row['principaluri'], $row['uri']);
+        $this->deleteSubscriptions($addressBook['principaluri'], $addressBook['uri']);
 
         $collection = $this->db->selectCollection($this->addressBookChangesTableName);
         $collection->remove([ '_id' => $mongoId ]);
-
-        $this->eventEmitter->emit('sabre:addressBookDeleted', [
-            [
-                'addressbookid' => $addressBookId,
-                'principaluri' => $row['principaluri'],
-                'path' => $this->buildAddressBookPath($row['principaluri'], $row['uri'])
-            ]
-        ]);
     }
 
     private function buildAddressBookPath($principalUri, $addressBookUri) {
@@ -452,7 +451,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     function deleteSubscription($subscriptionId) {
         $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
         $query = [ '_id' => new \MongoId($subscriptionId) ];
+        $addressBook = $collection->findOne($query);
         $collection->remove($query);
+
+        $this->onAddressBookDeleted($addressBook);
     }
 
     function deleteSubscriptions($principaluri, $uri) {
@@ -578,13 +580,36 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     function deleteSharedAddressBook($addressBookId) {
         $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
         $query = [ '_id' => new \MongoId($addressBookId) ];
+        $addressBook = $collection->findOne($query);
         $collection->remove($query);
+
+        $this->onAddressBookDeleted($addressBook);
     }
 
-    function deleteAddressBooksSharedFrom($addressBookId) {
+    function deleteAddressBooksSharedFrom($addressBookId, $options = null) {
+        $addressBooks = [];
         $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
         $query = [ 'addressbookid' => new \MongoId($addressBookId) ];
+
+        if (isset($options->sharees)) {
+            $shareeHrefs = [];
+            foreach($options->sharees as $sharee) {
+                $shareeHrefs[] = $sharee->href;
+            }
+
+            $query['share_href'] = [ '$in' => $shareeHrefs ];
+        }
+
+        $cursor = $collection->find($query);
+        foreach($cursor as $doc) {
+            $addressBooks[] = $doc;
+        }
+
         $collection->remove($query);
+
+        foreach($addressBooks as $addressBook) {
+            $this->onAddressBookDeleted($addressBook);
+        }
     }
 
     /**
@@ -645,12 +670,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             }
         }
 
-        foreach ($shareesToRemove as $sharee) {
-            $shareeCollection->remove([
-                'addressbookid' => $mongoAddressBookId,
-                'share_href' => $sharee->href
-            ]);
-        }
+        $removeShareesOptions = new \stdClass();
+        $removeShareesOptions->sharees = $shareesToRemove;
+        $this->deleteAddressBooksSharedFrom($mongoAddressBookId, $removeShareesOptions);
 
         foreach ($shareesToUpdate as $sharee) {
             $shareeCollection->update([
@@ -790,5 +812,15 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'size' => strlen($cardData),
             'etag' => '"' . md5($cardData) . '"'
         ];
+    }
+
+    private function onAddressBookDeleted($addressBook) {
+        $this->eventEmitter->emit('sabre:addressBookDeleted', [
+            [
+                'addressbookid' => $addressBook['_id'],
+                'principaluri' => $addressBook['principaluri'],
+                'path' => $this->buildAddressBookPath($addressBook['principaluri'], $addressBook['uri'])
+            ]
+        ]);
     }
 }

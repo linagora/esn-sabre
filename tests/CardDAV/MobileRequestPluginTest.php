@@ -1,6 +1,6 @@
 <?php
 
-namespace ESN\CalDAV;
+namespace ESN\CardDAV;
 
 use Sabre\DAV\ServerPlugin;
 use Sabre\VObject\Document;
@@ -35,36 +35,12 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
     }
 
     function testAfterPropFind() {
-        $delegationRequest = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json',
-        ));
-
-        $sharees = [
-            'share' => [
-                'set' => [
-                    [
-                        'dav:href' => 'mailto:robertocarlos@realmadrid.com',
-                        'dav:read' => true
-                    ]
-                ]
-            ]
-        ];
-
-        $delegationRequest->setBody(json_encode($sharees));
-        $response = $this->request($delegationRequest);
-
-        $this->assertEquals(200, $response->status);
-
-
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPFIND',
             'HTTP_CONTENT_TYPE' => 'application/xml',
             'HTTP_ACCEPT'       => 'application/xml',
             'HTTP_USER_AGENT'   => 'DAVdroid/1.10.1.1-ose (2/13/18; dav4android; okhttp3) Android/8.1.0',
-            'REQUEST_URI'       => 'calendars/54b64eadf6d7d8e41d263e0f',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/',
         ));
 
         $response = $this->request($request);
@@ -78,8 +54,8 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             $responseProps = $xmlResponse->getResponseProperties();
             $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
             
-            if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
-                $this->assertTrue((boolean)preg_match("/.*-.*/", $responseProps[200]['{DAV:}displayname']));
+            if (isset($resourceType) && ($resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook"))) {
+                $this->assertTrue((boolean)preg_match("/My Collected Contacts/", $responseProps[200]['{DAV:}displayname']));
             }
         }
     }

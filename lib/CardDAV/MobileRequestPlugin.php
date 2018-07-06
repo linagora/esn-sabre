@@ -1,16 +1,17 @@
 <?php
-namespace ESN\CalDAV;
+namespace ESN\CardDAV;
 
 use \Sabre\VObject;
+use \Sabre\Uri;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 
 class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
     /**
-     * This is the official CalDAV namespace
+     * This is the official CardDAV namespace
      */
-    const NS_CALDAV = 'urn:ietf:params:xml:ns:caldav';
+    const NS_CALDAV = 'urn:ietf:params:xml:ns:carddav';
 
     function initialize(Server $server) {
         parent::initialize($server);
@@ -27,7 +28,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
      * @return string
      */
     function getPluginName() {
-        return 'mobile-request';
+        return 'carddav-mobile-request';
     }
 
     /**
@@ -44,8 +45,8 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
     function getPluginInfo() {
         return [
             'name'        => $this->getPluginName(),
-            'description' => 'support of some mobile dav client for CalDAV',
-            'link'        => 'http://sabre.io/dav/caldav/',
+            'description' => 'support of some mobile dav client for CardDAV',
+            'link'        => 'http://sabre.io/dav/carddav/',
         ];
     }
 
@@ -58,7 +59,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
         $path = $request->getPath();
         $node = $this->server->tree->getNodeForPath($path);
 
-        if($node instanceof \Sabre\CalDAV\CalendarHome) {
+        if($node instanceof \Sabre\CardDAV\AddressBookHome) {
             $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
             $xmlResponses = $propFindXml->getResponses();
 
@@ -66,19 +67,24 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 $responseProps = $xmlResponse->getResponseProperties();
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
                 
-                if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
-                    $sourceHref = isset($responseProps[200]['{http://calendarserver.org/ns/}source']) ?
-                                    $responseProps[200]['{http://calendarserver.org/ns/}source']->getHref()
-                                    : $xmlResponse->getHref();
+                if (isset($resourceType) && $resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook")) {
+                    $addressBookPath = $xmlResponse->getHref();
+                    list($type, $ownerId, $addressbookType) = explode('/', trim($addressBookPath, '/'));
+                    list(,, $currentUserId) = explode('/', $this->currentUser);
 
-                    $sharedNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
-                    $userPrincipal = $this->server->tree->getNodeForPath($sharedNode->getOwner());
-
+                    $addressBookNode = $this->server->tree->getNodeForPath($addressBookPath);
+                    $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getOwner());
                     $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
+
+                    if($ownerId === $currentUserId) {
+                        $addressBookDisplayName = $addressbookType === 'contacts' ? 'My Contacts' : 'My Collected Contacts';
+                    } else {
+                        $addressBookDisplayName = $addressbookType === 'contacts' ? 'Contacts - ' . $userDisplayName : 'Collected Contacts - '. $userDisplayName;
+                    }
 
                     $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
                                     $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
-                                    "Events - " . $userDisplayName;
+                                    $addressBookDisplayName;
 
                     $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
 

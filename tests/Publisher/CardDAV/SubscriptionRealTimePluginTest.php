@@ -1,9 +1,10 @@
 <?php
 namespace ESN\Publisher\CardDAV;
 
+
 require_once ESN_TEST_BASE . '/Publisher/CardDAV/CardDAVBackendMock.php';
 
-class AddressBookRealTimePluginTest extends \PHPUnit_Framework_TestCase {
+class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
     const PATH = "addressbooks/456456/123123";
     const PRINCIPAL_URI = "principals/users/456456";
@@ -17,19 +18,19 @@ class AddressBookRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->cardDAVBackend->setEventEmitter($this->getMock(\Sabre\Event\EventEmitter::class));
 
         $this->publisher = $this->getMock(\ESN\Publisher\Publisher::class);
-        $this->plugin = new AddressBookRealTimePlugin($this->publisher, $this->cardDAVBackend, $this->getMock(\Sabre\Event\EventEmitter::class));
+        $this->plugin = new SubscriptionRealTimePlugin($this->publisher, $this->cardDAVBackend, $this->getMock(\Sabre\Event\EventEmitter::class));
 
         $this->server = $this->getMock(\Sabre\DAV\Server::class);
 
         $this->plugin->initialize($this->server);
     }
 
-    function testAddressBookDeleted() {
+    function testAddressBookSubscriptionDeleted() {
         $this->publisher
             ->expects($this->once())
             ->method('publish')
-            ->with('sabre:addressbook:deleted');
-        $this->plugin->onAddressBookDeleted([
+            ->with('sabre:addressbook:subscription:deleted');
+        $this->plugin->onAddressBookSubscriptionDeleted([
             'path' => self::PATH,
             'principaluri' => self::PRINCIPAL_URI
         ]);

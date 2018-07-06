@@ -187,7 +187,7 @@ $server->addPlugin($corsPlugin);
 $esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['calendarRoot'], $authBackend);
 $server->addPlugin($esnHookPlugin);
 
-// Rabbit Caldav publisher plugin
+// Rabbit publisher plugin
 if(!empty($config['amqp']['host'])){
     $amqpLogin = !empty($config['amqp']['login']) ? $config['amqp']['login'] : 'guest';
     $amqpPassword = !empty($config['amqp']['password']) ? $config['amqp']['password'] : 'guest';
@@ -215,6 +215,9 @@ if(!empty($config['amqp']['host'])){
 
     $addressBookRealTimePlugin = new ESN\Publisher\CardDAV\AddressBookRealTimePlugin($AMQPPublisher, $addressbookBackend);
     $server->addPlugin($addressBookRealTimePlugin);
+
+    $subscriptionRealTimePlugin = new ESN\Publisher\CardDAV\SubscriptionRealTimePlugin($AMQPPublisher, $addressbookBackend);
+    $server->addPlugin($subscriptionRealTimePlugin);
 }
 
 $communityMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'communities');

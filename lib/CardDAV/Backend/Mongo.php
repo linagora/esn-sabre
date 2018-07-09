@@ -38,6 +38,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $this->db = $db;
         $this->eventEmitter = new EventEmitter();
         $this->CharAPI = new \ESN\Utils\CharAPI();
+        $this->ensureIndex();
     }
 
     function getEventEmitter() {
@@ -109,8 +110,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         });
     }
 
-    function createAddressBook($principalUri, $url, array $properties) {
-
+    function createAddressBook($principalUri, $uri, array $properties) {
         $values = [
             'synctoken' => 1,
             'displayname' => '',
@@ -118,7 +118,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'privilege' => ['dav:read', 'dav:write'],
             'principaluri' => $principalUri,
             'type' => '',
-            'uri' => $url,
+            'uri' => $uri,
         ];
 
         foreach($properties as $property=>$newValue) {
@@ -143,8 +143,14 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         }
 
         $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $collection->insert($values);
-        return (string) $values['_id'];
+        $modified = $collection->findAndModify(
+            array('principaluri' => $principalUri, 'uri' => $uri),
+            $values,
+            array('_id'),
+            array('upsert' => true, 'new' => true)
+        );
+
+        return (string) $modified['_id'];
     }
 
     function deleteAddressBook($addressBookId) {
@@ -831,5 +837,14 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'size' => strlen($cardData),
             'etag' => '"' . md5($cardData) . '"'
         ];
+    }
+
+    private function ensureIndex() {
+        // create a unique compound index on 'principaluri' and 'uri' for address book collection
+        $addressBookCollection = $this->db->selectCollection($this->addressBooksTableName);
+        $addressBookCollection->createIndex(
+            array('principaluri' => 1, 'uri' => 1),
+            array('unique' => true)
+        );
     }
 }

@@ -344,7 +344,7 @@ class PluginTest extends PluginTestBase {
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
         $this->assertCount(2, $addressbooks);
 
-        $book = $addressbooks[1];
+        $book = $addressbooks[0];
         $this->assertEquals('NAME', $book['{DAV:}displayname']);
         $this->assertEquals('DESCRIPTION', $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
         $this->assertEquals(['dav:read'], $book['{DAV:}acl']);

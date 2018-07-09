@@ -32,8 +32,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $this->assertInternalType('array',$books);
         $this->assertEquals(2, count($books));
 
-        $this->checkAddressbook($contactAddressBook, $books[0]);
-        $this->checkAddressbook($collectedAddressBook, $books[1]);
+        $this->checkAddressbook($collectedAddressBook, $books[0]);
+        $this->checkAddressbook($contactAddressBook, $books[1]);
     }
 
     function testGetAddressBooksForUserWhenOtherThanDefaultExists() {
@@ -65,8 +65,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals(3, count($books));
 
         $this->checkAddressbook($anotherAddressBook, $books[0]);
-        $this->checkAddressbook($contactAddressBook, $books[1]);
-        $this->checkAddressbook($collectedAddressBook, $books[2]);
+        $this->checkAddressbook($collectedAddressBook, $books[1]);
+        $this->checkAddressbook($contactAddressBook, $books[2]);
     }
 
     private function checkAddressbook($expected, $item) {

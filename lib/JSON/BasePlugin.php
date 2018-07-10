@@ -5,6 +5,10 @@ use Sabre\DAV\ServerPlugin;
 
 class BasePlugin extends ServerPlugin {
 
+    const USER_AGENT_REGEXP = [
+        "/DAVdroid.*/",
+    ];
+
     function initialize(\Sabre\DAV\Server $server) {
         $this->server = $server;
 
@@ -45,6 +49,24 @@ class BasePlugin extends ServerPlugin {
 
     protected function getSupportedHeaders() {
         return array('application/json');
+    }
+
+    protected function checkUserAgent($request) {
+        $userAgents = $request->getHeader('User-Agent');
+
+        if (!isset($userAgents)) {
+            return false;
+        }
+
+        $userAgent = false;
+
+        foreach(self::USER_AGENT_REGEXP as $userAgentRegexp) {
+            if(preg_match($userAgentRegexp, $userAgents)) {
+                $userAgent = true;
+            }
+        }
+
+        return $userAgent;
     }
 
     /**

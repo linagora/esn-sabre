@@ -230,6 +230,8 @@ $server->addPlugin(new ESN\CalDAV\ParticipationPlugin());
 
 $server->addPlugin(new ESN\CalDAV\MobileRequestPlugin());
 
+$server->addPlugin(new ESN\CardDAV\MobileRequestPlugin());
+
 $server->addPlugin(new ESN\CalDAV\ImportPlugin());
 
 // And off we go!

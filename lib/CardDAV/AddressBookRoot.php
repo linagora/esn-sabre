@@ -26,11 +26,13 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
             $uri = self::USER_PREFIX . '/' . $user['_id'];
             $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }
-        $res = $this->db->communities->find(array(), array("_id"));
+
+        //Reactive the fetch for communities
+        /*$res = $this->db->communities->find(array(), array("_id"));
         foreach ($res as $community) {
             $uri = self::COMMUNITY_PREFIX . '/' . $community['_id'];
             $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
-        }
+        }*/
         $res = $this->db->projects->find(array(), array("_id"));
         foreach ($res as $project) {
             $uri = self::PROJECT_PREFIX . '/' . $project['_id'];
@@ -53,11 +55,12 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
             return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }
 
-        $res = $this->db->communities->findOne(array('_id' => $mongoName), array());
+        //Reactive the fetch for communities
+        /*$res = $this->db->communities->findOne(array('_id' => $mongoName), array());
         if ($res) {
             $uri = self::COMMUNITY_PREFIX . '/' . $name;
             return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
-        }
+        }*/
 
         $res = $this->db->projects->findOne(array('_id' => $mongoName), array());
         if ($res) {

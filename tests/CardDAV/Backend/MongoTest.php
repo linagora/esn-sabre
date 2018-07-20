@@ -2,6 +2,8 @@
 
 namespace ESN\CardDAV\Backend;
 
+use \Sabre\DAV\Sharing\Plugin as SPlugin;
+
 require_once 'AbstractDatabaseTest.php';
 
 /**
@@ -185,5 +187,24 @@ class MongoTest extends AbstractDatabaseTest {
         );
 
         $this->assertEquals($expected, $result);
+    }
+
+    function testGetSharedAddressBooksBySource() {
+        $backend = $this->getBackend();
+
+        $addressBookId = $backend->createAddressBook('principals/users/user1', 'addressbook1', []);
+        $backend->updateInvites($addressBookId, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'principal' => 'principals/users/user2',
+                'href' => 'mailto:user1@op.co',
+                'access' => SPlugin::ACCESS_READ,
+                'inviteStatus' => SPlugin::INVITE_ACCEPTED,
+                'properties' => []
+            ])
+        ]);
+        $sharedAddressBooks = $backend->getSharedAddressBooksBySource($addressBookId);
+
+        $this->assertEquals(1, count($sharedAddressBooks));
+        $this->assertEquals('principals/users/user2', $sharedAddressBooks[0]['principaluri']);
     }
 }

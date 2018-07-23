@@ -8,7 +8,7 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
     const COMMUNITY_PREFIX = 'principals/communities';
     const PROJECT_PREFIX = 'principals/projects';
 
-    function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CardDAV\Backend\BackendInterface $addrbookBackend, \MongoDB $db) {
+    function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CardDAV\Backend\BackendInterface $addrbookBackend, \MongoDB\Database $db) {
         $this->principalBackend = $principalBackend;
         $this->addrbookBackend = $addrbookBackend;
         $this->db = $db;
@@ -21,19 +21,19 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
     public function getChildren() {
         //throw new \Sabre\DAV\Exception\MethodNotAllowed('Listing children in this collection has been disabled');
         $homes = [];
-        $res = $this->db->users->find(array(), array("_id"));
+        $res = $this->db->users->find([], [ 'projection' => ['_id' => 1 ]]);
         foreach ($res as $user) {
             $uri = self::USER_PREFIX . '/' . $user['_id'];
             $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }
 
         //Reactive the fetch for communities
-        /*$res = $this->db->communities->find(array(), array("_id"));
+        /*$res = $this->db->communities->find([], [ 'projection' => ['_id' => 1 ]]);
         foreach ($res as $community) {
             $uri = self::COMMUNITY_PREFIX . '/' . $community['_id'];
             $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }*/
-        $res = $this->db->projects->find(array(), array("_id"));
+        $res = $this->db->projects->find([], [ 'projection' => ['_id' => 1 ]]);
         foreach ($res as $project) {
             $uri = self::PROJECT_PREFIX . '/' . $project['_id'];
             $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
@@ -44,8 +44,8 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
 
     public function getChild($name) {
         try {
-            $mongoName = new \MongoId($name);
-        } catch (\MongoException $e) {
+            $mongoName = new \MongoDB\BSON\ObjectId($name);
+        } catch (\MongoDB\Driver\Exception\Exception $e) {
             return null;
         }
 
@@ -56,13 +56,13 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
         }
 
         //Reactive the fetch for communities
-        /*$res = $this->db->communities->findOne(array('_id' => $mongoName), array());
+        /*$res = $this->db->communities->findOne([ '_id' => $mongoName ], [ 'projection' => []]);
         if ($res) {
             $uri = self::COMMUNITY_PREFIX . '/' . $name;
             return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }*/
 
-        $res = $this->db->projects->findOne(array('_id' => $mongoName), array());
+        $res = $this->db->projects->findOne([ '_id' => $mongoName ], [ 'projection' => []]);
         if ($res) {
             $uri = self::PROJECT_PREFIX . '/' . $name;
             return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);

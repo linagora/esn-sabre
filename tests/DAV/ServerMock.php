@@ -222,17 +222,17 @@ END:VCALENDAR'
     protected $cal;
 
     function setUp() {
-        $mcesn = new \MongoClient(ESN_MONGO_ESNURI);
-        $this->esndb = $mcesn->selectDB(ESN_MONGO_ESNDB);
+        $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
+        $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
 
-        $mcsabre = new \MongoClient(ESN_MONGO_SABREURI);
-        $this->sabredb = $mcsabre->selectDB(ESN_MONGO_SABREDB);
+        $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
+        $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
 
         $this->sabredb->drop();
         $this->esndb->drop();
 
-        $this->esndb->users->insert([
-            '_id' => new \MongoId('54b64eadf6d7d8e41d263e0f'),
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0f'),
             'firstname' => 'Roberto',
             'lastname' => 'Carlos',
             'accounts' => [
@@ -244,8 +244,8 @@ END:VCALENDAR'
                 ]
             ]
         ]);
-        $this->esndb->users->insert([
-            '_id' => new \MongoId('54b64eadf6d7d8e41d263e0e'),
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0e'),
             'accounts' => [
                 [
                     'type' => 'email',
@@ -255,8 +255,8 @@ END:VCALENDAR'
                 ]
             ]
         ]);
-        $this->esndb->users->insert([
-            '_id' => new \MongoId('54b64eadf6d7d8e41d263e0d'),
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0d'),
             'accounts' => [
                 [
                     'type' => 'email',
@@ -266,8 +266,8 @@ END:VCALENDAR'
                 ]
             ]
         ]);
-        $this->esndb->users->insert([
-            '_id' => new \MongoId('54b64eadf6d7d8e41d263e0c'),
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0c'),
             'accounts' => [
                 [
                     'type' => 'email',
@@ -278,8 +278,8 @@ END:VCALENDAR'
             ]
         ]);
 
-        $this->esndb->resources->insert([
-            '_id' => new \MongoId('62b64eadf6d7d8e41d263e0c'),
+        $this->esndb->resources->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('62b64eadf6d7d8e41d263e0c'),
             'type' => 'calendar',
             'name' => 'cal resource'
         ]);

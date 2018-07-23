@@ -12,8 +12,8 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
     protected $carddavBackend;
 
     function setUp() {
-        $mcsabre = new \MongoClient(ESN_MONGO_SABREURI);
-        $this->sabredb = $mcsabre->selectDB(ESN_MONGO_SABREDB);
+        $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
+        $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
 
         $this->sabredb->drop();
 

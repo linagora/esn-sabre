@@ -7,8 +7,8 @@ namespace ESN\CardDAV\Backend;
  */
 class EsnTest extends \PHPUnit_Framework_TestCase {
     protected function getBackend() {
-        $mc = new \MongoClient(ESN_MONGO_SABREURI);
-        $db = $mc->selectDB(ESN_MONGO_SABREDB);
+        $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);
+        $db = $mc->{ESN_MONGO_SABREDB};
         $db->drop();
         return new Esn($db);
     }

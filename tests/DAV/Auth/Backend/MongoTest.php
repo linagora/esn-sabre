@@ -12,14 +12,14 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
     protected static $userPrincipal;
 
     static function setUpBeforeClass() {
-        $mc = new \MongoClient(ESN_MONGO_ESNURI);
-        self::$db = $mc->selectDB(ESN_MONGO_ESNDB);
+        $mc = new \MongoDB\Client(ESN_MONGO_ESNURI);
+        self::$db = $mc->{ESN_MONGO_ESNDB};
 
         $salt = str_replace('+', '.', base64_encode("abcdefghijklmnopqrstuv"));
         $pw = crypt('xxx', '$2y$10$'.$salt.'$');
 
-        $userId = new \MongoId();
-        self::$db->users->insert([
+        $userId = new \MongoDB\BSON\ObjectId();
+        self::$db->users->insertOne([
           '_id' => $userId,
           'accounts' => [
             [ 'type' => 'email', 'emails' => ['user1@example.com', 'user2@example.com'] ]

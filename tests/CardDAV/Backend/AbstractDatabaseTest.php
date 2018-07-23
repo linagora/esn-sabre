@@ -39,7 +39,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 '{DAV:}displayname' => 'book1',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 1',
                 '{http://calendarserver.org/ns/}getctag' => 1,
-                '{DAV:}acl' => ['dav:read', 'dav:write'],
+                '{DAV:}acl' => new \MongoDB\Model\BSONArray(['dav:read', 'dav:write']),
                 '{http://open-paas.org/contacts}type' => '',
                 '{http://sabredav.org/ns}sync-token' => "1"
             )
@@ -87,7 +87,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 'id' => $this->bookId,
                 'uri' => 'book1',
                 'principaluri' => 'principals/users/user1',
-                '{DAV:}acl' => ['dav:read', 'dav:write'],
+                '{DAV:}acl' => new \MongoDB\Model\BSONArray(['dav:read', 'dav:write']),
                 '{DAV:}displayname' => 'book1',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 1',
                 '{http://calendarserver.org/ns/}getctag' => 1,
@@ -115,7 +115,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 'uri' => 'book1',
                 'principaluri' => 'principals/users/user1',
                 '{DAV:}displayname' => 'book1',
-                '{DAV:}acl' => ['dav:read', 'dav:write'],
+                '{DAV:}acl' => new \MongoDB\Model\BSONArray(['dav:read', 'dav:write']),
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 1',
                 '{http://calendarserver.org/ns/}getctag' => 1,
                 '{http://sabredav.org/ns}sync-token' => 1,
@@ -147,7 +147,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 'principaluri' => 'principals/users/user1',
                 '{DAV:}displayname' => 'updated',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'updated',
-                '{DAV:}acl' => ['dav:read'],
+                '{DAV:}acl' => new \MongoDB\Model\BSONArray(['dav:read']),
                 '{http://calendarserver.org/ns/}getctag' => 2,
                 '{http://sabredav.org/ns}sync-token' => 2,
                 '{http://open-paas.org/contacts}type' => ''
@@ -186,7 +186,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 'principaluri' => 'principals/users/user1',
                 '{DAV:}displayname' => 'book1',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 1',
-                '{DAV:}acl' => ['dav:read', 'dav:write'],
+                '{DAV:}acl' => new \MongoDB\Model\BSONArray(['dav:read', 'dav:write']),
                 '{http://calendarserver.org/ns/}getctag' => 1,
                 '{http://sabredav.org/ns}sync-token' => 1,
                 '{http://open-paas.org/contacts}type' => '',
@@ -197,7 +197,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 'principaluri' => 'principals/users/user1',
                 '{DAV:}displayname' => 'book2',
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 2',
-                '{DAV:}acl' => ['dav:read'],
+                '{DAV:}acl' => new \MongoDB\Model\BSONArray(['dav:read']),
                 '{http://calendarserver.org/ns/}getctag' => 1,
                 '{http://sabredav.org/ns}sync-token' => 1,
                 '{http://open-paas.org/contacts}type' => 'social'
@@ -214,13 +214,15 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     public function testGetCard() {
         $result = $this->backend->getCard($this->bookId,'card1');
 
-        $expected = array(
+        $expected = new \MongoDB\Model\BSONDocument(
+            [
             'id' => $this->cardId,
             'uri' => 'card1',
             'carddata' => 'card1',
             'lastmodified' => 0,
             'etag' => '"' . md5('card1') . '"',
             'size' => 5
+            ]
         );
 
         $this->assertEquals($expected, $result);
@@ -290,9 +292,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
      * @depends testGetCard
      */
     public function testDeleteCard() {
-        $this->backend->deleteCard($this->bookId, 'card1');
-        $result = $this->backend->getCard($this->bookId,'card1');
-        $this->assertFalse($result);
+        $this->assertTrue($this->backend->deleteCard($this->bookId, 'card1'));
+        $this->assertFalse($this->backend->getCard($this->bookId,'card1'));
     }
 
     function testGetChanges() {

@@ -101,7 +101,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
         if (!$this->acceptJson()) {
             return true;
         }
-
         $path = $request->getPath();
         $node = $this->server->tree->getNodeForPath($path);
 

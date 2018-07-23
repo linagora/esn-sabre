@@ -12,11 +12,11 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
     protected $carddavBackend;
 
     function setUp() {
-        $mcesn = new \MongoClient(ESN_MONGO_ESNURI);
-        $this->esndb = $mcesn->selectDB(ESN_MONGO_ESNDB);
+        $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
+        $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
 
-        $mcsabre = new \MongoClient(ESN_MONGO_SABREURI);
-        $this->sabredb = $mcsabre->selectDB(ESN_MONGO_SABREDB);
+        $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
+        $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
 
         $this->esndb->drop();
         $this->sabredb->drop();
@@ -35,9 +35,9 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testChildren() {
-        $this->esndb->users->insert([ '_id' => new \MongoId('54313fcc398fef406b0041b6') ]);
-        //$this->esndb->communities->insert([ '_id' => new \MongoId('54313fcc398fef406b0041b4') ]);
-        $this->esndb->projects->insert([ '_id' => new \MongoId('54b64eadf6d7d8e41d263e0f') ]);
+        $this->esndb->users->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6') ]);
+        //$this->esndb->communities->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b4') ]);
+        $this->esndb->projects->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0f') ]);
 
         $children = $this->root->getChildren();
         $this->assertEquals(2, count($children));
@@ -60,9 +60,9 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testGetChild() {
-        $this->esndb->users->insert([ '_id' => new \MongoId('54313fcc398fef406b0041b6') ]);
-        //$this->esndb->communities->insert([ '_id' => new \MongoId('54313fcc398fef406b0041b4') ]);
-        $this->esndb->projects->insert([ '_id' => new \MongoId('54b64eadf6d7d8e41d263e0f') ]);
+        $this->esndb->users->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6') ]);
+        //$this->esndb->communities->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b4') ]);
+        $this->esndb->projects->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0f') ]);
 
         $user = $this->root->getChild('54313fcc398fef406b0041b6');
         $this->assertTrue($user instanceof \Sabre\CardDAV\AddressBookHome);

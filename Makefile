@@ -29,7 +29,6 @@ test-report: $(PHPUNIT)
 lint: $(PHPCS)
 	$(PHPCS) -p --standard=$(PHPCS_CONFIG) $(LINT_TARGET)
 
-
 update: $(PHPCS) $(PHPUNIT)
 
 .PHONY: update test test-report lint check

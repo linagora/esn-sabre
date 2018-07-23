@@ -2,6 +2,8 @@
 
 namespace ESN\CardDAV;
 
+use \Sabre\DAV\Sharing\Plugin as SPlugin;
+
 /**
  * @medium
  */
@@ -85,5 +87,34 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
             ]
         ];
         $this->assertEquals($expectedACL, $this->book->getACL());
+    }
+
+    function testGetSubscribedAddressBooks() {
+        $this->bookInfo = [
+            'id' => $this->bookId,
+            'uri' => 'book1',
+            'principaluri' => 'principals/users/user1'
+        ];
+        $this->book = new \ESN\CardDAV\AddressBook($this->carddavBackend, $this->bookInfo);
+
+        $this->carddavBackend->updateInvites($this->bookId, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'principal' => 'principals/users/user2',
+                'access' => SPlugin::ACCESS_READ,
+                'inviteStatus' => SPlugin::INVITE_ACCEPTED,
+                'properties' => []
+            ])
+        ]);
+        $this->carddavBackend->createSubscription(
+          'principals/users/user3',
+          'subscriptionuri',
+          [
+              '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/user1/book1', false)
+          ]
+        );
+
+        $result = $this->book->getSubscribedAddressBooks();
+
+        $this->assertCount(2, $result);
     }
 }

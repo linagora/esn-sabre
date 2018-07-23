@@ -6,6 +6,12 @@ require_once ESN_TEST_BASE . '/CardDAV/MockUtils.php';
 
 class ContactRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
+    const SHARED_ADDRESSBOOK = [[
+        'id' => 'shared-one',
+        'principaluri' => '/principals/users/cardo',
+        'uri' => 'addressbooks/cardo/shared-one'
+    ]];
+
     private function getPlugin($server = null) {
         $plugin = new ContactRealTimePluginMock($server);
         $server = $plugin->getServer();
@@ -15,42 +21,46 @@ class ContactRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     }
 
     private function mockTree($server) {
-        $server->tree = $this->getMockBuilder('\Sabre\DAV\Tree')->disableOriginalConstructor()->getMock();
+        $contactMock = $this->getMockBuilder('\Sabre\CardDAV\Card')
+            ->disableOriginalConstructor()
+            ->getMock();
+        $addressbookMock = $this->getMockBuilder('\ESN\CardDAV\AddressBook')
+            ->disableOriginalConstructor()
+            ->getMock();
 
-        $nodeMock = $this->createCard();
+        $addressbookMock->method('getSubscribedAddressBooks')
+            ->will($this->returnValue(self::SHARED_ADDRESSBOOK));
 
-        $server->tree->expects($this->any())->method('getNodeForPath')
-            ->will($this->returnValue($nodeMock));
-    }
-
-    private function createCard() {
-        $addressBookInfo = [
-            'uri' => 'addressbooks/456456/123123',
-            'id' => '123123',
-            'principaluri' => 'principals/users/456456'
-        ];
-        $cardData = [
-            'carddata' => "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:hello\r\nEND:VCARD\r\n"
+        $map = [
+            ['/addressbooks/bookId/bookName/contact.vcf', $contactMock],
+            ['/addressbooks/bookId/bookName', $addressbookMock]
         ];
 
-        return new \Sabre\CardDAV\Card(new \ESN\CardDAV\CardDAVBackendMock(), $addressBookInfo, $cardData);
+        $server->tree = $this->getMockBuilder('\Sabre\DAV\Tree')
+            ->disableOriginalConstructor()
+            ->getMock();
+
+        $server->tree
+            ->expects($this->any())
+            ->method('getNodeForPath')
+            ->will($this->returnValueMap($map));
     }
 
-    function testAfterCreateFileEventShouldDoNothingWithNonCardPath() {
+    function testAfterBindEventShouldDoNothingWithNonCardPath() {
         $plugin = $this->getPlugin();
         $server = $plugin->getServer();
         $client = $plugin->getClient();
 
-        $this->assertTrue($server->emit('afterCreateFile', ["not_a_card_path"]));
+        $this->assertTrue($server->emit('afterBind', ['not_a_card_path']));
         $this->assertNull($client->message);
     }
 
-    function testAfterCreateFileEventShouldPublishMessage() {
+    function testAfterBindEventShouldPublishMessage() {
         $plugin = $this->getPlugin();
         $server = $plugin->getServer();
         $client = $plugin->getClient();
 
-        $this->assertTrue($server->emit('afterCreateFile', ["addressbooks/123/contacts/456.vcf"]));
+        $this->assertTrue($server->emit('afterBind', ['addressbooks/bookId/bookName/contact.vcf']));
         $this->assertNotNull($client->message);
     }
 
@@ -70,27 +80,11 @@ class ContactRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $server = $plugin->getServer();
         $client = $plugin->getClient();
 
-        $nodeMock = $this->createCard();
+        $nodeMock = $this->getMockBuilder('\Sabre\CardDAV\Card')
+            ->disableOriginalConstructor()
+            ->getMock();
 
-        $this->assertTrue($server->emit('afterWriteContent', ["addressbooks/123/contacts/456.vcf", $nodeMock]));
-        $this->assertNotNull($client->message);
-    }
-
-    function testAfterMoveEventShouldDoNothingWithNonCardPath() {
-        $plugin = $this->getPlugin();
-        $server = $plugin->getServer();
-        $client = $plugin->getClient();
-
-        $this->assertTrue($server->emit('afterMove', ["not_a_card_path", "addressbooks/123/collected/456.vcf"]));
-        $this->assertNull($client->message);
-    }
-
-    function testAfterMoveEventShouldPublishMessage() {
-        $plugin = $this->getPlugin();
-        $server = $plugin->getServer();
-        $client = $plugin->getClient();
-
-        $this->assertTrue($server->emit('afterMove', ["addressbooks/123/contacts/456.vcf", "addressbooks/123/collected/456.vcf"]));
+        $this->assertTrue($server->emit('afterWriteContent', ["addressbooks/bookId/bookName/contact.vcf", $nodeMock]));
         $this->assertNotNull($client->message);
     }
 
@@ -108,22 +102,8 @@ class ContactRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $server = $plugin->getServer();
         $client = $plugin->getClient();
 
-        $this->assertTrue($server->emit('afterUnbind', ["addressbooks/123/contacts/456.vcf"]));
+        $this->assertTrue($server->emit('afterUnbind', ["addressbooks/bookId/bookName/contact.vcf"]));
         $this->assertNotNull($client->message);
-    }
-
-    function testIgnoreAfterUnbindEventWhenAfterMoveEventIsFiredBefore() {
-        $plugin = $this->getPlugin();
-        $server = $plugin->getServer();
-        $client = $plugin->getClient();
-
-        $this->assertTrue($server->emit('afterMove', ["addressbooks/123/contacts/456.vcf", "addressbooks/123/collected/456.vcf"]));
-        $this->assertNotNull($client->message);
-
-        $client->message = null;
-
-        $this->assertTrue($server->emit('afterUnbind', ["addressbooks/123/contacts/456.vcf"]));
-        $this->assertNull($client->message);
     }
 }
 

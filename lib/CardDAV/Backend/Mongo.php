@@ -34,6 +34,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         '{DAV:}write'
     ];
 
+    const MINIMAL_ADDRESSBOOK_FIELDS = ['_id', 'principaluri', 'uri'];
+
     function __construct(\MongoDB $db) {
         $this->db = $db;
         $this->eventEmitter = new EventEmitter();
@@ -160,7 +162,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $query = [ '_id' => $mongoId ];
         $addressBook = $collection->findOne($query);
         $collection->remove([ '_id' => $mongoId ]);
-        
+
         $this->eventEmitter->emit('sabre:addressBookDeleted', [
             [
                 'addressbookid' => $addressBook['_id'],
@@ -481,14 +483,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function getSubscriptionsBySource($source) {
-        $fields[] = '_id';
-        $fields[] = 'principaluri';
-        $fields[] = 'uri';
-
         $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
         $query = [ 'source' => $source ];
 
-        $res = $collection->find($query, $fields);
+        $res = $collection->find($query, self::MINIMAL_ADDRESSBOOK_FIELDS);
 
         $result = [];
         foreach ($res as $row) {
@@ -565,6 +563,23 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             ];
 
             $addressBooks[] = $addressBook;
+        }
+
+        return $addressBooks;
+    }
+
+    function getSharedAddressBooksBySource($sourceAddressBookId) {
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+
+        $query = [
+            'addressbookid' => new \MongoId($sourceAddressBookId),
+            'share_invitestatus' => SPlugin::INVITE_ACCEPTED
+        ];
+        $res = $collection->find($query, self::MINIMAL_ADDRESSBOOK_FIELDS);
+
+        $addressBooks = [];
+        foreach ($res as $row) {
+            $addressBooks[] = $row;
         }
 
         return $addressBooks;

@@ -187,6 +187,26 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return $invites;
     }
 
+    /**
+     * Returns the list of subscribers (addressbook) of this addressbook which includes
+     * - Addressbooks created by accepting invitation which is shared by delegation
+     * - Subscription addressbooks if this addressbook is published publicly
+     *
+     * @return array List of addressbook objects (_id, principaluri, uri)
+     */
+    function getSubscribedAddressBooks() {
+        $principalUriExploded = explode('/', $this->addressBookInfo['principaluri']);
+        $path = 'addressbooks/' . $principalUriExploded[2] . '/' . $this->addressBookInfo['uri'];
+        $id = $this->addressBookInfo['id'];
+
+        $result = array_merge(
+            $this->carddavBackend->getSharedAddressBooksBySource($id),
+            $this->carddavBackend->getSubscriptionsBySource($path)
+        );
+
+        return $result;
+    }
+
     function setPublishStatus($value) {
         $this->carddavBackend->setPublishStatus($this->addressBookInfo, $value);
     }

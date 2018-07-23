@@ -10,11 +10,8 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     private $PUBSUB_TOPICS = [
         'CONTACT_CREATED' => 'sabre:contact:created',
         'CONTACT_UPDATED' => 'sabre:contact:updated',
-        'CONTACT_MOVED'   => 'sabre:contact:moved',
         'CONTACT_DELETED' => 'sabre:contact:deleted',
     ];
-
-    private $moved;
 
     function __construct($client) {
         parent::__construct($client);
@@ -25,17 +22,16 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         $this->moved = false;
 
-        $server->on('afterCreateFile',    [$this, 'afterCreateFile']);
-        $server->on('afterWriteContent',  [$this, 'afterWriteContent']);
-        $server->on('afterMove',          [$this, 'afterMove']);
+        $server->on('afterBind',          [$this, 'afterBind']);
         $server->on('afterUnbind',        [$this, 'afterUnbind']);
+        $server->on('afterWriteContent',  [$this, 'afterWriteContent']);
     }
 
     function buildData($data) {
         return $data;
     }
 
-    function afterCreateFile($path) {
+    function afterBind($path) {
         if (!$this->isCardPath($path)) {
             return true;
         }
@@ -43,54 +39,19 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $node = $this->server->tree->getNodeForPath('/'.$path);
 
         if ($node instanceof \Sabre\CardDAV\Card) {
-            $this->createMessage(
-                $this->PUBSUB_TOPICS['CONTACT_CREATED'],
-                [
-                    'path' => $path,
-                    'owner' => $node->getOwner(),
-                    'carddata' => $node->get()
-                ]
-            );
-            $this->publishMessages();
-        }
-
-        return true;
-    }
-
-    function afterWriteContent($path, \Sabre\DAV\IFile $node) {
-        if ($node instanceof \Sabre\CardDAV\Card) {
-            $this->createMessage(
-                $this->PUBSUB_TOPICS['CONTACT_UPDATED'],
-                [
-                    'path' => $path,
-                    'owner' => $node->getOwner(),
-                    'carddata' => $node->get()
-                ]
-            );
-            $this->publishMessages();
-        }
-        return true;
-    }
-
-    function afterMove($path, $toPath) {
-        if (!$this->isCardPath($path)) {
-            return true;
-        }
-
-        $node = $this->server->tree->getNodeForPath('/'.$toPath);
-
-        $this->createMessage(
-            $this->PUBSUB_TOPICS['CONTACT_MOVED'],
-            [
-                'path' => $path,
-                'toPath' => $toPath,
-                'owner' => $node->getOwner(),
+            $this->createMessage($this->PUBSUB_TOPICS['CONTACT_CREATED'], [
+                'path'     => $path,
+                'owner'    => $node->getOwner(),
                 'carddata' => $node->get()
-            ]
-        );
-        $this->publishMessages();
+            ]);
 
-        $this->moved = true;
+            $this->notifySubscribedAddressBooks('CREATED', $path, [
+                'owner'    => $node->getOwner(),
+                'carddata' => $node->get()
+            ]);
+
+            $this->publishMessages();
+        }
 
         return true;
     }
@@ -100,19 +61,55 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             return true;
         }
 
-        if ($this->moved) { // ignore unbind event when contact is moved
-            return true;
-        }
-
         $this->createMessage(
             $this->PUBSUB_TOPICS['CONTACT_DELETED'],
             [
                 'path' => $path
             ]
         );
+
+        $this->notifySubscribedAddressBooks('DELETED', $path);
+
         $this->publishMessages();
 
         return true;
+    }
+
+    function afterWriteContent($path, \Sabre\DAV\IFile $node) {
+        if ($node instanceof \Sabre\CardDAV\Card) {
+            $this->createMessage(
+                $this->PUBSUB_TOPICS['CONTACT_UPDATED'],
+                [
+                    'path'     => $path,
+                    'owner'    => $node->getOwner(),
+                    'carddata' => $node->get()
+                ]
+            );
+
+            $this->notifySubscribedAddressBooks('UPDATED', $path, [
+                'owner'    => $node->getOwner(),
+                'carddata' => $node->get()
+            ]);
+
+            $this->publishMessages();
+        }
+
+        return true;
+    }
+
+    private function notifySubscribedAddressBooks($action, $cardPath, $dataMessage = []) {
+        list($parentUri) = Uri\split($cardPath);
+        $parent = $this->server->tree->getNodeForPath('/'.$parentUri);
+        $subscribedAddressBooks = $parent->getSubscribedAddressBooks();
+
+        foreach ($subscribedAddressBooks as $addressBook) {
+            $principalUriExploded = explode('/', $addressBook['principaluri']);
+            $cardPathExploded = explode('/', $cardPath);
+            $dataMessage['path'] = 'addressbooks/'.$principalUriExploded[2].'/'.$addressBook['uri'].'/'.$cardPathExploded[3];
+            $dataMessage['sourcePath'] = $cardPath;
+
+            $this->createMessage($this->PUBSUB_TOPICS['CONTACT_'.$action], $dataMessage);
+        }
     }
 
     private function isCardPath($path) {

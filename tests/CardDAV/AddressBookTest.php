@@ -17,7 +17,7 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
 
         $this->sabredb->drop();
 
-        $this->principalUri = "principals/user1";
+        $this->principalUri = "principals/users/user1";
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
 
         $this->bookId = '556e42ba10771854d5541fef';
@@ -43,7 +43,7 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
         $expectedACL = [
             [
                 'privilege' => '{DAV:}read',
-                'principal' => "principals/user1",
+                'principal' => "principals/users/user1",
                 'protected' => true,
             ]
         ];
@@ -56,7 +56,7 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
         $expectedACL = [
             [
                 'privilege' => '{DAV:}all',
-                'principal' => "principals/user1",
+                'principal' => "principals/users/user1",
                 'protected' => true,
             ]
         ];
@@ -69,7 +69,7 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
         $expectedACL = [
             [
                 'privilege' => '{DAV:}read',
-                'principal' => "principals/user1",
+                'principal' => "principals/users/user1",
                 'protected' => true,
             ]
         ];
@@ -82,7 +82,7 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
         $expectedACL = [
             [
                 'privilege' => '{DAV:}all',
-                'principal' => "principals/user1",
+                'principal' => "principals/users/user1",
                 'protected' => true,
             ]
         ];

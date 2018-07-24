@@ -1446,7 +1446,9 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'HTTP_ACCEPT'            => 'application/json',
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
         ));
-        $schedulePlugin = $this->getMock(ServerPlugin::class, ['getPluginName', 'scheduleLocalDelivery', 'initialize']);
+        $schedulePlugin = $this->getMockBuilder(ServerPlugin::class)
+            ->setMethods(['getPluginName', 'scheduleLocalDelivery', 'initialize'])
+            ->getMock();
         $schedulePlugin->expects($this->any())->method('getPluginName')->will($this->returnValue('caldav-schedule'));
         $schedulePlugin->expects($this->once())->method('scheduleLocalDelivery')->will($this->returnCallback(function($message) {
             $this->assertInstanceOf(Message::class, $message);
@@ -1476,7 +1478,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->itipRequestData['method'] = null;
         $this->itipRequestData['sequence'] = null;
 
-        $schedulePlugin = $this->getMock(ServerPlugin::class, ['getPluginName', 'scheduleLocalDelivery', 'initialize']);
+        $schedulePlugin = $this->getMockBuilder(ServerPlugin::class)->setMethods(['getPluginName', 'scheduleLocalDelivery', 'initialize'])->getMock();
         $schedulePlugin->expects($this->any())->method('getPluginName')->will($this->returnValue('caldav-schedule'));
         $schedulePlugin->expects($this->once())->method('scheduleLocalDelivery')->will($this->returnCallback(function($message) {
             $this->assertInstanceOf(Message::class, $message);
@@ -1506,7 +1508,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->itipRequestData['method'] = 'COUNTER';
         $this->itipRequestData['sequence'] = null;
 
-        $schedulePlugin = $this->getMock(ServerPlugin::class, ['getPluginName', 'scheduleLocalDelivery', 'initialize']);
+        $schedulePlugin = $this->getMockBuilder(ServerPlugin::class)->setMethods(['getPluginName', 'scheduleLocalDelivery', 'initialize'])->getMock();
         $schedulePlugin->expects($this->any())->method('getPluginName')->will($this->returnValue('caldav-schedule'));
         $schedulePlugin->expects($this->never())->method('scheduleLocalDelivery');
 

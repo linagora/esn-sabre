@@ -13,12 +13,12 @@ class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
     function setUp() {
         $this->calendarBackend = new CalendarBackendMock();
-        $this->calendarBackend->setEventEmitter($this->getMock(\Sabre\Event\EventEmitter::class));
+        $this->calendarBackend->setEventEmitter($this->createMock(\Sabre\Event\EventEmitter::class));
 
-        $this->publisher = $this->getMock(\ESN\Publisher\Publisher::class);
-        $this->plugin = new CalendarRealTimePlugin($this->publisher, $this->calendarBackend, $this->getMock(\Sabre\Event\EventEmitter::class));
-        
-        $this->server = $this->getMock(\Sabre\DAV\Server::class);
+        $this->publisher = $this->createMock(\ESN\Publisher\Publisher::class);
+        $this->plugin = new CalendarRealTimePlugin($this->publisher, $this->calendarBackend, $this->createMock(\Sabre\Event\EventEmitter::class));
+
+        $this->server = $this->createMock(\Sabre\DAV\Server::class);
         $this->mockTree();
 
         $this->plugin->initialize($this->server);
@@ -30,7 +30,7 @@ class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
             ->with('/'.self::PATH)
             ->willReturn(true);
         $this->server->expects($this->any())->method('getPlugin')
-            ->willReturn($this->getMock(\ESN\DAV\Sharing\Plugin::class));
+            ->willReturn($this->createMock(\ESN\DAV\Sharing\Plugin::class));
 
         $nodeMock = $this->getMockBuilder('\Sabre\CalDAV\Calendar')
             ->disableOriginalConstructor()
@@ -74,7 +74,7 @@ class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testCalendarCreated() {
-        
+
         $this->publisher
             ->expects($this->once())
             ->method('publish')

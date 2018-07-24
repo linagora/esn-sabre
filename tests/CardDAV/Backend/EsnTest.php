@@ -15,7 +15,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
 
     function testGetAddressBooksForUserNoAddressBooks() {
         $backend = $this->getBackend();
-        $books = $backend->getAddressBooksForUser('principals/user2');
+        $books = $backend->getAddressBooksForUser('principals/users/user2');
 
         $contactAddressBook = array(
             'uri'               => $backend::CONTACTS_URI,
@@ -39,7 +39,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
     function testGetAddressBooksForUserWhenOtherThanDefaultExists() {
         $backend = $this->getBackend();
 
-        $backend->createAddressBook('principals/user2', 'anotheraaddressbook', []);
+        $backend->createAddressBook('principals/users/user2', 'anotheraaddressbook', []);
 
         $anotherAddressBook = array(
             'uri'               => 'anotheraaddressbook',
@@ -59,7 +59,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
         );
 
-        $books = $backend->getAddressBooksForUser('principals/user2');
+        $books = $backend->getAddressBooksForUser('principals/users/user2');
 
         $this->assertInternalType('array',$books);
         $this->assertEquals(3, count($books));

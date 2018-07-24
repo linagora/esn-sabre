@@ -15,7 +15,7 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
 
         $this->sabredb->drop();
 
-        $this->principalUri = "principals/user1";
+        $this->principalUri = "principals/users/user1";
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
 
         $this->books = new AddressBookHome($this->carddavBackend, $this->principalUri);

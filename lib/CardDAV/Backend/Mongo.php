@@ -152,6 +152,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             array('upsert' => true, 'new' => true)
         );
 
+        $this->eventEmitter->emit('sabre:addressBookCreated', [
+            [
+                'principaluri' => $principalUri,
+                'path' => $this->buildAddressBookPath($principalUri, $uri)
+            ]
+        ]);
+
         return (string) $modified['_id'];
     }
 

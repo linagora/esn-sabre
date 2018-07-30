@@ -24,6 +24,17 @@ class AddressBookRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->plugin->initialize($this->server);
     }
 
+    function testAddressBookCreated() {
+        $this->publisher
+            ->expects($this->once())
+            ->method('publish')
+            ->with('sabre:addressbook:created');
+        $this->plugin->onAddressBookCreated([
+            'path' => self::PATH,
+            'principaluri' => self::PRINCIPAL_URI
+        ]);
+    }
+
     function testAddressBookDeleted() {
         $this->publisher
             ->expects($this->once())

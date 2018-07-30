@@ -11,6 +11,7 @@ class AddressBookRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     protected $carddavBackend;
 
     private $PUBSUB_TOPICS = [
+        'ADDRESSBOOK_CREATED' => 'sabre:addressbook:created',
         'ADDRESSBOOK_DELETED' => 'sabre:addressbook:deleted',
     ];
 
@@ -24,11 +25,24 @@ class AddressBookRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         $eventEmitter = $this->carddavBackend->getEventEmitter();
 
+        $eventEmitter->on('sabre:addressBookCreated', [$this, 'onAddressBookCreated']);
         $eventEmitter->on('sabre:addressBookDeleted', [$this, 'onAddressBookDeleted']);
     }
 
     function buildData($data) {
         return $data;
+    }
+
+    function onAddressBookCreated($data) {
+        $this->createMessage(
+            $this->PUBSUB_TOPICS['ADDRESSBOOK_CREATED'],
+            [
+                'path' => $data['path'],
+                'owner' => $data['principaluri']
+            ]
+        );
+
+        $this->publishMessages();
     }
 
     function onAddressBookDeleted($data) {

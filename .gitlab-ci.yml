@@ -116,6 +116,7 @@ docker-snapshot:
     - docker logout
   only:
     - master@linagora/lgs/openpaas/esn-sabre
+    - release-*@linagora/lgs/openpaas/esn-sabre
 
 docker-release:
   <<: *build-docker-tpl
@@ -132,4 +133,24 @@ docker-release:
     - docker-tag-and-push.sh build:latest ${DOCKER_IMAGE_PRIVATE} ${DOCKER_IMAGE_PUBLIC}
     - docker logout
   only:
-    - tags@linagora/lgs/openpaas/esn
+    - tags@linagora/lgs/openpaas/esn-sabre
+
+docker-mark-as-latest:
+  <<: *build-docker-tpl
+  stage: deploy
+  variables:
+      DOCKER_HOST: "tcp://docker-dind"
+      DOCKER_IMAGE_PRIVATE: "docker-registry.linagora.com:5000/openpaas-releases/openpaas-esn-sabre"
+      DOCKER_IMAGE_PUBLIC: "linagora/esn-sabre"
+  script:
+    - if [ "${TAG}" == "" ] ; then exit 1; fi
+    - docker login -u ${REGISTRY_USER_RELEASE} -p ${REGISTRY_TOKEN_RELEASE} docker-registry.linagora.com:5000
+    - docker login -u ${HUB_DOCKER_USER} -p ${HUB_DOCKER_TOKEN}
+    - docker pull ${DOCKER_IMAGE_PRIVATE}:${TAG}
+    - export DOCKER_TAGS=latest
+    - docker-tag-and-push.sh ${DOCKER_IMAGE_PRIVATE}:${TAG} ${DOCKER_IMAGE_PRIVATE} ${DOCKER_IMAGE_PUBLIC}
+    - docker logout
+  when: manual
+  only:
+    - master@linagora/lgs/openpaas/esn-sabre
+    - release-*@linagora/lgs/openpaas/esn-sabre

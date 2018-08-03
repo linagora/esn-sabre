@@ -31,6 +31,9 @@ test:
     - ./vendor/bin/phpcs -p --standard=vendor/sabre/dav/tests/phpcs/ruleset.xml --report-checkstyle=checkstyle.xml lib/
     - cd tests
     - ../vendor/bin/phpunit --coverage-clover=${CI_PROJECT_DIR}/clover.xml --log-junit=${CI_PROJECT_DIR}/junit.xml .
+  except:
+    variables:
+      - $SKIP_TESTS
 
 build_pkg_deb_jessie:
   <<: *build-pkg-tpl
@@ -88,6 +91,9 @@ deploy_dev:
     - git fetch --all
     - git checkout ${CI_COMMIT_SHA}
     - composer up
+  except:
+    variables:
+      - $SKIP_DEPLOY
 
 .build-docker-tpl: &build-docker-tpl
   image: docker-registry.linagora.com:5000/linshare-snapshots/linshare-dind:latest
@@ -96,9 +102,6 @@ deploy_dev:
   services:
       - name: docker-registry.linagora.com:5000/linshare-snapshots/linshare-dind:latest
         alias: docker-dind
-  except:
-    variables:
-      - $SKIP_BUILD_DOCKER
 
 docker-snapshot:
   <<: *build-docker-tpl
@@ -117,6 +120,9 @@ docker-snapshot:
   only:
     - master@linagora/lgs/openpaas/esn-sabre
     - release-*@linagora/lgs/openpaas/esn-sabre
+  except:
+    variables:
+      - $SKIP_BUILD_DOCKER
 
 docker-release:
   <<: *build-docker-tpl
@@ -134,6 +140,9 @@ docker-release:
     - docker logout
   only:
     - tags@linagora/lgs/openpaas/esn-sabre
+  except:
+    variables:
+      - $SKIP_BUILD_DOCKER
 
 docker-mark-as-latest:
   <<: *build-docker-tpl

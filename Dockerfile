@@ -34,23 +34,21 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --file
 
 # Set up Nginx
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf
-ADD docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh
-RUN sh /root/set_nginx_htpasswd.sh
-ADD docker/config/nginx.conf     /etc/nginx/sites-available/default
+RUN ln -sf /dev/stderr /var/log/nginx/error.log
+RUN ln -sf /dev/stdout /var/log/nginx/access.log
+
+
+WORKDIR /var/www
+COPY . /var/www
+RUN cp -v docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh \
+    && cp -v docker/config/nginx.conf     /etc/nginx/sites-available/default \
+    && cp -v docker/supervisord.conf /etc/supervisor/conf.d/ \
+    && rm -frv html \
+    && chown -R www-data:www-data /var/www \
+    && /root/set_nginx_htpasswd.sh
 
 RUN pecl install mongo
-
-# Set up Sabre DAV
-WORKDIR /var/www
-RUN rm -rf composer.json composer.lock vendor data html server.php
-COPY composer.json /var/www/composer.json
-RUN composer clearcache
-RUN composer update
-
-COPY . /var/www
-RUN chown -R www-data:www-data /var/www
-
-ADD docker/supervisord.conf /etc/supervisor/conf.d/
+RUN composer clearcache && composer update
 
 EXPOSE 80
 

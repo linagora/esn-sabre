@@ -119,7 +119,7 @@ docker-snapshot:
     - docker logout
   only:
     - master@linagora/lgs/openpaas/esn-sabre
-    - release-*@linagora/lgs/openpaas/esn-sabre
+    - /^release-.*/@linagora/lgs/openpaas/esn-sabre
   except:
     variables:
       - $SKIP_BUILD_DOCKER
@@ -162,4 +162,4 @@ docker-mark-as-latest:
   when: manual
   only:
     - master@linagora/lgs/openpaas/esn-sabre
-    - release-*@linagora/lgs/openpaas/esn-sabre
+    - /^release-.*/@linagora/lgs/openpaas/esn-sabre

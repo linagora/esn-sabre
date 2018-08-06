@@ -152,12 +152,12 @@ docker-mark-as-latest:
       DOCKER_IMAGE_PRIVATE: "docker-registry.linagora.com:5000/openpaas-releases/openpaas-esn-sabre"
       DOCKER_IMAGE_PUBLIC: "linagora/esn-sabre"
   script:
-    - if [ "${TAG}" == "" ] ; then exit 1; fi
+    - if [ "${LATEST_TAG_SRC}" == "" ] ; then exit 1; fi
     - docker login -u ${REGISTRY_USER_RELEASE} -p ${REGISTRY_TOKEN_RELEASE} docker-registry.linagora.com:5000
     - docker login -u ${HUB_DOCKER_USER} -p ${HUB_DOCKER_TOKEN}
-    - docker pull ${DOCKER_IMAGE_PRIVATE}:${TAG}
+    - docker pull ${DOCKER_IMAGE_PRIVATE}:${LATEST_TAG_SRC}
     - export DOCKER_TAGS=latest
-    - docker-tag-and-push.sh ${DOCKER_IMAGE_PRIVATE}:${TAG} ${DOCKER_IMAGE_PRIVATE} ${DOCKER_IMAGE_PUBLIC}
+    - docker-tag-and-push.sh ${DOCKER_IMAGE_PRIVATE}:${LATEST_TAG_SRC} ${DOCKER_IMAGE_PRIVATE} ${DOCKER_IMAGE_PUBLIC}
     - docker logout
   when: manual
   only:

@@ -66,6 +66,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
     }
 
+    protected function getSupportedHeaders() {
+        return array('application/json', 'application/vcard+json');
+    }
+
     function httpDelete($request, $response) {
         if (!$this->acceptJson()) {
             return true;

@@ -104,8 +104,17 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             }
 
             $collection = $this->db->selectCollection($this->addressBooksTableName);
-            $query = [ '_id' => new \MongoId($addressBookId) ];
-            $collection->update($query, [ '$set' => $updates ]);
+            $updatedAddressBook = $collection->findAndModify(
+                [ '_id'  => new \MongoId($addressBookId) ],
+                [ '$set' => $updates ],
+                [ 'principaluri' => 1, 'uri' => 1],
+                [ 'new'  => true ]
+            );
+            $this->eventEmitter->emit('sabre:addressBookUpdated', [
+                [
+                    'path' => $this->buildAddressBookPath($updatedAddressBook['principaluri'], $updatedAddressBook['uri'])
+                ]
+            ]);
             $this->addChange($addressBookId, "", 2);
 
             return true;
@@ -457,8 +466,17 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             }
 
             $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
-            $query = [ '_id' => new \MongoId($subscriptionId) ];
-            $collection->update($query, [ '$set' => $newValues ]);
+            $updatedAddressBook = $collection->findAndModify(
+                [ '_id'  => new \MongoId($subscriptionId) ],
+                [ '$set' => $newValues ],
+                [ 'principaluri' => 1, 'uri' => 1],
+                [ 'new'  => true ]
+            );
+            $this->eventEmitter->emit('sabre:addressBookSubscriptionUpdated', [
+                [
+                    'path' => $this->buildAddressBookPath($updatedAddressBook['principaluri'], $updatedAddressBook['uri'])
+                ]
+            ]);
 
             return true;
         });
@@ -605,8 +623,17 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             }
 
             $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
-            $query = [ '_id' => new \MongoId($addressBookId) ];
-            $collection->update($query, [ '$set' => $newValues ]);
+            $updatedAddressBook = $collection->findAndModify(
+                [ '_id'  => new \MongoId($addressBookId) ],
+                [ '$set' => $newValues ],
+                [ 'principaluri' => 1, 'uri' => 1],
+                [ 'new'  => true ]
+            );
+            $this->eventEmitter->emit('sabre:addressBookSubscriptionUpdated', [
+                [
+                    'path' => $this->buildAddressBookPath($updatedAddressBook['principaluri'], $updatedAddressBook['uri'])
+                ]
+            ]);
 
             return true;
         });

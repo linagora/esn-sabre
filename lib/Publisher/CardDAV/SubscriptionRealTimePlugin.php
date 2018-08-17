@@ -12,6 +12,7 @@ class SubscriptionRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     private $PUBSUB_TOPICS = [
         'ADDRESSBOOK_SUBSCRIPTION_DELETED' => 'sabre:addressbook:subscription:deleted',
+        'ADDRESSBOOK_SUBSCRIPTION_UPDATED' => 'sabre:addressbook:subscription:updated'
     ];
 
     function __construct($client, $carddavBackend) {
@@ -25,6 +26,7 @@ class SubscriptionRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $eventEmitter = $this->carddavBackend->getEventEmitter();
 
         $eventEmitter->on('sabre:addressBookSubscriptionDeleted', [$this, 'onAddressBookSubscriptionDeleted']);
+        $eventEmitter->on('sabre:addressBookSubscriptionUpdated', [$this, 'onAddressBookSubscriptionUpdated']);
     }
 
     function buildData($data) {
@@ -37,6 +39,17 @@ class SubscriptionRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             [
                 'path' => $data['path'],
                 'owner' => $data['principaluri']
+            ]
+        );
+
+        $this->publishMessages();
+    }
+
+    function onAddressBookSubscriptionUpdated($data) {
+        $this->createMessage(
+            $this->PUBSUB_TOPICS['ADDRESSBOOK_SUBSCRIPTION_UPDATED'],
+            [
+                'path' => $data['path']
             ]
         );
 

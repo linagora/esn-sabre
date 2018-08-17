@@ -45,4 +45,14 @@ class AddressBookRealTimePluginTest extends \PHPUnit_Framework_TestCase {
             'principaluri' => self::PRINCIPAL_URI
         ]);
     }
+
+    function testAddressBookUpdated() {
+        $this->publisher
+            ->expects($this->once())
+            ->method('publish')
+            ->with('sabre:addressbook:updated');
+        $this->plugin->onAddressBookUpdated([
+            'path' => self::PATH,
+        ]);
+    }
 }

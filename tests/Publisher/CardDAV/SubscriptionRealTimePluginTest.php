@@ -35,4 +35,14 @@ class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
             'principaluri' => self::PRINCIPAL_URI
         ]);
     }
+
+    function testAddressBookSubscriptionUpdated() {
+        $this->publisher
+            ->expects($this->once())
+            ->method('publish')
+            ->with('sabre:addressbook:subscription:updated');
+        $this->plugin->onAddressBookSubscriptionUpdated([
+            'path' => self::PATH
+        ]);
+    }
 }

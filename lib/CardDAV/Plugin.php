@@ -10,7 +10,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
     function initialize(\Sabre\DAV\Server $server) {
         parent::initialize($server);
 
-        $server->on('method:DELETE', [$this, 'httpDelete'], 80);
+        $server->on('beforeUnbind', [$this, 'beforeUnbind']);
         $server->on('method:GET', [$this, 'httpGet'], 80);
         $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
         $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
@@ -52,22 +52,19 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return array('application/json', 'application/vcard+json');
     }
 
-    function httpDelete($request, $response) {
-        if (!$this->acceptJson()) {
-            return true;
-        }
+    function beforeUnbind($path) {
+        $protectedAddressBook = array(
+            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
+            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
+        );
 
-        $path = $request->getPath();
         $node = $this->server->tree->getNodeForPath($path);
 
-        $code = null;
-        $body = null;
-
         if ($node instanceof \Sabre\CardDAV\AddressBook) {
-            list($code, $body) = $this->deleteNode($path, $node);
+            if (in_array($node->getName(), $protectedAddressBook)) {
+                throw new \Sabre\DAV\Exception\Forbidden('Forbidden: You can not delete '.$node->getName().' address book');
+            }
         }
-
-        return $this->send($code, $body);
     }
 
     function httpGet($request, $response) {
@@ -296,23 +293,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];
-    }
-
-    private function deleteNode($nodePath, $node) {
-        $protectedAddressBook = array(
-            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
-            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
-        );
-
-        if (in_array($node->getName(), $protectedAddressBook)) {
-            return [403, [
-                'status' => 403,
-                'message' => 'Forbidden: You can not delete '.$node->getName().' address book'
-            ]];
-        }
-
-        $this->server->tree->delete($nodePath);
-        return [204, null];
     }
 
     private function changeAddressBookProperties($nodePath, $node, $jsonData) {

@@ -45,4 +45,14 @@ class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
             'path' => self::PATH
         ]);
     }
+
+    function testAddressBookSubscriptionCreated() {
+        $this->publisher
+            ->expects($this->once())
+            ->method('publish')
+            ->with('sabre:addressbook:subscription:created');
+        $this->plugin->onAddressBookSubscriptionCreated([
+            'path' => self::PATH
+        ]);
+    }
 }

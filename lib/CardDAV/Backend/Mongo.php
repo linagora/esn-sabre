@@ -445,6 +445,12 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
         $collection->insert($obj);
 
+        $this->eventEmitter->emit('sabre:addressBookSubscriptionCreated', [
+            [
+                'path' => $this->buildAddressBookPath($principalUri, $uri)
+            ]
+        ]);
+
         return (string)$obj['_id'];
     }
 
@@ -849,7 +855,22 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             $set['displayname'] = $slug;
         }
 
-        $collection->update($query, ['$set' => $set]);
+        if ($status === SPlugin::INVITE_ACCEPTED) {
+            $updatedAddressBook = $collection->findAndModify(
+                [ '_id' => $mongoAddressBookId ],
+                [ '$set' => $set ],
+                [ 'principaluri' => 1, 'uri' => 1 ],
+                [ 'new'  => true ]
+            );
+    
+            $this->eventEmitter->emit('sabre:addressBookSubscriptionCreated', [
+                [
+                    'path' => $this->buildAddressBookPath($updatedAddressBook['principaluri'], $updatedAddressBook['uri'])
+                ]
+            ]);
+        } else {
+            $collection->update($query, [ '$set' => $set ]);
+        }
     }
 
     protected function addChange($addressBookId, $objectUri, $operation) {

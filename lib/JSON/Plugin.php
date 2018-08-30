@@ -327,10 +327,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->deleteNode($path, $node);
         }
 
-        if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
-            list($code, $body) = $this->deleteSubscription($node);
-        }
-
         return $this->send($code, $body);
     }
 
@@ -421,12 +417,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         $this->server->tree->delete($nodePath);
-        return [204, null];
-    }
-
-    function deleteSubscription($node) {
-        $node->delete();
-
         return [204, null];
     }
 

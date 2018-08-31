@@ -962,6 +962,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $calendarInfo['principaluri'] = $publicCaldavCalendar['principaluri'];
         $calendarInfo['uri'] = $publicCaldavCalendar['uri'];
 
+        // Create calendar
         $publicCaldavCalendar['id'] = $this->caldavBackend->createCalendar($publicCaldavCalendar['principaluri'], $publicCaldavCalendar['uri'], $publicCaldavCalendar);
         $this->caldavBackend->saveCalendarPublicRight($publicCaldavCalendar['id'], '{DAV:}read', $calendarInfo);
 
@@ -975,6 +976,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'apple:order' => '99'
         ];
 
+        // Subscribe to calendar
         $subscriptionResponse = $this->makeRequest('POST', '/calendars/54b64eadf6d7d8e41d263e0f.json', $subscriptionBody);
 
         $this->assertEquals($subscriptionResponse->status, 201);
@@ -983,9 +985,13 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $jsonResponse = json_decode($getAllCalendarResponse->getBodyAsString());
         $allCalendarsAfterSubscription = count($jsonResponse->{'_embedded'}->{'dav:calendar'});
 
+        // Delete Original calendar
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0e');
         $deleteResponse = $this->makeRequest('DELETE', '/calendars/54b64eadf6d7d8e41d263e0e/'.$publicCaldavCalendar['uri'].'.json', null);
         $this->assertEquals($deleteResponse->status, 204);
 
+        // Check if Subscriptions to calendar have been deleted
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0f');
         $getSubscriptionResponse = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f/publicCalToRemoveSubscription.json?withRights=true', null);
         $this->assertEquals($getSubscriptionResponse->status, 404);
 

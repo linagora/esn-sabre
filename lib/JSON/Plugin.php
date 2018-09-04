@@ -27,7 +27,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $server->on('method:REPORT', [$this, 'httpReport'], 80);
         $server->on('method:POST', [$this, 'post'], 80);
         $server->on('method:GET', [$this, 'get'], 80);
-        $server->on('method:DELETE', [$this, 'delete'], 80);
         $server->on('method:PROPPATCH', [$this, 'proppatch'], 80);
         $server->on('method:PROPFIND', [$this, 'findProperties'], 80);
         $server->on('method:ITIP', [$this, 'itip'], 80);
@@ -116,6 +115,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         if ($node instanceof \Sabre\DAV\IFile) {
             return $this->checkModificationsRights($this->server->tree->getNodeForPath($path));
+        }
+
+        if ($node instanceof \Sabre\CalDAV\Calendar) {
+            $mainCalendarId = explode('/', $this->currentUser);
+
+            if ($node->getName() === \ESN\CalDAV\Backend\Esn::EVENTS_URI || $node->getName() === $mainCalendarId[2]) {
+                throw new DAV\Exception\Forbidden('Forbidden: You can not delete your main calendar');
+            }
         }
     }
 
@@ -308,32 +315,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return compact('includePersonal', 'includeSharedPublicSubscription', 'includeShared', 'sharedDelegationStatus');
     }
 
-    function delete($request, $response) {
-        if (!$this->acceptJson()) {
-            return true;
-        }
-
-        $path = $request->getPath();
-        $node = $this->server->tree->getNodeForPath($path);
-
-        $code = null;
-        $body = null;
-
-        if ($node instanceof \Sabre\CalDAV\CalendarHome) {
-            list($code, $body) = $this->deleteHomeNode($node);
-        }
-
-        if ($node instanceof \Sabre\CalDAV\Calendar) {
-            list($code, $body) = $this->deleteNode($path, $node);
-        }
-
-        if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
-            list($code, $body) = $this->deleteSubscription($node);
-        }
-
-        return $this->send($code, $body);
-    }
-
     function proppatch($request, $response) {
         if (!$this->acceptJson()) {
             return true;
@@ -409,37 +390,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];
-    }
-
-    function deleteNode($nodePath, $node) {
-        $mainCalendarId = explode('/', $this->currentUser);
-        if ($node->getName() === \ESN\CalDAV\Backend\Esn::EVENTS_URI || $node->getName() === $mainCalendarId[2]) {
-            return [403, [
-                'status' => 403,
-                'message' => 'Forbidden: You can not delete your main calendar'
-            ]];
-        }
-
-        $this->server->tree->delete($nodePath);
-        return [204, null];
-    }
-
-    function deleteSubscription($node) {
-        $node->delete();
-
-        return [204, null];
-    }
-
-    function deleteHomeNode($node) {
-        $children = $node->getChildren();
-
-        foreach ($children as $child) {
-            if($child instanceof \Sabre\CalDAV\Calendar) {
-                $child->delete();
-            }
-        }
-
-        return [204, null];
     }
 
     function changeCalendarProperties($nodePath, $node, $jsonData) {

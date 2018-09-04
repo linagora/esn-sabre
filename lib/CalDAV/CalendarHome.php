@@ -12,6 +12,23 @@ class CalendarHome extends \Sabre\CalDAV\CalendarHome {
         return array_map([$this, 'wrapCalendarForACLs'], parent::getChildren());
     }
 
+    /**
+     * Deletes this object
+     *
+     * @return void
+     */
+    function delete() {
+
+        $children = $this->getChildren();
+
+        foreach ($children as $child) {
+            if($child instanceof \Sabre\CalDAV\Calendar) {
+                $child->delete();
+            }
+        }
+
+    }
+
     private function wrapCalendarForACLs($cal) {
         if ($cal instanceof \Sabre\CalDAV\SharedCalendar) {
             return new SharedCalendar($cal);

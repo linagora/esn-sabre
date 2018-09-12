@@ -46,6 +46,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $this->db = $db;
 
         $this->eventEmitter = new EventEmitter();
+        $this->ensureIndex();
     }
 
     function getEventEmitter() {
@@ -180,6 +181,71 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $this->eventEmitter->emit('esn:calendarCreated', [$this->getCalendarPath($principalUri, $calendarUri)]);
         return [$calendarId, (string)$obj['_id']];
+    }
+
+    function createDefaultCalendar($principalUri, $calendarUri) {
+        $calendar = $this->checkIfCalendarInstanceExist($principalUri, $calendarUri);
+
+        if($calendar) {
+            return $calendar;
+        }
+
+        // Default value
+        $sccs = '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set';
+
+        // Insert in calendars collection
+        $obj = [
+          'synctoken' => 1
+        ];
+        if (!isset($properties[$sccs])) {
+            $obj['components'] = ['VEVENT', 'VTODO'];
+        } else {
+            if (!($properties[$sccs] instanceof \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet)) {
+                throw new \Sabre\DAV\Exception('The ' . $sccs . ' property must be of type: \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet');
+            }
+            $obj['components'] = $properties[$sccs]->getValue();
+        }
+
+        $collection = $this->db->selectCollection($this->calendarTableName);
+        $calendarModified = $collection->findAndModify(array(), $obj, array('_id'), array('upsert' => true, 'new' => true));
+        $calendarId = (string)$calendarModified['_id'];
+
+        // Insert in calendarinstances collection
+        $obj = [
+            'principaluri' => $principalUri,
+            'uri' => $calendarUri,
+            'transparent' => 0,
+            'access' => 1,
+            'share_invitestatus' => 2,
+            'calendarid' => new \MongoId($calendarId)
+        ];
+
+        $transp = '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp';
+        if (isset($properties[$transp])) {
+            $obj['transparent'] = $properties[$transp]->getValue() === 'transparent';
+        }
+        foreach($this->propertyMap as $xmlName=>$dbName) {
+            if (isset($properties[$xmlName])) {
+                $obj[$dbName] = $properties[$xmlName];
+            } else {
+                $obj[$dbName] = null;
+            }
+        }
+
+        if($this->isPrincipalResource($obj['principaluri'])) {
+            $obj['public_right'] = self::RESOURCE_CALENDAR_PUBLIC_PRIVILEGE;
+        }
+
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+        $modified = $collection->findAndModify(
+            array('principaluri' => $principalUri, 'uri' => $calendarUri),
+            $obj,
+            array('_id'),
+            array('upsert' => true, 'new' => true)
+        );
+
+        $this->eventEmitter->emit('esn:calendarCreated', [$this->getCalendarPath($principalUri, $calendarUri)]);
+        return [$calendarId, (string)$modified['_id']];
     }
 
     private function isPrincipalResource($principalUri) {
@@ -1036,5 +1102,14 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $update = [ '$inc' => [ 'synctoken' => 1 ] ];
         $calcollection->update($query, $update);
+    }
+
+    private function ensureIndex() {
+        // create a unique compound index on 'principaluri' and 'uri' for address book collection
+        $calendarInstanceCollection = $this->db->selectCollection($this->calendarInstancesTableName);
+        $calendarInstanceCollection->createIndex(
+            array('principaluri' => 1, 'uri' => 1),
+            array('unique' => true)
+        );
     }
 }

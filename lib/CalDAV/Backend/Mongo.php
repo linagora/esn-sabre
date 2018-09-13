@@ -42,7 +42,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     const MAX_DATE = '2038-01-01';
     const RESOURCE_CALENDAR_PUBLIC_PRIVILEGE = '{DAV:}read';
 
-    function __construct(\MongoDB $db) {
+    function __construct(\MongoDB\Database $db) {
         $this->db = $db;
 
         $this->eventEmitter = new EventEmitter();
@@ -64,19 +64,24 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $fields[] = 'share_invitestatus';
 
         $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-        $query = [ 'principaluri' => $principalUri ];
 
-        $res = $collection->find($query, $fields);
-        $res->sort(['calendarorder' => 1]);
+        $query = [ 'principaluri' => $principalUri ];
+        $projection = array_fill_keys($fields, 1);
+        $options = [
+            'projection' => $projection,
+            'sort' => ['calendarorder' => 1]
+        ];
+
+        $res = $collection->find($query, $options);
 
         $calendars = [];
         foreach ($res as $row) {
             $collection = $this->db->selectCollection($this->calendarTableName);
-            $query = [ '_id' => new \MongoId((string)$row['calendarid'])];
+            $query = [ '_id' => new \MongoDB\BSON\ObjectId((string)$row['calendarid'])];
             $fields = [ '_id', 'synctoken', 'components' ];
             $calendarInstanceRow = $collection->findOne($query, $fields);
 
-            $components = $calendarInstanceRow['components'];
+            $components = $calendarInstanceRow['components']->getArrayCopy();
 
             $calendar = [
                 'id' => [(string)$row['calendarid'], (string)$row['_id']],
@@ -146,8 +151,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         }
 
         $collection = $this->db->selectCollection($this->calendarTableName);
-        $collection->insert($obj);
-        $calendarId = (string)$obj['_id'];
+        $insertResult = $collection->insertOne($obj);
+        $calendarId = (string) $insertResult->getInsertedId();
 
         // Insert in calendarinstances collection
         $obj = [
@@ -156,7 +161,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             'transparent' => 0,
             'access' => 1,
             'share_invitestatus' => 2,
-            'calendarid' => new \MongoId($calendarId)
+            'calendarid' => new \MongoDB\BSON\ObjectId($calendarId)
         ];
 
         $transp = '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp';
@@ -176,10 +181,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         }
 
         $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-        $collection->insert($obj);
+        $insertResult = $collection->insertOne($obj);
 
         $this->eventEmitter->emit('esn:calendarCreated', [$this->getCalendarPath($principalUri, $calendarUri)]);
-        return [$calendarId, (string)$obj['_id']];
+        return [$calendarId, (string) $insertResult->getInsertedId()];
     }
 
     private function isPrincipalResource($principalUri) {
@@ -223,12 +228,12 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             }
 
             $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-            $query = [ '_id' => new \MongoId($instanceId) ];
-            $collection->update($query, [ '$set' => $newValues ]);
+            $query = [ '_id' => new \MongoDB\BSON\ObjectId($instanceId) ];
+            $collection->updateOne($query, [ '$set' => $newValues ]);
             $this->addChange($calendarId, "", 2);
 
             $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-            $query = [ '_id' => new \MongoId($instanceId) ];
+            $query = [ '_id' => new \MongoDB\BSON\ObjectId($instanceId) ];
             $fields = [
                 'uri',
                 'principaluri'
@@ -247,8 +252,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $this->_assertIsArray($calendarIdArray);
 
         list($calendarId, $instanceId) = $calendarIdArray;
-        $mongoId = new \MongoId($calendarId);
-        $mongoInstanceId = new \MongoId($instanceId);
+        $mongoId = new \MongoDB\BSON\ObjectId($calendarId);
+        $mongoInstanceId = new \MongoDB\BSON\ObjectId($instanceId);
 
         $collection = $this->db->selectCollection($this->calendarInstancesTableName);
         $query = [ '_id' => $mongoInstanceId ];
@@ -265,19 +270,19 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $this->deleteSubscribers($row['principaluri'], $row['uri']);
 
             $collection = $this->db->selectCollection($this->calendarObjectTableName);
-            $collection->remove([ 'calendarid' => $mongoId ]);
+            $collection->deleteMany([ 'calendarid' => $mongoId ]);
 
             $collection = $this->db->selectCollection($this->calendarChangesTableName);
-            $collection->remove([ 'calendarid' => $mongoId ]);
+            $collection->deleteMany([ 'calendarid' => $mongoId ]);
 
             $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-            $collection->remove([ 'calendarid' => $mongoId ]);
+            $collection->deleteMany([ 'calendarid' => $mongoId ]);
 
             $collection = $this->db->selectCollection($this->calendarTableName);
-            $collection->remove([ '_id' => $mongoId ]);
+            $collection->deleteMany([ '_id' => $mongoId ]);
         } else {
             $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-            $collection->remove([ '_id' => $mongoInstanceId ]);
+            $collection->deleteMany([ '_id' => $mongoInstanceId ]);
         }
 
         $this->eventEmitter->emit('esn:calendarDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
@@ -383,7 +388,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             'lastoccurence' => $extraData['lastOccurence'],
             'uid' => $extraData['uid']
         ];
-        $collection->insert($obj);
+        $collection->insertOne($obj);
         $this->addChange($calendarId, $objectUri, 1);
 
         return '"' . $extraData['etag'] . '"';
@@ -409,7 +414,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             'uid' => $extraData['uid'],
         ] ];
 
-        $collection->update($query, $obj);
+        $collection->updateMany($query, $obj);
         $this->addChange($calendarId, $objectUri, 2);
 
         return '"' . $extraData['etag'] . '"';
@@ -422,7 +427,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
         $query = [ 'calendarid' => $calendarId, 'uri' => $objectUri ];
-        $collection->remove($query);
+        $collection->deleteMany($query);
         $this->addChange($calendarId, $objectUri, 3);
     }
 
@@ -482,7 +487,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $result = [];
         foreach ($collection->find($query, $fields) as $row) {
             if ($requirePostFilter) {
-                if (!$this->validateFilterForObject($row, $filters)) {
+                if (!$this->validateFilterForObject((array) $row, $filters)) {
                     continue;
                 }
             }
@@ -499,7 +504,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $fields = ['calendarid', 'uri', 'access'];
 
         $calendarInstances = $collection->find($query, $fields);
-        if (!$calendarInstances || !$calendarInstances->hasNext()) return null;
+        if (!$calendarInstances) return null;
 
         $calendarUris = array();
         foreach($calendarInstances as $calendarInstance) {
@@ -510,6 +515,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 $calendarUris[(string) $calendarInstance['calendarid']] = (string) $calendarInstance['uri'];
             }
         }
+        if (empty($calendarUris)) return null;
 
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
         $query = ['calendarid' => ['$in' => array_keys($calendarUris)] , 'uid' => $uid ];
@@ -529,7 +535,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         // Current synctoken
         $collection = $this->db->selectCollection($this->calendarTableName);
-        $mongoCalendarId = new \MongoId($calendarId);
+        $mongoCalendarId = new \MongoDB\BSON\ObjectId($calendarId);
         $fields = ['synctoken'];
         $query = [ '_id' => $mongoCalendarId ];
 
@@ -553,9 +559,15 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $query = [ 'synctoken' => [ '$gte' => (int)$syncToken, '$lt' => (int)$currentToken ],
                        'calendarid' => $mongoCalendarId ];
 
-            $res = $collection->find($query, $fields);
-            $res->sort([ 'synctoken' => 1 ]);
-            if ($limit > 0) $res->limit((int)$limit);
+            $projection = array_fill_keys($fields, 1);
+            $options = [
+                'projection' => $projection,
+                'sort' => ['calendarorder' => 1]
+            ];
+
+            if ($limit > 0) $options['limit'] = $limit;
+
+            $res = $collection->find($query, $options);
 
             // Fetching all changes
             $changes = [];
@@ -604,9 +616,15 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         // Making fields a comma-delimited list
         $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
+
         $query = [ 'principaluri' => $principalUri ];
-        $res = $collection->find($query, $fields);
-        $res->sort(['calendarorder' => 1]);
+        $projection = array_fill_keys($fields, 1);
+        $options = [
+            'projection' => $projection,
+            'sort' => ['calendarorder' => 1]
+        ];
+
+        $res = $collection->find($query, $options);
 
         $subscriptions = [];
         foreach ($res as $row) {
@@ -655,11 +673,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         }
 
         $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
-        $collection->insert($obj);
+        $insertResult = $collection->insertOne($obj);
 
         $this->eventEmitter->emit('esn:subscriptionCreated', [$this->getCalendarPath($principalUri, $uri)]);
-        
-        return (string)$obj['_id'];
+
+        return (string) $insertResult->getInsertedId();
     }
 
     function updateSubscription($subscriptionId, \Sabre\DAV\PropPatch $propPatch) {
@@ -681,8 +699,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             }
 
             $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
-            $query = [ '_id' => new \MongoId($subscriptionId) ];
-            $collection->update($query, [ '$set' => $newValues ]);
+            $query = [ '_id' => new \MongoDB\BSON\ObjectId($subscriptionId) ];
+            $collection->updateMany($query, [ '$set' => $newValues ]);
 
             $fields = [
                 'uri',
@@ -698,17 +716,17 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     function deleteSubscription($subscriptionId) {
         $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
-        $query = [ '_id' => new \MongoId($subscriptionId) ];
+        $query = [ '_id' => new \MongoDB\BSON\ObjectId($subscriptionId) ];
         $fields = [
             'uri',
             'principaluri',
             'source'
         ];
         $row = $collection->findOne($query, $fields);
-        $collection->remove($query);
+        $collection->deleteMany($query);
 
         $this->eventEmitter->emit('esn:subscriptionDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri']), '/' . $row['source']]);
-        
+
     }
 
     function getSubscribers($source) {
@@ -771,7 +789,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function deleteSchedulingObject($principalUri, $objectUri) {
         $collection = $this->db->selectCollection($this->schedulingObjectTableName);
         $query = [ 'principaluri' => $principalUri, 'uri' => $objectUri ];
-        $collection->remove($query);
+        $collection->deleteMany($query);
     }
 
     function createSchedulingObject($principalUri, $objectUri, $objectData) {
@@ -784,7 +802,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             'etag' => md5($objectData),
             'size' => strlen($objectData)
         ];
-        $collection->insert($obj);
+        $collection->insertOne($obj);
     }
 
     function updateInvites($calendarId, array $sharees) {
@@ -794,17 +812,17 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $currentInvites = $this->getInvites($calendarId);
         list($calendarId, $instanceId) = $calendarId;
-        $mongoCalendarId = new \MongoId($calendarId);
-        $mongoInstanceId = new \MongoId($instanceId);
+        $mongoCalendarId = new \MongoDB\BSON\ObjectId($calendarId);
+        $mongoInstanceId = new \MongoDB\BSON\ObjectId($instanceId);
 
         $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-        $existingInstance = $collection->findOne([ '_id' => $mongoInstanceId ]);
+        $existingInstance = $collection->findOne([ '_id' => $mongoInstanceId ], ['projection' => ['_id' => 0]]);
 
         foreach($sharees as $sharee) {
             if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS) {
                 // TODO access === 2 || access === 3
                 $uri = $collection->findone([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ], ['uri']);
-                $collection->remove([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ]);
+                $collection->deleteMany([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ]);
 
                 $calendarInstances[] = [
                     'uri' => $uri['uri'],
@@ -830,7 +848,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             foreach($currentInvites as $oldSharee) {
                 if ($oldSharee->href === $sharee->href) {
                     $sharee->properties = array_merge($oldSharee->properties, $sharee->properties);
-                    $collection->update([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ], [ '$set' => [
+                    $collection->updateMany([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ], [ '$set' => [
                         'access' => $sharee->access,
                         'share_displayname' => isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null,
                         'share_invitestatus' => $sharee->inviteStatus ?: $oldSharee->inviteStatus
@@ -855,8 +873,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $existingInstance['share_href'] = $sharee->href;
             $existingInstance['share_displayname'] = isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null;
             $existingInstance['share_invitestatus'] = $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
-            unset($existingInstance['_id']);
-            $collection->insert($existingInstance);
+            $collection->insertOne($existingInstance);
 
             $calendarInstances[] = [
                 'uri' => $existingInstance['uri'],
@@ -872,7 +889,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $this->_assertIsArray($calendarId);
 
         $calendarId = $calendarId[0];
-        $mongoCalendarId = new \MongoId($calendarId);
+        $mongoCalendarId = new \MongoDB\BSON\ObjectId($calendarId);
 
         $fields[] = 'principaluri';
         $fields[] = 'access';
@@ -905,7 +922,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function prepareRequestForCalendarPublicRight($calendarId) {
         $this->_assertIsArray($calendarId);
 
-        $mongoCalendarId = new \MongoId($calendarId[0]);
+        $mongoCalendarId = new \MongoDB\BSON\ObjectId($calendarId[0]);
 
         return [$this->db->selectCollection($this->calendarInstancesTableName), ['calendarid' => $mongoCalendarId]];
     }
@@ -913,7 +930,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function saveCalendarPublicRight($calendarId, $privilege, $calendarInfo) {
         list($collection, $query) = $this->prepareRequestForCalendarPublicRight($calendarId);
 
-        $collection->update($query, ['$set' => ['public_right' => $privilege]]);
+        $collection->updateMany($query, ['$set' => ['public_right' => $privilege]]);
 
         if(!in_array($privilege, ['{DAV:}read', '{DAV:}write'])) {
             $this->eventEmitter->emit('esn:updatePublicRight', [$this->getCalendarPath($calendarInfo['principaluri'], $calendarInfo['uri']), false]);
@@ -926,12 +943,12 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function saveCalendarInviteStatus($calendarId, $status) {
         $this->_assertIsArray($calendarId);
 
-        $mongoCalendarId = new \MongoId($calendarId[1]);
+        $mongoCalendarId = new \MongoDB\BSON\ObjectId($calendarId[1]);
 
         $collection =$this->db->selectCollection($this->calendarInstancesTableName);
         $query = ['_id' => $mongoCalendarId];
 
-        $collection->update($query, ['$set' => ['share_invitestatus' => $status]]);
+        $collection->updateMany($query, ['$set' => ['share_invitestatus' => $status]]);
     }
 
     function getCalendarPublicRight($calendarId) {
@@ -1020,7 +1037,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     protected function addChange($calendarId, $objectUri, $operation) {
         $calcollection = $this->db->selectCollection($this->calendarTableName);
-        $mongoCalendarId = new \MongoId($calendarId);
+        $mongoCalendarId = new \MongoDB\BSON\ObjectId($calendarId);
         $fields = ['synctoken'];
         $query = [ '_id' => $mongoCalendarId ];
         $res = $calcollection->findOne($query, $fields);
@@ -1032,9 +1049,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             'calendarid' => $mongoCalendarId,
             'operation' => $operation
         ];
-        $changecollection->insert($obj);
+        $changecollection->insertOne($obj);
 
         $update = [ '$inc' => [ 'synctoken' => 1 ] ];
-        $calcollection->update($query, $update);
+        $calcollection->updateOne($query, $update);
     }
 }

@@ -32,7 +32,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $parts = explode('/', $path);
         if ($parts[0] == 'principals' && isset($this->collectionMap[$parts[1]]) && count($parts) == 3) {
             $collection = $this->collectionMap[$parts[1]];
-            $obj = $collection->findOne(['_id' => new \MongoId($parts[2])]);
+            $obj = $collection->findOne(['_id' => new \MongoDB\BSON\ObjectId($parts[2])]);
 
             if ($parts[1] == 'resources') {
                 $domain = $this->db->domains->findOne(['_id' => $obj['domain']]);
@@ -68,7 +68,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $principals = [];
         if (count($parts) == 3 && $parts[0] == 'principals' && isset($this->collectionMap[$parts[1]])) {
             $collection = $this->collectionMap[$parts[1]];
-            $res = $collection->findOne([ '_id' => new \MongoId($parts[2])], [ 'members.member.id' ]);
+            $res = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($parts[2])], [ 'members.member.id' ]);
             if ($res && isset($res['members'])) {
                 foreach ($res['members'] as $member) {
                     $principals[] = 'principals/users/' . $member['member']['id'];
@@ -83,13 +83,13 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $parts = explode('/', $principal);
         $principals = [];
         if (count($parts) == 3 && $parts[0] == 'principals' && $parts[1] == 'users') {
-            $query = [ 'members' => [ '$elemMatch' => [ 'member.id' => new \MongoId($parts[2]) ] ] ];
+            $query = [ 'members' => [ '$elemMatch' => [ 'member.id' => new \MongoDB\BSON\ObjectId($parts[2]) ] ] ];
 
-            foreach ($this->db->communities->find($query, ['_id']) as $community) {
+            foreach ($this->db->communities->find($query, ['projection' => ['_id' => 1]]) as $community) {
                 $principals[] = 'principals/communities/' . $community['_id'];
             }
 
-            foreach ($this->db->projects->find($query, ['_id']) as $project) {
+            foreach ($this->db->projects->find($query, ['projection' => ['_id' => 1]]) as $project) {
                 $principals[] = 'principals/projects/' . $project['_id'];
             }
         }
@@ -138,7 +138,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     '{DAV:}displayname' => $displayname
                 ];
 
-                if (isset($obj['domain']) && is_array($obj['domain'])) {
+                if (isset($obj['domain']) && $obj['domain'] instanceof \MongoDB\Model\BSONDocument) {
                     $principal['{http://sabredav.org/ns}email-address'] = $obj['_id'] . '@' . $obj['domain']['name'];
                 }
                 break;
@@ -159,7 +159,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         $principals = [];
-        $res = $collection->find($query, [ '_id' ]);
+        $res = $collection->find($query, ['projection' => ['_id' => 1]]);
         foreach ($res as $obj) {
             $principals[] = 'principals/' . $prefix . '/' . $obj['_id'];
         }
@@ -176,9 +176,13 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 case '{http://sabredav.org/ns}email-address':
                     list($possibleId) = explode('@', $value);
 
-                    if($groupName === 'resources' && \MongoId::isValid ($possibleId)) {
-                        $query[] = [ '_id' =>  new \MongoId($possibleId) ];
-                        break;
+                    try {
+                        if($groupName === 'resources') {
+                            $query[] = [ '_id' =>  new \MongoDB\BSON\ObjectId($possibleId) ];
+                            break;
+                        }
+                    } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
+                        //Resource email has not the default format {resourceId}@{domain}, skipping custom query
                     }
 
                     $query[] = [ 'email' => [

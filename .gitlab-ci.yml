@@ -20,7 +20,7 @@ stages:
       - $SKIP_BUILD_PKG
 
 test:
-  image: linagora/php-deps-composer:5.6.30
+  image: linagora/php-deps-composer:7.0.31
   stage: test
   tags:
     - docker

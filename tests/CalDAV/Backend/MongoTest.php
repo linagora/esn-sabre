@@ -9,12 +9,12 @@ require_once 'AbstractDatabaseTest.php';
  */
 class MongoTest extends AbstractDatabaseTest {
     protected function generateId() {
-        return [(string) new \MongoId(), (string) new \MongoId()];
+        return [(string) new \MongoDB\BSON\ObjectId(), (string) new \MongoDB\BSON\ObjectId()];
     }
 
     protected function getBackend() {
-        $mc = new \MongoClient(ESN_MONGO_SABREURI);
-        $db = $mc->selectDB(ESN_MONGO_SABREDB);
+        $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);
+        $db = $mc->{ESN_MONGO_SABREDB};
         $db->drop();
         return new Mongo($db);
     }

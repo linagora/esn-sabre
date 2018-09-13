@@ -17,26 +17,26 @@ class CollaborationMembersPluginTest extends \Sabre\DAVServerTest {
     protected $setupACL = true;
 
     function setUp() {
-        $mcesn = new \MongoClient(ESN_MONGO_ESNURI);
-        $this->esndb = $mcesn->selectDB(ESN_MONGO_ESNDB);
+        $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
+        $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
         $this->plugin = new CollaborationMembersPluginMock($this->esndb);
 
-        $mcsabre = new \MongoClient(ESN_MONGO_SABREURI);
-        $this->sabredb = $mcsabre->selectDB(ESN_MONGO_SABREDB);
+        $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
+        $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
 
         $this->esndb->drop();
         $this->sabredb->drop();
 
-        $this->userMongoId = new \MongoId();
-        $this->commMongoId = new \MongoId();
-        $this->projMongoId = new \MongoId();
+        $this->userMongoId = new \MongoDB\BSON\ObjectId();
+        $this->commMongoId = new \MongoDB\BSON\ObjectId();
+        $this->projMongoId = new \MongoDB\BSON\ObjectId();
         $this->userEmail = 'user@example.com';
         $this->autoLogin = 'users/' . $this->userMongoId;
 
         parent::setUp();
 
         $this->server->addPlugin($this->plugin);
-        $this->esndb->users->insert([
+        $this->esndb->users->insertOne([
             '_id' => $this->userMongoId,
             'firstname' => 'test',
             'lastname' => 'user',
@@ -45,14 +45,14 @@ class CollaborationMembersPluginTest extends \Sabre\DAVServerTest {
             ]
         ]);
 
-        $this->esndb->communities->insert([
+        $this->esndb->communities->insertOne([
             '_id' => $this->commMongoId,
             'title' => 'community',
             'members' => [
               [ 'member' => [ 'id' => $this->userMongoId, 'objectType' => 'user' ] ]
             ]
         ]);
-        $this->esndb->projects->insert([
+        $this->esndb->projects->insertOne([
             '_id' => $this->projMongoId,
             'title' => 'project',
             'members' => [

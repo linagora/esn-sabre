@@ -39,17 +39,17 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
     );
 
     function setUp() {
-        $mcesn = new \MongoClient(ESN_MONGO_ESNURI);
-        $this->esndb = $mcesn->selectDB(ESN_MONGO_ESNDB);
+        $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
+        $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
 
-        $mcsabre = new \MongoClient(ESN_MONGO_SABREURI);
-        $this->sabredb = $mcsabre->selectDB(ESN_MONGO_SABREDB);
+        $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
+        $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
 
         $this->sabredb->drop();
         $this->esndb->drop();
 
-        $this->esndb->users->insert([
-            '_id' => new \MongoId('54b64eadf6d7d8e41d263e0f'),
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0f'),
             'firstname' => 'Roberto',
             'lastname' => 'Carlos',
             'accounts' => [
@@ -61,8 +61,8 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
                 ]
             ]
         ]);
-        $this->esndb->users->insert([
-            '_id' => new \MongoId('54b64eadf6d7d8e41d263e0e'),
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0e'),
             'accounts' => [
                 [
                     'type' => 'email',
@@ -142,7 +142,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->cal['id'] = $this->caldavBackend->createCalendar($this->cal['principaluri'], $this->cal['uri'], $this->cal);
         $this->caldavBackend->createCalendarObject($this->cal['id'], 'simple.ics', $this->ical);
         $this->caldavBackend->createCalendarObject($this->cal['id'], 'rec.ics', $this->icalRec);
-        
+
         $this->calUser2 = $this->caldavCalendarUser2;
         $this->calUser2['id'] = $this->caldavBackend->createCalendar($this->calUser2['principaluri'], $this->calUser2['uri'], $this->calUser2);
         $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'simple.ics', $this->ical);
@@ -317,7 +317,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals('1.2', $this->msg->scheduleStatus);
         $this->assertTrue($requestCalled);
     }
-    
+
     function testSendRecToExternalUser() {
         $messages[] = join("\r\n", [
             'BEGIN:VCALENDAR',

@@ -30,11 +30,11 @@ function exception_error_handler($errno, $errstr, $errfile, $errline ) {
 set_error_handler("exception_error_handler");
 
 try {
-    $mongoEsn = new MongoClient($dbConfig['esn']['connectionString'], $dbConfig['esn']['connectionOptions']);
+    $mongoEsn = new \MongoDB\Client($dbConfig['esn']['connectionString'], $dbConfig['esn']['connectionOptions']);
     if ($dbConfig['esn']['connectionString'] == $dbConfig['sabre']['connectionString']) {
         $mongoSabre = $mongoEsn;
     } else {
-        $mongoSabre = new MongoClient($dbConfig['sabre']['connectionString'], $dbConfig['sabre']['connectionOptions']);
+        $mongoSabre = new \MongoDB\Client($dbConfig['sabre']['connectionString'], $dbConfig['sabre']['connectionOptions']);
     }
 } catch (MongoConnectionException $e) {
     // Create a fake server that will abort with the exception right away. This
@@ -48,8 +48,8 @@ try {
 }
 
 // Databases
-$esnDb = $mongoEsn->selectDB($dbConfig['esn']['db']);
-$sabreDb = $mongoSabre->selectDB($dbConfig['sabre']['db']);
+$esnDb = $mongoEsn->{$dbConfig['esn']['db']};
+$sabreDb = $mongoSabre->{$dbConfig['sabre']['db']};
 
 // Backends
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm']);

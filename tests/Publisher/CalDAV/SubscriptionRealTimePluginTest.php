@@ -14,13 +14,13 @@ class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     protected $server;
 
     function setUp() {
-        $this->eventEmitter = $this->getMock(\Sabre\Event\EventEmitter::class);
+        $this->eventEmitter = $this->createMock(\Sabre\Event\EventEmitter::class);
         $this->eventEmitter->expects($this->exactly(3))->method('on');
 
-        $this->publisher = $this->getMock(\ESN\Publisher\Publisher::class);
+        $this->publisher = $this->createMock(\ESN\Publisher\Publisher::class);
         $this->plugin = new SubscriptionRealTimePlugin($this->publisher, $this->eventEmitter);
-        
-        $this->server = $this->getMock(\Sabre\DAV\Server::class);
+
+        $this->server = $this->createMock(\Sabre\DAV\Server::class);
 
         $this->plugin->initialize($this->server);
     }

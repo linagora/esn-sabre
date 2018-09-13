@@ -15,12 +15,12 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         $obj = $this->carddavBackend->getCard($this->addressBookInfo['id'], $uri);
         if (!$obj) throw new \Sabre\DAV\Exception\NotFound('Card not found');
         $obj['acl'] = $this->getChildACL();
-        return new \Sabre\CardDAV\Card($this->carddavBackend, $this->addressBookInfo, $obj);
+        return new \Sabre\CardDAV\Card($this->carddavBackend, $this->addressBookInfo, (array) $obj);
     }
 
     function getACL() {
         if($properties = $this->getProperties(['{DAV:}acl'])) {
-            if (!in_array('dav:write', $properties['{DAV:}acl'])) {
+            if (!in_array('dav:write', (array) $properties['{DAV:}acl'])) {
                 $acl = [
                     [
                         'privilege' => '{DAV:}read',

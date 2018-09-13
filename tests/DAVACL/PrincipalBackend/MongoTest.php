@@ -18,46 +18,46 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
 
     static function setUpBeforeClass() {
-        $mc = new \MongoClient(ESN_MONGO_ESNURI);
-        self::$esndb = $mc->selectDB(ESN_MONGO_ESNDB);
+        $mc = new \MongoDB\Client(ESN_MONGO_ESNURI);
+        self::$esndb = $mc->{ESN_MONGO_ESNDB};
         self::$esndb->drop();
 
-        self::$esndb->domains->insert([
-            '_id' => new \MongoId(self::DOMAIN_ID),
+        self::$esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
             'name' => 'test',
         ]);
-        self::$esndb->users->insert([
-            '_id' => new \MongoId(self::USER_ID),
+        self::$esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID),
             'firstname' => 'first',
             'lastname' => 'last',
             'accounts' => [
                 [ 'type' => 'email', 'emails' => [ 'user@example.com' ] ]
             ]
         ]);
-        self::$esndb->users->insert([
-            '_id' => new \MongoId(self::USER_WITH_NO_LASTNAME),
+        self::$esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_NO_LASTNAME),
             'firstname' => 'Originalname',
             'accounts' => [
                 [ 'type' => 'email', 'emails' => [ 'userNoLast@example.com' ] ]
             ]
         ]);
-        self::$esndb->users->insert([
-            '_id' => new \MongoId(self::USER_WITH_NO_FIRSTNAME),
+        self::$esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_NO_FIRSTNAME),
             'lastname' => 'lastname',
             'accounts' => [
                 [ 'type' => 'email', 'emails' => [ 'userNoFirst@example.com' ] ]
             ]
         ]);
-        self::$esndb->users->insert([
-            '_id' => new \MongoId(self::USER_WITH_ACCOUNT_ID),
+        self::$esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_ACCOUNT_ID),
             'firstname' => 'withAccount',
             'lastname' => 'last',
             'accounts' => [
                 [ 'type' => 'email', 'emails' => [ 'userWithAccount@example.com' ] ]
             ]
         ]);
-        self::$esndb->users->insert([
-            '_id' => new \MongoId(self::USER_WITH_TWO_ACCOUNTS_ID),
+        self::$esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_TWO_ACCOUNTS_ID),
             'firstname' => 'withTwoAccounts',
             'lastname' => 'last',
             'accounts' => [
@@ -65,48 +65,48 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
                 [ 'type' => 'email', 'emails' => [ 'userWithTwoAccounts@example.com' ] ]
             ]
         ]);
-        self::$esndb->users->insert([
-            '_id' => new \MongoId(self::USER_WITH_NO_EMAIL_ID),
+        self::$esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_NO_EMAIL_ID),
             'firstname' => 'withNoEmail',
             'lastname' => 'last'
         ]);
-        self::$esndb->users->insert([
-            '_id' => new \MongoId(self::USER_WITH_NO_EMAIL_ACCOUNT_ID),
+        self::$esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_NO_EMAIL_ACCOUNT_ID),
             'firstname' => 'withNoEmailAccount',
             'lastname' => 'last',
             'accounts' => [
                 [ 'type' => 'twitter' ]
             ]
         ]);
-        self::$esndb->communities->insert([
-            '_id' => new \MongoId(self::COMMUNITY_ID),
+        self::$esndb->communities->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::COMMUNITY_ID),
             'title' => 'community',
             'members' => [
               [
                 'member' => [
                   'objectType' => 'user',
-                  'id' => new \MongoId(self::USER_ID)
+                  'id' => new \MongoDB\BSON\ObjectId(self::USER_ID)
                 ]
               ]
             ]
         ]);
-        self::$esndb->projects->insert([
-            '_id' => new \MongoId(self::PROJECT_ID),
+        self::$esndb->projects->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::PROJECT_ID),
             'title' => 'project',
             'members' => [
               [
                 'member' => [
                   'objectType' => 'user',
-                  'id' => new \MongoId(self::USER_ID)
+                  'id' => new \MongoDB\BSON\ObjectId(self::USER_ID)
                 ]
               ]
             ]
         ]);
 
-        self::$esndb->resources->insert([
-            '_id' => new \MongoId(self::RESOURCE_ID),
+        self::$esndb->resources->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_ID),
             'name' => 'resource',
-            'domain' => new \MongoId(self::DOMAIN_ID)
+            'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
         ]);
     }
 
@@ -324,6 +324,12 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
 
         $result = $backend->searchPrincipals('principals/users', array('{DAV:}displayname' => 'FIrST', '{http://sabredav.org/ns}email-address' => 'NOTFOUND'), 'anyof');
         $this->assertEquals(array('principals/users/' . self::USER_ID), $result);
+
+        $result = $backend->searchPrincipals('principals/resources', array('{http://sabredav.org/ns}email-address' => self::RESOURCE_ID . '@EXAMPLE.CoM'));
+        $this->assertEquals(array('principals/resources/' . self::RESOURCE_ID), $result);
+
+        $result = $backend->searchPrincipals('principals/resources', array('{http://sabredav.org/ns}email-address' => 'resource@EXAMPLE.CoM'));
+        $this->assertEquals([], $result);
     }
 
     /**

@@ -7,7 +7,7 @@ class RealTimePluginTest extends \PHPUnit_Framework_TestCase {
     protected $plugin;
 
     function setUp() {
-        $this->publisher = $this->getMock(Publisher::class);
+        $this->publisher = $this->createMock(Publisher::class);
         $this->plugin = $this->getMockForAbstractClass('\ESN\Publisher\RealTimePlugin', [$this->publisher]);
     }
 
@@ -41,11 +41,11 @@ class RealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->plugin->createMessage('topic', 'data');
         $this->plugin->publishMessages();
     }
-        
+
     function testPublishEmptyMessages() {
 
         $this->publisher->expects($this->never())->method('publish');
-        
+
         $this->plugin->publishMessages();
     }
 }

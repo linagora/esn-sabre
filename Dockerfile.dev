@@ -2,16 +2,12 @@
 # Docker container for ESN Sabre frontend development.
 #
 # Build:
-# docker build -t linagora/esn-sabre .
+# docker build -t linagora/esn-sabre-dev .
 #
 
 FROM linagora/esn-sabre
-MAINTAINER Linagora Folks <openpaas@linagora.com>
+LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get -y install php5-xdebug
-
-# Clean up APT when done.
-RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN pecl install xdebug
 
 CMD ["sh", "./scripts/start.sh"]

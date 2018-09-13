@@ -10,12 +10,12 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
     protected $carddavBackend;
 
     function setUp() {
-        $mcsabre = new \MongoClient(ESN_MONGO_SABREURI);
-        $this->sabredb = $mcsabre->selectDB(ESN_MONGO_SABREDB);
+        $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
+        $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
 
         $this->sabredb->drop();
 
-        $this->principalUri = "principals/user1";
+        $this->principalUri = "principals/users/user1";
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
 
         $this->books = new AddressBookHome($this->carddavBackend, $this->principalUri);

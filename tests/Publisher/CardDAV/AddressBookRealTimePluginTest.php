@@ -14,12 +14,12 @@ class AddressBookRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
     function setUp() {
         $this->cardDAVBackend = new CardDAVBackendMock();
-        $this->cardDAVBackend->setEventEmitter($this->getMock(\Sabre\Event\EventEmitter::class));
+        $this->cardDAVBackend->setEventEmitter($this->createMock(\Sabre\Event\EventEmitter::class));
 
-        $this->publisher = $this->getMock(\ESN\Publisher\Publisher::class);
-        $this->plugin = new AddressBookRealTimePlugin($this->publisher, $this->cardDAVBackend, $this->getMock(\Sabre\Event\EventEmitter::class));
+        $this->publisher = $this->createMock(\ESN\Publisher\Publisher::class);
+        $this->plugin = new AddressBookRealTimePlugin($this->publisher, $this->cardDAVBackend, $this->createMock(\Sabre\Event\EventEmitter::class));
 
-        $this->server = $this->getMock(\Sabre\DAV\Server::class);
+        $this->server = $this->createMock(\Sabre\DAV\Server::class);
 
         $this->plugin->initialize($this->server);
     }

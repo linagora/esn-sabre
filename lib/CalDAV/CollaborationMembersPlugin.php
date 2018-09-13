@@ -38,7 +38,7 @@ class CollaborationMembersPlugin extends ServerPlugin {
         }
 
         // Find all members in the collaboration
-        $query = [ '_id' => new \MongoId($parts[2]) ];
+        $query = [ '_id' => new \MongoDB\BSON\ObjectId($parts[2]) ];
         $fields = ['members'];
         $res = $this->collection->findOne($query, $fields);
         $members  = [];
@@ -53,13 +53,21 @@ class CollaborationMembersPlugin extends ServerPlugin {
         $authplugin = $this->server->getPlugin('auth');
         $organizerPrincipal = $authplugin->getCurrentPrincipal();
         $parts = explode('/', $organizerPrincipal);
-        $organizerId = new \MongoId($parts[2]);
+        $organizerId = new \MongoDB\BSON\ObjectId($parts[2]);
         $members[] = $organizerId;
 
         // Retrieve all collaboration members from the database
         $query = [ '_id' => [ '$in' => $members] ];
-        $fields = ['firstname', 'lastname', 'accounts', '_id'];
-        $userData = $this->db->users->find($query, $fields);
+        $options = [
+            'projection' => [
+                'firstname' => 1,
+                'lastname' => 1,
+                'accounts' => 1,
+                '_id' => 1
+            ]
+        ];
+
+        $userData = $this->db->users->find($query, $options);
 
         // Add one ATTENDEE property per collaboration member
         foreach ($userData as $user) {

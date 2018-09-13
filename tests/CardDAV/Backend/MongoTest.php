@@ -33,43 +33,43 @@ class MongoTest extends AbstractDatabaseTest {
             'synctoken' => 1
         ];
 
-        $this->db->addressbooks->insert($book);
-        $this->db->addressbooks->insert($book1);
+        $insertResultBook =  $this->db->addressbooks->insertOne($book);
+        $insertResultBook1 = $this->db->addressbooks->insertOne($book1);
 
-        $this->bookId = (string)$book['_id'];
-        $this->missingPropertiesBookId = (string)$book1['_id'];
+        $this->bookId = (string) $insertResultBook->getInsertedId();
+        $this->missingPropertiesBookId = (string) $insertResultBook1->getInsertedId();
 
         $card = [
-            'addressbookid' => $book['_id'],
+            'addressbookid' => new \MongoDB\BSON\ObjectId($this->bookId),
             'carddata' => 'card1',
             'uri' => 'card1',
             'lastmodified' => 0,
             'etag' => '"' . md5('card1') . '"',
             'size' => 5
         ];
-        $this->db->cards->insert($card);
-        $this->cardId = (string)$card['_id'];
+        $insertResultCard = $this->db->cards->insertOne($card);
+        $this->cardId = (string) $insertResultCard->getInsertedId();
 
         $card = [
-            'addressbookid' => $book['_id'],
+            'addressbookid' => new \MongoDB\BSON\ObjectId($this->bookId),
             'carddata' => 'card2',
             'uri' => 'card2',
             'lastmodified' => 0,
             'etag' => '"' . md5('card2') . '"',
             'size' => 5
         ];
-        $this->db->cards->insert($card);
+        $insertResultCard2 = $this->db->cards->insertOne($card);
 
-        $this->cardId2 = (string)$card['_id'];
+        $this->cardId2 = (string) $insertResultCard2->getInsertedId();
     }
 
     protected function generateId() {
-        return (string) new \MongoId();
+        return (string) new \MongoDB\BSON\ObjectId();
     }
 
     protected function getBackend() {
-        $mcsabre = new \MongoClient(ESN_MONGO_SABREURI);
-        $this->db = $mcsabre->selectDB(ESN_MONGO_SABREDB);
+        $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
+        $this->db = $mcsabre->{ESN_MONGO_SABREDB};
         $this->db->drop();
         return new Mongo($this->db);
     }
@@ -88,7 +88,7 @@ class MongoTest extends AbstractDatabaseTest {
             'synctoken' => 1
         ];
 
-        $this->db->addressbooks->insert($book);
+        $this->db->addressbooks->insertOne($book);
 
         $this->assertTrue($this->backend->addressBookExists('principals/users/user2', 'thisoneexists'));
         $this->assertFalse($this->backend->addressBookExists('principals/users/user2', 'thisonedoesnotexistsatall'));
@@ -136,54 +136,54 @@ class MongoTest extends AbstractDatabaseTest {
     function testGetCardsFilters() {
         $backend = $this->getBackend();
         $cardUpToDate = [
-            'addressbookid' => $this->book['_id'],
+            'addressbookid' => new \MongoDB\BSON\ObjectId($this->bookId),
             'carddata' => 'cardUpToDate',
             'uri' => 'cardUpToDate',
             'lastmodified' => 100,
             'etag' => '"' . md5('cardUpToDate') . '"',
             'size' => 5
         ];
-        $this->db->cards->insert($cardUpToDate);
+        $this->db->cards->insertOne($cardUpToDate);
 
         $cardOutdated1 = [
-            'addressbookid' => $this->book['_id'],
+            'addressbookid' => new \MongoDB\BSON\ObjectId($this->bookId),
             'carddata' => 'cardOutdated1',
             'uri' => 'cardOutdated1',
             'lastmodified' => 99,
             'etag' => '"' . md5('cardOutdated1') . '"',
             'size' => 5
         ];
-        $this->db->cards->insert($cardOutdated1);
+        $insertResultCard1 = $this->db->cards->insertOne($cardOutdated1);
 
         $cardOutdated2 = [
-            'addressbookid' => $this->book['_id'],
+            'addressbookid' => new \MongoDB\BSON\ObjectId($this->bookId),
             'carddata' => 'cardOutdated2',
             'uri' => 'cardOutdated2',
             'lastmodified' => 99,
             'etag' => '"' . md5('cardOutdated2') . '"',
             'size' => 5
         ];
-        $this->db->cards->insert($cardOutdated2);
+        $insertResultCard2 = $this->db->cards->insertOne($cardOutdated2);
         $filters = [
             'modifiedBefore' => 100
         ];
         $result = $backend->getCards($this->bookId, 0, 0, null, $filters);
 
         $expected = array(
-          array(
-            'id' => (string)$cardOutdated1['_id'],
-            'uri' => 'cardOutdated1',
-            'lastmodified' => 99,
-            'etag' => '"' . md5('cardOutdated1') . '"',
-            'size' => 5
-          ),
-          array(
-            'id' => (string)$cardOutdated2['_id'],
-            'uri' => 'cardOutdated2',
-            'lastmodified' => 99,
-            'etag' => '"' . md5('cardOutdated2') . '"',
-            'size' => 5
-          )
+            array(
+                'id' => (string) $insertResultCard1->getInsertedId(),
+                'uri' => 'cardOutdated1',
+                'lastmodified' => 99,
+                'etag' => '"' . md5('cardOutdated1') . '"',
+                'size' => 5
+            ),
+            array(
+                'id' => (string) $insertResultCard2->getInsertedId(),
+                'uri' => 'cardOutdated2',
+                'lastmodified' => 99,
+                'etag' => '"' . md5('cardOutdated2') . '"',
+                'size' => 5
+            )
         );
 
         $this->assertEquals($expected, $result);

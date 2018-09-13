@@ -97,7 +97,7 @@ class PluginTest extends PluginTestBase {
             'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
         );
 
-        $this->carddavBackend->createAddressBook($collectedAddressBook['principaluri'],
+        $returnValue =  $this->carddavBackend->createAddressBook($collectedAddressBook['principaluri'],
             $collectedAddressBook['uri'],
             [
                 '{DAV:}displayname' => 'collected',
@@ -347,7 +347,7 @@ class PluginTest extends PluginTestBase {
         $book = $addressbooks[0];
         $this->assertEquals('NAME', $book['{DAV:}displayname']);
         $this->assertEquals('DESCRIPTION', $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
-        $this->assertEquals(['dav:read'], $book['{DAV:}acl']);
+        $this->assertEquals(new \MongoDB\Model\BSONArray(['dav:read']), $book['{DAV:}acl']);
         $this->assertEquals('social', $book['{http://open-paas.org/contacts}type']);
     }
 

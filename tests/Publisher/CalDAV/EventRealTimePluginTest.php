@@ -91,7 +91,10 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testItipDoSendMessageIfScheduleFail() {
-        $plugin = $this->getMock(EventRealTimePlugin::class, ['publishMessages'], ['', new \ESN\CalDAV\CalDAVBackendMock()]);
+        $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
+            ->setMethods(['publishMessages'])
+            ->setConstructorArgs(['', new \ESN\CalDAV\CalDAVBackendMock()])
+            ->getMock();
         $plugin->expects($this->never())->method('publishMessages');
 
         $message = new \Sabre\VObject\ITip\Message();
@@ -103,7 +106,10 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testItipDelegateToScheduleAndPublishMessage() {
-        $plugin = $this->getMock(EventRealTimePlugin::class, ['schedule', 'publishMessages'], ['', new \ESN\CalDAV\CalDAVBackendMock()]);
+        $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
+            ->setMethods(['schedule', 'publishMessages'])
+            ->setConstructorArgs(['', new \ESN\CalDAV\CalDAVBackendMock()])
+            ->getMock();
         $plugin->expects($this->once())->method('schedule')->will($this->returnCallback(function($message) {
             $this->assertInstanceOf(\Sabre\VObject\ITip\Message::class, $message);
 

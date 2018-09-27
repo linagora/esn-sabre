@@ -18,21 +18,21 @@ class FreeBusyPluginTest extends \ESN\DAV\ServerMock {
         'users' => ['54b64eadf6d7d8e41d263e0f']
       ];
 
-      protected $freebusyBulkWithFilterData = [
+    protected $freebusyBulkWithFilterData = [
         'start' => '20120101T000000Z',
         'end' => '20150101T000000Z',
         'users' => ['54b64eadf6d7d8e41d263e0f'],
         'uids' => ['171EBEFC-C951-499D-B234-7BA7D677B45D']
       ];
 
-      protected $freebusyBulkWithDurationEvent = [
+    protected $freebusyBulkWithDurationEvent = [
         'start' => '20180401T000000Z',
         'end' => '20180401T003000Z',
         'users' => ['54b64eadf6d7d8e41d263e0f'],
         'uids' => ['171EBEFC-C951-499D-B234-7BA7D677B45D']
       ];
 
-      protected $freebusyBulkWithRecurringEvent = [
+    protected $freebusyBulkWithRecurringEvent = [
         'start' => '20180501T010000Z',
         'end' => '20180501T013000Z',
         'users' => ['54b64eadf6d7d8e41d263e0f'],

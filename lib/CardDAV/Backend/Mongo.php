@@ -342,7 +342,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     function getChangesForAddressBook($addressBookId, $syncToken, $syncLevel, $limit = null) {
         $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $res = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ], ['synctoken']);
+        $res = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ], [ 'projection' => [ 'synctoken' => 1 ] ] );
 
         if (!$res || is_null($res['synctoken'])) return null;
         $currentToken = $res['synctoken'];
@@ -602,7 +602,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
         $query = [ 'principaluri' => $principalUri ];
-        $res = $collection->find($query, $fields);
+        $projection = array_fill_keys($fields, 1);
+        $res = $collection->find($query, [ 'projection' => $projection ]);
 
         $addressBooks = [];
         foreach ($res as $row) {
@@ -926,9 +927,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     protected function addChange($addressBookId, $objectUri, $operation) {
         $adrcollection = $this->db->selectCollection($this->addressBooksTableName);
-        $fields = ['synctoken'];
+        $projection = [ 'synctoken' => 1 ];
         $query = [ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ];
-        $res = $adrcollection->findOne($query, $fields);
+        $res = $adrcollection->findOne($query, [ 'projection' => $projection ]);
 
         $changecollection = $this->db->selectCollection($this->addressBookChangesTableName);
 

@@ -74,50 +74,82 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $res = $collection->find($query, $options);
 
-        $calendars = [];
+        $calendarInstances = [];
+        $calendarIds = [];
+
         foreach ($res as $row) {
-            $collection = $this->db->selectCollection($this->calendarTableName);
-            $query = [ '_id' => new \MongoDB\BSON\ObjectId((string) $row['calendarid'])];
-            $projection = [
-                '_id' => 1,
-                'synctoken' => 1,
-                'components' => 1
-            ];
-            $calendarInstanceRow = $collection->findOne($query, [ 'projection' => $projection ]);
+            $calendarIds[] = new \MongoDB\BSON\ObjectId((string) $row['calendarid']);
 
-            $components = (array) $calendarInstanceRow['components'];
+            $calendarInstances[] = $row;
+        }
 
-            $calendar = [
-                'id' => [(string)$row['calendarid'], (string)$row['_id']],
-                'uri' => $row['uri'],
-                'principaluri' => $row['principaluri'],
-                '{' . \Sabre\CalDAV\Plugin::NS_CALENDARSERVER . '}getctag' => 'http://sabre.io/ns/sync/' . ($calendarInstanceRow['synctoken'] ? $calendarInstanceRow['synctoken'] : '0'),
-                '{http://sabredav.org/ns}sync-token' => $calendarInstanceRow['synctoken'] ? $calendarInstanceRow['synctoken'] : '0',
-                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' => new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet($components),
-                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp($row['transparent'] ? 'transparent' : 'opaque'),
-                'share-resource-uri' => '/ns/share/' . $row['_id'],
-                'share-invitestatus' => $row['share_invitestatus']
+        $collection = $this->db->selectCollection($this->calendarTableName);
+        $query = [ '_id' => [ '$in' => $calendarIds ] ];
+        $projection = [
+            '_id' => 1,
+            'synctoken' => 1,
+            'components' => 1
+        ];
+        $result = $collection->find($query, [ 'projection' => $projection ]);
+
+        $calendars = [];
+
+        foreach ($result as $row) {
+            $calendars[(string) $row['_id']] = $row;
+        }
+
+        $userCalendars = [];
+        foreach ($calendarInstances as $calendarInstance) {
+            $currentCalendarId = (string) $calendarInstance['calendarid'];
+
+            if (!isset($calendars[$currentCalendarId])) {
+                $this->server->getLogger().error(
+                    'No matching calendar found',
+                    'Calendar '.$currentCalendarId.' not found for calendar instance '.(string) $calendarInstance['_id']
+                );
+
+                continue;
+            }
+
+            $calendar = $calendars[$currentCalendarId];
+
+            $components = (array) $calendar['components'];
+
+            $userCalendar = [
+                'id' => [ (string) $calendarInstance['calendarid'], (string) $calendarInstance['_id'] ],
+                'uri' => $calendarInstance['uri'],
+                'principaluri' => $calendarInstance['principaluri'],
+                '{' . \Sabre\CalDAV\Plugin::NS_CALENDARSERVER . '}getctag' =>
+                    'http://sabre.io/ns/sync/' . ($calendar['synctoken'] ? $calendar['synctoken'] : '0'),
+                '{http://sabredav.org/ns}sync-token' =>
+                    $calendar['synctoken'] ? $calendar['synctoken'] : '0',
+                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' =>
+                    new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet($components),
+                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' =>
+                    new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp($calendarInstance['transparent'] ? 'transparent' : 'opaque'),
+                'share-resource-uri' => '/ns/share/' . $calendarInstance['_id'],
+                'share-invitestatus' => $calendarInstance['share_invitestatus']
             ];
 
             // 1 = owner, 2 = readonly, 3 = readwrite
-            if ($row['access'] > 1) {
-                $calendar['share-access'] = (int)$row['access'];
+            if ($calendarInstance['access'] > 1) {
+                $userCalendar['share-access'] = (int) $calendarInstance['access'];
                 // read-only is for backwards compatibility.
-                $calendar['read-only'] = (int)$row['access'] === \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
+                $userCalendar['read-only'] = (int) $calendarInstance['access'] === \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
             }
 
-            if (!$row['displayname'] ) {
-                $row['displayname'] = 'Events';
+            if (!$calendarInstance['displayname'] ) {
+                $calendarInstance['displayname'] = 'Events';
             }
 
             foreach($this->propertyMap as $xmlName=>$dbName) {
-                $calendar[$xmlName] = $row[$dbName];
+                $userCalendar[$xmlName] = $calendarInstance[$dbName];
             }
 
-            $calendars[] = $calendar;
+            $userCalendars[] = $userCalendar;
         }
 
-        return $calendars;
+        return $userCalendars;
     }
 
     private function checkIfCalendarInstanceExist($principalUri, $calendarUri) {
@@ -341,35 +373,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getCalendarObject($calendarId, $objectUri) {
-        $this->_assertIsArray($calendarId);
+        $result = $this->getMultipleCalendarObjects($calendarId, [ $objectUri ]);
 
-        $calendarId = $calendarId[0];
-
-        $collection = $this->db->selectCollection($this->calendarObjectTableName);
-        $query = [ 'calendarid' => $calendarId, 'uri' => $objectUri ];
-        $projection = [
-            '_id' => 1,
-            'uri' => 1,
-            'lastmodified' => 1,
-            'etag' => 1,
-            'calendarid' => 1,
-            'size' => 1,
-            'calendardata' => 1,
-            'componenttype' => 1
-        ];
-
-        $row = $collection->findOne($query, [ 'projection' => $projection ]);
-        if (!$row) return null;
-
-        return [
-            'id'            => (string) $row['_id'],
-            'uri'           => $row['uri'],
-            'lastmodified'  => $row['lastmodified'],
-            'etag'          => '"' . $row['etag'] . '"',
-            'size'          => (int) $row['size'],
-            'calendardata'  => $row['calendardata'],
-            'component'     => strtolower($row['componenttype']),
-         ];
+        return array_shift($result);
     }
 
     function getMultipleCalendarObjects($calendarId, array $uris) {

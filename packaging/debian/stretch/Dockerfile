@@ -10,11 +10,11 @@ ARG VERSION=0.0.0
 ARG ITERATION=1
 ARG TREEISH=master
 
-RUN apt-get update && apt-get install -y curl apt-transport-https && \
-    curl -s https://packages.sury.org/php/apt.gpg | apt-key add - && \
-    echo "deb https://packages.sury.org/php/ stretch main" > /etc/apt/sources.list.d/sury.org.list && \
-    apt-get update && \
-    apt-get -y install git php5.6-curl php5.6-dev php5.6-mbstring php5.6-bcmath php5.6-xml php-mongo
+RUN apt-get update && apt-get -y install git curl php7.0-curl php7.0-fpm php7.0-cli php7.0-bcmath php7.0-mbstring php-pear php7.0-dev
+
+RUN pecl install mongodb \
+    && echo "extension=mongodb.so" >> /etc/php/7.0/mods-available/mongodb.ini \
+    && phpenmod mongodb
 
 RUN curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/local/bin/composer.phar && ln -s /usr/local/bin/composer.phar /usr/local/bin/composer
 
@@ -46,12 +46,12 @@ RUN fpm \
   --deb-user openpaas \
   --deb-group openpaas \
   --depends nginx \
-  --depends php-mongo \
-  --depends php5.6-curl \
-  --depends php5.6-fpm \
-  --depends php5.6-mbstring \
-  --depends php5.6-bcmath \
-  --depends php5.6-xml \
+  --depends php7.0-curl \
+  --depends php7.0-fpm \
+  --depends php7.0-mbstring \
+  --depends php7.0-bcmath \
+  --depends php7.0-dev \
+  --depends php-pear \
   --depends mongodb \
   --depends rabbitmq-server \
   --before-install /root/openpaas-davserver.preinst \

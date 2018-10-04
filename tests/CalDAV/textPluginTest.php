@@ -38,7 +38,7 @@ class TextPluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($Res, $expected);
     }
 
-    function testGetSubscriptionCalendarTextReturnNothingWhenRequestIsNotCalendarObjectContainer() {
+    function testGetSubscriptionCalendarTextReturnNotImplementedWhenRequestIsNotCalendarObjectContainer() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'text/calendar',

@@ -562,7 +562,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $projection = array_fill_keys($fields, 1);
             $options = [
                 'projection' => $projection,
-                'sort' => ['calendarorder' => 1]
+                'sort' => [ 'synctoken' => 1 ]
             ];
 
             if ($limit > 0) $options['limit'] = $limit;

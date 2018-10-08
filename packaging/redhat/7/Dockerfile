@@ -11,7 +11,7 @@ ARG TREEISH=master
 
 RUN rpm -ivh http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && \
     rpm -ivh http://rpms.famillecollet.com/enterprise/remi-release-7.rpm && \
-    yum --setopt=alwaysprompt=no --enablerepo=remi,remi-php56 -y install git rpm-build php php-cli php-fpm php-curl php-bcmath php-mbstring php-xml php-pecl-mongo
+    yum --setopt=alwaysprompt=no --enablerepo=remi,remi-php70 -y install git rpm-build php php-cli php-fpm php-curl php-bcmath php-mbstring php-xml php-pecl-mongodb
 
 RUN curl -sS https://getcomposer.org/installer | php && \
     mv composer.phar /usr/local/bin/composer.phar && \
@@ -52,7 +52,7 @@ RUN fpm \
   --depends php-bcmath \
   --depends php-mbstring \
   --depends php-xml \
-  --depends php-pecl-mongo \
+  --depends php-pecl-mongodb \
   --depends mongodb-org \
   --depends rabbitmq-server \
   --before-install /root/openpaas-davserver.preinst \

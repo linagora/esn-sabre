@@ -34,7 +34,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         '{DAV:}write'
     ];
 
-    const MINIMAL_ADDRESSBOOK_FIELDS = ['_id' => 1, 'principaluri' => 1, 'uri' => 1];
+    const MINIMAL_ADDRESSBOOK_FIELDS = [
+        '_id' => 1,
+        'principaluri' => 1,
+        'uri' => 1
+    ];
 
     function __construct(\MongoDB\Database $db) {
         $this->db = $db;
@@ -48,12 +52,21 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function getAddressBooksForUser($principalUri) {
-        $fields = ['_id' => 1, 'uri' => 1, 'displayname' => 1, 'principaluri' => 1, 'privilege' => 1, 'type' => 1, 'description' => 1, 'synctoken' => 1];
-        $query = [ 'principaluri' => $principalUri ];
         $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $projection = [
+            '_id' => 1,
+            'uri' => 1,
+            'displayname' => 1,
+            'principaluri' => 1,
+            'privilege' => 1,
+            'type' => 1,
+            'description' => 1,
+            'synctoken' => 1
+        ];
+        $query = [ 'principaluri' => $principalUri ];
         $addressBooks = [];
 
-        foreach ($collection->find($query, [ 'projection' => $fields ]) as $row) {
+        foreach ($collection->find($query, [ 'projection' => $projection ]) as $row) {
             $addressBooks[] = [
                 'id'  => (string)$row['_id'],
                 'uri' => $row['uri'],
@@ -70,11 +83,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function addressBookExists($principalUri, $uri) {
-        $fields = ['_id' => 1, 'uri' => 1];
-        $query = [ 'principaluri' => $principalUri, 'uri' => $uri];
         $collection = $this->db->selectCollection($this->addressBooksTableName);
-
-        $doc = $collection->findOne($query, [ 'projection' => $fields ]);
+        $projection = [
+            '_id' => 1,
+            'uri' => 1
+        ];
+        $query = [ 'principaluri' => $principalUri, 'uri' => $uri];
+        $doc = $collection->findOne($query, [ 'projection' => $projection ]);
 
         return !empty($doc);
     }
@@ -219,7 +234,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function getCards($addressBookId, $offset = 0, $limit = 0, $sort = null, $filters = null) {
-        $fields = ['_id', 'uri', 'lastmodified', 'etag', 'size'];
+        $projection = [
+            '_id' => 1,
+            'uri' => 1,
+            'lastmodified' => 1,
+            'etag' => 1,
+            'size' => 1
+        ];
         $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
         $collection = $this->db->selectCollection($this->cardsTableName);
         $cards = [];
@@ -232,7 +253,6 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             }
         }
 
-        $projection = array_fill_keys($fields, 1);
         $options = [
             'projection' => $projection,
             'skip' => (int) $offset
@@ -259,12 +279,16 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function getCard($addressBookId, $cardUri) {
-        $fields = ['_id', 'uri', 'lastmodified', 'carddata', 'etag', 'size'];
-        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId), 'uri' => $cardUri ];
         $collection = $this->db->selectCollection($this->cardsTableName);
-
-        $projection = array_fill_keys($fields, 1);
-
+        $projection = [
+            '_id' => 1,
+            'uri' => 1,
+            'lastmodified' => 1,
+            'carddata' => 1,
+            'etag' => 1,
+            'size' => 1
+        ];
+        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId), 'uri' => $cardUri ];
         $card = $collection->findOne($query, ['projection' => $projection]);
         if ($card) {
             $card['id'] = (string) $card['_id'];
@@ -276,13 +300,19 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function getMultipleCards($addressBookId, array $uris) {
-        $fields = ['_id' => 1, 'uri' => 1, 'lastmodified' => 1, 'carddata' => 1, 'etag' => 1, 'size' => 1];
+        $collection = $this->db->selectCollection($this->cardsTableName);
+        $projection = [
+            '_id' => 1,
+            'uri' => 1,
+            'lastmodified' => 1,
+            'carddata' => 1,
+            'etag' => 1,
+            'size' => 1];
         $query = [
             'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
             'uri' => [ '$in' => $uris ]
         ];
-        $collection = $this->db->selectCollection($this->cardsTableName);
-        foreach ($collection->find($query, [ 'projection' => $fields ]) as $card) {
+        foreach ($collection->find($query, [ 'projection' => $projection ]) as $card) {
             $card = $card->getArrayCopy();
 
             $card['id'] = (string)$card['_id'];
@@ -342,7 +372,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     function getChangesForAddressBook($addressBookId, $syncToken, $syncLevel, $limit = null) {
         $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $res = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ], ['synctoken']);
+        $res = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ], [ 'projection' => [ 'synctoken' => 1 ] ] );
 
         if (!$res || is_null($res['synctoken'])) return null;
         $currentToken = $res['synctoken'];
@@ -364,12 +394,12 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             $projection = [
                 'uri' => 1,
                 'operation' => 1
-              ];
+            ];
 
             $options = [
                 'projection' => $projection,
                 'sort' => [ 'synctoken' => 1 ]
-              ];
+            ];
 
             if ($limit > 0) $options['limit'] = $limit;
 
@@ -410,19 +440,19 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function getSubscriptionsForUser($principalUri) {
-        $fields[] = '_id';
-        $fields[] = 'displayname';
-        $fields[] = 'description';
-        $fields[] = 'uri';
-        $fields[] = 'source';
-        $fields[] = 'principaluri';
-        $fields[] = 'lastmodified';
-        $fields[] = 'privilege';
-
         // Making fields a comma-delimited list
         $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
+        $projection = [
+            '_id' => 1,
+            'displayname' => 1,
+            'description' => 1,
+            'uri' => 1,
+            'source' => 1,
+            'principaluri' => 1,
+            'lastmodified' => 1,
+            'privilege' => 1
+        ];
         $query = [ 'principaluri' => $principalUri ];
-        $projection = array_fill_keys($fields, 1);
         $res = $collection->find($query, [ 'projection' => $projection ]);
 
         $subscriptions = [];
@@ -576,7 +606,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $collection = $this->db->selectCollection($this->addressBooksTableName);
         $query = ['_id' => $addressBookId];
 
-        $res = $collection->findOne($query, [ 'projection' => ['public_right' => 1] ]);
+        $res = $collection->findOne($query, [ 'projection' => [ 'public_right' => 1 ] ]);
 
         return isset($res['public_right']) ? $res['public_right'] : null;
     }
@@ -587,30 +617,34 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
      * @return array
      */
     function getSharedAddressBooksForUser($principalUri) {
-        $fields[] = '_id';
-        $fields[] = 'displayname';
-        $fields[] = 'description';
-        $fields[] = 'uri';
-        $fields[] = 'principaluri';
-        $fields[] = 'addressbookid';
-        $fields[] = 'lastmodified';
-        $fields[] = 'privilege';
-        $fields[] = 'share_access';
-        $fields[] = 'share_invitestatus';
-        $fields[] = 'share_href';
-        $fields[] = 'share_displayname';
-
         $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $projection = [
+            '_id' => 1,
+            'displayname' => 1,
+            'description' => 1,
+            'uri' => 1,
+            'principaluri' => 1,
+            'addressbookid' => 1,
+            'lastmodified' => 1,
+            'privilege' => 1,
+            'share_access' => 1,
+            'share_invitestatus' => 1,
+            'share_href' => 1,
+            'share_displayname' => 1
+        ];
         $query = [ 'principaluri' => $principalUri ];
-        $res = $collection->find($query, $fields);
+        $res = $collection->find($query, [ 'projection' => $projection ]);
 
         $addressBooks = [];
         foreach ($res as $row) {
             $collection = $this->db->selectCollection($this->addressBooksTableName);
             $query = [ '_id' => new \MongoDB\BSON\ObjectId((string)$row['addressbookid'])];
-            $fields = [ 'principaluri', 'uri', 'synctoken', 'type' ];
-
-            $projection = array_fill_keys($fields, 1);
+            $projection = [
+                'principaluri' => 1,
+                'uri' => 1,
+                'synctoken' => 1,
+                'type' => 1
+            ];
             $addressBookInstance = $collection->findOne($query, [ 'projection' => $projection ]);
 
             $addressBook = [
@@ -844,17 +878,17 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
      * @return \Sabre\DAV\Xml\Element\Sharee[]
      */
     function getInvites($addressBookId) {
-        $fields[] = 'principaluri';
-        $fields[] = 'share_access';
-        $fields[] = 'share_href';
-        $fields[] = 'share_invitestatus';
-        $fields[] = 'share_displayname';
-
-        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
         $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
-
-        $projection = array_fill_keys($fields, 1);
+        $projection = [
+            'principaluri' => 1,
+            'share_access' => 1,
+            'share_href' => 1,
+            'share_invitestatus' => 1,
+            'share_displayname' => 1
+        ];
+        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
         $res = $collection->find($query, [ 'projection' => $projection ]);
+
         $result = [];
         foreach ($res as $row) {
             if ($row['share_invitestatus'] === SPlugin::INVITE_INVALID) {
@@ -926,9 +960,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     protected function addChange($addressBookId, $objectUri, $operation) {
         $adrcollection = $this->db->selectCollection($this->addressBooksTableName);
-        $fields = ['synctoken'];
         $query = [ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ];
-        $res = $adrcollection->findOne($query, $fields);
+        $res = $adrcollection->findOne($query, [ 'projection' => [ 'synctoken' => 1 ] ]);
 
         $changecollection = $this->db->selectCollection($this->addressBookChangesTableName);
 

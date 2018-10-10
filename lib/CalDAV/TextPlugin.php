@@ -54,19 +54,19 @@ class TextPlugin extends \ESN\JSON\BasePlugin {
             return true;
         }
 
-        $code = null;
-        $body = null;
         $path = $request->getPath();
-        $jsonData = json_decode($request->getBodyAsString());
-
         $node = $this->server->tree->getNodeForPath($path);
 
-        if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
-            list($code, $body) = $this->getCalendarObjects($path, $node, $jsonData);
-        } else {
-            $code = 204;
-            $body = [];
+        if($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+            return $this->send(204, []);
         }
+
+        if (!($node instanceof \Sabre\CalDAV\ICalendarObjectContainer)) {
+            return true;
+        }
+
+        $jsonData = json_decode($request->getBodyAsString());
+        list($code, $body) = $this->getCalendarObjects($path, $node, $jsonData);
 
         return $this->send($code, $body);
     }

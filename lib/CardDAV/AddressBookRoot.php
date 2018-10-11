@@ -7,6 +7,7 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
     const USER_PREFIX = 'principals/users';
     const COMMUNITY_PREFIX = 'principals/communities';
     const PROJECT_PREFIX = 'principals/projects';
+    const DOMAIN_PREFIX = 'principals/domains';
 
     function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CardDAV\Backend\BackendInterface $addrbookBackend, \MongoDB\Database $db) {
         $this->principalBackend = $principalBackend;
@@ -19,7 +20,6 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
     }
 
     public function getChildren() {
-        //throw new \Sabre\DAV\Exception\MethodNotAllowed('Listing children in this collection has been disabled');
         $homes = [];
         $res = $this->db->users->find([], [ 'projection' => ['_id' => 1 ]]);
         foreach ($res as $user) {
@@ -33,9 +33,16 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
             $uri = self::COMMUNITY_PREFIX . '/' . $community['_id'];
             $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }*/
+
         $res = $this->db->projects->find([], [ 'projection' => ['_id' => 1 ]]);
         foreach ($res as $project) {
             $uri = self::PROJECT_PREFIX . '/' . $project['_id'];
+            $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
+        }
+
+        $res = $this->db->domains->find([], [ 'projection' => ['_id' => 1 ]]);
+        foreach ($res as $domain) {
+            $uri = self::DOMAIN_PREFIX . '/' . $domain['_id'];
             $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
         }
 
@@ -66,6 +73,12 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
         if ($res) {
             $uri = self::PROJECT_PREFIX . '/' . $name;
             return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
+        }
+
+        $res = $this->db->domains->findOne(['_id' => $mongoName], [ 'projection' => []]);
+        if ($res) {
+            $uri = self::DOMAIN_PREFIX . '/' . $name;
+            return new AddressBookHome($this->addrbookBackend, $uri);
         }
 
         throw new \Sabre\DAV\Exception\NotFound('Principal with name ' . $name . ' not found');

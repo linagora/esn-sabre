@@ -26,12 +26,16 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
         $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\EsnRequest($this->esndb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
 
-        $this->root = new AddressBookRoot($this->principalBackend,
-                                          $this->carddavBackend, $this->esndb);
+        $this->root = new AddressBookRoot($this->principalBackend, $this->carddavBackend);
 
         $this->esndb->users->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6') ]);
         //$this->esndb->communities->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b4') ]);
-        $this->esndb->projects->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0f') ]);
+        $this->esndb->projects->insertOne(
+            [
+                '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0f'),
+                'title' => 'project'
+            ]
+            );
         $this->esndb->domains->insertOne(['_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)]);
     }
 

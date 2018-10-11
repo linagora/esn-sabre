@@ -4,31 +4,16 @@ namespace ESN\CardDAV;
 
 class AddressBookRoot extends \Sabre\DAV\Collection {
 
-    const principalSupportedSet = [
-        [
-            'collectionName' => 'users',
-            'prefix' => 'principals/users'
-        ],
-        /* Uncomment to reactive the fetch for communities
-        [
-            'collectionName' => 'communities',
-            'prefix' => 'principals/communities'
-        ],
-        */
-        [
-            'collectionName' => 'projects',
-            'prefix' => 'principals/projects'
-        ],
-        [
-            'collectionName' => 'domains',
-            'prefix' => 'principals/domains'
-        ]
+    const PRINCIPAL_SUPPORTED_SET = [
+        'principals/users',
+        // 'principals/communities', // Uncomment to reactive the fetch for communities
+        'principals/projects',
+        'principals/domains'
     ];
 
-    function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CardDAV\Backend\BackendInterface $addrbookBackend, \MongoDB\Database $db) {
+    function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CardDAV\Backend\BackendInterface $addrbookBackend) {
         $this->principalBackend = $principalBackend;
         $this->addrbookBackend = $addrbookBackend;
-        $this->db = $db;
     }
 
     public function getName() {
@@ -38,12 +23,11 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
     public function getChildren() {
         $homes = [];
 
-        foreach(self::principalSupportedSet as $principalType) {
-            $res = $this->db->selectCollection($principalType['collectionName'])->find([], [ 'projection' => ['_id' => 1 ]]);
+        foreach(self::PRINCIPAL_SUPPORTED_SET as $principalType) {
+            $res = $this->principalBackend->getPrincipalsByPrefix($principalType);
 
             foreach ($res as $principal) {
-                $uri = $principalType['prefix'] . '/' . $principal['_id'];
-                $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
+                $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $principal['uri']);
             }
         }
 
@@ -51,18 +35,16 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
     }
 
     public function getChild($name) {
-        try {
-            $mongoName = new \MongoDB\BSON\ObjectId($name);
-        } catch (\MongoDB\Driver\Exception\Exception $e) {
-            return null;
-        }
+        foreach(self::PRINCIPAL_SUPPORTED_SET as $principalType) {
+            $uri = $principalType . '/' . $name;
 
-        foreach(self::principalSupportedSet as $principalType) {
-            $res = $this->db->selectCollection($principalType['collectionName'])->findOne(['_id' => $mongoName]);
+            try {
+                $res = $this->principalBackend->getPrincipalByPath($uri);
+            } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
+                return null;
+            }
 
             if ($res) {
-                $uri = $principalType['prefix'] . '/' . $name;
-
                 return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
             }
         }

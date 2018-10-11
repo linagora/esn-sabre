@@ -296,8 +296,7 @@ END:VCALENDAR'
         ]);
         $this->tree[] = new \ESN\CardDAV\AddressBookRoot(
             $this->principalBackend,
-            $this->carddavBackend,
-            $this->esndb
+            $this->carddavBackend
         );
         $this->tree[] = new \ESN\CalDAV\CalendarRoot(
             $this->principalBackend,

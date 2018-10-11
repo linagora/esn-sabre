@@ -74,7 +74,7 @@ $tree = [
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_DOMAINS)
     ]),
     new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $esnDb),
-    new ESN\CardDAV\AddressBookRoot($principalBackend, $addressbookBackend, $esnDb),
+    new ESN\CardDAV\AddressBookRoot($principalBackend, $addressbookBackend),
 ];
 
 $server = new Sabre\DAV\Server($tree);

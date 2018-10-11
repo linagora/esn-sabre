@@ -38,7 +38,13 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             if ($parts[1] == 'resources') {
                 $domain = $this->db->domains->findOne([ '_id' => $obj[ 'domain' ]]);
                 $obj['domain'] = $domain;
+            } else if ($parts[1] == 'users' && !empty($obj[ 'domains' ])) {
+                $domainIds = array_column((array) $obj[ 'domains' ], 'domain_id');
+
+                $domains = $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]);
+                $obj['domains'] = $domains;
             }
+
             return $obj ? $this->objectToPrincipal($obj, $parts[1]) : null;
         } else {
             return null;
@@ -143,6 +149,15 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     '{DAV:}displayname' => $displayname,
                     '{http://sabredav.org/ns}email-address' => Utils::firstEmailAddress($obj)
                 ];
+
+                if (!empty($obj['domains'])) {
+                    $adminForDomains = $this->getDomainsUserIsAdminOf($obj['_id'], $obj['domains']);
+
+                    if (!empty($adminForDomains)) {
+                        $principal['adminForDomains'] = $adminForDomains;
+                    }
+                }
+
                 break;
             case "communities":
             case "projects":
@@ -183,6 +198,22 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $principal['groupPrincipals'] = $this->getGroupMembership($principal['uri']);
 
         return $principal;
+    }
+
+    private function getDomainsUserIsAdminOf($userId, $domains) {
+        $adminForDomains = [];
+
+        foreach($domains as $domain) {
+            if (!empty($domain['administrators'])) {
+                $domainAdmins = array_column((array) $domain['administrators'], 'user_id');
+
+                if (in_array($userId, $domainAdmins)) {
+                    $adminForDomains[] = (string) $domain['_id'];
+                }
+            }
+        }
+
+        return $adminForDomains;
     }
 
     private function queryPrincipals($prefix, $collection, $query, $test = 'allof') {

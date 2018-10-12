@@ -19,6 +19,7 @@ define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
 define('PRINCIPALS_COMMUNITIES', 'principals/communities');
 define('PRINCIPALS_PROJECTS', 'principals/projects');
 define('PRINCIPALS_RESOURCES', 'principals/resources');
+define('PRINCIPALS_DOMAINS', 'principals/domains');
 
 /**
  * @medium
@@ -242,7 +243,8 @@ END:VCALENDAR'
                       'robertocarlos@realmadrid.com'
                     ]
                 ]
-            ]
+                    ],
+            'domains' => []
         ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0e'),
@@ -253,7 +255,8 @@ END:VCALENDAR'
                       'johndoe@example.org'
                     ]
                 ]
-            ]
+            ],
+            'domains' => []
         ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0d'),
@@ -331,7 +334,8 @@ END:VCALENDAR'
             PRINCIPALS_USERS,
             PRINCIPALS_COMMUNITIES,
             PRINCIPALS_PROJECTS,
-            PRINCIPALS_RESOURCES
+            PRINCIPALS_RESOURCES,
+            PRINCIPALS_DOMAINS
         ];
         $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
         $this->server->addPlugin($aclPlugin);

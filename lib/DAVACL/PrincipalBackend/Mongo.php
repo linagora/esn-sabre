@@ -11,7 +11,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             'users' => $this->db->users,
             'communities' => $this->db->communities,
             'projects' => $this->db->projects,
-            'resources' => $this->db->resources
+            'resources' => $this->db->resources,
+            'domains' => $this->db->domains
         ];
     }
 
@@ -58,6 +59,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return $this->searchGroupPrincipals('projects', $searchProperties, $test);
         } else if ($prefixPath == "principals/resources") {
             return $this->searchGroupPrincipals('resources', $searchProperties, $test);
+        } else if ($prefixPath == "principals/domains" && isset($searchProperties['{DAV:}displayname'])) {
+            return $this->searchDomainPrincipals($searchProperties['{DAV:}displayname'], $test);
         } else {
             return [];
         }
@@ -67,11 +70,23 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $parts = explode('/', $principal);
         $principals = [];
         if (count($parts) == 3 && $parts[0] == 'principals' && isset($this->collectionMap[$parts[1]])) {
-            $collection = $this->collectionMap[$parts[1]];
-            $res = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($parts[2])], [ 'projection' => [ 'members.member.id' => 1 ]]);
-            if ($res && isset($res['members'])) {
-                foreach ($res['members'] as $member) {
-                    $principals[] = 'principals/users/' . $member['member']['id'];
+            if ($parts[1] === 'domains') {
+                $users = $this->db->users->find(
+                    [ 'domains' => [ '$elemMatch' => [ 'domain_id' => new \MongoDB\BSON\ObjectId($parts[2]) ] ] ],
+                    [ 'projection' => [ '_id' => 1 ]]
+                );
+
+                foreach ($users as $user) {
+                    $principals[] = 'principals/users/' . (string)$user['_id'];
+                }
+            } else {
+                $collection = $this->collectionMap[$parts[1]];
+                $res = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($parts[2])], [ 'projection' => [ 'members.member.id' => 1 ]]);
+
+                if ($res && isset($res['members'])) {
+                    foreach ($res['members'] as $member) {
+                        $principals[] = 'principals/users/' . $member['member']['id'];
+                    }
                 }
             }
         }
@@ -83,14 +98,23 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $parts = explode('/', $principal);
         $principals = [];
         if (count($parts) == 3 && $parts[0] == 'principals' && $parts[1] == 'users') {
-            $query = [ 'members' => [ '$elemMatch' => [ 'member.id' => new \MongoDB\BSON\ObjectId($parts[2]) ] ] ];
+            $collaborationQuery = [ 'members' => [ '$elemMatch' => [ 'member.id' => new \MongoDB\BSON\ObjectId($parts[2]) ] ] ];
 
-            foreach ($this->db->communities->find($query, [ 'projection' => [ '_id' => 1 ]]) as $community) {
+            foreach ($this->db->communities->find($collaborationQuery, [ 'projection' => [ '_id' => 1 ]]) as $community) {
                 $principals[] = 'principals/communities/' . $community['_id'];
             }
 
-            foreach ($this->db->projects->find($query, [ 'projection' => [ '_id' => 1 ]]) as $project) {
+            foreach ($this->db->projects->find($collaborationQuery, [ 'projection' => [ '_id' => 1 ]]) as $project) {
                 $principals[] = 'principals/projects/' . $project['_id'];
+            }
+
+            $user = $this->db->users->findOne(
+                [ '_id' => new \MongoDB\BSON\ObjectId($parts[2]) ],
+                [ 'projection' => [ 'domains' => 1 ]]
+            );
+
+            foreach ($user['domains'] as $domain) {
+                $principals[] = 'principals/domains/' . (string)$domain['domain_id'];
             }
         }
 
@@ -142,6 +166,17 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     $principal['{http://sabredav.org/ns}email-address'] = $obj['_id'] . '@' . $obj['domain']['name'];
                 }
                 break;
+            case "domains":
+                $displayname = "";
+                if (isset($obj['name'])) {
+                    $displayname = $obj['name'];
+                }
+
+                $principal = [
+                    'id' => (string)$obj['_id'],
+                    '{DAV:}displayname' => $displayname
+                ];
+                break;
         }
 
         $principal['uri'] = 'principals/' . $type . '/' . $obj['_id'];
@@ -164,6 +199,21 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             $principals[] = 'principals/' . $prefix . '/' . $obj['_id'];
         }
         return $principals;
+    }
+
+    private function searchDomainPrincipals($key, $test = 'allof') {
+        $query = [];
+
+        if ($key) {
+            $query[] = array('name' => [ '$regex' => preg_quote($key), '$options' => 'i' ]);
+        }
+
+        return $this->queryPrincipals(
+            'domains',
+            $this->db->domains,
+            $query,
+            $test
+        );
     }
 
     private function searchGroupPrincipals($groupName, array $searchProperties, $test = 'allof') {

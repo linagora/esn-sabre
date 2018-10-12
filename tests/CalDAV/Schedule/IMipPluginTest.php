@@ -59,7 +59,8 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
                     'robertocarlos@realmadrid.com'
                     ]
                 ]
-            ]
+            ],
+            'domains' => []
         ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0e'),

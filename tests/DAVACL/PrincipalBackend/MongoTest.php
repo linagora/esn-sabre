@@ -32,6 +32,9 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'lastname' => 'last',
             'accounts' => [
                 [ 'type' => 'email', 'emails' => [ 'user@example.com' ] ]
+            ],
+            'domains' => [
+                array('domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID))
             ]
         ]);
         self::$esndb->users->insertOne([
@@ -222,6 +225,26 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $this->assertSame($expected['id'], $principal['id']);
     }
 
+    function testDomainPrincipalsByPrefix() {
+        $backend = new Mongo(self::$esndb);
+
+        $principals = $backend->getPrincipalsByPrefix('principals/domains');
+        $principal = $backend->getPrincipalByPath('principals/domains/' . self::DOMAIN_ID);
+        $this->assertEquals(count($principals), 1);
+
+        $expected = [
+            'uri' => 'principals/domains/' . self::DOMAIN_ID,
+            'id' => self::DOMAIN_ID,
+            '{DAV:}displayname' => 'test',
+        ];
+        $this->assertEquals($expected, $principals[0]);
+        $this->assertEquals($expected, $principal);
+
+        // Extra check to make sure no mongo ids are used
+        $this->assertSame($expected['id'], $principals[0]['id']);
+        $this->assertSame($expected['id'], $principal['id']);
+    }
+
     function testProjectPrincipalsByPrefix() {
         $backend = new Mongo(self::$esndb);
 
@@ -276,6 +299,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertEquals($expected,$backend->getGroupMemberSet('principals/communities/' . self::COMMUNITY_ID));
         $this->assertEquals($expected,$backend->getGroupMemberSet('principals/projects/' . self::PROJECT_ID));
+        $this->assertEquals($expected,$backend->getGroupMemberSet('principals/domains/' . self::DOMAIN_ID));
     }
 
     function testGetGroupMembership() {
@@ -283,7 +307,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
 
         $expected = array(
             'principals/communities/' . self::COMMUNITY_ID,
-            'principals/projects/' . self::PROJECT_ID
+            'principals/projects/' . self::PROJECT_ID,
+            'principals/domains/' . self::DOMAIN_ID
         );
         $this->assertEquals($expected,$backend->getGroupMembership('principals/users/' . self::USER_ID));
     }
@@ -329,6 +354,12 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals(array('principals/resources/' . self::RESOURCE_ID), $result);
 
         $result = $backend->searchPrincipals('principals/resources', array('{http://sabredav.org/ns}email-address' => 'resource@EXAMPLE.CoM'));
+        $this->assertEquals([], $result);
+
+        $result = $backend->searchPrincipals('principals/domains', array('{DAV:}displayname' => 'test'));
+        $this->assertEquals(array('principals/domains/' . self::DOMAIN_ID), $result);
+
+        $result = $backend->searchPrincipals('principals/domains', array('{DAV:}displayname' => 'notexist'));
         $this->assertEquals([], $result);
     }
 

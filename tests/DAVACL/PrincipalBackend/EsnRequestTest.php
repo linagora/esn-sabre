@@ -52,4 +52,5 @@ class MockPrincipalDb {
     public $communities = null;
     public $projects = null;
     public $resources = null;
+    public $domains = null;
 }

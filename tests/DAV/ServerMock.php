@@ -267,7 +267,8 @@ END:VCALENDAR'
                       'johndoe2@example.org'
                     ]
                 ]
-            ]
+            ],
+            'domains' => []
         ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0c'),
@@ -278,7 +279,8 @@ END:VCALENDAR'
                       'janedoe@example.org'
                     ]
                 ]
-            ]
+            ],
+            'domains' => []
         ]);
 
         $this->esndb->resources->insertOne([

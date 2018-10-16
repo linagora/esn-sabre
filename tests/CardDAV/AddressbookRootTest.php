@@ -28,7 +28,10 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
 
         $this->root = new AddressBookRoot($this->principalBackend, $this->carddavBackend);
 
-        $this->esndb->users->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6') ]);
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6'),
+            'domains' => []
+        ]);
         //$this->esndb->communities->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b4') ]);
         $this->esndb->projects->insertOne(
             [

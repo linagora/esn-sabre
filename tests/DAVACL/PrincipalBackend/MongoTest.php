@@ -42,14 +42,16 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'firstname' => 'Originalname',
             'accounts' => [
                 [ 'type' => 'email', 'emails' => [ 'userNoLast@example.com' ] ]
-            ]
+            ],
+            'domains' => []
         ]);
         self::$esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_NO_FIRSTNAME),
             'lastname' => 'lastname',
             'accounts' => [
                 [ 'type' => 'email', 'emails' => [ 'userNoFirst@example.com' ] ]
-            ]
+            ],
+            'domains' => []
         ]);
         self::$esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_ACCOUNT_ID),
@@ -57,7 +59,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'lastname' => 'last',
             'accounts' => [
                 [ 'type' => 'email', 'emails' => [ 'userWithAccount@example.com' ] ]
-            ]
+            ],
+            'domains' => []
         ]);
         self::$esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_TWO_ACCOUNTS_ID),
@@ -66,12 +69,14 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'accounts' => [
                 [ 'type' => 'twitter' ],
                 [ 'type' => 'email', 'emails' => [ 'userWithTwoAccounts@example.com' ] ]
-            ]
+            ],
+            'domains' => []
         ]);
         self::$esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_NO_EMAIL_ID),
             'firstname' => 'withNoEmail',
-            'lastname' => 'last'
+            'lastname' => 'last',
+            'domains' => []
         ]);
         self::$esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITH_NO_EMAIL_ACCOUNT_ID),
@@ -79,7 +84,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'lastname' => 'last',
             'accounts' => [
                 [ 'type' => 'twitter' ]
-            ]
+            ],
+            'domains' => []
         ]);
         self::$esndb->communities->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::COMMUNITY_ID),
@@ -153,43 +159,54 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'uri' => 'principals/users/' . self::USER_ID,
             'id' => self::USER_ID,
             '{DAV:}displayname' => 'first last',
-            '{http://sabredav.org/ns}email-address' => 'user@example.com'
+            '{http://sabredav.org/ns}email-address' => 'user@example.com',
+            'groupPrincipals' => [
+                'principals/communities/' . self::COMMUNITY_ID,
+                'principals/projects/' . self::PROJECT_ID,
+                'principals/domains/' . self::DOMAIN_ID
+            ]
         ];
         $expectedWithNoEmail = [
             'uri' => 'principals/users/' . self::USER_WITH_NO_EMAIL_ID,
             'id' => self::USER_WITH_NO_EMAIL_ID,
             '{DAV:}displayname' => 'withNoEmail last',
-            '{http://sabredav.org/ns}email-address' => null
+            '{http://sabredav.org/ns}email-address' => null,
+            'groupPrincipals' => []
         ];
         $expectedWithNoEmailAccount = [
             'uri' => 'principals/users/' . self::USER_WITH_NO_EMAIL_ACCOUNT_ID,
             'id' => self::USER_WITH_NO_EMAIL_ACCOUNT_ID,
             '{DAV:}displayname' => 'withNoEmailAccount last',
-            '{http://sabredav.org/ns}email-address' => null
+            '{http://sabredav.org/ns}email-address' => null,
+            'groupPrincipals' => []
         ];
         $expectedWithNoLastname = [
             'uri' => 'principals/users/' . self::USER_WITH_NO_LASTNAME,
             'id' => self::USER_WITH_NO_LASTNAME,
             '{DAV:}displayname' => 'Originalname',
-            '{http://sabredav.org/ns}email-address' => 'userNoLast@example.com'
+            '{http://sabredav.org/ns}email-address' => 'userNoLast@example.com',
+            'groupPrincipals' => []
         ];
         $expectedWithNoFirstname = [
             'uri' => 'principals/users/' . self::USER_WITH_NO_FIRSTNAME,
             'id' => self::USER_WITH_NO_FIRSTNAME,
             '{DAV:}displayname' => ' lastname',
-            '{http://sabredav.org/ns}email-address' => 'userNoFirst@example.com'
+            '{http://sabredav.org/ns}email-address' => 'userNoFirst@example.com',
+            'groupPrincipals' => []
         ];
         $expectedWithAccount = [
             'uri' => 'principals/users/' . self::USER_WITH_ACCOUNT_ID,
             'id' => self::USER_WITH_ACCOUNT_ID,
             '{DAV:}displayname' => 'withAccount last',
-            '{http://sabredav.org/ns}email-address' => 'userWithAccount@example.com'
+            '{http://sabredav.org/ns}email-address' => 'userWithAccount@example.com',
+            'groupPrincipals' => []
         ];
         $expectedWithTwoAccounts = [
             'uri' => 'principals/users/' . self::USER_WITH_TWO_ACCOUNTS_ID,
             'id' => self::USER_WITH_TWO_ACCOUNTS_ID,
             '{DAV:}displayname' => 'withTwoAccounts last',
-            '{http://sabredav.org/ns}email-address' => 'userWithTwoAccounts@example.com'
+            '{http://sabredav.org/ns}email-address' => 'userWithTwoAccounts@example.com',
+            'groupPrincipals' => []
         ];
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);
@@ -216,6 +233,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'uri' => 'principals/communities/' . self::COMMUNITY_ID,
             'id' => self::COMMUNITY_ID,
             '{DAV:}displayname' => 'community',
+            'groupPrincipals' => []
         ];
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);
@@ -236,6 +254,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'uri' => 'principals/domains/' . self::DOMAIN_ID,
             'id' => self::DOMAIN_ID,
             '{DAV:}displayname' => 'test',
+            'groupPrincipals' => []
         ];
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);
@@ -256,6 +275,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'uri' => 'principals/projects/' . self::PROJECT_ID,
             'id' => self::PROJECT_ID,
             '{DAV:}displayname' => 'project',
+            'groupPrincipals' => []
         ];
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);
@@ -276,13 +296,15 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'uri' => 'principals/resources/' . self::RESOURCE_ID,
             'id' => self::RESOURCE_ID,
             '{DAV:}displayname' => 'resource',
-            '{http://sabredav.org/ns}email-address' => self::RESOURCE_ID . '@test'
+            '{http://sabredav.org/ns}email-address' => self::RESOURCE_ID . '@test',
+            'groupPrincipals' => []
         ];
 
         $expectedFromPrefix = [
             'uri' => 'principals/resources/' . self::RESOURCE_ID,
             'id' => self::RESOURCE_ID,
-            '{DAV:}displayname' => 'resource'
+            '{DAV:}displayname' => 'resource',
+            'groupPrincipals' => []
         ];
 
         $this->assertEquals($expectedFromPrefix, $principals[0]);

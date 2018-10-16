@@ -71,7 +71,8 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
                     'johndoe@example.org'
                     ]
                 ]
-            ]
+            ],
+            'domains' => []
         ]);
 
         $this->ical = join("\r\n", [

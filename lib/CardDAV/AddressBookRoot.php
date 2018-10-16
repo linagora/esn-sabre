@@ -27,7 +27,7 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
             $res = $this->principalBackend->getPrincipalsByPrefix($principalType);
 
             foreach ($res as $principal) {
-                $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $principal['uri']);
+                $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $principal);
             }
         }
 
@@ -39,13 +39,16 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
             $uri = $principalType . '/' . $name;
 
             try {
-                $res = $this->principalBackend->getPrincipalByPath($uri);
+                $principal = $this->principalBackend->getPrincipalByPath($uri);
             } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
                 return null;
             }
 
-            if ($res) {
-                return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
+            if ($principal) {
+                return new \ESN\CardDAV\AddressBookHome(
+                    $this->addrbookBackend,
+                    $principal
+                );
             }
         }
 

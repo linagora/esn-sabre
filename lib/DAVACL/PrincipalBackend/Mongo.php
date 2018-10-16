@@ -180,6 +180,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         $principal['uri'] = 'principals/' . $type . '/' . $obj['_id'];
+        $principal['groupPrincipals'] = $this->getGroupMembership($principal['uri']);
 
         return $principal;
     }

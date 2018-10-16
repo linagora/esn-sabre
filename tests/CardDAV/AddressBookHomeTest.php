@@ -15,17 +15,36 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
 
         $this->sabredb->drop();
 
-        $this->principalUri = "principals/users/user1";
-        $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
+        $this->domainPrincipal = 'principals/domains/domain';
 
-        $this->books = new AddressBookHome($this->carddavBackend, $this->principalUri);
+        $this->principal = [
+            'uri' => 'principals/users/user',
+            'groupPrincipals' => [$this->domainPrincipal]
+        ];
+        $this->carddavBackend = new \ESN\CardDAV\Backend\Esn($this->sabredb);
+
+        $this->books = new AddressBookHome($this->carddavBackend, $this->principal);
     }
 
     function testGetChildren() {
-        $this->carddavBackend->createAddressBook($this->principalUri, 'book1', []);
+        $this->carddavBackend->createAddressBook($this->domainPrincipal, 'GAB', []);
 
         $children = $this->books->getChildren();
-        $this->assertCount(1, $children);
+        $this->assertCount(3, $children);
         $this->assertInstanceOf('\ESN\CardDAV\AddressBook', $children[0]);
+        $this->assertInstanceOf('\ESN\CardDAV\AddressBook', $children[1]);
+        $this->assertInstanceOf('\ESN\CardDAV\AddressBook', $children[2]);
+
+        $childrenNames = [];
+        foreach ($children as $child) {
+            $childrenNames[] = $child->getName();
+        }
+
+        // Default address books
+        $this->assertContains('collected', $childrenNames);
+        $this->assertContains('contacts', $childrenNames);
+
+        // Domain address book
+        $this->assertContains('GAB', $childrenNames);
     }
 }

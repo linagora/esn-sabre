@@ -7,6 +7,18 @@ use Sabre\DAV\MkCol;
 class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
 
     /**
+     * Constructor
+     *
+     * @param Backend\BackendInterface $carddavBackend
+     * @param array $principal
+     */
+    function __construct(\Sabre\CardDAV\Backend\BackendInterface $carddavBackend, $principal) {
+        $this->groupPrincipals = $principal['groupPrincipals'];
+
+        parent::__construct($carddavBackend, $principal['uri']);
+    }
+
+    /**
      * Returns a list of addressbooks. In contrast to the sabre version of this
      * method, the returned addressbook instance has extra methods.
      *
@@ -30,6 +42,15 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         if ($this->carddavBackend instanceof Backend\SharingSupport) {
             foreach ($this->carddavBackend->getSharedAddressBooksForUser($this->principalUri) as $sharedAddressBook) {
                 $objs[] = new Sharing\SharedAddressBook($this->carddavBackend, $sharedAddressBook);
+            }
+        }
+
+        // Add group address books
+        if (isset($this->groupPrincipals)) {
+            foreach ($this->groupPrincipals as $groupPrincipal) {
+                foreach ($this->carddavBackend->getAddressBooksFor($groupPrincipal) as $addressBook) {
+                    $objs[] = new \ESN\CardDAV\AddressBook($this->carddavBackend, $addressBook);
+                }
             }
         }
 

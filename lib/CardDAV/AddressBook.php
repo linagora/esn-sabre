@@ -231,7 +231,7 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return $acl;
     }
 
-    private function updateAclWithShareAccess($acl) {
+    protected function updateAclWithShareAccess($acl) {
         $sharees = $this->getInvites();
 
         foreach ($sharees as $sharee) {

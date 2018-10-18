@@ -195,7 +195,16 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         $principal['uri'] = 'principals/' . $type . '/' . $obj['_id'];
-        $principal['groupPrincipals'] = $this->getGroupMembership($principal['uri']);
+        $groupPrincipals = [];
+
+        foreach ($this->getGroupMembership($principal['uri']) as $groupPrincipal) {
+            $groupPrincipals[] = [
+                'uri' => $groupPrincipal,
+                'administrators' => $this->getAdministratorsForGroup($groupPrincipal)
+            ];
+        }
+
+        $principal['groupPrincipals'] = $groupPrincipals;
 
         return $principal;
     }
@@ -297,5 +306,23 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         return $this->queryPrincipals('users', $this->db->users, $query, $test);
+    }
+
+    private function getAdministratorsForGroup($principal) {
+        $parts = explode('/', $principal);
+        $administrators = [];
+
+        if ($parts[1] === 'domains') {
+            $domain = $this->db->domains->findOne(
+                [ '_id' => new \MongoDB\BSON\ObjectId($parts[2]) ],
+                [ 'projection' => [ 'administrators' => 1 ]]
+            );
+
+            foreach ($domain['administrators'] as $administrator) {
+                $administrators[] = 'principals/users/' . (string)$administrator['user_id'];
+            }
+        }
+
+        return $administrators;
     }
 }

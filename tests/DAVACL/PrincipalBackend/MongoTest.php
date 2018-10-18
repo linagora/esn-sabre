@@ -191,9 +191,18 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             '{DAV:}displayname' => 'first last',
             '{http://sabredav.org/ns}email-address' => 'user@example.com',
             'groupPrincipals' => [
-                'principals/communities/' . self::COMMUNITY_ID,
-                'principals/projects/' . self::PROJECT_ID,
-                'principals/domains/' . self::DOMAIN_ID
+                [
+                    'uri' => 'principals/communities/' . self::COMMUNITY_ID,
+                    'administrators' => []
+                ],
+                [
+                    'uri' => 'principals/projects/' . self::PROJECT_ID,
+                    'administrators' => []
+                ],
+                [
+                    'uri' => 'principals/domains/' . self::DOMAIN_ID,
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                ]
             ]
         ];
         $expectedWithNoEmail = [
@@ -201,49 +210,84 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'id' => self::USER_WITH_NO_EMAIL_ID,
             '{DAV:}displayname' => 'withNoEmail last',
             '{http://sabredav.org/ns}email-address' => null,
-            'groupPrincipals' => ['principals/domains/' . self::DOMAIN_ID]
+            'groupPrincipals' => [
+                [
+                    'uri' => 'principals/domains/' . self::DOMAIN_ID,
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                ]
+            ]
         ];
         $expectedWithNoEmailAccount = [
             'uri' => 'principals/users/' . self::USER_WITH_NO_EMAIL_ACCOUNT_ID,
             'id' => self::USER_WITH_NO_EMAIL_ACCOUNT_ID,
             '{DAV:}displayname' => 'withNoEmailAccount last',
             '{http://sabredav.org/ns}email-address' => null,
-            'groupPrincipals' => ['principals/domains/' . self::DOMAIN_ID]
+            'groupPrincipals' => [
+                [
+                    'uri' => 'principals/domains/' . self::DOMAIN_ID,
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                ]
+            ]
         ];
         $expectedWithNoLastname = [
             'uri' => 'principals/users/' . self::USER_WITH_NO_LASTNAME,
             'id' => self::USER_WITH_NO_LASTNAME,
             '{DAV:}displayname' => 'Originalname',
             '{http://sabredav.org/ns}email-address' => 'userNoLast@example.com',
-            'groupPrincipals' => ['principals/domains/' . self::DOMAIN_ID]
+            'groupPrincipals' => [
+                [
+                    'uri' => 'principals/domains/' . self::DOMAIN_ID,
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                ]
+            ]
         ];
         $expectedWithNoFirstname = [
             'uri' => 'principals/users/' . self::USER_WITH_NO_FIRSTNAME,
             'id' => self::USER_WITH_NO_FIRSTNAME,
             '{DAV:}displayname' => ' lastname',
             '{http://sabredav.org/ns}email-address' => 'userNoFirst@example.com',
-            'groupPrincipals' => ['principals/domains/' . self::DOMAIN_ID]
+            'groupPrincipals' => [
+                [
+                    'uri' => 'principals/domains/' . self::DOMAIN_ID,
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                ]
+            ]
         ];
         $expectedWithAccount = [
             'uri' => 'principals/users/' . self::USER_WITH_ACCOUNT_ID,
             'id' => self::USER_WITH_ACCOUNT_ID,
             '{DAV:}displayname' => 'withAccount last',
             '{http://sabredav.org/ns}email-address' => 'userWithAccount@example.com',
-            'groupPrincipals' => ['principals/domains/' . self::DOMAIN_ID]
+            'groupPrincipals' => [
+                [
+                    'uri' => 'principals/domains/' . self::DOMAIN_ID,
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                ]
+            ]
         ];
         $expectedWithTwoAccounts = [
             'uri' => 'principals/users/' . self::USER_WITH_TWO_ACCOUNTS_ID,
             'id' => self::USER_WITH_TWO_ACCOUNTS_ID,
             '{DAV:}displayname' => 'withTwoAccounts last',
             '{http://sabredav.org/ns}email-address' => 'userWithTwoAccounts@example.com',
-            'groupPrincipals' => ['principals/domains/' . self::DOMAIN_ID]
+            'groupPrincipals' => [
+                [
+                    'uri' => 'principals/domains/' . self::DOMAIN_ID,
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                ]
+            ]
         ];
         $expectedAdmin = [
             'uri' => 'principals/users/' . self::USER_DOMAIN_ADMIN_ID,
             'id' => self::USER_DOMAIN_ADMIN_ID,
             '{DAV:}displayname' => 'admin admin',
             '{http://sabredav.org/ns}email-address' => 'admin@example.com',
-            'groupPrincipals' => ['principals/domains/' . self::DOMAIN_ID],
+            'groupPrincipals' => [
+                [
+                    'uri' => 'principals/domains/' . self::DOMAIN_ID,
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                ]
+            ],
             'adminForDomains' => [ self::DOMAIN_ID ]
         ];
 

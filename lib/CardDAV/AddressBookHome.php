@@ -48,8 +48,10 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         // Add group address books
         if (isset($this->groupPrincipals)) {
             foreach ($this->groupPrincipals as $groupPrincipal) {
-                foreach ($this->carddavBackend->getAddressBooksFor($groupPrincipal) as $addressBook) {
-                    $objs[] = new \ESN\CardDAV\AddressBook($this->carddavBackend, $addressBook);
+                foreach ($this->carddavBackend->getAddressBooksFor($groupPrincipal['uri']) as $addressBook) {
+                    $addressBook['administrators'] = $groupPrincipal['administrators'];
+
+                    $objs[] = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
                 }
             }
         }

@@ -2,6 +2,8 @@
 
 namespace ESN\CardDAV;
 
+use \Sabre\DAV\Sharing\Plugin as SPlugin;
+
 /**
  * @medium
  */
@@ -82,5 +84,62 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
 
         $index = array_search('GAB', $childrenNames);
         $this->assertEquals($children[$index]->getACL(), $expectACL);
+    }
+
+    function testGetChildrenWithGroupAdressBookIsDelegated() {
+        $createGroupAddressBookId = $this->carddavBackend->createAddressBook($this->domainPrincipal, 'GAB', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
+        $delegatedAddressBookName = 'DelegatedGAB';
+
+        // Share GAB for user
+        $this->carddavBackend->updateInvites(
+            $createGroupAddressBookId,
+            [
+                new \Sabre\DAV\Xml\Element\Sharee([
+                    'href' => self::USER_ID,
+                    'access' => SPlugin::ACCESS_READWRITE,
+                    'inviteStatus' => SPlugin::INVITE_ACCEPTED,
+                    'properties' => [ '{DAV:}displayname' => $delegatedAddressBookName ],
+                    'principal' => 'principals/users/' . self::USER_ID
+                ])
+            ]
+        );
+
+        $children = $this->books->getChildren();
+        $this->assertCount(3, $children);
+
+        $childrenNames = [];
+        $delegatedAddressBooks = [];
+
+        foreach ($children as $child) {
+            $childrenNames[] = $child->getName();
+
+            if ($child instanceof \ESN\CardDAV\Sharing\SharedAddressBook) {
+                $delegatedAddressBooks[] = $child;
+            }
+        }
+
+        // Default address books
+        $this->assertContains('collected', $childrenNames);
+        $this->assertContains('contacts', $childrenNames);
+
+        // Delegated address book
+        $this->assertCount(1, $delegatedAddressBooks);
+
+        $expectACL = [
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => 'principals/users/' . self::USER_ID,
+                'protected' => true
+            ],
+            [
+                'privilege' => '{DAV:}write-properties',
+                'principal' => 'principals/users/' . self::USER_ID,
+                'protected' => true
+            ]
+        ];
+        $properties = $delegatedAddressBooks[0]->getProperties([ 'acl', 'share_displayname' ]);
+
+        $this->assertEquals($properties['acl'], $expectACL);
+        $this->assertEquals($properties['share_displayname'], $delegatedAddressBookName);
     }
 }

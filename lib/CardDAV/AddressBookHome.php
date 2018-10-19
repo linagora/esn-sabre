@@ -38,9 +38,12 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
             }
         }
 
+        $sourcesOfSharedAddressBooks = [];
+
         // If the backend supports shared address books, we'll add those as well
         if ($this->carddavBackend instanceof Backend\SharingSupport) {
             foreach ($this->carddavBackend->getSharedAddressBooksForUser($this->principalUri) as $sharedAddressBook) {
+                $sourcesOfSharedAddressBooks[] = (string)$sharedAddressBook['addressbookid'];
                 $objs[] = new Sharing\SharedAddressBook($this->carddavBackend, $sharedAddressBook);
             }
         }
@@ -49,9 +52,13 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         if (isset($this->groupPrincipals)) {
             foreach ($this->groupPrincipals as $groupPrincipal) {
                 foreach ($this->carddavBackend->getAddressBooksFor($groupPrincipal['uri']) as $addressBook) {
-                    $addressBook['administrators'] = $groupPrincipal['administrators'];
+                    
+                    // Once group address book is delegated to user, the delegated one will override the source.
+                    if (!in_array((string)$addressBook['id'], $sourcesOfSharedAddressBooks)) {
+                        $addressBook['administrators'] = $groupPrincipal['administrators'];
 
-                    $objs[] = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
+                        $objs[] = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
+                    }
                 }
             }
         }

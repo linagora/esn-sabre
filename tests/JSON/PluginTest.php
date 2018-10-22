@@ -659,8 +659,8 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $firstCall = $this->request($request);
         $secondCall = $this->request($request);
 
-        $this->assertEquals($firstCall->status, 201);
-        $this->assertEquals($secondCall->status, 201);
+        $this->assertEquals(201, $firstCall->status);
+        $this->assertEquals(405, $secondCall->status);
 
         $calendarsAfter = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
         $this->assertCount(3, $calendarsAfter);
@@ -692,7 +692,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $response = $this->request($request);
 
         $jsonResponse = json_decode($response->getBodyAsString());
-        $this->assertEquals($response->status, 201);
+        $this->assertEquals(201, $response->status);
 
         $calendars = $this->caldavBackend->getCalendarsForUser('principals/resources/62b64eadf6d7d8e41d263e0c');
         $this->assertCount(1, $calendars);

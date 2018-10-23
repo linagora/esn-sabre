@@ -84,6 +84,7 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
 
         $index = array_search('GAB', $childrenNames);
         $this->assertEquals($children[$index]->getACL(), $expectACL);
+        $this->assertEquals($children[$index]->getProperties([])['{DAV:}group'], 'principals/domains/' . self::DOMAIN_ID);
     }
 
     function testGetChildrenWithGroupAdressBookIsDelegated() {

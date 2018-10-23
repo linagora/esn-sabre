@@ -30,6 +30,8 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
     function getProperties($properties) {
         $response = parent::getProperties($properties);
 
+        $response['{DAV:}group'] = $this->getOwner();
+
         if (in_array('acl', $properties)) {
             $response['acl'] = $this->getACL();
         }

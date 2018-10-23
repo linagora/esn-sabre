@@ -225,6 +225,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             '{DAV:}displayname',
             '{DAV:}acl',
             '{DAV:}share-access',
+            '{DAV:}group',
             '{http://open-paas.org/contacts}subscription-type',
             '{http://open-paas.org/contacts}source',
             '{http://open-paas.org/contacts}type',
@@ -242,6 +243,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             'openpaas:subscription-type' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}subscription-type'),
             'type' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}type'),
             'acl' => Utils::getArrayValue($bookProps, 'acl'),
+            'dav:group' => Utils::getArrayValue($bookProps, '{DAV:}group')
         ];
 
         if (isset($bookProps['{http://open-paas.org/contacts}source'])) {

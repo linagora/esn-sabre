@@ -13,7 +13,7 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
      * @param array $principal
      */
     function __construct(\Sabre\CardDAV\Backend\BackendInterface $carddavBackend, $principal) {
-        $this->groupPrincipals = $principal['groupPrincipals'];
+        $this->principal = $principal;
 
         parent::__construct($carddavBackend, $principal['uri']);
     }
@@ -49,8 +49,8 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         }
 
         // Add group address books
-        if (isset($this->groupPrincipals)) {
-            foreach ($this->groupPrincipals as $groupPrincipal) {
+        if (isset($this->principal['groupPrincipals'])) {
+            foreach ($this->principal['groupPrincipals'] as $groupPrincipal) {
                 foreach ($this->carddavBackend->getAddressBooksFor($groupPrincipal['uri']) as $addressBook) {
                     
                     // Once group address book is delegated to user, the delegated one will override the source.

@@ -338,7 +338,10 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'uri' => 'principals/domains/' . self::DOMAIN_ID,
             'id' => self::DOMAIN_ID,
             '{DAV:}displayname' => 'test',
-            'groupPrincipals' => []
+            'groupPrincipals' => [],
+            'administrators' => [
+                'principals/users/' . self::USER_DOMAIN_ADMIN_ID
+            ]
         ];
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);

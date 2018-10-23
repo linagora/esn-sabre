@@ -2,6 +2,8 @@
 
 namespace ESN\CardDAV;
 
+use ESN\Utils\Utils as Utils;
+
 class AddressBookRoot extends \Sabre\DAV\Collection {
 
     const PRINCIPAL_SUPPORTED_SET = [
@@ -27,7 +29,7 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
             $res = $this->principalBackend->getPrincipalsByPrefix($principalType);
 
             foreach ($res as $principal) {
-                $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $principal);
+                $homes[] = $this->initializeChildInstance($principal);
             }
         }
 
@@ -45,13 +47,18 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
             }
 
             if ($principal) {
-                return new \ESN\CardDAV\AddressBookHome(
-                    $this->addrbookBackend,
-                    $principal
-                );
+                return $this->initializeChildInstance($principal);
             }
         }
 
         throw new \Sabre\DAV\Exception\NotFound('Principal with name ' . $name . ' not found');
+    }
+
+    private function initializeChildInstance($principal) {
+        if (Utils::isUserPrincipal($principal['uri'])) {
+            return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $principal);
+        }
+
+        return new \ESN\CardDAV\GroupAddressBookHome($this->addrbookBackend, $principal);
     }
 }

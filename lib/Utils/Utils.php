@@ -35,6 +35,10 @@ class Utils {
         return strpos($principal, 'resources') !== false;
     }
 
+    static function isUserPrincipal($principal) {
+        return strpos($principal, '/users/') !== false;
+    }
+
     static function getPrincipalByUri($uri, \Sabre\DAV\Server $server) {
         $aclPlugin = $server->getPlugin('acl');
 

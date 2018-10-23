@@ -189,7 +189,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
 
                 $principal = [
                     'id' => (string)$obj['_id'],
-                    '{DAV:}displayname' => $displayname
+                    '{DAV:}displayname' => $displayname,
+                    'administrators' => $this->getAdministratorsForGroup('principals/' . $type . '/' . $obj['_id'])
                 ];
                 break;
         }

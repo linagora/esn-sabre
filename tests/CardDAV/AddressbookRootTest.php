@@ -12,6 +12,8 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
     protected $carddavBackend;
 
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
+    const USER_ID = '54313fcc398fef406b0041b6';
+    const ADMINISTRATOR_ID = '54313fcc398fef406b0041b7';
 
     function setUp() {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
@@ -29,7 +31,7 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
         $this->root = new AddressBookRoot($this->principalBackend, $this->carddavBackend);
 
         $this->esndb->users->insertOne([
-            '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6'),
+            '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID),
             'domains' => []
         ]);
         //$this->esndb->communities->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b4') ]);
@@ -39,7 +41,14 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
                 'title' => 'project'
             ]
             );
-        $this->esndb->domains->insertOne(['_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)]);
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => self::ADMINISTRATOR_ID
+                ]
+            ]
+        ]);
     }
 
     function testConstruct() {
@@ -107,6 +116,18 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($domain instanceof \Sabre\CardDAV\AddressBookHome);
         $this->assertEquals($domain->getName(), self::DOMAIN_ID);
         $this->assertEquals($domain->getOwner(), 'principals/domains/'.self::DOMAIN_ID);
+        $this->assertEquals($domain->getACL(), [
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => '{DAV:}owner',
+                'protected' => true
+            ],
+            [
+                'privilege' => '{DAV:}all',
+                'principal' => 'principals/users/' . self::ADMINISTRATOR_ID,
+                'protected' => true
+            ]
+        ]);
     }
 
     /**

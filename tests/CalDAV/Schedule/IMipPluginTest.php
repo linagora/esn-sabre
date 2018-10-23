@@ -191,6 +191,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
     function testScheduleNotSignificant() {
         $plugin = $this->getPlugin();
         $this->msg->significantChange = false;
+        $this->msg->hasChange = false;
 
         $plugin->schedule($this->msg);
         $this->assertEquals($this->msg->scheduleStatus, '1.0');

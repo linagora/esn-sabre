@@ -229,6 +229,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             '{http://open-paas.org/contacts}subscription-type',
             '{http://open-paas.org/contacts}source',
             '{http://open-paas.org/contacts}type',
+            '{http://open-paas.org/contacts}state',
             'acl'
         ]);
 
@@ -242,6 +243,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             'dav:share-access' => Utils::getArrayValue($bookProps, '{DAV:}share-access'),
             'openpaas:subscription-type' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}subscription-type'),
             'type' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}type'),
+            'state' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}state'),
             'acl' => Utils::getArrayValue($bookProps, 'acl'),
             'dav:group' => Utils::getArrayValue($bookProps, '{DAV:}group')
         ];
@@ -266,7 +268,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             '{DAV:}displayname' => $issetdef('dav:name'),
             '{urn:ietf:params:xml:ns:carddav}addressbook-description' => $issetdef('carddav:description'),
             '{DAV:}acl' => $issetdef('dav:acl'),
-            '{http://open-paas.org/contacts}type' => $issetdef('type')
+            '{http://open-paas.org/contacts}type' => $issetdef('type'),
+            '{http://open-paas.org/contacts}state' => $issetdef('state')
         ];
 
         $this->server->createCollection($homePath . '/' . $jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
@@ -312,7 +315,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         $propnameMap = [
             'dav:name' => '{DAV:}displayname',
-            'carddav:description' => '{urn:ietf:params:xml:ns:carddav}addressbook-description'
+            'carddav:description' => '{urn:ietf:params:xml:ns:carddav}addressbook-description',
+            'state' => '{http://open-paas.org/contacts}state'
         ];
 
         $davProps = [];

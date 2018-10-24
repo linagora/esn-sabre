@@ -131,9 +131,11 @@ class PluginTest extends PluginTestBase {
 
         $patchedName = 'Patched name';
         $patchedDescription = 'Patched description';
+        $patchedState = 'disabled';
         $data = [
             'dav:name' => $patchedName,
-            'carddav:description' => $patchedDescription
+            'carddav:description' => $patchedDescription,
+            'state' => $patchedState
         ];
         $request->setBody(json_encode($data));
 
@@ -146,6 +148,7 @@ class PluginTest extends PluginTestBase {
         $book = $addressbooks[0];
         $this->assertEquals($patchedName, $book['{DAV:}displayname']);
         $this->assertEquals($patchedDescription, $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+        $this->assertEquals($patchedState, $book['{http://open-paas.org/contacts}state']);
     }
 
     function testDeleteDefaultAddressBook() {
@@ -332,7 +335,8 @@ class PluginTest extends PluginTestBase {
             'dav:name' => 'NAME',
             'carddav:description' => 'DESCRIPTION',
             'dav:acl' => ['dav:read'],
-            'type' => 'social'
+            'type' => 'social',
+            'state' => 'enabled'
         ];
 
         $request->setBody(json_encode($addressbook));
@@ -349,6 +353,7 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals('DESCRIPTION', $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
         $this->assertEquals(new \MongoDB\Model\BSONArray(['dav:read']), $book['{DAV:}acl']);
         $this->assertEquals('social', $book['{http://open-paas.org/contacts}type']);
+        $this->assertEquals('enabled', $book['{http://open-paas.org/contacts}state']);
     }
 
     function testCreateAddressBookMissingId() {

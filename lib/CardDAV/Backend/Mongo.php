@@ -60,6 +60,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'principaluri' => 1,
             'privilege' => 1,
             'type' => 1,
+            'state' => 1,
             'description' => 1,
             'synctoken' => 1
         ];
@@ -75,6 +76,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getValue($row, 'description', ''),
                 '{DAV:}acl' => $this->getValue($row, 'privilege', ['dav:read', 'dav:write']),
                 '{http://open-paas.org/contacts}type' => $this->getValue($row, 'type', ''),
+                '{http://open-paas.org/contacts}state' => $this->getValue($row, 'state', ''),
                 '{http://calendarserver.org/ns/}getctag' => $row['synctoken'],
                 '{http://sabredav.org/ns}sync-token' => $this->getValue($row, 'synctoken', '0'),
             ];
@@ -98,7 +100,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $supportedProperties = [
             '{DAV:}displayname',
             '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description',
-            '{DAV:}acl'
+            '{DAV:}acl',
+            '{http://open-paas.org/contacts}state'
         ];
 
         $propPatch->handle($supportedProperties, function($mutations) use ($addressBookId) {
@@ -115,6 +118,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                         break;
                     case '{DAV:}acl' :
                         $updates['privilege'] = $newValue;
+                        break;
+                    case '{http://open-paas.org/contacts}state' :
+                        $updates['state'] = $newValue;
                         break;
                 }
             }
@@ -152,6 +158,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'privilege' => ['dav:read', 'dav:write'],
             'principaluri' => $principalUri,
             'type' => '',
+            'state' => '',
             'uri' => $uri,
         ];
 
@@ -169,6 +176,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                     break;
                 case '{http://open-paas.org/contacts}type' :
                     $values['type'] = $newValue;
+                    break;
+                case '{http://open-paas.org/contacts}state' :
+                    $values['state'] = $newValue;
                     break;
                 default :
                     throw new \Sabre\DAV\Exception\BadRequest('Unknown property: ' . $property);
@@ -643,7 +653,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'principaluri' => 1,
                 'uri' => 1,
                 'synctoken' => 1,
-                'type' => 1
+                'type' => 1,
+                'state' => 1
             ];
             $addressBookInstance = $collection->findOne($query, [ 'projection' => $projection ]);
 
@@ -658,6 +669,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getValue($row, 'description', ''),
                 '{http://open-paas.org/contacts}subscription-type' => 'delegation',
                 '{http://open-paas.org/contacts}type' => $this->getValue($addressBookInstance, 'type', ''),
+                '{http://open-paas.org/contacts}state' => $this->getValue($addressBookInstance, 'state', ''),
                 '{http://calendarserver.org/ns/}getctag' => $this->getValue($addressBookInstance, 'synctoken', '0'),
                 '{http://sabredav.org/ns}sync-token' => $this->getValue($addressBookInstance, 'synctoken', '0'),
                 'share_access' => $this->getValue($row, 'share_access', SPlugin::ACCESS_NOACCESS),

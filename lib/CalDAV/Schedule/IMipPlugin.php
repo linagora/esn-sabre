@@ -46,7 +46,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
         // Not sending any emails if the system considers the update
         // insignificant.
-        if (!$iTipMessage->significantChange) {
+        if (!$iTipMessage->significantChange && !$iTipMessage->hasChange) {
             if (!$iTipMessage->scheduleStatus) {
                 $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_PENDING;
             }

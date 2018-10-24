@@ -165,7 +165,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             if ($issetdef('openpaas:source')) {
                 list($code, $body) = $this->createSubscriptionAddressBook($path, $node, $jsonData);
             } else {
-                list($code, $body) = $this->createAddressBook($node, $jsonData);
+                list($code, $body) = $this->createAddressBook($path, $jsonData);
             }
         }
 
@@ -254,12 +254,12 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return $output;
     }
 
-    function createAddressBook($node, $jsonData) {
-        $issetdef = $this->propertyOrDefault($jsonData);
-
+    function createAddressBook($homePath, $jsonData) {
         if (!isset($jsonData->id) || !$jsonData->id) {
             return [400, null];
         }
+
+        $issetdef = $this->propertyOrDefault($jsonData);
 
         $rt = ['{DAV:}collection', '{urn:ietf:params:xml:ns:carddav}addressbook'];
         $props = [
@@ -269,7 +269,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             '{http://open-paas.org/contacts}type' => $issetdef('type')
         ];
 
-        $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
+        $this->server->createCollection($homePath . '/' . $jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];
     }

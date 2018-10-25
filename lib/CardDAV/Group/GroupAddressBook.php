@@ -2,6 +2,8 @@
 
 namespace ESN\CardDAV\Group;
 
+use ESN\DAV\Sharing\Plugin as SPlugin;
+
 /**
  * Group address book node
  *
@@ -63,5 +65,24 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
         }
 
         return $acl;
+    }
+
+    /**
+     * Updates the list of sharees.
+     *
+     * Every item must be a Sharee object.
+     *
+     * There's no invite status handling in group object so ACCEPTED is forced
+     *
+     *
+     * @param \Sabre\DAV\Xml\Element\Sharee[] $sharees
+     * @return void
+     */
+    function updateInvites(array $sharees) {
+        foreach ($sharees as $sharee) {
+            $sharee['inviteStatus'] = SPlugin::INVITE_ACCEPTED;
+        }
+
+        parent::updateInvites($sharees);
     }
 }

@@ -22,7 +22,10 @@ class GroupAddressBookHomeTest extends \PHPUnit_Framework_TestCase {
         $this->sabredb->drop();
         $this->carddavBackend = new \ESN\CardDAV\Backend\Esn($this->sabredb);
 
-        $this->books = new GroupAddressBookHome($this->carddavBackend, [ 'uri' => 'principals/domains/' . self::DOMAIN_ID ]);
+        $this->books = new GroupAddressBookHome($this->carddavBackend, [
+            'uri' => 'principals/domains/' . self::DOMAIN_ID,
+            'administrators' => [ 'principals/users/' . self::ADMINISTRATOR_ID ]
+        ]);
     }
 
     function testGetChildren() {

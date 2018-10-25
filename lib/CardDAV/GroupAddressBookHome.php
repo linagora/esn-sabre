@@ -35,6 +35,8 @@ class GroupAddressBookHome extends AddressBookHome {
         $children = [];
 
         foreach($addressbooks as $addressbook) {
+            $addressbook['administrators'] = $this->principal['administrators'];
+
             $children[] = new Group\GroupAddressBook($this->carddavBackend, $addressbook);
         }
 

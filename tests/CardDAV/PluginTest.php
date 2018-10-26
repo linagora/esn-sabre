@@ -75,7 +75,7 @@ class PluginTest extends PluginTestBase {
             ]);
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(2, $addressbooks);
+        $this->assertCount(3, $addressbooks);
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',
@@ -105,7 +105,7 @@ class PluginTest extends PluginTestBase {
             ]);
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(2, $addressbooks);
+        $this->assertCount(3, $addressbooks);
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',
@@ -143,12 +143,20 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals(204, $response->status);
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(1, $addressbooks);
+        $this->assertCount(3, $addressbooks);
 
-        $book = $addressbooks[0];
-        $this->assertEquals($patchedName, $book['{DAV:}displayname']);
-        $this->assertEquals($patchedDescription, $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
-        $this->assertEquals($patchedState, $book['{http://open-paas.org/contacts}state']);
+        $patchedAddressBook;
+
+        foreach ($addressbooks as $addressbook) {
+            if ($addressbook['uri'] === 'book1') {
+                $patchedAddressBook = $addressbook;
+                break;
+            }
+        }
+
+        $this->assertEquals($patchedName, $patchedAddressBook['{DAV:}displayname']);
+        $this->assertEquals($patchedDescription, $patchedAddressBook['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+        $this->assertEquals($patchedState, $patchedAddressBook['{http://open-paas.org/contacts}state']);
     }
 
     function testDeleteDefaultAddressBook() {
@@ -172,13 +180,13 @@ class PluginTest extends PluginTestBase {
             ]);
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(2, $addressbooks);
+        $this->assertCount(3, $addressbooks);
 
         $response = $this->request($request);
         $this->assertEquals(403, $response->status);
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(2, $addressbooks);
+        $this->assertCount(3, $addressbooks);
     }
 
     function testDeleteCollectedAddressBook() {
@@ -202,13 +210,13 @@ class PluginTest extends PluginTestBase {
             ]);
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(2, $addressbooks);
+        $this->assertCount(3, $addressbooks);
 
         $response = $this->request($request);
         $this->assertEquals(403, $response->status);
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(2, $addressbooks);
+        $this->assertCount(3, $addressbooks);
     }
 
     function testDeleteAddressBook() {
@@ -232,13 +240,13 @@ class PluginTest extends PluginTestBase {
         ));
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(1, $addressbooks);
+        $this->assertCount(3, $addressbooks);
 
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(0, $addressbooks);
+        $this->assertCount(2, $addressbooks);
 
         $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/'. $this->userTestId2);
         $this->assertCount(0, $subscriptions);
@@ -345,15 +353,22 @@ class PluginTest extends PluginTestBase {
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals(201, $response->status);
 
-        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(2, $addressbooks);
+        $addressBooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
+        $this->assertCount(4, $addressBooks);
 
-        $book = $addressbooks[0];
-        $this->assertEquals('NAME', $book['{DAV:}displayname']);
-        $this->assertEquals('DESCRIPTION', $book['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
-        $this->assertEquals(new \MongoDB\Model\BSONArray(['dav:read']), $book['{DAV:}acl']);
-        $this->assertEquals('social', $book['{http://open-paas.org/contacts}type']);
-        $this->assertEquals('enabled', $book['{http://open-paas.org/contacts}state']);
+        $createdAddressBook;
+
+        foreach ($addressBooks as $addressBook) {
+            if ($addressBook['uri'] === $addressbook['id']) {
+                $createdAddressBook = $addressBook;
+            }
+        }
+
+        $this->assertEquals('NAME', $createdAddressBook['{DAV:}displayname']);
+        $this->assertEquals('DESCRIPTION', $createdAddressBook['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+        $this->assertEquals(new \MongoDB\Model\BSONArray(['dav:read']), $createdAddressBook['{DAV:}acl']);
+        $this->assertEquals('social', $createdAddressBook['{http://open-paas.org/contacts}type']);
+        $this->assertEquals('enabled', $createdAddressBook['{http://open-paas.org/contacts}state']);
     }
 
     function testCreateAddressBookMissingId() {
@@ -375,7 +390,7 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals(400, $response->status);
 
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
-        $this->assertCount(1, $addressbooks);
+        $this->assertCount(3, $addressbooks);
     }
 
     function testTimeRangeWrongNode() {

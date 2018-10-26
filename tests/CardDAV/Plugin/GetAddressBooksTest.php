@@ -51,8 +51,10 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f.json');
 
         $addressBooks = $jsonResponse->{'_embedded'}->{'dav:addressbook'};
-        $this->assertCount(1, $addressBooks);
+        $this->assertCount(3, $addressBooks);
         $this->assertEquals($addressBooks[0]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json');
+        $this->assertEquals($addressBooks[1]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/collected.json');
+        $this->assertEquals($addressBooks[2]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/contacts.json');
     }
 
     function testGetPuclicAddressBooks() {

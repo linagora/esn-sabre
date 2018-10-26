@@ -17,8 +17,8 @@ class GroupAddressBookHomeTest extends \PHPUnit_Framework_TestCase {
 
     function setUp() {
         $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
-
         $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
+
         $this->sabredb->drop();
         $this->carddavBackend = new \ESN\CardDAV\Backend\Esn($this->sabredb);
 

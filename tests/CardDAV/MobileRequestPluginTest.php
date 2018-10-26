@@ -43,6 +43,15 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/',
         ));
 
+        $request->setBody('<?xml version="1.0" encoding="utf-8" ?>
+            <D:propfind xmlns:D="DAV:">
+                <D:prop>
+                    <D:displayname/>
+                    <D:resourcetype/>
+                </D:prop>
+            </D:propfind>'
+        );
+
         $response = $this->request($request);
 
         $this->assertEquals($response->status, 207);
@@ -50,13 +59,22 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
         $xmlResponses = $propFindXml->getResponses();
 
+        $displayNames = [];
+
         foreach($xmlResponses as $index => $xmlResponse) {
             $responseProps = $xmlResponse->getResponseProperties();
             $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
             
             if (isset($resourceType) && ($resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook"))) {
-                $this->assertTrue((boolean)preg_match("/My Collected Contacts/", $responseProps[200]['{DAV:}displayname']));
+                $displayNames[] = $responseProps[200]['{DAV:}displayname'];
             }
         }
+
+        // My default address books
+        $this->assertContains('My Collected Contacts', $displayNames);
+        $this->assertContains('My Contacts', $displayNames);
+
+        // Normal address book
+        $this->assertContains('Book 1 - Roberto Carlos', $displayNames);
     }
 }

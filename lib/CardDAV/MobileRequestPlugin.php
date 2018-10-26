@@ -96,7 +96,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
             $service = new \Sabre\Xml\Service();
             $data = $service->write('{DAV:}multistatus', $xml);
-            
+
             $response->setBody($data);
         }
     }

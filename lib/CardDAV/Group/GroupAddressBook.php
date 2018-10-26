@@ -39,6 +39,10 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
         return $response;
     }
 
+    function setMembersRight($privileges) {
+        return $this->carddavBackend->setMembersRight($this->addressBookInfo['id'], $privileges);
+    }
+
     private function updateAclWithAdministratorsRight($acl) {
         foreach ($this->addressBookInfo['administrators'] as $administrator) {
             $acl[] = [

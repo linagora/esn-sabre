@@ -8,7 +8,8 @@ use ESN\DAV\Sharing\Plugin as SPlugin;
 class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     \Sabre\CardDAV\Backend\SyncSupport,
     SubscriptionSupport,
-    SharingSupport {
+    SharingSupport,
+    GroupSupport {
 
     protected $eventEmitter;
 
@@ -968,6 +969,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         } else {
             $collection->updateMany($query, [ '$set' => $set ]);
         }
+    }
+
+    function setMembersRight($addressBookId, $privileges) {
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $query = [ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ];
+
+        $collection->updateOne($query, [ '$set' => [ 'privilege' => $privileges ] ]);
     }
 
     protected function addChange($addressBookId, $objectUri, $operation) {

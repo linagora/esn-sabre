@@ -41,6 +41,10 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
         return $response;
     }
 
+    function getInvites() {
+        return $this->carddavBackend->getInvites($this->addressBookInfo['id']);
+    }
+
     function setMembersRight($privileges) {
         return $this->carddavBackend->setMembersRight($this->addressBookInfo['id'], $privileges);
     }

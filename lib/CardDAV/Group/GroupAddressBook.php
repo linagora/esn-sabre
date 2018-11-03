@@ -107,7 +107,7 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
      */
     function updateInvites(array $sharees) {
         foreach ($sharees as $sharee) {
-            $sharee['inviteStatus'] = SPlugin::INVITE_ACCEPTED;
+            $sharee->inviteStatus = SPlugin::INVITE_ACCEPTED;
         }
 
         parent::updateInvites($sharees);

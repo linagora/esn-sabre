@@ -135,7 +135,7 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
      * @return string
      */
     function getShareResourceUri() {
-        return '/addressbooks/' . Utils::getUserIdFromPrincipalUri($this->getShareOwner()) . '/' . $this->addressBookInfo['share_resource_uri'];
+        return 'addressbooks/' . Utils::getPrincipalIdFromPrincipalUri($this->getShareOwner()) . '/' . $this->addressBookInfo['share_resource_uri'];
     }
 
     /**

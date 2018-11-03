@@ -149,12 +149,13 @@ class Utils {
         return [$data, $modified];
     }
 
-    static function getUserIdFromPrincipalUri($principalUri) {
+    static function getPrincipalIdFromPrincipalUri($principalUri) {
         $parts = explode('/', trim($principalUri, '/'));
 
         if (count($parts) !== 3) return;
         if ($parts[0] !== 'principals') return;
-        if ($parts[1] !== 'users') return;
+
+        if (!in_array($parts[1], ['users', 'domains'])) return;
 
         return $parts[2];
     }

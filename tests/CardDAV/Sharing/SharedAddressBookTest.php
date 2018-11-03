@@ -56,4 +56,32 @@ class SharedAddressBookTest extends \ESN\CardDAV\PluginTestBase {
             ]
         ]);
     }
+
+    function testGetShareResourceUriWhenSharedFromUserAddressBook() {
+        $userId = '54b64eadf6d7d8e41d263e9f';
+        $addressBook = [
+            'id' => '54b64eadf6d7d8e41d263e7e',
+            'uri' => 'foo',
+            'principaluri' => $this->userPrincipal,
+            'share_owner' => 'principals/users/' . $userId,
+            'share_resource_uri' => 'bar'
+        ];
+        $sharedAddressBook = new SharedAddressBook($this->carddavBackend, $addressBook);
+
+        $this->assertEquals($sharedAddressBook->getShareResourceUri(), 'addressbooks/' . $userId . '/' . $addressBook['share_resource_uri']);
+    }
+
+    function testGetShareResourceUriWhenSharedFromGroupAddressBook() {
+        $domainId = '54b64eadf6d7d8e41d263e9f';
+        $addressBook = [
+            'id' => '54b64eadf6d7d8e41d263e7e',
+            'uri' => 'foo',
+            'principaluri' => $this->userPrincipal,
+            'share_owner' => 'principals/domains/' . $domainId,
+            'share_resource_uri' => 'bar'
+        ];
+        $sharedAddressBook = new SharedAddressBook($this->carddavBackend, $addressBook);
+
+        $this->assertEquals($sharedAddressBook->getShareResourceUri(), 'addressbooks/' . $domainId . '/' . $addressBook['share_resource_uri']);
+    }
 }

@@ -49,6 +49,10 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
         return $this->carddavBackend->setMembersRight($this->addressBookInfo['id'], $privileges);
     }
 
+    function isDisabled() {
+        return isset($this->addressBookInfo['{http://open-paas.org/contacts}state']) && $this->addressBookInfo['{http://open-paas.org/contacts}state'] === 'disabled';
+    }
+
     private function updateAclWithAdministratorsRight($acl) {
         foreach ($this->addressBookInfo['administrators'] as $administrator) {
             $acl[] = [

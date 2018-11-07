@@ -58,8 +58,11 @@ class GroupAddressBookHome extends AddressBookHome {
                     // Once group address book is delegated to user, the delegated one will override the source.
                     if (!in_array((string)$addressBook['id'], $sourcesOfSharedAddressBooks)) {
                         $addressBook['administrators'] = $groupPrincipal['administrators'];
+                        $groupAddressBook = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
 
-                        $children[] = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
+                        if (!$groupAddressBook->isDisabled()) {
+                            $children[] = $groupAddressBook;
+                        }
                     }
                 }
             }

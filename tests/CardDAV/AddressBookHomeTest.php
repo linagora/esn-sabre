@@ -143,4 +143,28 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($properties['acl'], $expectACL);
         $this->assertEquals($properties['share_displayname'], $delegatedAddressBookName);
     }
+
+    function testGetChildrenWithDisabledGroupAdressBook() {
+        $createGroupAddressBookId = $this->carddavBackend->createAddressBook(
+            $this->domainPrincipal,
+            'GAB',
+            [
+                '{DAV:}acl' => [ '{DAV:}read' ],
+                '{http://open-paas.org/contacts}state' => 'disabled'
+            ]
+        );
+
+        $children = $this->books->getChildren();
+        $this->assertCount(2, $children);
+
+        $childrenNames = [];
+
+        foreach ($children as $child) {
+            $childrenNames[] = $child->getName();
+        }
+
+        // Default address books
+        $this->assertContains('collected', $childrenNames);
+        $this->assertContains('contacts', $childrenNames);
+    }
 }

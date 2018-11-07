@@ -26,15 +26,15 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
      */
     function getChildren() {
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->principalUri);
-        $objs = [];
+        $children = [];
         foreach($addressbooks as $addressbook) {
-            $objs[] = new \ESN\CardDAV\AddressBook($this->carddavBackend, $addressbook);
+            $children[] = new \ESN\CardDAV\AddressBook($this->carddavBackend, $addressbook);
         }
 
         // If the backend supports subscriptions, we'll add those as well
         if ($this->carddavBackend instanceof Backend\SubscriptionSupport) {
             foreach ($this->carddavBackend->getSubscriptionsForUser($this->principalUri) as $subscription) {
-                $objs[] = new \ESN\CardDAV\Subscriptions\Subscription($this->carddavBackend, $subscription);
+                $children[] = new \ESN\CardDAV\Subscriptions\Subscription($this->carddavBackend, $subscription);
             }
         }
 
@@ -44,7 +44,7 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         if ($this->carddavBackend instanceof Backend\SharingSupport) {
             foreach ($this->carddavBackend->getSharedAddressBooksForUser($this->principalUri) as $sharedAddressBook) {
                 $sourcesOfSharedAddressBooks[] = (string)$sharedAddressBook['addressbookid'];
-                $objs[] = new Sharing\SharedAddressBook($this->carddavBackend, $sharedAddressBook);
+                $children[] = new Sharing\SharedAddressBook($this->carddavBackend, $sharedAddressBook);
             }
         }
 
@@ -52,18 +52,21 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         if (isset($this->principal['groupPrincipals'])) {
             foreach ($this->principal['groupPrincipals'] as $groupPrincipal) {
                 foreach ($this->carddavBackend->getAddressBooksFor($groupPrincipal['uri']) as $addressBook) {
-                    
+
                     // Once group address book is delegated to user, the delegated one will override the source.
                     if (!in_array((string)$addressBook['id'], $sourcesOfSharedAddressBooks)) {
                         $addressBook['administrators'] = $groupPrincipal['administrators'];
+                        $groupAddressBook = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
 
-                        $objs[] = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
+                        if (!$groupAddressBook->isDisabled()) {
+                            $children[] = $groupAddressBook;
+                        }
                     }
                 }
             }
         }
 
-        return $objs;
+        return $children;
     }
 
     /**

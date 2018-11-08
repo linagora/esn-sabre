@@ -36,6 +36,7 @@ class GroupAddressBookHome extends AddressBookHome {
 
         foreach($addressbooks as $addressbook) {
             $addressbook['administrators'] = $this->principal['administrators'];
+            $addressBook['members'] = $this->principal['members'];
 
             $children[] = new Group\GroupAddressBook($this->carddavBackend, $addressbook);
         }
@@ -58,6 +59,7 @@ class GroupAddressBookHome extends AddressBookHome {
                     // Once group address book is delegated to user, the delegated one will override the source.
                     if (!in_array((string)$addressBook['id'], $sourcesOfSharedAddressBooks)) {
                         $addressBook['administrators'] = $groupPrincipal['administrators'];
+                        $addressBook['members'] = $groupPrincipal['members'];
                         $groupAddressBook = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
 
                         if (!$groupAddressBook->isDisabled()) {

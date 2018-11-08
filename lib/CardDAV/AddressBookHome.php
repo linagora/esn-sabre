@@ -56,6 +56,7 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
                     // Once group address book is delegated to user, the delegated one will override the source.
                     if (!in_array((string)$addressBook['id'], $sourcesOfSharedAddressBooks)) {
                         $addressBook['administrators'] = $groupPrincipal['administrators'];
+                        $addressBook['members'] = $groupPrincipal['members'];
                         $groupAddressBook = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
 
                         if (!$groupAddressBook->isDisabled()) {

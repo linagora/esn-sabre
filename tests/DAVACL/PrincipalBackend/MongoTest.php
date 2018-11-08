@@ -4,6 +4,7 @@ namespace ESN\DAVACL\PrincipalBackend;
 
 class MongoTest extends \PHPUnit_Framework_TestCase {
     protected static $esndb;
+    protected static $domainMembers;
 
     const USER_ID = '54313fcc398fef406b0041b6';
     const USER_WITH_TWO_ACCOUNTS_ID = '54313fcc398fef406b0041b7';
@@ -22,6 +23,17 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $mc = new \MongoDB\Client(ESN_MONGO_ESNURI);
         self::$esndb = $mc->{ESN_MONGO_ESNDB};
         self::$esndb->drop();
+
+        self::$domainMembers = [
+            'principals/users/' . self::USER_ID,
+            'principals/users/' . self::USER_WITH_NO_LASTNAME,
+            'principals/users/' . self::USER_WITH_NO_FIRSTNAME,
+            'principals/users/' . self::USER_WITH_ACCOUNT_ID,
+            'principals/users/' . self::USER_WITH_TWO_ACCOUNTS_ID,
+            'principals/users/' . self::USER_WITH_NO_EMAIL_ID,
+            'principals/users/' . self::USER_WITH_NO_EMAIL_ACCOUNT_ID,
+            'principals/users/' . self::USER_DOMAIN_ADMIN_ID
+        ];
 
         self::$esndb->domains->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
@@ -193,15 +205,18 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/communities/' . self::COMMUNITY_ID,
-                    'administrators' => []
+                    'administrators' => [],
+                    'members' => [ 'principals/users/' . self::USER_ID ]
                 ],
                 [
                     'uri' => 'principals/projects/' . self::PROJECT_ID,
-                    'administrators' => []
+                    'administrators' => [],
+                    'members' => [ 'principals/users/' . self::USER_ID ]
                 ],
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
+                    'members' => self::$domainMembers
                 ]
             ]
         ];
@@ -213,7 +228,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
+                    'members' => self::$domainMembers
                 ]
             ]
         ];
@@ -225,7 +241,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
+                    'members' => self::$domainMembers
                 ]
             ]
         ];
@@ -237,7 +254,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
+                    'members' => self::$domainMembers
                 ]
             ]
         ];
@@ -249,7 +267,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
+                    'members' => self::$domainMembers
                 ]
             ]
         ];
@@ -261,7 +280,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
+                    'members' => self::$domainMembers
                 ]
             ]
         ];
@@ -273,7 +293,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
+                    'members' => self::$domainMembers
                 ]
             ]
         ];
@@ -285,7 +306,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
+                    'members' => self::$domainMembers
                 ]
             ],
             'adminForDomains' => [ self::DOMAIN_ID ]
@@ -341,8 +363,10 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'groupPrincipals' => [],
             'administrators' => [
                 'principals/users/' . self::USER_DOMAIN_ADMIN_ID
-            ]
+            ],
+            'members' => self::$domainMembers
         ];
+
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);
 

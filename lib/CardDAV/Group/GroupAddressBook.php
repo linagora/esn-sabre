@@ -12,18 +12,8 @@ use ESN\DAV\Sharing\Plugin as SPlugin;
 class GroupAddressBook extends \ESN\CardDAV\AddressBook {
     function getACL() {
         $acl = [];
-
-        if($properties = $this->getProperties(['{DAV:}acl'])) {
-            foreach ($properties['{DAV:}acl'] as $privilege) {
-                $acl[] = [
-                        'privilege' => $privilege,
-                        'principal' => $this->getOwner(),
-                        'protected' => true
-                ];
-            }
-        }
-
         $acl = $this->updateAclWithShareAccess($acl);
+        $acl = $this->updateAclWithMembersAccess($acl);
         $acl = $this->updateAclWithAdministratorsRight($acl);
 
         return $acl;
@@ -51,6 +41,35 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
 
     function isDisabled() {
         return isset($this->addressBookInfo['{http://open-paas.org/contacts}state']) && $this->addressBookInfo['{http://open-paas.org/contacts}state'] === 'disabled';
+    }
+
+    private function updateAclWithMembersAccess($acl) {
+        $shareePrincipals = [];
+
+        foreach ($this->getInvites() as $sharee) {
+            $shareePrincipals[] = $sharee->principal;
+        }
+
+        foreach ($this->addressBookInfo['members'] as $member) {
+            
+            // If a member is delegated, he does not have group members rights
+            if (in_array($member, $shareePrincipals)) continue;
+
+            // Group administrators rights is handled in #updateAclWithAdministratorsRight function
+            if (in_array($member, $this->addressBookInfo['administrators'])) continue;
+
+            if($properties = $this->getProperties(['{DAV:}acl'])) {
+                foreach ($properties['{DAV:}acl'] as $privilege) {
+                    $acl[] = [
+                        'privilege' => $privilege,
+                        'principal' => $member,
+                        'protected' => true
+                    ];
+                }
+            }
+        }
+
+        return $acl;
     }
 
     private function updateAclWithAdministratorsRight($acl) {

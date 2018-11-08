@@ -11,7 +11,6 @@ class GroupAddressBookHomeTest extends \PHPUnit_Framework_TestCase {
     protected $sabredb;
     protected $carddavBackend;
 
-    const USER_ID = '54313fcc398fef406b0041b6';
     const ADMINISTRATOR_ID = '54313fcc398fef406b0041b7';
     const DOMAIN_ID = '54313fcc398fef406b0041b8';
 
@@ -24,7 +23,8 @@ class GroupAddressBookHomeTest extends \PHPUnit_Framework_TestCase {
 
         $this->books = new GroupAddressBookHome($this->carddavBackend, [
             'uri' => 'principals/domains/' . self::DOMAIN_ID,
-            'administrators' => [ 'principals/users/' . self::ADMINISTRATOR_ID ]
+            'administrators' => [ 'principals/users/' . self::ADMINISTRATOR_ID ],
+            'members' => [ 'principals/users/' . self::ADMINISTRATOR_ID ]
         ]);
     }
 

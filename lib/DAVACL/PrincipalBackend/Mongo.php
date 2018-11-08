@@ -134,6 +134,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
 
     private function objectToPrincipal($obj, $type) {
         $principal = null;
+        $principalUri = 'principals/' . $type . '/' . $obj['_id'];
+
         switch($type) {
             case "users":
                 $displayname = "";
@@ -190,18 +192,20 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 $principal = [
                     'id' => (string)$obj['_id'],
                     '{DAV:}displayname' => $displayname,
-                    'administrators' => $this->getAdministratorsForGroup('principals/' . $type . '/' . $obj['_id'])
+                    'administrators' => $this->getAdministratorsForGroup($principalUri),
+                    'members' => $this->getGroupMemberSet($principalUri)
                 ];
                 break;
         }
 
-        $principal['uri'] = 'principals/' . $type . '/' . $obj['_id'];
+        $principal['uri'] = $principalUri;
         $groupPrincipals = [];
 
         foreach ($this->getGroupMembership($principal['uri']) as $groupPrincipal) {
             $groupPrincipals[] = [
                 'uri' => $groupPrincipal,
-                'administrators' => $this->getAdministratorsForGroup($groupPrincipal)
+                'administrators' => $this->getAdministratorsForGroup($groupPrincipal),
+                'members' => $this->getGroupMemberSet($groupPrincipal)
             ];
         }
 

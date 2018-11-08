@@ -28,7 +28,11 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => $this->domainPrincipal,
-                    'administrators' => [ 'principals/users/' . self::ADMINISTRATOR_ID ]
+                    'administrators' => [ 'principals/users/' . self::ADMINISTRATOR_ID ],
+                    'members' => [
+                        'principals/users/' . self::ADMINISTRATOR_ID,
+                        'principals/users/' . self::USER_ID
+                    ]
                 ]
             ]
         ];
@@ -62,7 +66,7 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
         $expectACL = [
             [
                 'privilege' => '{DAV:}read',
-                'principal' => 'principals/domains/' . self::DOMAIN_ID,
+                'principal' => 'principals/users/' . self::USER_ID,
                 'protected' => true
             ],
             [

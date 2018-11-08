@@ -107,6 +107,10 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
      */
     function updateInvites(array $sharees) {
         foreach ($sharees as $sharee) {
+            if (in_array($sharee->principal, $this->addressBookInfo['administrators'])) {
+                throw new \Sabre\DAV\Exception\MethodNotAllowed('Can not delegate for group administrators');
+            }
+
             $sharee->inviteStatus = SPlugin::INVITE_ACCEPTED;
         }
 

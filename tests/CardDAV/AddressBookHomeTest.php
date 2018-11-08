@@ -135,11 +135,6 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
                 'privilege' => '{DAV:}read',
                 'principal' => 'principals/users/' . self::USER_ID,
                 'protected' => true
-            ],
-            [
-                'privilege' => '{DAV:}write-properties',
-                'principal' => 'principals/users/' . self::USER_ID,
-                'protected' => true
             ]
         ];
         $properties = $delegatedAddressBooks[0]->getProperties([ 'acl', 'share_displayname' ]);

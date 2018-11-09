@@ -31,8 +31,10 @@ class GroupAddressBookHome extends AddressBookHome {
      * @return array
      */
     function getChildren() {
-        $addressbooks = $this->carddavBackend->getAddressBooksFor($this->principalUri);
+        $this->sourcesOfSharedAddressBooks = [];
         $children = [];
+
+        $addressbooks = $this->carddavBackend->getAddressBooksFor($this->principalUri);
 
         foreach($addressbooks as $addressbook) {
             $addressbook['administrators'] = $this->principal['administrators'];
@@ -41,33 +43,14 @@ class GroupAddressBookHome extends AddressBookHome {
             $children[] = new Group\GroupAddressBook($this->carddavBackend, $addressbook);
         }
 
-        $sourcesOfSharedAddressBooks = [];
-
         // If the backend supports shared address books, we'll add those as well
         if ($this->carddavBackend instanceof Backend\SharingSupport) {
-            foreach ($this->carddavBackend->getSharedAddressBooksForUser($this->principalUri) as $sharedAddressBook) {
-                $sourcesOfSharedAddressBooks[] = (string)$sharedAddressBook['addressbookid'];
-                $children[] = new Sharing\SharedAddressBook($this->carddavBackend, $sharedAddressBook);
-            }
+            $children = $this->updateChildrenWithSharedAddressBooks($children);
         }
 
         // Add group address books
         if (isset($this->principal['groupPrincipals'])) {
-            foreach ($this->principal['groupPrincipals'] as $groupPrincipal) {
-                foreach ($this->carddavBackend->getAddressBooksFor($groupPrincipal['uri']) as $addressBook) {
-                    
-                    // Once group address book is delegated to user, the delegated one will override the source.
-                    if (!in_array((string)$addressBook['id'], $sourcesOfSharedAddressBooks)) {
-                        $addressBook['administrators'] = $groupPrincipal['administrators'];
-                        $addressBook['members'] = $groupPrincipal['members'];
-                        $groupAddressBook = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
-
-                        if (!$groupAddressBook->isDisabled()) {
-                            $children[] = $groupAddressBook;
-                        }
-                    }
-                }
-            }
+            $children = $this->updateChildrenWithGroupAddressBooks($children);
         }
 
         return $children;

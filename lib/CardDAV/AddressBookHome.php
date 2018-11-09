@@ -25,46 +25,28 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
      * @return array
      */
     function getChildren() {
-        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->principalUri);
+        $this->sourcesOfSharedAddressBooks = [];
         $children = [];
+
+        $addressbooks = $this->carddavBackend->getAddressBooksForUser($this->principalUri);
+
         foreach($addressbooks as $addressbook) {
             $children[] = new \ESN\CardDAV\AddressBook($this->carddavBackend, $addressbook);
         }
 
         // If the backend supports subscriptions, we'll add those as well
         if ($this->carddavBackend instanceof Backend\SubscriptionSupport) {
-            foreach ($this->carddavBackend->getSubscriptionsForUser($this->principalUri) as $subscription) {
-                $children[] = new \ESN\CardDAV\Subscriptions\Subscription($this->carddavBackend, $subscription);
-            }
+            $children = $this->updateChildrenWithSubscriptionAddressBooks($children);
         }
-
-        $sourcesOfSharedAddressBooks = [];
 
         // If the backend supports shared address books, we'll add those as well
         if ($this->carddavBackend instanceof Backend\SharingSupport) {
-            foreach ($this->carddavBackend->getSharedAddressBooksForUser($this->principalUri) as $sharedAddressBook) {
-                $sourcesOfSharedAddressBooks[] = (string)$sharedAddressBook['addressbookid'];
-                $children[] = new Sharing\SharedAddressBook($this->carddavBackend, $sharedAddressBook);
-            }
+            $children = $this->updateChildrenWithSharedAddressBooks($children);
         }
 
         // Add group address books
         if (isset($this->principal['groupPrincipals'])) {
-            foreach ($this->principal['groupPrincipals'] as $groupPrincipal) {
-                foreach ($this->carddavBackend->getAddressBooksFor($groupPrincipal['uri']) as $addressBook) {
-
-                    // Once group address book is delegated to user, the delegated one will override the source.
-                    if (!in_array((string)$addressBook['id'], $sourcesOfSharedAddressBooks)) {
-                        $addressBook['administrators'] = $groupPrincipal['administrators'];
-                        $addressBook['members'] = $groupPrincipal['members'];
-                        $groupAddressBook = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
-
-                        if (!$groupAddressBook->isDisabled()) {
-                            $children[] = $groupAddressBook;
-                        }
-                    }
-                }
-            }
+            $children = $this->updateChildrenWithGroupAddressBooks($children);
         }
 
         return $children;
@@ -129,5 +111,41 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         ];
 
         return $acl;
+    }
+
+    protected function updateChildrenWithSubscriptionAddressBooks($children) {
+        foreach ($this->carddavBackend->getSubscriptionsForUser($this->principalUri) as $subscription) {
+            $children[] = new \ESN\CardDAV\Subscriptions\Subscription($this->carddavBackend, $subscription);
+        }
+
+        return $children;
+    }
+
+    protected function updateChildrenWithSharedAddressBooks($children) {
+        foreach ($this->carddavBackend->getSharedAddressBooksForUser($this->principalUri) as $sharedAddressBook) {
+            $this->sourcesOfSharedAddressBooks[] = (string)$sharedAddressBook['addressbookid'];
+            $children[] = new Sharing\SharedAddressBook($this->carddavBackend, $sharedAddressBook);
+        }
+
+        return $children;
+    }
+
+    protected function updateChildrenWithGroupAddressBooks($children) {
+        foreach ($this->principal['groupPrincipals'] as $groupPrincipal) {
+            foreach ($this->carddavBackend->getAddressBooksFor($groupPrincipal['uri']) as $addressBook) {
+                // Once group address book is delegated to user, the delegated one will override the source.
+                if (in_array((string)$addressBook['id'], $this->sourcesOfSharedAddressBooks)) continue;
+                
+                $addressBook['administrators'] = $groupPrincipal['administrators'];
+                $addressBook['members'] = $groupPrincipal['members'];
+                $groupAddressBook = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
+
+                if (!$groupAddressBook->isDisabled()) {
+                    $children[] = $groupAddressBook;
+                }
+            }
+        }
+
+        return $children;
     }
 }

@@ -13,7 +13,11 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
     function getACL() {
         $acl = [];
         $acl = $this->updateAclWithShareAccess($acl);
-        $acl = $this->updateAclWithMembersAccess($acl);
+
+        if (isset($this->addressBookInfo['members'])) {
+            $acl = $this->updateAclWithMembersAccess($acl);
+        }
+
         $acl = $this->updateAclWithAdministratorsRight($acl);
 
         return $acl;

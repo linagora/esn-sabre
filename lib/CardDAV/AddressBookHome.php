@@ -123,8 +123,11 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
 
     protected function updateChildrenWithSharedAddressBooks($children) {
         foreach ($this->carddavBackend->getSharedAddressBooksForUser($this->principalUri) as $sharedAddressBook) {
-            $this->sourcesOfSharedAddressBooks[] = (string)$sharedAddressBook['addressbookid'];
-            $children[] = new Sharing\SharedAddressBook($this->carddavBackend, $sharedAddressBook);
+            $sharedAddressBookInstance = new Sharing\SharedAddressBook($this->carddavBackend, $sharedAddressBook);
+
+            $this->sourcesOfSharedAddressBooks[(string)$sharedAddressBook['addressbookid']] = $sharedAddressBookInstance;
+
+            $children[] = $sharedAddressBookInstance;
         }
 
         return $children;
@@ -133,16 +136,25 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
     protected function updateChildrenWithGroupAddressBooks($children) {
         foreach ($this->principal['groupPrincipals'] as $groupPrincipal) {
             foreach ($this->carddavBackend->getAddressBooksFor($groupPrincipal['uri']) as $addressBook) {
-                // Once group address book is delegated to user, the delegated one will override the source.
-                if (in_array((string)$addressBook['id'], $this->sourcesOfSharedAddressBooks)) continue;
-                
                 $addressBook['administrators'] = $groupPrincipal['administrators'];
                 $addressBook['members'] = $groupPrincipal['members'];
                 $groupAddressBook = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
 
-                if (!$groupAddressBook->isDisabled()) {
-                    $children[] = $groupAddressBook;
+                if ($groupAddressBook->isDisabled()) {
+                    // Do not return shared address books which are delegated from disabled group address book
+                    if (isset($this->sourcesOfSharedAddressBooks[(string)$addressBook['id']])) {
+                        $index = array_search($this->sourcesOfSharedAddressBooks[(string)$addressBook['id']], $children);
+
+                        array_splice($children, $index, 1);
+                    }
+
+                    continue;
                 }
+
+                // Once group address book is delegated to user, the delegated one will override the source.
+                if (isset($this->sourcesOfSharedAddressBooks[(string)$addressBook['id']])) continue;
+
+                $children[] = $groupAddressBook;
             }
         }
 

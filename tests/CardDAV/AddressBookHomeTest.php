@@ -166,4 +166,44 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
         $this->assertContains('collected', $childrenNames);
         $this->assertContains('contacts', $childrenNames);
     }
+
+    function testGetChildrenWithSharedDisabledGroupAddressBook() {
+        $createGroupAddressBookId = $this->carddavBackend->createAddressBook($this->domainPrincipal, 'GAB', [
+            '{DAV:}acl' => [ '{DAV:}read' ],
+            '{http://open-paas.org/contacts}state' => 'disabled'
+        ]);
+        $delegatedAddressBookName = 'DelegatedGAB';
+
+        // Share GAB for user
+        $this->carddavBackend->updateInvites(
+            $createGroupAddressBookId,
+            [
+                new \Sabre\DAV\Xml\Element\Sharee([
+                    'href' => self::USER_ID,
+                    'access' => SPlugin::ACCESS_READWRITE,
+                    'inviteStatus' => SPlugin::INVITE_ACCEPTED,
+                    'properties' => [ '{DAV:}displayname' => $delegatedAddressBookName ],
+                    'principal' => 'principals/users/' . self::USER_ID
+                ])
+            ]
+        );
+
+        $children = $this->books->getChildren();
+        $this->assertCount(2, $children);
+
+        $childrenNames = [];
+        $delegatedAddressBooks = [];
+
+        foreach ($children as $child) {
+            $childrenNames[] = $child->getName();
+
+            if ($child instanceof \ESN\CardDAV\Sharing\SharedAddressBook) {
+                $delegatedAddressBooks[] = $child;
+            }
+        }
+
+        // Default address books
+        $this->assertContains('collected', $childrenNames);
+        $this->assertContains('contacts', $childrenNames);
+    }
 }

@@ -34,13 +34,13 @@ class GroupAddressBookHome extends AddressBookHome {
         $this->sourcesOfSharedAddressBooks = [];
         $children = [];
 
-        $addressbooks = $this->carddavBackend->getAddressBooksFor($this->principalUri);
+        $addressBooks = $this->carddavBackend->getAddressBooksFor($this->principalUri);
 
-        foreach($addressbooks as $addressbook) {
-            $addressbook['administrators'] = $this->principal['administrators'];
+        foreach($addressBooks as $addressBook) {
+            $addressBook['administrators'] = $this->principal['administrators'];
             $addressBook['members'] = $this->principal['members'];
 
-            $children[] = new Group\GroupAddressBook($this->carddavBackend, $addressbook);
+            $children[] = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
         }
 
         // If the backend supports shared address books, we'll add those as well

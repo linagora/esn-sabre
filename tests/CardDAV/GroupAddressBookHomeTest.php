@@ -13,6 +13,7 @@ class GroupAddressBookHomeTest extends \PHPUnit_Framework_TestCase {
 
     const ADMINISTRATOR_ID = '54313fcc398fef406b0041b7';
     const DOMAIN_ID = '54313fcc398fef406b0041b8';
+    const USER_ID = '54313fcc398fef406b0041c9';
 
     function setUp() {
         $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
@@ -24,7 +25,10 @@ class GroupAddressBookHomeTest extends \PHPUnit_Framework_TestCase {
         $this->books = new GroupAddressBookHome($this->carddavBackend, [
             'uri' => 'principals/domains/' . self::DOMAIN_ID,
             'administrators' => [ 'principals/users/' . self::ADMINISTRATOR_ID ],
-            'members' => [ 'principals/users/' . self::ADMINISTRATOR_ID ]
+            'members' => [
+                'principals/users/' . self::ADMINISTRATOR_ID,
+                'principals/users/' . self::USER_ID
+            ]
         ]);
     }
 
@@ -37,5 +41,29 @@ class GroupAddressBookHomeTest extends \PHPUnit_Framework_TestCase {
 
         $children = $this->books->getChildren();
         $this->assertInstanceOf('\ESN\CardDAV\Group\GroupAddressBook', $children[0]);
+
+        $expectACL = [
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => 'principals/users/' . self::USER_ID,
+                'protected' => true
+            ],
+            [
+                'privilege' => '{DAV:}read',
+                'principal' => 'principals/users/' . self::ADMINISTRATOR_ID,
+                'protected' => true
+            ],
+            [
+                'privilege' => '{DAV:}write',
+                'principal' => 'principals/users/' . self::ADMINISTRATOR_ID,
+                'protected' => true
+            ],
+            [
+                'privilege' => '{DAV:}share',
+                'principal' => 'principals/users/' . self::ADMINISTRATOR_ID,
+                'protected' => true
+            ]
+        ];
+        $this->assertEquals($children[0]->getACL(), $expectACL);
     }
 }

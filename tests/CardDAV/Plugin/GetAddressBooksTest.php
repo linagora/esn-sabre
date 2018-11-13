@@ -98,6 +98,57 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
         );
     }
 
+    function testGetAddressBooksContainGroupAddressBook() {
+        $domainID = '54313fcc398fef406b0041b8';
+        $userID = '54313fcc398fef406b0041b7';
+
+        $this->authBackend->setPrincipal('principals/users/' . $userID);
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($domainID),
+            'administrators' => [
+                [ 'user_id' => new \MongoDB\BSON\ObjectId($userID) ]
+            ]
+        ]);
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($userID),
+            'firstname' => 'admin',
+            'lastname' => 'admin',
+            'accounts' => [
+                [
+                    'type' => 'email',
+                    'emails' => [
+                      'admin@lng.com'
+                    ]
+                ]
+                    ],
+            'domains' => [ [ 'domain_id' => $domainID] ]
+        ]);
+
+        $publicBookId = $this->carddavBackend->createAddressBook(
+            'principals/domains/' . $domainID,
+            'gab',
+            [ '{DAV:}acl' => [ '{DAV:}read' ] ]
+        );
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $userID . '.json?personal=true',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+
+        $addressBooks = $jsonResponse->{'_embedded'}->{'dav:addressbook'};
+
+        $this->assertCount(3, $addressBooks);
+        $this->assertEquals($addressBooks[0]->{'_links'}->self->href, '/addressbooks/' . $userID . '/collected.json');
+        $this->assertEquals($addressBooks[1]->{'_links'}->self->href, '/addressbooks/' . $userID . '/contacts.json');
+        $this->assertEquals($addressBooks[2]->{'_links'}->self->href, '/addressbooks/' . $domainID . '/gab.json');
+    }
+
     function testGetSubscribedAddressBooks() {
         $this->carddavBackend->createSubscription(
             'principals/users/'. $this->userTestId2,

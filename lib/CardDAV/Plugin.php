@@ -233,9 +233,22 @@ class Plugin extends \ESN\JSON\BasePlugin {
             'acl'
         ]);
 
+        $addressBookHref = $baseUri . $nodePath . '.json';
+
+        // If there is a group address book, we need to ensure address book href contains group ID
+        if (!Utils::isUserPrincipal($addressBook->getOwner())) {
+            $ownerPrincipalExploded = explode('/', $addressBook->getOwner());
+            $nodePathExploded = explode('/', $nodePath);
+
+            $addressBookHref = $baseUri . $nodePathExploded[0] . '/' . $ownerPrincipalExploded[2] . '/' . $nodePathExploded[2] . '.json';
+        }
+
+        $ownerPrincipalExploded = explode('/', $addressBook->getOwner());
+        $nodePathExploded = explode('/', $nodePath);
+
         $output = [
             '_links' => [
-                'self' => [ 'href' => $baseUri . $nodePath . '.json' ],
+                'self' => [ 'href' => $addressBookHref ],
             ],
             'dav:name' => Utils::getArrayValue($bookProps, '{DAV:}displayname'),
             'carddav:description' => Utils::getArrayValue($bookProps, '{urn:ietf:params:xml:ns:carddav}addressbook-description'),

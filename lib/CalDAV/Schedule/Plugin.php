@@ -39,8 +39,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      */
     function deliver(ITip\Message $iTipMessage)
     {
-        if (!$iTipMessage->message->VEVENT->SEQUENCE) {
-            $iTipMessage->message->VEVENT->SEQUENCE = 0;
+        if (!$iTipMessage->message->VEVENT->SEQUENCE->getValue()) {
+            $iTipMessage->message->VEVENT->SEQUENCE->setValue(0);
         }
 
         parent::deliver($iTipMessage);

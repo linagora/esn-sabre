@@ -21,7 +21,7 @@ class SchedulePluginTest extends \PHPUnit_Framework_TestCase {
 
         $this->plugin->deliver($message);
 
-        $this->assertEquals('0', $message->message->VEVENT->SEQUENCE);
+        $this->assertEquals('0', $message->message->VEVENT->SEQUENCE->getValue());
     }
 
     function testDeliverShouldNotSetSequenceWhen0() {
@@ -29,7 +29,7 @@ class SchedulePluginTest extends \PHPUnit_Framework_TestCase {
 
         $this->plugin->deliver($message);
 
-        $this->assertEquals('0', $message->message->VEVENT->SEQUENCE);
+        $this->assertEquals('0', $message->message->VEVENT->SEQUENCE->getValue());
     }
 
     function testDeliverShouldNotSetSequenceWhenPresent() {
@@ -37,7 +37,7 @@ class SchedulePluginTest extends \PHPUnit_Framework_TestCase {
 
         $this->plugin->deliver($message);
 
-        $this->assertEquals('1', $message->message->VEVENT->SEQUENCE);
+        $this->assertEquals('1', $message->message->VEVENT->SEQUENCE->getValue());
     }
 
     private function newItipMessage($sequence) {

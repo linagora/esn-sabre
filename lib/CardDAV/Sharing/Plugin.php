@@ -152,6 +152,37 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 return $this->send($code, $body);
             }
 
+            if ($data = Utils::getJsonValue($jsonData, 'dav:group-addressbook')) {
+                $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
+                $supportMembersRights = [
+                    '{DAV:}read',
+                    '{DAV:}write-content',
+                    '{DAV:}bind',
+                    '{DAV:}unbind'
+                ];
+
+                $privileges = Utils::getJsonValue($data, 'privileges', false);
+
+                if (!is_array($privileges)) {
+                    throw new \Sabre\DAV\Exception\BadRequest('Privileges must be an array');
+                }
+
+                if (empty($privileges)) {
+                    throw new \Sabre\DAV\Exception\BadRequest('Privileges must not an empty array');
+                }
+
+                foreach ($privileges as $privilege) {
+                    if (!in_array($privilege, $supportMembersRights)) {
+                        throw new \Sabre\DAV\Exception\BadRequest('Privilege is not supported. Supported privileges are ' . join(',', $supportMembersRights));
+                    }
+                }
+
+                $node->setMembersRight($privileges);
+
+                $code = 204;
+                return $this->send($code, $body);
+            }
+
             // If this request handler could not deal with this POST request, it
             // will return 'null' and other plugins get a chance to handle the
             // request.

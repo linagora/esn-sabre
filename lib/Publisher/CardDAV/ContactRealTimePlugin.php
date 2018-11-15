@@ -4,6 +4,7 @@ namespace ESN\Publisher\CardDAV;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use Sabre\Uri;
+use ESN\Utils\Utils as Utils;
 
 class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
@@ -23,6 +24,7 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $this->moved = false;
 
         $server->on('afterBind',          [$this, 'afterBind']);
+        $server->on('beforeUnbind',        [$this, 'beforeUnbind']);
         $server->on('afterUnbind',        [$this, 'afterUnbind']);
         $server->on('afterWriteContent',  [$this, 'afterWriteContent']);
     }
@@ -40,7 +42,7 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         if ($node instanceof \Sabre\CardDAV\Card) {
             $this->createMessage($this->PUBSUB_TOPICS['CONTACT_CREATED'], [
-                'path'     => $path,
+                'path'     => $this->ensureContactPathContainsOwnerId($path, $node->getOwner()),
                 'owner'    => $node->getOwner(),
                 'carddata' => $node->get()
             ]);
@@ -50,10 +52,26 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 'carddata' => $node->get()
             ]);
 
+            if (!Utils::isUserPrincipal($node->getOwner())) {
+                $this->notifyMemberAddressBooks($node, $path, 'CREATED');
+            }
+
             $this->publishMessages();
         }
 
         return true;
+    }
+
+    function beforeUnbind($path) {
+        if (!$this->isCardPath($path)) {
+            return true;
+        }
+
+        $node = $this->server->tree->getNodeForPath('/'.$path);
+
+        if (!Utils::isUserPrincipal($node->getOwner())) {
+            $this->notifyMemberAddressBooks($node, $path, 'DELETED');
+        }
     }
 
     function afterUnbind($path) {
@@ -80,7 +98,7 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $this->createMessage(
                 $this->PUBSUB_TOPICS['CONTACT_UPDATED'],
                 [
-                    'path'     => $path,
+                    'path'     => $this->ensureContactPathContainsOwnerId($path, $node->getOwner()),
                     'owner'    => $node->getOwner(),
                     'carddata' => $node->get()
                 ]
@@ -90,6 +108,10 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 'owner'    => $node->getOwner(),
                 'carddata' => $node->get()
             ]);
+
+            if (!Utils::isUserPrincipal($node->getOwner())) {
+                $this->notifyMemberAddressBooks($node, $path, 'UPDATED');
+            }
 
             $this->publishMessages();
         }
@@ -112,7 +134,35 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         }
     }
 
+    private function notifyMemberAddressBooks($cardNode, $cardPath, $action) {
+        $ownerPrincipalNode = $this->server->tree->getNodeForPath($cardNode->getOwner());
+        $memberPrincipals = $ownerPrincipalNode->getGroupMemberSet();
+
+        foreach ($memberPrincipals as $principal) {
+            $principalExploded = explode('/', $principal);
+            $cardPathExploded = explode('/', $cardPath);
+
+            $dataMessage = [
+                'path' => 'addressbooks/'.$principalExploded[2].'/'.$cardPathExploded[2].'/'.$cardPathExploded[3],
+                'groupAddressBook' => true,
+                'owner'    => $cardNode->getOwner(),
+                'carddata' => $cardNode->get()
+            ];
+
+            $this->createMessage($this->PUBSUB_TOPICS['CONTACT_'.$action], $dataMessage);
+        }
+    }
+
     private function isCardPath($path) {
         return preg_match('/^addressbooks\/.*?\.vcf$/', $path);
+    }
+
+    private function ensureContactPathContainsOwnerId($path, $ownerPrincipal) {
+        $pathExploded = explode('/', $path);
+        $ownerPrincipalExploded = explode('/', $ownerPrincipal);
+
+        $pathExploded[1] = $ownerPrincipalExploded[2];
+
+        return join('/', $pathExploded);
     }
 }

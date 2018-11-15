@@ -2,16 +2,20 @@
 
 namespace ESN\CardDAV;
 
+use ESN\Utils\Utils as Utils;
+
 class AddressBookRoot extends \Sabre\DAV\Collection {
 
-    const USER_PREFIX = 'principals/users';
-    const COMMUNITY_PREFIX = 'principals/communities';
-    const PROJECT_PREFIX = 'principals/projects';
+    const PRINCIPAL_SUPPORTED_SET = [
+        'principals/users',
+        // 'principals/communities', // Uncomment to reactive the fetch for communities
+        'principals/projects',
+        'principals/domains'
+    ];
 
-    function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CardDAV\Backend\BackendInterface $addrbookBackend, \MongoDB\Database $db) {
+    function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CardDAV\Backend\BackendInterface $addrbookBackend) {
         $this->principalBackend = $principalBackend;
         $this->addrbookBackend = $addrbookBackend;
-        $this->db = $db;
     }
 
     public function getName() {
@@ -19,55 +23,42 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
     }
 
     public function getChildren() {
-        //throw new \Sabre\DAV\Exception\MethodNotAllowed('Listing children in this collection has been disabled');
         $homes = [];
-        $res = $this->db->users->find([], [ 'projection' => ['_id' => 1 ]]);
-        foreach ($res as $user) {
-            $uri = self::USER_PREFIX . '/' . $user['_id'];
-            $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
-        }
 
-        //Reactive the fetch for communities
-        /*$res = $this->db->communities->find([], [ 'projection' => ['_id' => 1 ]]);
-        foreach ($res as $community) {
-            $uri = self::COMMUNITY_PREFIX . '/' . $community['_id'];
-            $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
-        }*/
-        $res = $this->db->projects->find([], [ 'projection' => ['_id' => 1 ]]);
-        foreach ($res as $project) {
-            $uri = self::PROJECT_PREFIX . '/' . $project['_id'];
-            $homes[] = new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
+        foreach(self::PRINCIPAL_SUPPORTED_SET as $principalType) {
+            $res = $this->principalBackend->getPrincipalsByPrefix($principalType);
+
+            foreach ($res as $principal) {
+                $homes[] = $this->initializeChildInstance($principal);
+            }
         }
 
         return $homes;
     }
 
     public function getChild($name) {
-        try {
-            $mongoName = new \MongoDB\BSON\ObjectId($name);
-        } catch (\MongoDB\Driver\Exception\Exception $e) {
-            return null;
-        }
+        foreach(self::PRINCIPAL_SUPPORTED_SET as $principalType) {
+            $uri = $principalType . '/' . $name;
 
-        $res = $this->db->users->findOne(['_id' => $mongoName]);
-        if ($res) {
-            $uri = self::USER_PREFIX . '/' . $name;
-            return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
-        }
+            try {
+                $principal = $this->principalBackend->getPrincipalByPath($uri);
+            } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
+                return null;
+            }
 
-        //Reactive the fetch for communities
-        /*$res = $this->db->communities->findOne([ '_id' => $mongoName ], [ 'projection' => []]);
-        if ($res) {
-            $uri = self::COMMUNITY_PREFIX . '/' . $name;
-            return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
-        }*/
-
-        $res = $this->db->projects->findOne([ '_id' => $mongoName ], [ 'projection' => []]);
-        if ($res) {
-            $uri = self::PROJECT_PREFIX . '/' . $name;
-            return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $uri);
+            if ($principal) {
+                return $this->initializeChildInstance($principal);
+            }
         }
 
         throw new \Sabre\DAV\Exception\NotFound('Principal with name ' . $name . ' not found');
+    }
+
+    private function initializeChildInstance($principal) {
+        if (Utils::isUserPrincipal($principal['uri'])) {
+            return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $principal);
+        }
+
+        return new \ESN\CardDAV\GroupAddressBookHome($this->addrbookBackend, $principal);
     }
 }

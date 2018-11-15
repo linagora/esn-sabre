@@ -19,6 +19,7 @@ define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
 define('PRINCIPALS_COMMUNITIES', 'principals/communities');
 define('PRINCIPALS_PROJECTS', 'principals/projects');
 define('PRINCIPALS_RESOURCES', 'principals/resources');
+define('PRINCIPALS_DOMAINS', 'principals/domains');
 
 /**
  * @medium
@@ -242,7 +243,8 @@ END:VCALENDAR'
                       'robertocarlos@realmadrid.com'
                     ]
                 ]
-            ]
+                    ],
+            'domains' => []
         ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0e'),
@@ -253,7 +255,8 @@ END:VCALENDAR'
                       'johndoe@example.org'
                     ]
                 ]
-            ]
+            ],
+            'domains' => []
         ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0d'),
@@ -264,7 +267,8 @@ END:VCALENDAR'
                       'johndoe2@example.org'
                     ]
                 ]
-            ]
+            ],
+            'domains' => []
         ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0c'),
@@ -275,7 +279,8 @@ END:VCALENDAR'
                       'janedoe@example.org'
                     ]
                 ]
-            ]
+            ],
+            'domains' => []
         ]);
 
         $this->esndb->resources->insertOne([
@@ -286,15 +291,15 @@ END:VCALENDAR'
 
         $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\EsnRequest($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
-        $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
+        $this->carddavBackend = new \ESN\CardDAV\Backend\Esn($this->sabredb);
 
         $this->tree[] = new \Sabre\DAV\SimpleCollection('principals', [
-          new \Sabre\CalDAV\Principal\Collection($this->principalBackend, 'principals/users')
+          new \Sabre\CalDAV\Principal\Collection($this->principalBackend, 'principals/users'),
+          new \Sabre\CalDAV\Principal\Collection($this->principalBackend, 'principals/domains')
         ]);
         $this->tree[] = new \ESN\CardDAV\AddressBookRoot(
             $this->principalBackend,
-            $this->carddavBackend,
-            $this->esndb
+            $this->carddavBackend
         );
         $this->tree[] = new \ESN\CalDAV\CalendarRoot(
             $this->principalBackend,
@@ -331,7 +336,8 @@ END:VCALENDAR'
             PRINCIPALS_USERS,
             PRINCIPALS_COMMUNITIES,
             PRINCIPALS_PROJECTS,
-            PRINCIPALS_RESOURCES
+            PRINCIPALS_RESOURCES,
+            PRINCIPALS_DOMAINS
         ];
         $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
         $this->server->addPlugin($aclPlugin);

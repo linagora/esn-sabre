@@ -35,6 +35,10 @@ class Utils {
         return strpos($principal, 'resources') !== false;
     }
 
+    static function isUserPrincipal($principal) {
+        return strpos($principal, '/users/') !== false;
+    }
+
     static function getPrincipalByUri($uri, \Sabre\DAV\Server $server) {
         $aclPlugin = $server->getPlugin('acl');
 
@@ -145,12 +149,13 @@ class Utils {
         return [$data, $modified];
     }
 
-    static function getUserIdFromPrincipalUri($principalUri) {
+    static function getPrincipalIdFromPrincipalUri($principalUri) {
         $parts = explode('/', trim($principalUri, '/'));
 
         if (count($parts) !== 3) return;
         if ($parts[0] !== 'principals') return;
-        if ($parts[1] !== 'users') return;
+
+        if (!in_array($parts[1], ['users', 'domains'])) return;
 
         return $parts[2];
     }

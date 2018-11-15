@@ -69,10 +69,17 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 
                 if (isset($resourceType) && $resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook")) {
                     $addressBookPath = $xmlResponse->getHref();
-                    list($type, $ownerId, $addressbookType) = explode('/', trim($addressBookPath, '/'));
+                    list($type, $bookId, $addressbookType) = explode('/', trim($addressBookPath, '/'));
                     list(,, $currentUserId) = explode('/', $this->currentUser);
 
                     $addressBookNode = $this->server->tree->getNodeForPath($addressBookPath);
+                    list(,, $ownerId) = explode('/', $addressBookNode->getOwner());
+
+                    if ($addressBookNode instanceof Group\GroupAddressBook && $addressBookNode->isDisabled()) continue;
+
+                    // Do not return address book if the query book ID is not owner ID
+                    if ($bookId !== $ownerId) continue;
+
                     $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getOwner());
                     $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
@@ -96,7 +103,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
             $service = new \Sabre\Xml\Service();
             $data = $service->write('{DAV:}multistatus', $xml);
-            
+
             $response->setBody($data);
         }
     }

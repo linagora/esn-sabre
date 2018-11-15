@@ -41,6 +41,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 '{http://calendarserver.org/ns/}getctag' => 1,
                 '{DAV:}acl' => new \MongoDB\Model\BSONArray(['dav:read', 'dav:write']),
                 '{http://open-paas.org/contacts}type' => '',
+                '{http://open-paas.org/contacts}state' => '',
                 '{http://sabredav.org/ns}sync-token' => "1"
             )
         );
@@ -61,6 +62,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 '{http://calendarserver.org/ns/}getctag' => 1,
                 '{DAV:}acl' => ['dav:read', 'dav:write'],
                 '{http://open-paas.org/contacts}type' => 'social',
+                '{http://open-paas.org/contacts}state' => '',
                 '{http://sabredav.org/ns}sync-token' => "1"
             )
         );
@@ -92,7 +94,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 1',
                 '{http://calendarserver.org/ns/}getctag' => 1,
                 '{http://sabredav.org/ns}sync-token' => 1,
-                '{http://open-paas.org/contacts}type' => ''
+                '{http://open-paas.org/contacts}type' => '',
+                '{http://open-paas.org/contacts}state' => ''
             )
         );
 
@@ -119,7 +122,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 1',
                 '{http://calendarserver.org/ns/}getctag' => 1,
                 '{http://sabredav.org/ns}sync-token' => 1,
-                '{http://open-paas.org/contacts}type' => ''
+                '{http://open-paas.org/contacts}type' => '',
+                '{http://open-paas.org/contacts}state' => ''
             )
         );
 
@@ -150,7 +154,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 '{DAV:}acl' => new \MongoDB\Model\BSONArray(['dav:read']),
                 '{http://calendarserver.org/ns/}getctag' => 2,
                 '{http://sabredav.org/ns}sync-token' => 2,
-                '{http://open-paas.org/contacts}type' => ''
+                '{http://open-paas.org/contacts}type' => '',
+                '{http://open-paas.org/contacts}state' => ''
             )
         );
 
@@ -176,7 +181,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
             '{DAV:}displayname' => 'book2',
             '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'addressbook 2',
             '{DAV:}acl' => ['dav:read'],
-            '{http://open-paas.org/contacts}type' => 'social'
+            '{http://open-paas.org/contacts}type' => 'social',
+            '{http://open-paas.org/contacts}state' => 'enabled'
         ));
 
         $expected = array(
@@ -190,6 +196,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 '{http://calendarserver.org/ns/}getctag' => 1,
                 '{http://sabredav.org/ns}sync-token' => 1,
                 '{http://open-paas.org/contacts}type' => '',
+                '{http://open-paas.org/contacts}state' => ''
             ),
             array(
                 'id' => $book2Id,
@@ -200,7 +207,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 '{DAV:}acl' => new \MongoDB\Model\BSONArray(['dav:read']),
                 '{http://calendarserver.org/ns/}getctag' => 1,
                 '{http://sabredav.org/ns}sync-token' => 1,
-                '{http://open-paas.org/contacts}type' => 'social'
+                '{http://open-paas.org/contacts}type' => 'social',
+                '{http://open-paas.org/contacts}state' => 'enabled'
             )
         );
         $result = $this->backend->getAddressBooksForUser('principals/users/user1');

@@ -12,11 +12,15 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
             'principal' => $this->getOwner(),
             'protected' => true
         ];
-        $acl[] = [
-            'privilege' => '{DAV:}write-properties',
-            'principal' => $this->getOwner(),
-            'protected' => true
-        ];
+
+        // If user is delegated from another user, he can change delegated address book properties
+        if (Utils::isUserPrincipal($this->addressBookInfo['share_owner'])) {
+            $acl[] = [
+                'privilege' => '{DAV:}write-properties',
+                'principal' => $this->getOwner(),
+                'protected' => true
+            ];
+        }
 
         return $acl;
     }
@@ -131,7 +135,7 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
      * @return string
      */
     function getShareResourceUri() {
-        return '/addressbooks/' . Utils::getUserIdFromPrincipalUri($this->getShareOwner()) . '/' . $this->addressBookInfo['share_resource_uri'];
+        return 'addressbooks/' . Utils::getPrincipalIdFromPrincipalUri($this->getShareOwner()) . '/' . $this->addressBookInfo['share_resource_uri'];
     }
 
     /**

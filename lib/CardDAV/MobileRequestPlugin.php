@@ -75,6 +75,8 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     $addressBookNode = $this->server->tree->getNodeForPath($addressBookPath);
                     list(,, $ownerId) = explode('/', $addressBookNode->getOwner());
 
+                    if ($addressBookNode instanceof Group\GroupAddressBook && $addressBookNode->isDisabled()) continue;
+
                     // Do not return address book if the query book ID is not owner ID
                     if ($bookId !== $ownerId) continue;
 

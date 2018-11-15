@@ -243,9 +243,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $addressBookHref = $baseUri . $nodePathExploded[0] . '/' . $ownerPrincipalExploded[2] . '/' . $nodePathExploded[2] . '.json';
         }
 
-        $ownerPrincipalExploded = explode('/', $addressBook->getOwner());
-        $nodePathExploded = explode('/', $nodePath);
-
         $output = [
             '_links' => [
                 'self' => [ 'href' => $addressBookHref ],

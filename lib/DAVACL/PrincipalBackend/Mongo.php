@@ -9,7 +9,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $this->db = $db;
         $this->collectionMap = [
             'users' => $this->db->users,
-            'communities' => $this->db->communities,
+            //'communities' => $this->db->communities,
             'projects' => $this->db->projects,
             'resources' => $this->db->resources,
             'domains' => $this->db->domains
@@ -60,7 +60,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         if ($prefixPath == "principals/users") {
             return $this->searchUserPrincipals($searchProperties, $test);
         } else if ($prefixPath == "principals/communities") {
-            return $this->searchGroupPrincipals('communities', $searchProperties, $test);
+            //return $this->searchGroupPrincipals('communities', $searchProperties, $test);
         } else if ($prefixPath == "principals/projects") {
             return $this->searchGroupPrincipals('projects', $searchProperties, $test);
         } else if ($prefixPath == "principals/resources") {
@@ -106,9 +106,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         if (count($parts) == 3 && $parts[0] == 'principals' && $parts[1] == 'users') {
             $collaborationQuery = [ 'members' => [ '$elemMatch' => [ 'member.id' => new \MongoDB\BSON\ObjectId($parts[2]) ] ] ];
 
-            foreach ($this->db->communities->find($collaborationQuery, [ 'projection' => [ '_id' => 1 ]]) as $community) {
+            /*foreach ($this->db->communities->find($collaborationQuery, [ 'projection' => [ '_id' => 1 ]]) as $community) {
                 $principals[] = 'principals/communities/' . $community['_id'];
-            }
+            }*/
 
             foreach ($this->db->projects->find($collaborationQuery, [ 'projection' => [ '_id' => 1 ]]) as $project) {
                 $principals[] = 'principals/projects/' . $project['_id'];

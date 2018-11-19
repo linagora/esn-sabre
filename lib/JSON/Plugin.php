@@ -861,14 +861,23 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $newEvents = array();
             foreach ($vObject->VEVENT as $vevent) {
                 if ($this->isHiddenPrivateEvent($vevent, $parentNode)) {
-                    $vevent = new \Sabre\VObject\Component\VEvent($vObject, 'VEVENT', [
+                    $newVevent = new \Sabre\VObject\Component\VEvent($vObject, 'VEVENT', [
                       'UID' => $vevent->UID,
                       'SUMMARY' => 'Busy',
                       'CLASS' => 'PRIVATE',
                       'ORGANIZER' => $vevent->ORGANIZER,
-                      'DTSTART' => $vevent->DTSTART,
-                      'DTEND' => $vevent->DTEND,
+                      'DTSTART' => $vevent->DTSTART
                     ]);
+
+                    if (!!$vevent->DTEND) {
+                        $newVevent->DTEND = $vevent->DTEND;
+                    }
+
+                    if (!!$vevent->DURATION) {
+                        $newVevent->DURATION = $vevent->DURATION;
+                    }
+
+                    $vevent = $newVevent;
                 }
                 $newEvents[] = $vevent;
             }

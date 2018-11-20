@@ -75,7 +75,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $this->assertContains('My Contacts', $displayNames);
 
         // Normal address book
-        $this->assertContains('Book 1 - Roberto Carlos', $displayNames);
+        $this->assertContains('Book 1', $displayNames);
     }
 
     function testAfterPropFindWithGroupAddressBook() {

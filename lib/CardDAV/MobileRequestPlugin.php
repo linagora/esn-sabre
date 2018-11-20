@@ -51,22 +51,20 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function afterMethodPropfind($request, $response) {
-        if(!$this->checkUserAgent($request) && !$this->acceptJson()) {
+        if(!$this->checkUserAgent($request) && $this->acceptJson()) {
             return true;
         }
 
         $xml = [];
         $path = $request->getPath();
         $node = $this->server->tree->getNodeForPath($path);
-
-        if($node instanceof \Sabre\CardDAV\AddressBookHome) {
+        if($node instanceof \Sabre\CardDAV\AddressBook || $node instanceof \Sabre\CardDAV\AddressBookHome) {
             $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
             $xmlResponses = $propFindXml->getResponses();
 
             foreach($xmlResponses as $index => $xmlResponse) {
                 $responseProps = $xmlResponse->getResponseProperties();
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
-                
                 if (isset($resourceType) && $resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook")) {
                     $addressBookPath = $xmlResponse->getHref();
                     list($type, $bookId, $addressbookType) = explode('/', trim($addressBookPath, '/'));
@@ -84,14 +82,28 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
                     if($ownerId === $currentUserId) {
-                        $addressBookDisplayName = $addressbookType === 'contacts' ? 'My Contacts' : 'My Collected Contacts';
+                        if($addressbookType === 'contacts') {
+                            $addressBookDisplayName = 'My Contacts';
+                        }
+                        else if($addressbookType === 'collected') {
+                            $addressBookDisplayName = 'My Collected Contacts';
+                        }
+                        else {
+                            $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'];
+                        }
                     } else {
-                        $addressBookDisplayName = $addressbookType === 'contacts' ? 'Contacts - ' . $userDisplayName : 'Collected Contacts - '. $userDisplayName;
+                        if($addressbookType === 'contacts') {
+                            $addressBookDisplayName = 'Contacts - ' . $userDisplayName;
+                        }
+                        else if($addressbookType === 'collected') {
+                            $addressBookDisplayName = 'Collected Contacts - '. $userDisplayName;
+                        }
+                        else {
+                            $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName;
+                        }
                     }
 
-                    $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
-                                    $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
-                                    $addressBookDisplayName;
+                    $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;
 
                     $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
 

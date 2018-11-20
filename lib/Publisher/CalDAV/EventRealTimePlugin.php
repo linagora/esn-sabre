@@ -109,13 +109,20 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $pathExploded = explode('/', $calendarPathObject);
             $objectUri = $pathExploded[3];
             $calendarUri = $pathExploded[2];
+            $isImport = false;
 
             $event = \Sabre\VObject\Reader::read($data);
             $event->remove('method');
 
+            if (array_key_exists('import', $this->server->httpRequest->getQueryParameters())) {
+                $isImport = true;
+            }
+
+
             $dataMessage = [
                 'eventPath' => '/' . $calendarPathObject,
-                'event' => $event
+                'event' => $event,
+                'import' => $isImport
             ];
 
             if($old_event) {

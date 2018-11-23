@@ -72,6 +72,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                     $addressBookNode = $this->server->tree->getNodeForPath($addressBookPath);
                     list(,, $ownerId) = explode('/', $addressBookNode->getOwner());
+                    list(,, $shareOwnerId) = explode('/', $addressBookNode->getShareOwner());
 
                     if ($addressBookNode instanceof Group\GroupAddressBook && $addressBookNode->isDisabled()) continue;
 
@@ -81,7 +82,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getOwner());
                     $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
-                    if($ownerId === $currentUserId) {
+                    if($shareOwnerId === $currentUserId) {
                         if($addressbookType === 'contacts') {
                             $addressBookDisplayName = 'My Contacts';
                         }

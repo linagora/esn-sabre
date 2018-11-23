@@ -5,6 +5,7 @@ use \Sabre\VObject;
 use \Sabre\Uri;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
+use Sabre\DAV\Exception;
 
 class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
@@ -51,7 +52,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function afterMethodPropfind($request, $response) {
-        if(!$this->checkUserAgent($request) && $this->acceptJson()) {
+        if(!$this->checkUserAgent($request)) {
             return true;
         }
 
@@ -59,7 +60,14 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
         $path = $request->getPath();
         $node = $this->server->tree->getNodeForPath($path);
         if($node instanceof \Sabre\CardDAV\AddressBook || $node instanceof \Sabre\CardDAV\AddressBookHome) {
-            $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
+            try {
+                // With some client (DAVDroid), On a PROPFIND for a gab addressBook
+                // the xml is not good so we try to parse it, if we can't we do nothing
+                $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
+            } catch (\Exception $e) {
+                return true;
+            }
+
             $xmlResponses = $propFindXml->getResponses();
 
             foreach($xmlResponses as $index => $xmlResponse) {
@@ -97,6 +105,9 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                         }
                         else if($addressbookType === 'collected') {
                             $addressBookDisplayName = 'Collected Contacts - '. $userDisplayName;
+                        }
+                        else if($addressbookType === 'dab') {
+                            $addressBookDisplayName = 'Domain address book - '. $userDisplayName;
                         }
                         else {
                             $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName;

@@ -87,7 +87,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     // Do not return address book if the query book ID is not owner ID
                     if ($bookId !== $ownerId) continue;
 
-                    $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getOwner());
+                    $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getShareOwner());
                     $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
                     if($shareOwnerId === $currentUserId) {

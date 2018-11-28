@@ -82,7 +82,11 @@ $tree = [
 ];
 
 $server = new Sabre\DAV\Server($tree);
-$server->debugExceptions = true;
+
+// Add stack trace to HTML response in dev mode
+if (SABRE_ENV === SABRE_ENV_DEV) {
+    $server->debugExceptions = true;
+}
 
 $server->setBaseUri($config['webserver']['baseUri']);
 

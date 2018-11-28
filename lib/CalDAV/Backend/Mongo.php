@@ -78,9 +78,14 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $calendarIds = [];
 
         foreach ($res as $row) {
-            $calendarIds[] = new \MongoDB\BSON\ObjectId((string) $row['calendarid']);
+            $calendarId = (string) $row['calendarid'];
 
-            $calendarInstances[] = $row;
+            $calendarIds[] = new \MongoDB\BSON\ObjectId($calendarId);
+
+            //Little fix for avoid duplication calendarInstance,
+            //a calendarInstance is linked with only one $calendarId
+            //so if a $calendarInstance have been already in the array it gonna be replaced
+            $calendarInstances[$calendarId] = $row;
         }
 
         $collection = $this->db->selectCollection($this->calendarTableName);

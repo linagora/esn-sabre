@@ -101,10 +101,10 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                             $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'];
                         }
                     } else {
-                        if($addressbookType === 'contacts') {
+                        if($responseProps[200]['{DAV:}displayname'] === 'My contacts') {
                             $addressBookDisplayName = 'Contacts - ' . $userDisplayName;
                         }
-                        else if($addressbookType === 'collected') {
+                        else if($responseProps[200]['{DAV:}displayname'] === 'Collected contacts') {
                             $addressBookDisplayName = 'Collected Contacts - '. $userDisplayName;
                         }
                         else if($addressbookType === 'dab') {

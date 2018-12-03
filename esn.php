@@ -11,6 +11,10 @@ if (!$config) {
     throw new Exception("Could not load config.json from " . realpath(CONFIG_PATH) . ", Error " . json_last_error());
 }
 $dbConfig = $config['database'];
+define('SABRE_ENV_PRODUCTION', 'production');
+define('SABRE_ENV_DEV', 'dev');
+
+define('SABRE_ENV', (!empty($config['environment']) && !empty($config['environment']['SABRE_ENV'])) ? $config['environment']['SABRE_ENV'] : SABRE_ENV_PRODUCTION);
 
 // settings
 date_default_timezone_set('UTC');

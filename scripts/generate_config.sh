@@ -10,6 +10,7 @@ amqp_port='5672'
 amqp_login='guest'
 amqp_password='guest'
 mongo_timeout="10000"
+sabre_env="production"
 
 if [ ! -z $ESN_MONGO_CONNECTION_STRING ] ; then
   esn_mongo_connectionstring="$ESN_MONGO_CONNECTION_STRING"
@@ -27,6 +28,7 @@ fi
 [ -z "$AMQP_PORT" ] || amqp_port="$AMQP_PORT"
 [ -z "$AMQP_LOGIN" ] || amqp_login="$AMQP_LOGIN"
 [ -z "$AMQP_PASSWORD" ] || amqp_password="$AMQP_PASSWORD"
+[ -z "$SABRE_ENV" ] || sabre_env="$SABRE_ENV"
 
 config="{
   \"webserver\": {
@@ -63,6 +65,9 @@ config="{
   \"esn\": {
     \"apiRoot\": \"http://${esn_host}:${esn_port}\",
     \"calendarRoot\": \"http://${esn_host}:${esn_port}/calendar/api\"
+  },
+  \"environment\": {
+    \"SABRE_ENV\": \"${sabre_env}\"
   }
 }"
 

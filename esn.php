@@ -160,9 +160,11 @@ $server->addPlugin(
 // WebDAV-Sync plugin
 $server->addPlugin(new Sabre\DAV\Sync\Plugin());
 
-// Support for html frontend
-$browser = new Sabre\DAV\Browser\Plugin();
-$server->addPlugin($browser);
+// Support for html frontend (only available in dev mode)
+if (SABRE_ENV === SABRE_ENV_DEV) {
+    $browser = new Sabre\DAV\Browser\Plugin();
+    $server->addPlugin($browser);
+}
 
 // Calendar Ics Export support
 $icsExportPlugin = new Sabre\CalDAV\ICSExportPlugin();

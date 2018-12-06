@@ -75,6 +75,9 @@ Sabre can use [Monolog](https://github.com/Seldaek/monolog) to push log to :
 
 To configure logger add the `"logger"` item in config file with each logger needed
 
+You can add ENV fields, these fields will add ENV variables values to each log entry in the `extras` field.
+ENV fields define a field name that contains ENV variable value.
+
 Full configuration is:
 ```json
 {
@@ -91,6 +94,11 @@ Full configuration is:
                         "appendDateToIndexName": "date format (default none)",
                         "username":"ES user name (default none)",
                         "password":"ES user password (default none)"
+                },
+                "envFields": {
+                        "myFirstEnvFieldName": "MY_FIRST_ENV_VARIABLE_NAME",
+                        "mySecandEnvFieldName": "MY_SECOND_ENV_VARIABLE_NAME",
+                        ...
                 }
         }
 }

@@ -97,6 +97,9 @@ class EsnLoggerFactory
             'type' => $indexType
         ];
 
-        return new \Monolog\Handler\ElasticSearchHandler($elasticaClient, $options, $logLevel);
+        $handler = new \Monolog\Handler\ElasticSearchHandler($elasticaClient, $options, $logLevel);
+        $handler->setFormatter(new EsnLoggerFormatter($handler->getOptions()['index'], $handler->getOptions()['type']));
+
+        return $handler;
     }
 }

@@ -80,6 +80,14 @@ $tree = [
 $server = new Sabre\DAV\Server($tree);
 $server->debugExceptions = true;
 
+if (isset($config['logger'])) {
+    $logger = ESN\Log\EsnLoggerFactory::initLogger($config['logger']);
+
+    if (!empty($logger)) {
+        $server->setLogger($logger);
+    }
+}
+
 $server->setBaseUri($config['webserver']['baseUri']);
 
 // Server Plugins

@@ -24,7 +24,8 @@ RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/7.0/fpm/php.ini 
   sed -i -e "s/memory_limit\s*=\s*128M/memory_limit = 512M/g" /etc/php/7.0/fpm/php.ini && \
   sed -i "s/;listen.owner = www-data/listen.owner = www-data/" /etc/php/7.0/fpm/pool.d/www.conf && \
   sed -i "s/;listen.group = www-data/listen.group = www-data/" /etc/php/7.0/fpm/pool.d/www.conf && \
-  sed -i "s/;listen.mode = 0660/listen.mode = 0660/" /etc/php/7.0/fpm/pool.d/www.conf
+  sed -i "s/;listen.mode = 0660/listen.mode = 0660/" /etc/php/7.0/fpm/pool.d/www.conf && \
+  sed -i "s/;clear_env = no/clear_env = no/" /etc/php/7.0/fpm/pool.d/www.conf
 
 RUN pecl install mongodb \
     && echo "extension=mongodb.so" >> /etc/php/7.0/fpm/php.ini \

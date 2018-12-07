@@ -19,7 +19,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
 
         $elementCheck = array(
             'uri'               => '54b64eadf6d7d8e41d263e0f',
-            '{DAV:}displayname' => 'Events',
+            '{DAV:}displayname' => '#default',
             '{urn:ietf:params:xml:ns:caldav}calendar-description' => '',
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
         );

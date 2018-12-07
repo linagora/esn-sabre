@@ -66,6 +66,57 @@ This is the URL the Caldav server will use to access the OpenPaaS ESN API.
 
 This is the configuration the Caldav server will use to send emails.
 
+### Configure advanced logging
+
+Sabre can use [Monolog](https://github.com/Seldaek/monolog) to push log to :
+
+ * Standard file
+ * Elastic Search
+
+To configure logger add the `"logger"` item in config file with each logger needed
+
+You can add ENV fields, these fields will add ENV variables values to each log entry in the `extras` field.
+ENV fields define a field name that contains ENV variable value.
+
+Full configuration is:
+```json
+{
+        "logger" : {
+                "fileLogger": {
+                        "path": "Path to the file (required)",
+                        "level": "debug level (default ERROR)"
+                },
+                "esLogger": {
+                        "host": "ES hostname (default localhost)",
+                        "port": "ES port (default 9200)",
+                        "level": "debug level (default ERROR)",
+                        "index": "index name (default monolog)",
+                        "appendDateToIndexName": "date format (default none)",
+                        "username":"ES user name (default none)",
+                        "password":"ES user password (default none)"
+                },
+                "envFields": {
+                        "myFirstEnvFieldName": "MY_FIRST_ENV_VARIABLE_NAME",
+                        "mySecandEnvFieldName": "MY_SECOND_ENV_VARIABLE_NAME",
+                        ...
+                }
+        }
+}
+```
+
+Date format is specified by php date format [here](http://php.net/manual/fr/function.date.php)
+
+Log level can be :
+
+ * ALERT
+ * CRITICAL
+ * ERROR
+ * WARNING
+ * NOTICE
+ * INFO
+ * DEBUG
+
+
 ### System & Apache environment
 
 esn-sabre requires an Apache server to work.

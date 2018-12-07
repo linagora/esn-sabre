@@ -85,6 +85,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $options->public = Utils::getArrayValue($queryParams, 'public') === 'true';
             $options->subscribed = Utils::getArrayValue($queryParams, 'subscribed') === 'true';
             $options->personal = Utils::getArrayValue($queryParams, 'personal') === 'true';
+            $options->contactsCount = Utils::getArrayValue($queryParams, 'contactsCount') === 'true';
 
             // TODO: these should be in sharing plugin but we still do not find a effective way to do it
             $options->shared = Utils::getArrayValue($queryParams, 'shared') === 'true';
@@ -203,7 +204,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             }
 
             if ($shouldInclude) {
-                $items[] = $this->getAddressBookDetail($nodePath . '/' . $addressBook->getName(), $addressBook);
+                $items[] = $this->getAddressBookDetail($nodePath . '/' . $addressBook->getName(), $addressBook, $options);
             }
         }
 
@@ -218,9 +219,9 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return [200, $result];
     }
 
-    function getAddressBookDetail($nodePath, \Sabre\DAV\Collection $addressBook) {
+    function getAddressBookDetail($nodePath, \Sabre\DAV\Collection $addressBook, $options = null) {
         $baseUri = $this->server->getBaseUri();
-        $bookProps = $addressBook->getProperties([
+        $properties = [
             '{urn:ietf:params:xml:ns:carddav}addressbook-description',
             '{DAV:}displayname',
             '{DAV:}acl',
@@ -231,7 +232,13 @@ class Plugin extends \ESN\JSON\BasePlugin {
             '{http://open-paas.org/contacts}type',
             '{http://open-paas.org/contacts}state',
             'acl'
-        ]);
+        ];
+
+        if (isset($options->contactsCount) && $options->contactsCount) {
+            $properties[] = '{http://open-paas.org/contacts}numberOfContacts';
+        }
+
+        $bookProps = $addressBook->getProperties($properties);
 
         $addressBookHref = $baseUri . $nodePath . '.json';
 
@@ -254,6 +261,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             'openpaas:subscription-type' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}subscription-type'),
             'type' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}type'),
             'state' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}state'),
+            'numberOfContacts' => Utils::getArrayValue($bookProps, '{http://open-paas.org/contacts}numberOfContacts'),
             'acl' => Utils::getArrayValue($bookProps, 'acl'),
             'dav:group' => Utils::getArrayValue($bookProps, '{DAV:}group')
         ];

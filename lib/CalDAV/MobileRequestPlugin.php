@@ -78,14 +78,16 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                     $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
                                     $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
-                                    "Events - " . $userDisplayName;
-
-                    $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-
-                    $xml[] = ['{DAV:}response' => $newResponse];
+                                    "Agenda - " . $userDisplayName;
                 } else {
-                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    if (isset($responseProps[200]['{DAV:}displayname']) && $responseProps[200]['{DAV:}displayname'] === '#default') {
+                        $responseProps[200]['{DAV:}displayname'] = "My agenda";
+                    }
                 }
+
+                $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
+
+                $xml[] = ['{DAV:}response' => $newResponse];
             }
 
             $service = new \Sabre\Xml\Service();

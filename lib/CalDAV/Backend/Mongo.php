@@ -144,7 +144,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             }
 
             if (!$calendarInstance['displayname'] ) {
-                $calendarInstance['displayname'] = 'Events';
+                $calendarInstance['displayname'] = '#default';
             }
 
             foreach($this->propertyMap as $xmlName=>$dbName) {

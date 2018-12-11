@@ -57,6 +57,27 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertEquals($addressBooks[2]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/contacts.json');
     }
 
+    function testGetPersonalAddressBooksIncludeNumberOfContacts() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json?personal=true&contactsCount=true'
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f.json');
+
+        $addressBooks = $jsonResponse->{'_embedded'}->{'dav:addressbook'};
+        $this->assertCount(3, $addressBooks);
+
+        $this->assertEquals($addressBooks[0]->numberOfContacts, 4);
+        $this->assertEquals($addressBooks[1]->numberOfContacts, 0);
+        $this->assertEquals($addressBooks[2]->numberOfContacts, 0);
+    }
+
     function testGetPuclicAddressBooks() {
         $publicBookId = $this->carddavBackend->createAddressBook(
             'principals/users/' . $this->userTestId1,
@@ -183,6 +204,32 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
         );
 
         $this->assertEquals($addressBooks[0]->{'openpaas:source'}, '/addressbooks/' . $this->userTestId1 . '/book1.json');
+    }
+
+    function testGetSubscribedAddressBooksReturnNumberOfContactsAsNull() {
+        $this->carddavBackend->createSubscription(
+            'principals/users/'. $this->userTestId2,
+            'user2Subscription1',
+            [
+                '{DAV:}displayname' => 'user2Subscription1',
+                '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/' . $this->userTestId1 . '/book1', false)
+            ]
+        );
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $this->userTestId2 . '.json?subscribed=true&contactsCount=true',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+        $addressBooks = $jsonResponse->{'_embedded'}->{'dav:addressbook'};
+        $this->assertCount(1, $addressBooks);
+
+        $this->assertNull($addressBooks[0]->numberOfContacts);
     }
 
     private function getAddressBookAcl($addressBook) {

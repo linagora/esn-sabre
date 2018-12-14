@@ -73,6 +73,10 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
             $response['{DAV:}share-access'] = $this->getShareAccess();
         }
 
+        if (in_array('{http://open-paas.org/contacts}numberOfContacts', $properties)) {
+            $response['{http://open-paas.org/contacts}numberOfContacts'] = $this->getChildCount();
+        }
+
         return $response;
     }
 

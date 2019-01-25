@@ -52,10 +52,6 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 'carddata' => $node->get()
             ]);
 
-            if (!Utils::isUserPrincipal($node->getOwner())) {
-                $this->notifyMemberAddressBooks($node, $path, 'CREATED');
-            }
-
             $this->publishMessages();
         }
 
@@ -69,9 +65,11 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         $node = $this->server->tree->getNodeForPath('/'.$path);
 
-        if (!Utils::isUserPrincipal($node->getOwner())) {
-            $this->notifyMemberAddressBooks($node, $path, 'DELETED');
-        }
+        $this->createMessage($this->PUBSUB_TOPICS['CONTACT_DELETED'], [
+            'path'     => $this->ensureContactPathContainsOwnerId($path, $node->getOwner()),
+            'owner'    => $node->getOwner(),
+            'carddata' => $node->get()
+        ]);
     }
 
     function afterUnbind($path) {
@@ -109,10 +107,6 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 'carddata' => $node->get()
             ]);
 
-            if (!Utils::isUserPrincipal($node->getOwner())) {
-                $this->notifyMemberAddressBooks($node, $path, 'UPDATED');
-            }
-
             $this->publishMessages();
         }
 
@@ -129,25 +123,6 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $cardPathExploded = explode('/', $cardPath);
             $dataMessage['path'] = 'addressbooks/'.$principalUriExploded[2].'/'.$addressBook['uri'].'/'.$cardPathExploded[3];
             $dataMessage['sourcePath'] = $cardPath;
-
-            $this->createMessage($this->PUBSUB_TOPICS['CONTACT_'.$action], $dataMessage);
-        }
-    }
-
-    private function notifyMemberAddressBooks($cardNode, $cardPath, $action) {
-        $ownerPrincipalNode = $this->server->tree->getNodeForPath($cardNode->getOwner());
-        $memberPrincipals = $ownerPrincipalNode->getGroupMemberSet();
-
-        foreach ($memberPrincipals as $principal) {
-            $principalExploded = explode('/', $principal);
-            $cardPathExploded = explode('/', $cardPath);
-
-            $dataMessage = [
-                'path' => 'addressbooks/'.$principalExploded[2].'/'.$cardPathExploded[2].'/'.$cardPathExploded[3],
-                'groupAddressBook' => true,
-                'owner'    => $cardNode->getOwner(),
-                'carddata' => $cardNode->get()
-            ];
 
             $this->createMessage($this->PUBSUB_TOPICS['CONTACT_'.$action], $dataMessage);
         }

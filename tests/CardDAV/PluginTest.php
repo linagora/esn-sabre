@@ -20,6 +20,43 @@ class PluginTest extends PluginTestBase {
         //$this->server->addPlugin($plugin);
     }
 
+    function testGETAddressBookHomesWithoutTechnicalUser() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testGETAddressBookHomesWithTechnicalUser() {
+        $this->authBackend->setPrincipal('principals/technicalUser');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+
+        $this->assertEquals([
+            '54b64eadf6d7d8e41d263e0f',
+            '54b64eadf6d7d8e41d263e0e',
+            '54b64eadf6d7d8e41d263e0d',
+            '54b64eadf6d7d8e41d263e0c'
+        ], $jsonResponse);
+
+        $this->assertEquals(200, $response->status);
+    }
+
     function testPropFindRequestAddressBook() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPFIND',

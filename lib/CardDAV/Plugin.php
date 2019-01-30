@@ -3,6 +3,7 @@ namespace ESN\CardDAV;
 
 use Sabre\DAV;
 use \Sabre\VObject;
+use \Sabre\DAV\Exception\Forbidden;
 use \ESN\Utils\Utils as Utils;
 
 class Plugin extends \ESN\JSON\BasePlugin {
@@ -80,7 +81,25 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $code = null;
         $body = null;
 
-        if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
+        if ($node instanceof \ESN\CardDAV\AddressBookRoot) {
+            $authPlugin = $this->server->getPlugin('auth');
+            if (!is_null($authPlugin)) {
+                $currentPrincipal = $authPlugin->getCurrentPrincipal();
+                list(, $type) = explode('/', $currentPrincipal);
+
+                if ($type !== 'technicalUser') {
+                    throw new Forbidden();
+                }
+            }
+
+            $children = [];
+
+            foreach($node->getChildren() as $child) {
+                $children[] = $child->getName();
+            }
+
+            list($code, $body) = [200, $children];
+        } else if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
             $options = new \stdClass();
             $options->public = Utils::getArrayValue($queryParams, 'public') === 'true';
             $options->subscribed = Utils::getArrayValue($queryParams, 'subscribed') === 'true';

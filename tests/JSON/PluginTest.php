@@ -672,7 +672,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals('99', $cal['{http://apple.com/ns/ical/}calendar-order']);
     }
 
-    function testCreateResourceCalendar() {
+    function testResourceCalendarCannotBeCreatedByAnotherUser() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -692,16 +692,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $response = $this->request($request);
 
         $jsonResponse = json_decode($response->getBodyAsString());
-        $this->assertEquals(201, $response->status);
-
-        $calendars = $this->caldavBackend->getCalendarsForUser('principals/resources/62b64eadf6d7d8e41d263e0c');
-        $this->assertCount(1, $calendars);
-
-        $cal = $calendars[0];
-        $this->assertEquals('cal resource', $cal['{DAV:}displayname']);
-        $this->assertEquals('DESCRIPTION', $cal['{urn:ietf:params:xml:ns:caldav}calendar-description']);
-        $this->assertEquals('#0190FFFF', $cal['{http://apple.com/ns/ical/}calendar-color']);
-        $this->assertEquals('99', $cal['{http://apple.com/ns/ical/}calendar-order']);
+        $this->assertEquals(403, $response->status);
     }
 
     function testCreateSubscription() {

@@ -32,4 +32,24 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             $this->assertEquals($value, $calendars[0][$name]);
         }
     }
+
+    function testResourceCalendarShouldBeCreatedWhenRequesting() {
+        $backend = $this->getBackend();
+        $calendars = $backend->getCalendarsForUser('principals/resource/resourceId');
+
+        $elementCheck = array(
+            'uri'               => 'resourceId',
+            '{DAV:}displayname' => 'Events',
+            '{urn:ietf:params:xml:ns:caldav}calendar-description' => '',
+            '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
+        );
+
+        $this->assertInternalType('array', $calendars);
+        $this->assertEquals(1, count($calendars));
+
+        foreach ($elementCheck as $name => $value) {
+            $this->assertArrayHasKey($name, $calendars[0]);
+            $this->assertEquals($value, $calendars[0][$name]);
+        }
+    }
 }

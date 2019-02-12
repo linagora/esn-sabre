@@ -15,7 +15,9 @@ class PropFindAclPluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->server->addPlugin($plugin);
     }
 
-    function testAclOfSharerAddressBookContainsAclOfAcceptedInvites() {
+    function testAclOfSharerAddressBookContainsOnlyRequesterPrincipal() {
+        $this->authBackend->setPrincipal('principals/users/' . $this->userTestId2);
+
         $this->carddavBackend->updateInvites($this->user1Book1Id, [
             new \Sabre\DAV\Xml\Element\Sharee([
                 'href' => 'mailto:' . $this->userTestEmail2,
@@ -38,43 +40,8 @@ class PropFindAclPluginTest extends \ESN\CardDAV\PluginTestBase {
         $acl = json_decode($response->getBodyAsString(), true)['acl'];
         $this->assertEquals([
             [
-                'privilege' => '{DAV:}all',
-                'principal' => 'principals/users/' . $this->userTestId1,
-                'protected' => true
-            ],
-            [
                 'privilege' => '{DAV:}read',
                 'principal' => 'principals/users/' . $this->userTestId2,
-                'protected' => true
-            ]
-        ], $acl);
-    }
-
-    function testAclOfSharerAddressBookExcludesAclOfNoResponseInvites() {
-        $this->carddavBackend->updateInvites($this->user1Book1Id, [
-            new \Sabre\DAV\Xml\Element\Sharee([
-                'href' => 'mailto:' . $this->userTestEmail2,
-                'principal' => 'principals/users/' . $this->userTestId2,
-                'access' => SPlugin::ACCESS_READ,
-                'inviteStatus' => SPlugin::INVITE_NORESPONSE,
-                'properties' => []
-            ])
-        ]);
-
-        $response = $this->makeRequest(
-            'PROPFIND',
-            '/addressbooks/' . $this->userTestId1 . '/book1.json',
-            array(
-                'properties' => array('acl')
-            )
-        );
-
-        $this->assertEquals(200, $response->status);
-        $acl = json_decode($response->getBodyAsString(), true)['acl'];
-        $this->assertEquals([
-            [
-                'privilege' => '{DAV:}all',
-                'principal' => 'principals/users/' . $this->userTestId1,
                 'protected' => true
             ]
         ], $acl);

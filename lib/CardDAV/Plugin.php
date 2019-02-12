@@ -139,7 +139,26 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         if ($node instanceof AddressBook) {
             $jsonData = json_decode($request->getBodyAsString(), true);
-            $body = $node->getProperties($jsonData['properties']);
+            $properties = $node->getProperties($jsonData['properties']);
+
+            if (isset($properties['acl'])) {
+                $acl = [];
+
+                $authPlugin = $this->server->getPlugin('auth');
+                $currentPrincipal = $authPlugin->getCurrentPrincipal();
+
+                // only return acl which contains principal of requester and authenticated users
+                foreach($properties['acl'] as $ace) {
+                    if (in_array($ace['principal'], [$currentPrincipal, '{DAV:}authenticated'])) {
+                        $acl[] = $ace;
+                    }
+                }
+
+                $properties['acl'] = $acl;
+            }
+
+            $body = $properties;
+
             $code = 200;
         }
 

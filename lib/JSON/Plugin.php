@@ -102,12 +102,22 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function _getDefaultCalendarUri($user, $path) {
+        list(,,$userId) = explode('/', $user);
+
         $homePath = substr($path, 0, strpos($path, \ESN\CalDAV\Backend\Esn::EVENTS_URI));
         $node = $this->server->tree->getNodeForPath($homePath);
 
         $calendars = $node->getChildren();
 
-        return $calendars[0]->getName();
+        foreach ($calendars as $calendar) {
+            $name = $calendar->getName();
+
+            if ($name === \ESN\CalDAV\Backend\Esn::EVENTS_URI || $name === $userId ) {
+                return $name;
+            }
+        }
+
+        throw new DAV\Exception\NotFound('Unable to find user default calendar');
     }
 
     function beforeUnbind($path) {

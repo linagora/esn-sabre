@@ -71,6 +71,15 @@ class ServerMock extends \PHPUnit_Framework_TestCase {
         'uri' => 'subscription1',
     );
 
+    protected $oldCaldavCalendar = array(
+        '{DAV:}displayname' => 'null',
+        '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
+        '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
+        '{http://apple.com/ns/ical/}calendar-order' => '2',
+        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0c',
+        'uri' => '54b64eadf6d7d8e41d263e0c',
+    );
+
     protected $caldavCalendarObjects = array(
         'event1.ics' =>
             'BEGIN:VCALENDAR
@@ -163,6 +172,11 @@ END:VCALENDAR
     protected $timeRangeData = [
           'match' => [ 'start' => '20120225T230000Z', 'end' => '20130228T225959Z' ],
           'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
+        ];
+
+    protected $oldTimeRangeData = [
+        'match' => [ 'start' => '20120225T230000Z', 'end' => '20130228T225959Z' ],
+        'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0c/events' ] ]
         ];
 
     protected $freeBusyTimeRangeData = [
@@ -342,6 +356,11 @@ END:VCALENDAR'
         $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
         $this->server->addPlugin($aclPlugin);
 
+        $this->oldCal = $this->oldCaldavCalendar;
+        $this->oldCal['id'] = $this->caldavBackend->createCalendar($this->oldCal['principaluri'], $this->oldCal['uri'], $this->oldCal);
+        $this->caldavBackend->createCalendarObject($this->oldCal['id'], 'event1.ics', $this->caldavCalendarObjects['event1.ics']);
+        $this->caldavBackend->createCalendarObject($this->oldCal['id'], 'event2.ics', $this->caldavCalendarObjects['event2.ics']);
+        
         $this->cal = $this->caldavCalendar;
         $this->cal['id'] = $this->caldavBackend->createCalendar($this->cal['principaluri'], $this->cal['uri'], $this->cal);
         foreach ($this->caldavCalendarObjects as $eventUri => $data) {

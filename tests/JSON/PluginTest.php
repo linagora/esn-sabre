@@ -102,14 +102,16 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     function testGetDefaultCalendar() {
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0c');
+
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',
             'HTTP_CONTENT_TYPE' => 'application/json',
             'HTTP_ACCEPT'            => 'application/json',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/events.json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0c/events.json',
         ));
 
-        $request->setBody(json_encode($this->timeRangeData));
+        $request->setBody(json_encode($this->oldTimeRangeData));
         $response = $this->request($request);
 
         $jsonResponse = json_decode($response->getBodyAsString());
@@ -118,11 +120,13 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     function testFreebusyReport() {
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0c');
+
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',
             'HTTP_CONTENT_TYPE' => 'application/json',
             'HTTP_ACCEPT'            => 'application/json',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/events.json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0c/events.json',
         ));
 
         $request->setBody(json_encode($this->freeBusyTimeRangeData));

@@ -903,14 +903,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             if (is_null($sharee->principal)) {
                 $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_INVALID;
             } else {
-                $query = [ 'calendarid' => $mongoCalendarId, 'principaluri' => $sharee->principal ];
-                $shareeCalendarInstance = $collection->findOne($query, ['projection' => [ 'share_invitestatus' => 1 ]]);
-
-                if ($shareeCalendarInstance && $shareeCalendarInstance['share_invitestatus']) {
-                    $sharee->inviteStatus = $shareeCalendarInstance['share_invitestatus'];
-                } else  {
-                    $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
-                }
+                $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
             }
 
             foreach($currentInvites as $oldSharee) {

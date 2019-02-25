@@ -742,6 +742,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                     'href'         => 'mailto:user@example.org',
                     'principal'    => 'principals/user2/userID',
                     'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+                    'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
                     'properties'   => ['{DAV:}displayname' => 'User 2'],
                 ])
             ]
@@ -753,7 +754,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                 'href'         => 'mailto:user@example.org',
                 'principal'    => 'principals/user2/userID',
                 'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
-                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
                 'properties'   => [
                     '{DAV:}displayname' => 'User 2',
                 ],
@@ -794,6 +795,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
                     'href'         => 'mailto:user@example.org',
                     'principal'    => 'principals/user2/userID',
                     'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+                    'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
                 ])
             ]
         );

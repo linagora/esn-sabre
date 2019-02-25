@@ -574,6 +574,13 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
     function testFilteredCalendarLisWithSharedNoResponseOnly() {
         $jsonResponse = $this->_testFilteredCalendarList(null, null, 'noresponse');
+
+        $this->assertNull($jsonResponse);
+    }
+
+    function testFilteredCalendarLisWithSharedAcceptedOnly() {
+        $jsonResponse = $this->_testFilteredCalendarList(null, null, 'accepted');
+
         $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
 
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
@@ -581,12 +588,6 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
         $this->assertEquals($calendars[0]->{'calendarserver:delegatedsource'}, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
-    }
-
-    function testFilteredCalendarLisWithSharedAcceptedOnly() {
-        $jsonResponse = $this->_testFilteredCalendarList(null, null, 'accepted');
-
-        $this->assertNull($jsonResponse);
     }
 
     function testGetCalendarConfiguration() {

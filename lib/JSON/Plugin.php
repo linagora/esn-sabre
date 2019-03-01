@@ -252,9 +252,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 $jsonData = json_decode($request->getBodyAsString());
 
                 if ($this->isBodyForSubscription($jsonData)) {
-                    list($code, $body) = $this->createSubscription($path, $node, $jsonData);
+                    list($code, $body) = $this->createSubscription($path, $jsonData);
                 } else {
-                    list($code, $body) = $this->createCalendar($path, $node, $jsonData);
+                    list($code, $body) = $this->createCalendar($path, $jsonData);
                 }
             }
 
@@ -356,7 +356,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     }
 
-    function createCalendar($nodePath, $node, $jsonData) {
+    function createCalendar($homePath, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
         if (!isset($jsonData->id) || !$jsonData->id) {
@@ -371,12 +371,12 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             '{http://apple.com/ns/ical/}calendar-order' => $issetdef('apple:order')
         ];
 
-        $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
+        $this->server->createCollection($homePath . '/' . $jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];
     }
 
-    function createSubscription($nodePath, $node, $jsonData) {
+    function createSubscription($homePath, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
         if (!isset($jsonData->id) || !$jsonData->id) {
@@ -397,7 +397,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href($sourcePath, false)
         ];
 
-        $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
+        $this->server->createCollection($homePath . '/' . $jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];
     }

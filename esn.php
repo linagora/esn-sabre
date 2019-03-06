@@ -41,10 +41,28 @@ try {
     } else {
         $mongoSabre = new \MongoDB\Client($dbConfig['sabre']['connectionString'], $dbConfig['sabre']['connectionOptions']);
     }
-} catch (MongoConnectionException $e) {
+
+    if(!empty($config['amqp']['host'])) {
+        $amqpLogin = !empty($config['amqp']['login']) ? $config['amqp']['login'] : 'guest';
+        $amqpPassword = !empty($config['amqp']['password']) ? $config['amqp']['password'] : 'guest';
+
+        $amqpConnection = new AMQPStreamConnection(
+            $config['amqp']['host'],
+            $config['amqp']['port'],
+            $amqpLogin,
+            $amqpPassword
+        );
+    }
+} catch (Exception $e) {
     // Create a fake server that will abort with the exception right away. This
     // allows us to use SabreDAV's exception handler and output.
     $server = new Sabre\DAV\Server([]);
+
+    // Add stack trace to HTML response in dev mode
+    if (SABRE_ENV === SABRE_ENV_DEV) {
+        $server->debugExceptions = true;
+    }
+
     $server->on('beforeMethod', function() use ($e) {
         throw new Sabre\DAV\Exception\ServiceUnavailable($e->getMessage());
     }, 1);
@@ -210,17 +228,7 @@ $server->addPlugin($esnHookPlugin);
 
 // Rabbit publisher plugin
 if(!empty($config['amqp']['host'])){
-    $amqpLogin = !empty($config['amqp']['login']) ? $config['amqp']['login'] : 'guest';
-    $amqpPassword = !empty($config['amqp']['password']) ? $config['amqp']['password'] : 'guest';
-
-    $connection = new AMQPStreamConnection(
-      $config['amqp']['host'],
-      $config['amqp']['port'],
-      $amqpLogin,
-      $amqpPassword
-    );
-
-    $channel = $connection->channel();
+    $channel = $amqpConnection->channel();
     $AMQPPublisher = new ESN\Publisher\AMQPPublisher($channel);
     $eventRealTimePlugin = new ESN\Publisher\CalDAV\EventRealTimePlugin($AMQPPublisher, $calendarBackend);
     $server->addPlugin($eventRealTimePlugin);

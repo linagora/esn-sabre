@@ -9,7 +9,6 @@ namespace ESN\Log;
 class EsnLoggerFactory
 {
     const DEFAULT_LEVEL = \Monolog\Logger::ERROR;
-    private $extraFiels;
 
     public static function initLogger($loggerConfig)
     {
@@ -62,7 +61,7 @@ class EsnLoggerFactory
 
         $logLevel = self::DEFAULT_LEVEL;
         if (isset($esLoggerConfig['level']) && defined('Monolog\Logger::'.$esLoggerConfig['level'])) {
-            $logLevel = constant('Monolog\Logger::'.$fileLoggerConfig['level']);
+            $logLevel = constant('Monolog\Logger::'.$esLoggerConfig['level']);
         }
 
         $clientOptions = [

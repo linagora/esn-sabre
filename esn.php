@@ -34,6 +34,12 @@ function exception_error_handler($errno, $errstr, $errfile, $errline ) {
 }
 set_error_handler("exception_error_handler");
 
+$loggerConfig = isset($config['logger']) ? $config['logger'] : null;
+
+$logger = ESN\Log\EsnLoggerFactory::initLogger($loggerConfig);
+
+$loggerPlugin = new ESN\Log\ExceptionLoggerPlugin($logger);
+
 try {
     $mongoEsn = new \MongoDB\Client($dbConfig['esn']['connectionString'], $dbConfig['esn']['connectionOptions']);
     if ($dbConfig['esn']['connectionString'] == $dbConfig['sabre']['connectionString']) {
@@ -62,6 +68,8 @@ try {
     if (SABRE_ENV === SABRE_ENV_DEV) {
         $server->debugExceptions = true;
     }
+
+    $server->addPlugin($loggerPlugin);
 
     $server->on('beforeMethod', function() use ($e) {
         throw new Sabre\DAV\Exception\ServiceUnavailable($e->getMessage());
@@ -106,13 +114,7 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
     $server->debugExceptions = true;
 }
 
-if (isset($config['logger'])) {
-    $logger = ESN\Log\EsnLoggerFactory::initLogger($config['logger']);
-
-    if (!empty($logger)) {
-        $server->setLogger($logger);
-    }
-}
+$server->addPlugin($loggerPlugin);
 
 $server->setBaseUri($config['webserver']['baseUri']);
 

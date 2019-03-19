@@ -10,34 +10,32 @@ class EsnLoggerFactory
 {
     const DEFAULT_LEVEL = \Monolog\Logger::ERROR;
 
-    public static function initLogger($loggerConfig)
+    public static function initLogger($loggerConfig = null)
     {
         $handlers = [];
 
-        if (isset($loggerConfig['fileLogger'])) {
-            $fileHandler = self::initFileHandler($loggerConfig['fileLogger']);
+        if (isset($loggerConfig)) {
+            if (isset($loggerConfig['fileLogger'])) {
+                $fileHandler = self::initFileHandler($loggerConfig['fileLogger']);
 
-            if (!empty($fileHandler)) {
-                $handlers[] = $fileHandler;
+                if (!empty($fileHandler)) {
+                    $handlers[] = $fileHandler;
+                }
+            }
+
+            if (isset($loggerConfig['esLogger'])) {
+                $esLoggerConfig = $loggerConfig['esLogger'];
+                $handlers[] = self::initESHandler($esLoggerConfig);
             }
         }
 
-        if (isset($loggerConfig['esLogger'])) {
-            $esLoggerConfig = $loggerConfig['esLogger'];
-            $handlers[] = self::initESHandler($esLoggerConfig);
+        $logger = new \Monolog\Logger('EsnSabre');
+
+        foreach ($handlers as  $handler) {
+            $logger->pushHandler($handler);
         }
 
-        if (!empty($handlers)) {
-            $logger = new \Monolog\Logger('EsnSabre');
-
-            foreach ($handlers as  $handler) {
-                $logger->pushHandler($handler);
-            }
-
-            return $logger;
-        }
-
-        return null;
+        return $logger;
     }
 
     private static function initFileHandler($fileLoggerConfig)

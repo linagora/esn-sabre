@@ -197,11 +197,9 @@ class PluginTest extends PluginTestBase {
 
         $patchedName = 'Patched name';
         $patchedDescription = 'Patched description';
-        $patchedState = 'disabled';
         $data = [
             'dav:name' => $patchedName,
-            'carddav:description' => $patchedDescription,
-            'state' => $patchedState
+            'carddav:description' => $patchedDescription
         ];
         $request->setBody(json_encode($data));
 
@@ -222,7 +220,48 @@ class PluginTest extends PluginTestBase {
 
         $this->assertEquals($patchedName, $patchedAddressBook['{DAV:}displayname']);
         $this->assertEquals($patchedDescription, $patchedAddressBook['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
-        $this->assertEquals($patchedState, $patchedAddressBook['{http://open-paas.org/contacts}state']);
+    }
+
+    function testProppatchGroupAddressBook() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        $domainBook1Id = $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domainAB');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPPATCH',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domainAB.json',
+        ));
+
+        $patchedName = 'Patched name';
+        $patchedDescription = 'Patched description';
+        $patchedState = 'disabled';
+        $data = [
+            'dav:name' => $patchedName,
+            'carddav:description' => $patchedDescription,
+            'state' => $patchedState
+        ];
+        $request->setBody(json_encode($data));
+
+        $response = $this->request($request);
+        $this->assertEquals(204, $response->status);
+
+        $addressbooks = $this->carddavBackend->getAddressBooksFor('principals/domains/' . $DOMAIN_ID);
+        $this->assertCount(1, $addressbooks);
+
+        $this->assertEquals($patchedName, $addressbooks[0]['{DAV:}displayname']);
+        $this->assertEquals($patchedDescription, $addressbooks[0]['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+        $this->assertEquals($patchedState, $addressbooks[0]['{http://open-paas.org/contacts}state']);
     }
 
     function testDeleteDefaultAddressBook() {

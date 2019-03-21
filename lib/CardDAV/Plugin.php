@@ -371,9 +371,13 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         $propnameMap = [
             'dav:name' => '{DAV:}displayname',
-            'carddav:description' => '{urn:ietf:params:xml:ns:carddav}addressbook-description',
-            'state' => '{http://open-paas.org/contacts}state'
+            'carddav:description' => '{urn:ietf:params:xml:ns:carddav}addressbook-description'
         ];
+
+        // state concept only apply for group address books
+        if ($node instanceof \ESN\CardDAV\Group\GroupAddressBook) {
+            $propnameMap['state'] = '{http://open-paas.org/contacts}state';
+        }
 
         $davProps = [];
         foreach ($jsonData as $jsonProp => $value) {

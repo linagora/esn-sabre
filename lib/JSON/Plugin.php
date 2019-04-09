@@ -491,12 +491,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $items = [];
         foreach ($homes as $home) {
-            if ($home instanceof \Sabre\CalDAV\CalendarHome) {
-                $noderef = $nodePath . '/' . $home->getName();
-                list($code, $result) = $this->listCalendars($noderef, $home, $withRights, $calendarTypeOptions);
-                if (!empty($result)) {
-                    $items[] = $result;
-                }
+            $noderef = $nodePath . '/' . $home->getName();
+            list($code, $result) = $this->listCalendars($noderef, $home, $withRights, $calendarTypeOptions);
+            if (!empty($result)) {
+                $items[] = $result;
             }
         }
 

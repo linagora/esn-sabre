@@ -287,9 +287,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $calendarFilterParameters = $this->getCalendarFilterParameters($queryParams);
 
         if ($node instanceof \ESN\CalDAV\CalendarRoot) {
-            list($code, $body) = $this->listCalendarRoot($path, $node, $withRights, $calendarFilterParameters);
+            list($code, $body) = $this->listCalendarHomes($path, $node, $withRights, $calendarFilterParameters);
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
-            list($code, $body) = $this->listCalendarHome($path, $node, $withRights, $calendarFilterParameters, $sharedPublic, $withFreeBusy);
+            list($code, $body) = $this->listCalendars($path, $node, $withRights, $calendarFilterParameters, $sharedPublic, $withFreeBusy);
         } else if ($node instanceof \Sabre\CalDAV\Calendar) {
             list($code, $body) = $this->getCalendarInformation($path, $node, $withRights);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
@@ -485,7 +485,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return true;
     }
 
-    function listCalendarRoot($nodePath, $node, $withRights, $calendarTypeOptions) {
+    function listCalendarHomes($nodePath, $node, $withRights, $calendarTypeOptions) {
         $homes = $node->getChildren();
         $baseUri = $this->server->getBaseUri();
 
@@ -493,7 +493,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         foreach ($homes as $home) {
             if ($home instanceof \Sabre\CalDAV\CalendarHome) {
                 $noderef = $nodePath . '/' . $home->getName();
-                list($code, $result) = $this->listCalendarHome($noderef, $home, $withRights, $calendarTypeOptions);
+                list($code, $result) = $this->listCalendars($noderef, $home, $withRights, $calendarTypeOptions);
                 if (!empty($result)) {
                     $items[] = $result;
                 }
@@ -511,7 +511,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $result];
     }
 
-    function listCalendarHome($nodePath, $node, $withRights, $calendarTypeOptions, $sharedPublic = false, $withFreeBusy = false) {
+    function listCalendars($nodePath, $node, $withRights, $calendarTypeOptions, $sharedPublic = false, $withFreeBusy = false) {
         $baseUri = $this->server->getBaseUri();
 
         if ($sharedPublic) {

@@ -34,6 +34,12 @@ function exception_error_handler($errno, $errstr, $errfile, $errline ) {
 }
 set_error_handler("exception_error_handler");
 
+$loggerConfig = isset($config['logger']) ? $config['logger'] : null;
+
+$logger = ESN\Log\EsnLoggerFactory::initLogger($loggerConfig);
+
+$loggerPlugin = new ESN\Log\ExceptionLoggerPlugin($logger);
+
 try {
     $mongoEsn = new \MongoDB\Client($dbConfig['esn']['connectionString'], $dbConfig['esn']['connectionOptions']);
     if ($dbConfig['esn']['connectionString'] == $dbConfig['sabre']['connectionString']) {
@@ -41,10 +47,30 @@ try {
     } else {
         $mongoSabre = new \MongoDB\Client($dbConfig['sabre']['connectionString'], $dbConfig['sabre']['connectionOptions']);
     }
-} catch (MongoConnectionException $e) {
+
+    if(!empty($config['amqp']['host'])) {
+        $amqpLogin = !empty($config['amqp']['login']) ? $config['amqp']['login'] : 'guest';
+        $amqpPassword = !empty($config['amqp']['password']) ? $config['amqp']['password'] : 'guest';
+
+        $amqpConnection = new AMQPStreamConnection(
+            $config['amqp']['host'],
+            $config['amqp']['port'],
+            $amqpLogin,
+            $amqpPassword
+        );
+    }
+} catch (Exception $e) {
     // Create a fake server that will abort with the exception right away. This
     // allows us to use SabreDAV's exception handler and output.
     $server = new Sabre\DAV\Server([]);
+
+    // Add stack trace to HTML response in dev mode
+    if (SABRE_ENV === SABRE_ENV_DEV) {
+        $server->debugExceptions = true;
+    }
+
+    $server->addPlugin($loggerPlugin);
+
     $server->on('beforeMethod', function() use ($e) {
         throw new Sabre\DAV\Exception\ServiceUnavailable($e->getMessage());
     }, 1);
@@ -88,13 +114,7 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
     $server->debugExceptions = true;
 }
 
-if (isset($config['logger'])) {
-    $logger = ESN\Log\EsnLoggerFactory::initLogger($config['logger']);
-
-    if (!empty($logger)) {
-        $server->setLogger($logger);
-    }
-}
+$server->addPlugin($loggerPlugin);
 
 $server->setBaseUri($config['webserver']['baseUri']);
 
@@ -210,17 +230,7 @@ $server->addPlugin($esnHookPlugin);
 
 // Rabbit publisher plugin
 if(!empty($config['amqp']['host'])){
-    $amqpLogin = !empty($config['amqp']['login']) ? $config['amqp']['login'] : 'guest';
-    $amqpPassword = !empty($config['amqp']['password']) ? $config['amqp']['password'] : 'guest';
-
-    $connection = new AMQPStreamConnection(
-      $config['amqp']['host'],
-      $config['amqp']['port'],
-      $amqpLogin,
-      $amqpPassword
-    );
-
-    $channel = $connection->channel();
+    $channel = $amqpConnection->channel();
     $AMQPPublisher = new ESN\Publisher\AMQPPublisher($channel);
     $eventRealTimePlugin = new ESN\Publisher\CalDAV\EventRealTimePlugin($AMQPPublisher, $calendarBackend);
     $server->addPlugin($eventRealTimePlugin);

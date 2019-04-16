@@ -2,6 +2,7 @@
 
 namespace ESN\JSON;
 
+use \Sabre\DAV\Exception\Forbidden;
 use \Sabre\VObject,
     \Sabre\DAV;
 use Sabre\VObject\ITip\Message;
@@ -287,7 +288,24 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $calendarFilterParameters = $this->getCalendarFilterParameters($queryParams);
 
         if ($node instanceof \ESN\CalDAV\CalendarRoot) {
-            list($code, $body) = $this->listCalendarHomes($path, $node, $withRights, $calendarFilterParameters);
+            $authPlugin = $this->server->getPlugin('auth');
+            if (!is_null($authPlugin)) {
+                $currentPrincipal = $authPlugin->getCurrentPrincipal();
+                list(, $type) = explode('/', $currentPrincipal);
+
+                if ($type !== 'technicalUser') {
+                    throw new Forbidden();
+                }
+            }
+
+            $calendarHomes = $node->getChildren();
+
+            $items = [];
+            foreach ($calendarHomes as $home) {
+                $items[$home->getName()] = $this->listAllPersonalCalendars($home);
+            }
+
+            list($code, $body) = [200, $items];
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
             list($code, $body) = $this->listCalendars($path, $node, $withRights, $calendarFilterParameters, $sharedPublic, $withFreeBusy);
         } else if ($node instanceof \Sabre\CalDAV\Calendar) {
@@ -569,6 +587,21 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         return $items;
 
+    }
+
+    function listAllPersonalCalendars($calendarHomeNode) {
+        $calendars = $calendarHomeNode->getChildren();
+
+        $personalCalendars = [];
+        foreach ($calendars as $calendar) {
+            if ($calendar instanceof \ESN\CalDAV\SharedCalendar) {
+                if (!$calendar->isSharedInstance()) {
+                    $personalCalendars[] = $calendar->getName();
+                }
+            }
+        }
+
+        return $personalCalendars;
     }
 
     function listPublicCalendars($nodePath, $node, $withRights = null) {

@@ -340,57 +340,44 @@ class PluginTest extends \ESN\DAV\ServerMock {
         return $calendars;
     }
 
-    function _testCalendarRoot($withRightsParam = null) {
-        $requestUri = $withRightsParam ? '/calendars.json?withRights=' . $withRightsParam : '/calendars.json';
+    function testGetCalendarRootAsNormalUser() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
             'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => $requestUri,
+            'REQUEST_URI'       => '/calendars',
         ));
 
         $response = $this->request($request);
-        $jsonResponse = json_decode($response->getBodyAsString());
-        $this->assertEquals($response->status, 200);
-        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars.json');
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
 
-        $homes = $jsonResponse->{'_embedded'}->{'dav:home'};
-        $this->assertCount(2, $homes);
-
-        $this->assertEquals($homes[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
-
-        $this->checkCalendars($homes[0]->{'_embedded'}->{'dav:calendar'});
-
-        $calendars = $homes[1]->{'_embedded'}->{'dav:calendar'};
-        $this->assertCount(1, $calendars);
-
-        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
-        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
-        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/2');
-        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
-        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
-
-        return $homes;
+        $this->assertEquals(403, $response->status);
     }
 
-    function testCalendarRoot() {
-        $this->_testCalendarRoot();
-    }
+    function testGETAddressBookHomesWithTechnicalUser() {
+        $this->authBackend->setPrincipal('principals/technicalUser');
 
-    function testCalendarRootWithRights() {
-        $homes = $this->_testCalendarRoot('true');
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars',
+        ));
 
-        $calendars = $homes[1]->{'_embedded'}->{'dav:calendar'};
-        $this->assertNotNull($calendars[0]->{'acl'});
-        $publicACE = null;
-        foreach ($calendars[0]->{'acl'} as $ace) {
-            if ($ace->principal === '{DAV:}authenticated') {
-                $publicACE = $ace;
-                break;
-            }
-        }
-        $this->assertEquals($publicACE->privilege, '{DAV:}all');
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+
+        $this->assertEquals([
+            // 4 users
+            '54b64eadf6d7d8e41d263e0f' => [ 'calendar1', 'delegatedCal1' ],
+            '54b64eadf6d7d8e41d263e0e' => [ 'calendar2', 'publicCal1' ],
+            '54b64eadf6d7d8e41d263e0d' => [],
+            '54b64eadf6d7d8e41d263e0c' => [ '54b64eadf6d7d8e41d263e0c' ],
+            // 1 resource
+            '62b64eadf6d7d8e41d263e0c' => []
+        ], $jsonResponse);
+
+        $this->assertEquals(200, $response->status);
     }
 
     private function _testCalendarList($withRightsParam = null) {

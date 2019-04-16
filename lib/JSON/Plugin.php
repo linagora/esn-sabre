@@ -309,7 +309,30 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
             list($code, $body) = $this->listCalendars($path, $node, $withRights, $calendarFilterParameters, $sharedPublic, $withFreeBusy);
         } else if ($node instanceof \Sabre\CalDAV\Calendar) {
-            list($code, $body) = $this->getCalendarInformation($path, $node, $withRights);
+            if ($this->getBooleanParameter($queryParams, 'allEvents')) {
+                $children = $node->getChildren();
+                $items = [];
+
+                foreach ($children as $child) {
+                    $items[] = [
+                        '_links' => [ 'self' => [ 'href' => '/' . $path . '/' . $child->getName() ] ],
+                        'data' => $child->get()
+                    ];
+                }
+
+                $result = [
+                    '_links' => [
+                        'self' => [ 'href' => '/' . $path . '.json' ]
+                    ],
+                    '_embedded'=> [
+                        'dav:item' => $items
+                    ]
+                ];
+
+                list($code, $body) = [200, $result];
+            } else {
+                list($code, $body) = $this->getCalendarInformation($path, $node, $withRights);
+            };
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
             list($code, $body) = $this->getSubscriptionInformation($path, $node, $withRights);
         }

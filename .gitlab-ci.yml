@@ -35,7 +35,7 @@ test:
     variables:
       - $SKIP_TESTS
 
-build_pkg_deb_jessie:
+.build_pkg_deb_jessie:
   <<: *build-pkg-tpl
   stage: build
   script:
@@ -48,7 +48,7 @@ build_pkg_deb_jessie:
       -F "variables[DOCKERFILE]=debian/jessie/Dockerfile"
       https://ci.linagora.com/api/v4/projects/338/trigger/pipeline | jq .
 
-build_pkg_deb_stretch:
+.build_pkg_deb_stretch:
   <<: *build-pkg-tpl
   stage: build
   script:
@@ -61,7 +61,7 @@ build_pkg_deb_stretch:
       -F "variables[DOCKERFILE]=debian/stretch/Dockerfile"
       https://ci.linagora.com/api/v4/projects/338/trigger/pipeline | jq .
 
-build_pkg_rpm:
+.build_pkg_rpm:
   <<: *build-pkg-tpl
   stage: build
   script:

@@ -163,8 +163,14 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             foreach($calendars as $calendarUser) {
                 if($calendarUser['id'][0] == $options['calendarid']) {
                     $calendarUri = $calendarUser['uri'];
+
+                    list(,, $userId) = explode('/', $user->principal);
+                    $eventCalendar = $this->server->tree->getNodeForPath('calendars/' . $userId . '/' . $calendarUri);
                 }
             }
+
+            $vCalendar = $dataMessage['event'];
+            $dataMessage['event'] = Utils::hidePrivateEventInfoForUser($vCalendar, $eventCalendar, $user->principal);
 
             $dataMessage['eventPath'] = Utils::objectPathFromUri($user->principal,  $calendarUri, $options['objectUri']);
 

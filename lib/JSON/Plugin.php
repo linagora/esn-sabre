@@ -2,6 +2,7 @@
 
 namespace ESN\JSON;
 
+use ESN\Utils\Utils;
 use \Sabre\DAV\Exception\Forbidden;
 use \Sabre\VObject,
     \Sabre\DAV;
@@ -144,7 +145,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     function checkModificationsRights(\Sabre\DAV\IFile $node) {
         if ($node instanceof \Sabre\CalDAV\ICalendarObject) {
             $vcalendar = VObject\Reader::read($node->get());
-            if ($this->isHiddenPrivateEvent($vcalendar->VEVENT, $node)) {
+            if (Utils::isHiddenPrivateEvent($vcalendar->VEVENT, $node, $this->currentUser)) {
                 throw new DAV\Exception\Forbidden('You can not modify private events you do not own');
             }
         }
@@ -922,33 +923,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 }
             }
 
-            $newEvents = array();
-            foreach ($vObject->VEVENT as $vevent) {
-                if ($this->isHiddenPrivateEvent($vevent, $parentNode)) {
-                    $newVevent = new \Sabre\VObject\Component\VEvent($vObject, 'VEVENT', [
-                      'UID' => $vevent->UID,
-                      'SUMMARY' => 'Busy',
-                      'CLASS' => 'PRIVATE',
-                      'ORGANIZER' => $vevent->ORGANIZER,
-                      'DTSTART' => $vevent->DTSTART
-                    ]);
-
-                    if (!!$vevent->DTEND) {
-                        $newVevent->DTEND = $vevent->DTEND;
-                    }
-
-                    if (!!$vevent->DURATION) {
-                        $newVevent->DURATION = $vevent->DURATION;
-                    }
-
-                    $vevent = $newVevent;
-                }
-                $newEvents[] = $vevent;
-            }
-            $vObject->remove('VEVENT');
-            foreach ($newEvents as &$vevent) {
-                $vObject->add($vevent);
-            }
+            $vevent = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
 
             $items[] = [
                 '_links' => [
@@ -965,10 +940,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             ],
             '_embedded' => [ 'dav:item' => $items ]
         ];
-    }
-
-    function isHiddenPrivateEvent($vevent, $node) {
-        return $vevent->CLASS == 'PRIVATE' && $node->getOwner() != $this->currentUser;
     }
 
     function handleJsonRequest($path, $node, $jsonData) {

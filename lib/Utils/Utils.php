@@ -2,10 +2,7 @@
 
 namespace ESN\Utils;
 
-use \Sabre\VObject;
-
 class Utils {
-
 
     static function firstEmailAddress($user) {
         if (array_key_exists('accounts', $user)) {
@@ -168,4 +165,42 @@ class Utils {
         return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
     }
 
+    static function hidePrivateEventInfoForUser($vCalendar, $parentNode, $userPrincipal) {
+        $newEvents = array();
+        foreach ($vCalendar->VEVENT as $vevent) {
+            if (self::isHiddenPrivateEvent($vevent, $parentNode, $userPrincipal)) {
+                $newVevent = clone ($vevent);
+
+                $children = $newVevent->children();
+                foreach ($children as $child) {
+                    $newVevent->remove($child->name);
+                }
+                $newVevent->UID = $vevent->UID;
+                $newVevent->SUMMARY = 'Busy';
+                $newVevent->CLASS = 'PRIVATE';
+                $newVevent->ORGANIZER = $vevent->ORGANIZER;
+                $newVevent->DTSTART = $vevent->DTSTART;
+
+                if (!!$vevent->DTEND) {
+                    $newVevent->DTEND = $vevent->DTEND;
+                }
+
+                if (!!$vevent->DURATION) {
+                    $newVevent->DURATION = $vevent->DURATION;
+                }
+
+                $vevent = $newVevent;
+            }
+            $newEvents[] = $vevent;
+        }
+        $vCalendar->remove('VEVENT');
+        foreach ($newEvents as $vevent) {
+            $vCalendar->add($vevent);
+        }
+        return $vCalendar;
+    }
+
+    static function isHiddenPrivateEvent($vevent, $node, $userPrincipal) {
+        return $vevent->CLASS == 'PRIVATE' && ($node->getOwner() !== $userPrincipal);
+    }
 }

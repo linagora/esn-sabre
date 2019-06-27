@@ -84,9 +84,9 @@ $sabreDb = $mongoSabre->{$dbConfig['sabre']['db']};
 
 // Backends
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm']);
-$calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb);
 $addressbookBackend = new ESN\CardDAV\Backend\Esn($sabreDb);
 $principalBackend = new ESN\DAVACL\PrincipalBackend\EsnRequest($esnDb, $authBackend, $config['esn']['apiRoot']);
+$calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend);
 
 // listener
 $authEmitter = $authBackend->getEventEmitter();

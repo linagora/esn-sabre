@@ -11,7 +11,10 @@ class CalendarHomeTest extends \PHPUnit_Framework_TestCase {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $db = $mc->{ESN_MONGO_SABREDB};
         $db->drop();
-        return new \ESN\CalDAV\Backend\Esn($db);
+
+        $principalBackendMock = $this->createMock(\Sabre\DAVACL\PrincipalBackend\BackendInterface::class);
+
+        return new \ESN\CalDAV\Backend\Esn($db, $principalBackendMock);
     }
 
     function testChildTypeReturned() {

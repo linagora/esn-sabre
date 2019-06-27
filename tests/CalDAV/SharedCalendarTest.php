@@ -15,7 +15,9 @@ class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
         $db = $mc->{ESN_MONGO_SABREDB};
         $db->drop();
 
-        return new \ESN\CalDAV\Backend\Esn($db);
+        $principalBackendMock = $this->createMock(\Sabre\DAVACL\PrincipalBackend\BackendInterface::class);
+
+        return new \ESN\CalDAV\Backend\Esn($db, $principalBackendMock);
     }
 
     protected $calendarId = '54b64eadf6d7d8e41d263e0f';

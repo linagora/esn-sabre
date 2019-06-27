@@ -10,7 +10,11 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $db = $mc->{ESN_MONGO_SABREDB};
         $db->drop();
-        return new Esn($db);
+
+        $principalBackendMock = $this->getMockBuilder(\Sabre\DAVACL\PrincipalBackend\BackendInterface::class)->setMethods(['getPrincipalByPath', 'getPrincipalsByPrefix', 'updatePrincipal', 'searchPrincipals', 'findByUri', 'getGroupMemberSet', 'getGroupMembership', 'setGroupMemberSet'])->getMock();
+        $principalBackendMock->expects($this->any())->method('getPrincipalByPath')->will($this->returnValue(['{DAV:}displayname' => 'resourceName']));
+
+        return new Esn($db, $principalBackendMock);
     }
 
     function testGetCalendarsForUserNoCalendars() {
@@ -35,11 +39,11 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
 
     function testResourceCalendarShouldBeCreatedWhenRequesting() {
         $backend = $this->getBackend();
-        $calendars = $backend->getCalendarsForUser('principals/resource/resourceId');
+        $calendars = $backend->getCalendarsForUser('principals/resources/resourceId');
 
         $elementCheck = array(
             'uri'               => 'resourceId',
-            '{DAV:}displayname' => '#default',
+            '{DAV:}displayname' => 'resourceName',
             '{urn:ietf:params:xml:ns:caldav}calendar-description' => '',
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
         );

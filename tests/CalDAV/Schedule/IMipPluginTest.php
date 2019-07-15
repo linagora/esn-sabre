@@ -2,9 +2,6 @@
 
 namespace ESN\CalDAV\Schedule;
 
-use Sabre\DAV\ServerPlugin;
-use Sabre\DAV\Xml\Property\Href;
-
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVACL/PrincipalBackend/Mock.php';
@@ -105,6 +102,19 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             'END:VCALENDAR',
             '']);
 
+        $this->icalAttendees = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'BEGIN:VEVENT',
+            'UID:e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1560',
+            'DTSTART:20180305T120000Z',
+            'DTEND:20180305T130000Z',
+            'SUMMARY:Lunch',
+            'ORGANIZER:mailto:robertocarlos@realmadrid.com',
+            'ATTENDEE:mailto:robertocarlos@realmadrid.com',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            '']);
+
         $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\EsnRequest($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
@@ -144,6 +154,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->cal['id'] = $this->caldavBackend->createCalendar($this->cal['principaluri'], $this->cal['uri'], $this->cal);
         $this->caldavBackend->createCalendarObject($this->cal['id'], 'simple.ics', $this->ical);
         $this->caldavBackend->createCalendarObject($this->cal['id'], 'rec.ics', $this->icalRec);
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'attendees.ics', $this->icalAttendees);
 
         $this->calUser2 = $this->caldavCalendarUser2;
         $this->calUser2['id'] = $this->caldavBackend->createCalendar($this->calUser2['principaluri'], $this->calUser2['uri'], $this->calUser2);
@@ -257,10 +268,40 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             $self->assertEquals($jsondata->email, 'johndoe@example.org');
             $self->assertEquals($jsondata->event, $self->ical);
             $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
+            $self->assertFalse(isset($jsondata->newEvent));
             $self->assertTrue($jsondata->notify);
             $requestCalled = true;
         });
 
+        $plugin->schedule($this->msg);
+        $this->assertEquals('1.2', $this->msg->scheduleStatus);
+        $this->assertTrue($requestCalled);
+    }
+
+    function testSendNewEventSuccess() {
+        $plugin = $this->getPlugin();
+        $client = $plugin->getClient();
+
+        $this->msg->sender = 'mailto:test@example.com';
+        $this->msg->recipient = 'mailto:johndoe@example.org';
+        $this->msg->method = "REQUEST";
+        $this->msg->uid = "daab17fe-fac4-4946-9105-0f2cdb30f5ab";
+
+        $plugin->setNewAttendees((['mailto:johndoe@example.org' => ['master']]));
+
+        $requestCalled = false;
+        $self = $this;
+
+        $client->on('doRequest', function($request, &$response) use ($self, &$requestCalled) {
+            $jsondata = json_decode($request->getBodyAsString());
+            $self->assertEquals($jsondata->method, 'REQUEST');
+            $self->assertEquals($jsondata->email, 'johndoe@example.org');
+            $self->assertEquals($jsondata->event, $self->ical);
+            $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
+            $self->assertTrue($jsondata->newEvent);
+            $self->assertTrue($jsondata->notify);
+            $requestCalled = true;
+        });
         $plugin->schedule($this->msg);
         $this->assertEquals('1.2', $this->msg->scheduleStatus);
         $this->assertTrue($requestCalled);
@@ -373,6 +414,74 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals('1.2', $this->msg->scheduleStatus);
         $this->assertEquals(2, $timesCalled);
     }
+
+    function testCalendarObjectChangeEventModification() {
+        $data = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'BEGIN:VEVENT',
+            'UID:e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1560',
+            'DTSTART:20180305T120000Z',
+            'DTEND:20180305T130000Z',
+            'SUMMARY:Lunch',
+            'ORGANIZER:mailto:robertocarlos@realmadrid.com',
+            'ATTENDEE:mailto:robertocarlos@realmadrid.com',
+            'ATTENDEE;CN=Two:mailto:two@example.org',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            '']);
+
+        $attendees = $this->emitCalendarChange('attendees.ics', $data, false);
+
+        $this->assertEquals($attendees, ['mailto:two@example.org' => 1]);
+    }
+
+    function testCalendarObjectChangeNewEvent() {
+        $data = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'BEGIN:VEVENT',
+            'UID:new-event',
+            'DTSTART:20180305T120000Z',
+            'DTEND:20180305T130000Z',
+            'SUMMARY:Lunch',
+            'RRULE:FREQ=DAILY;COUNT=8',
+            'ORGANIZER:mailto:robertocarlos@realmadrid.com',
+            'ATTENDEE:mailto:robertocarlos@realmadrid.com',
+            'ATTENDEE;CN=Two:mailto:two@example.org',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            '']);
+
+        $attendees = $this->emitCalendarChange('new.ics', $data, true);
+
+        $this->assertEquals($attendees, ['mailto:robertocarlos@realmadrid.com' => 1, 'mailto:two@example.org' => 1]);
+    }
+
+    private function emitCalendarChange(string $eventId, string $data, bool $isNew): array
+    {
+        $plugin = $this->getPlugin();
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD' => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT' => 'application/json',
+            'REQUEST_URI' => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/' . $eventId,
+        ));
+        $response = new \Sabre\HTTP\ResponseMock();
+
+        $modified = false;
+        $vobj = \Sabre\VObject\Reader::read($data);
+
+        $plugin->calendarObjectChange(
+            $request,
+            $response,
+            $vobj,
+            null,
+            $modified,
+            $isNew
+        );
+
+        return $plugin->getNewAttendees();
+    }
 }
 
 class MockAuthBackend {
@@ -400,5 +509,13 @@ class IMipPluginMock extends IMipPlugin {
 
     function getServer() {
         return $this->server;
+    }
+
+    function setNewAttendees($newAttendees) {
+        $this->newAttendees = $newAttendees;
+    }
+
+    function getNewAttendees() {
+        return $this->newAttendees;
     }
 }

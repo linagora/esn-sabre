@@ -81,67 +81,32 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     }
 
     function schedule(ITip\Message $iTipMessage) {
-        if (!$this->apiroot) {
-            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_PERMANENT;
+        $recipientPrincipalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
+        $matched = preg_match("|/(calendars/.*/.*)/|", $_SERVER["REQUEST_URI"], $matches);
+
+        if ($matched) {
+            $calendarPath = $matches[1];
+        }
+
+        if (!($this->checkPreconditions($iTipMessage, $matched, $recipientPrincipalUri))) {
             return;
         }
 
-        foreach ($iTipMessage->message->VEVENT->children() as $componentChild) {
-            if ($componentChild instanceof Property\ICalendar\DateTime && $componentChild->hasTime()) {
+        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
-                $dt = $componentChild->getDateTimes(new DateTimeZone('UTC'));
-                $dt[0] = $dt[0]->setTimeZone(new DateTimeZone('UTC'));
-                $componentChild->setDateTimes($dt);
-            }
-        }
+        $this->sanitizeDateTimeZones($iTipMessage);
 
-        // Not sending any emails if the system considers the update
-        // insignificant.
-        if (!$iTipMessage->significantChange && !$iTipMessage->hasChange) {
-            if (!$iTipMessage->scheduleStatus) {
-                $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_PENDING;
-            }
-            return;
-        }
-
-        if (parse_url($iTipMessage->sender, PHP_URL_SCHEME)!=='mailto') {
-            return;
-        }
-
-        if (parse_url($iTipMessage->recipient, PHP_URL_SCHEME)!=='mailto') {
-            return;
-        }
-
-        $requestPath = $_SERVER["REQUEST_URI"];
-        $matched = preg_match("|/(calendars/.*/.*)/|", $requestPath, $matches);
-
-        if (!$matched) {
-            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
-            error_log("iTip Delivery could not be performed because calendar uri could not be found.");
-            return;
-        }
-
-        $calendarNode = $this->server->tree->getNodeForPath($matches[1]);
-
-        $principalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
-        
-        if (Utils::isResourceFromPrincipal($principalUri)) {
-            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
-
-            return;
-        }
-
-        list($homePath, $eventPath, $eventData) = Utils::getEventForItip($principalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+        list($homePath, $eventPath, ) = Utils::getEventForItip($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
 
         if (!$homePath || !$eventPath) {
-            $fullEventPath = '/' . $matches[1] . '/' . $iTipMessage->uid . '.ics';
+            $fullEventPath = '/' . $calendarPath . '/' . $iTipMessage->uid . '.ics';
         } else {
             $fullEventPath = '/' . $homePath . $eventPath;
         }
 
         // No need to split iTip message for Sabre User
         // Sabre can handle multiple event iTip message
-        if ($iTipMessage->method === 'COUNTER' || $principalUri) {
+        if ($iTipMessage->method === 'COUNTER' || $recipientPrincipalUri) {
             $eventMessages = [$iTipMessage->message];
         } else {
             $eventMessages = $this->explodeItipMessageEvents($iTipMessage->message);
@@ -207,5 +172,55 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $this->httpClient = new HTTP\Client();
 
         $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], self::HIGHER_PRIORITY_BEFORE_SCHEDULE);
+    }
+
+    private function sanitizeDateTimeZones(ITip\Message $iTipMessage) {
+        foreach ($iTipMessage->message->VEVENT->children() as $componentChild) {
+            if ($componentChild instanceof Property\ICalendar\DateTime && $componentChild->hasTime()) {
+
+                $dt = $componentChild->getDateTimes(new DateTimeZone('UTC'));
+                $dt[0] = $dt[0]->setTimeZone(new DateTimeZone('UTC'));
+                $componentChild->setDateTimes($dt);
+            }
+        }
+    }
+
+    private function checkPreconditions(ITip\Message $iTipMessage, int $matched, $principalUri): bool
+    {
+        if (!$this->apiroot) {
+            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_PERMANENT;
+            return false;
+        }
+
+        // Not sending any emails if the system considers the update
+        // insignificant.
+        if (!$iTipMessage->significantChange && !$iTipMessage->hasChange) {
+            if (!$iTipMessage->scheduleStatus) {
+                $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_PENDING;
+            }
+            return false;
+        }
+
+        if (parse_url($iTipMessage->sender, PHP_URL_SCHEME) !== 'mailto') {
+            return false;
+        }
+
+        if (parse_url($iTipMessage->recipient, PHP_URL_SCHEME) !== 'mailto') {
+            return false;
+        }
+
+        if (!$matched) {
+            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
+            error_log("iTip Delivery could not be performed because calendar uri could not be found.");
+            return false;
+        }
+
+        if (Utils::isResourceFromPrincipal($principalUri)) {
+            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
+
+            return false;
+        }
+
+        return true;
     }
 }

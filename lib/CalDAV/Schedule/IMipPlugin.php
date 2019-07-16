@@ -96,12 +96,13 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
         $this->sanitizeDateTimeZones($iTipMessage);
 
-        list($homePath, $eventPath, ) = Utils::getEventForItip($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+        list($eventPath, ) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
 
-        if (!$homePath || !$eventPath) {
+        // If event doesn't exist in recipient home, we define event path
+        if (!$eventPath) {
             $fullEventPath = '/' . $calendarPath . '/' . $iTipMessage->uid . '.ics';
         } else {
-            $fullEventPath = '/' . $homePath . $eventPath;
+            $fullEventPath = '/' . $eventPath;
         }
 
         // No need to split iTip message for Sabre User

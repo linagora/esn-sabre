@@ -54,7 +54,7 @@ class Utils {
         return $principalUri;
     }
 
-    static function getEventForItip($principalUri, $eventUid, $method, \Sabre\DAV\Server $server) {
+    static function getEventObjectFromAnotherPrincipalHome($principalUri, $eventUid, $method, \Sabre\DAV\Server $server) {
         $aclPlugin = $server->getPlugin('acl');
 
         if (!$aclPlugin) {
@@ -117,11 +117,13 @@ class Utils {
             return;
         }
 
-        $uriExploded = explode('/', $eventPath);
-        $calendar = $home->getChild($uriExploded[0]);
-        $event = $calendar->getChild($uriExploded[1]);
+        list($calendarUri, $eventUri) = explode('/', $eventPath);
+        $calendar = $home->getChild($calendarUri);
+        $event = $calendar->getChild($eventUri);
 
-        return [$homePath, $eventPath, $event->get()];
+        $eventFullPath = $homePath . $eventPath;
+
+        return [$eventFullPath, $event->get()];
     }
 
     static function formatIcal($data, $modified) {

@@ -196,15 +196,13 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             return true;
         }
 
-        list($homePath, $eventPath, $upToDateEventIcs) = Utils::getEventForItip($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
-        $path = $homePath . $eventPath;
-
-        if (!$homePath || !$eventPath) {
+        list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+        if (!$eventPath) {
             return false;
         }
         
         $dataMessage = [
-            'eventPath' => '/' . $path,
+            'eventPath' => '/' . $eventPath,
             'event' => VObject\Reader::read($upToDateEventIcs)
         ];
 
@@ -213,13 +211,13 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $dataMessage
         );
 
-        list($namespace, $homeId, $calendarUri, $objectUri) = explode('/', $path);
-        $calendar = $this->server->tree->getNodeForPath('/'. substr($path,0,strrpos($path,'/')));
+        list($namespace, $homeId, $calendarUri, $objectUri) = explode('/', $eventPath);
+        $calendar = $this->server->tree->getNodeForPath('/'. substr($eventPath,0,strrpos($eventPath,'/')));
         $calendarid = $calendar->getCalendarId();
 
         $options = [
             'action' => $iTipMessage->method,
-            'eventSourcePath' => $path,
+            'eventSourcePath' => $eventPath,
             'calendarid' => $calendarid,
             'objectUri' => $objectUri,
             'calendarUri' => $calendarUri
@@ -236,12 +234,12 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         }
 
         if($iTipMessage->method === 'REQUEST' && Utils::isResourceFromPrincipal($recipientPrincipalUri)) {
-            $pathExploded = explode('/', $path);
+            $pathExploded = explode('/', $eventPath);
 
             $dataMessage = [
                 'resourceId' => $pathExploded[1],
                 'eventId' => $pathExploded[3],
-                'eventPath' => '/' . $path,
+                'eventPath' => '/' . $eventPath,
                 'ics' => $upToDateEventIcs
             ];
             $this->createMessage(
@@ -253,10 +251,9 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $senderPrincipalUri = Utils::getPrincipalByUri($iTipMessage->sender, $this->server);
 
         if($senderPrincipalUri && $iTipMessage->method === 'REPLY' && Utils::isResourceFromPrincipal($senderPrincipalUri)) {
-            list($homePath, $eventPath, $upToDateEventIcs) = Utils::getEventForItip($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
-            $path = $homePath . $eventPath;
+            list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
 
-            if (!$homePath || !$eventPath) {
+            if (!$eventPath) {
                 return false;
             }
 
@@ -269,7 +266,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                             $dataMessage = [
                                 'resourceId' => $explodedSenderPrincipalUri[2],
                                 'eventId' => $iTipMessage->uid,
-                                'eventPath' => '/' . $path,
+                                'eventPath' => '/' . $eventPath,
                                 'ics' => $upToDateEventIcs
                             ];
                             $this->createMessage(
@@ -281,7 +278,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                             $dataMessage = [
                                 'resourceId' => $explodedSenderPrincipalUri[2],
                                 'eventId' => $iTipMessage->uid,
-                                'eventPath' => '/' . $path,
+                                'eventPath' => '/' . $eventPath,
                                 'ics' => $upToDateEventIcs
                             ];
                             $this->createMessage(

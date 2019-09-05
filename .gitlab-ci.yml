@@ -103,6 +103,31 @@ deploy_dev:
       - name: docker-registry.linagora.com:5000/linshare-snapshots/linshare-dind:latest
         alias: docker-dind
 
+docker-master:
+  <<: *build-docker-tpl
+  stage: build
+  variables:
+      DOCKER_HOST: "tcp://docker-dind"
+      DOCKER_IMAGE_PRIVATE: "docker-registry.linagora.com:5000/openpaas-snapshots/openpaas-esn-sabre"
+      DOCKER_IMAGE_PUBLIC: "linagora/esn-sabre"
+  script:
+    - guess-version.sh guess
+    - source version.env
+    - docker-tag-computing.sh ${VERSION} docker-tag-and-push.env
+    - docker login -u ${REGISTRY_USER} -p ${REGISTRY_TOKEN} docker-registry.linagora.com:5000
+    - docker build . -t build:latest
+    - docker-tag-and-push.sh build:latest ${DOCKER_IMAGE_PRIVATE}
+    - docker logout docker-registry.linagora.com:5000
+    - docker login -u ${HUB_DOCKER_USER} -p ${HUB_DOCKER_TOKEN}
+    - export DOCKER_TAGS=branch-master
+    - docker-tag-and-push.sh build:latest ${DOCKER_IMAGE_PUBLIC}
+    - docker logout
+  only:
+    - master@linagora/lgs/openpaas/esn-sabre
+  except:
+    variables:
+      - $SKIP_BUILD_DOCKER
+
 docker-snapshot:
   <<: *build-docker-tpl
   stage: build
@@ -110,7 +135,7 @@ docker-snapshot:
       DOCKER_HOST: "tcp://docker-dind"
       DOCKER_IMAGE_PRIVATE: "docker-registry.linagora.com:5000/openpaas-snapshots/openpaas-esn-sabre"
   script:
-    - guess-version.sh guest
+    - guess-version.sh guess
     - source version.env
     - docker-tag-computing.sh ${VERSION} docker-tag-and-push.env
     - docker login -u ${REGISTRY_USER} -p ${REGISTRY_TOKEN} docker-registry.linagora.com:5000
@@ -118,7 +143,6 @@ docker-snapshot:
     - docker-tag-and-push.sh build:latest ${DOCKER_IMAGE_PRIVATE}
     - docker logout
   only:
-    - master@linagora/lgs/openpaas/esn-sabre
     - /^release-.*/@linagora/lgs/openpaas/esn-sabre
   except:
     variables:

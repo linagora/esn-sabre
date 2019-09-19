@@ -205,4 +205,54 @@ class Utils {
     static function isHiddenPrivateEvent($vevent, $node, $userPrincipal) {
         return $vevent->CLASS == 'PRIVATE' && ($node->getOwner() !== $userPrincipal);
     }
+
+    /**
+     * Generates a list of DAV items in a JSON format with status for each individual item based on a list of file properties.
+     *
+     * If 'strip404s' is set to true, all 404 items will be removed.
+     *
+     * @param array $responseDetails
+     * <p>$responseDetails['fileProperties'] array An array of the file properties to analyze, could contain VEVENTs or VCARDs.</p>
+     * <p>$responseDetails['dataKey'] string The data key used to get the data of a VEVENT or VCARD in a file property.</p>
+     * <p>$responseDetails['baseUri'] string The base URI of the Sabre server.</p>
+     * <p>$responseDetails['strip404s'] boolean Should strip 404s out of the results or not.</p>
+     * @return array The array of JSON items with status of each item
+     */
+    static function generateJSONMultiStatus(array $responseDetails = []) {
+        $params = array_replace([
+            'fileProperties' => [],
+            'dataKey' => '',
+            'baseUri' => '',
+            'strip404s' => false
+        ], $responseDetails);
+
+        $items = [];
+
+        foreach ($params['fileProperties'] as $entry) {
+            if (count((array)$entry[404])) {
+                if (!$params['strip404s']) {
+                    $items[] = [
+                        '_links' => [
+                            'self' => ['href' => $params['baseUri'] . $entry['href']]
+                        ],
+                        'status' => 404
+                    ];
+                }
+
+                continue;
+            }
+
+            $items[] = [
+                '_links' => [
+                    'self' => [ 'href' => $params['baseUri'] . $entry['href'] ]
+                ],
+                'etag' => $entry[200]['{DAV:}getetag'],
+                'data' => $entry[200][$params['dataKey']],
+                'status' => 200
+            ];
+        }
+
+        return $items;
+    }
+
 }

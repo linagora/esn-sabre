@@ -58,6 +58,26 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertCount(2, $jsonResponse->_embedded->{'dav:item'});
     }
 
+    function testTimeRangeQueryShouldReturnMultistatusResponse() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeDataBothEvents));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(2, $items);
+        foreach ($items as $item) {
+            $this->assertEquals(200, $item->status);
+        }
+    }
+
     function testTimeRangeQueryRecur() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

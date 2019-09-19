@@ -889,15 +889,18 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $this->getMultipleDAVItems($nodePath, $node, $node->calendarQuery($filters), $start, $end)];
     }
 
-    private function getMultipleDAVItems($parentNodePath, $parentNode, $paths, $start = false, $end = false) {
-        $items = [];
+    private function getMultipleDAVItems($parentNodePath, $parentNode, $calendarObjectUris, $start = false, $end = false) {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
-        foreach ($paths as $path) {
-            list($properties) = $this->server->getPropertiesForPath($parentNodePath . '/' . $path, $props);
+        $paths = [];
+        foreach ($calendarObjectUris as $calendarObjectUri) {
+            $paths[] = $parentNodePath . '/' . $calendarObjectUri;
+        }
 
-            $vObject = VObject\Reader::read($properties[200]['{' . self::NS_CALDAV . '}calendar-data']);
+        $propertyList = [];
+        foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
+            $vObject = VObject\Reader::read($objProps[200][$props[0]]);
 
             // If we have start and end date, we're getting an expanded list of occurrences between these dates
             if ($start && $end) {
@@ -924,21 +927,22 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
 
             $vevent = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+            $objProps[200][$props[0]] = $vObject->jsonSerialize();
 
-            $items[] = [
-                '_links' => [
-                    'self' => [ 'href' => $baseUri . $properties['href' ] ]
-                ],
-                'etag' => $properties[200]['{DAV:}getetag'],
-                'data' => $vObject->jsonSerialize()
-            ];
+            $propertyList[] = $objProps;
         }
 
         return [
             '_links' => [
                 'self' => [ 'href' => $baseUri . $parentNodePath . '.json']
             ],
-            '_embedded' => [ 'dav:item' => $items ]
+            '_embedded' => [
+                'dav:item' => Utils::generateJSONMultiStatus([
+                    'fileProperties' => $propertyList,
+                    'dataKey' => $props[0],
+                    'baseUri' => $baseUri
+                ])
+            ]
         ];
     }
 

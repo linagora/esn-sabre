@@ -255,4 +255,21 @@ class Utils {
         return $items;
     }
 
+    /**
+     * Split an event path into a calendar node path and an event's URI.
+     *
+     * @param $eventPath string The event path, must be in the following format:
+     *                          /calendars/calendarHomeId/calendarId/eventUid.ics'
+     * @return array An array where the first element is the calendar node path, and the second one is the event's URI.
+     *               If validation fails, an array with two 'null' elements will be returned instead.
+     */
+    static function splitEventPath($eventPath) {
+        if (!preg_match('~/calendars/[\w-]+/[\w-]+/[\w-]+.ics~', $eventPath)) {
+            return [null, null];
+        }
+
+        $lastSlashPos = strrpos($eventPath, '/');
+
+        return [substr($eventPath, 1, $lastSlashPos - 1), substr($eventPath, $lastSlashPos + 1)];
+    }
 }

@@ -43,6 +43,14 @@ class ServerMock extends \PHPUnit_Framework_TestCase {
                 '{http://apple.com/ns/ical/}calendar-order' => '2',
                 'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
                 'uri' => 'delegatedCal1',
+            ],
+            'user1Calendar2' => [
+                '{DAV:}displayname' => 'User1 Calendar2',
+                '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
+                '{http://apple.com/ns/ical/}calendar-color' => '#01FDD04B',
+                '{http://apple.com/ns/ical/}calendar-order' => '2',
+                'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'uri' => 'user1Calendar2',
             ]
         ],
         'otherCalendars' => [
@@ -176,6 +184,24 @@ END:VFREEBUSY
 END:VCALENDAR
 ';
 
+    protected $caldavCalendarObjectsForUser1Calendar2 = array(
+        'event3.ics' =>
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20120313T142342Z
+UID:event3
+TRANSP:OPAQUE
+SUMMARY:Event 3
+DTSTART:20140401T000000Z
+DTEND:20140401T010000Z
+DTSTAMP:20140313T142416Z
+SEQUENCE:1
+END:VEVENT
+END:VCALENDAR
+'
+    );
+
     protected $timeRangeData = [
           'match' => [ 'start' => '20120225T230000Z', 'end' => '20130228T225959Z' ],
           'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
@@ -219,6 +245,14 @@ END:VCALENDAR
     protected $uidQueryData = [ 'uid' => 'event1' ];
 
     protected $uidQueryDataRecur = [ 'uid' => 'recur' ];
+
+    protected $getMultipleCalendarObjectsFromPathsRequestBody = [
+        'eventPaths' => [
+            '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event1.ics',
+            '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event2.ics',
+            '/calendars/54b64eadf6d7d8e41d263e0f/user1Calendar2/event3.ics'
+        ]
+    ];
 
     protected $itipRequestData = [
         'method' => 'REPLY',
@@ -389,6 +423,12 @@ END:VCALENDAR'
         $this->delegatedCal = $this->user1Calendars['ownedCalendars']['user1DelegatedCalendar1'];
         $this->delegatedCal['id'] = $this->caldavBackend->createCalendar($this->delegatedCal['principaluri'], $this->delegatedCal['uri'], $this->delegatedCal);
         $this->delegateCalendar();
+
+        $this->user1Cal2 = $this->user1Calendars['ownedCalendars']['user1Calendar2'];
+        $this->user1Cal2['id'] = $this->caldavBackend->createCalendar($this->user1Cal2['principaluri'], $this->user1Cal2['uri'], $this->user1Cal2);
+        foreach ($this->caldavCalendarObjectsForUser1Calendar2 as $eventUri => $data) {
+            $this->caldavBackend->createCalendarObject($this->user1Cal2['id'], $eventUri, $data);
+        }
 
         $this->subscription = $this->user1Calendars['otherCalendars']['user1SubscriptionCalendar1'];
         $this->subscription['{http://calendarserver.org/ns/}source'] = new \Sabre\DAV\Xml\Property\Href('calendars/54b64eadf6d7d8e41d263e0e/publicCal1');

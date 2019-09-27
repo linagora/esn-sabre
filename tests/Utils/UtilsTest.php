@@ -90,4 +90,26 @@ class UtilsTest extends \PHPUnit_Framework_TestCase {
         $this->assertJSONMultiStatusResult(self::$responseDetails['fileProperties'][0], $results[0], false);
     }
 
+    function testSplitEventPathShouldReturnCalendarPathAndEventUriWhenEventPathIsValid() {
+        list($calendarPath, $eventUri) = Utils::splitEventPath('/calendars/calendarHomeId-1/calendarId-1/eventUid-1.ics');
+
+        $this->assertEquals($calendarPath, 'calendars/calendarHomeId-1/calendarId-1');
+        $this->assertEquals($eventUri, 'eventUid-1.ics');
+    }
+
+    function testSplitEventPathShouldReturnAPairOfNullsWhenEventPathIsInvalid() {
+        $invalidEventPaths = [
+            'calendars/calendarHomeId/calendarId/eventUid.ics',
+            '/calendars/calendarHomeId/calendarId/eventUid',
+            'calendar/calendarHomeId/calendarId/eventUid.ics',
+            '/calendarHomeId/calendarId/eventUid.ics',
+            '/calendars/calendarId/eventUid.ics',
+        ];
+
+        foreach ($invalidEventPaths as $invalidEventPath) {
+            list($calendarPath, $eventUri) = Utils::splitEventPath($invalidEventPath);
+            $this->assertEquals($calendarPath, null);
+            $this->assertEquals($eventUri, null);
+        }
+    }
 }

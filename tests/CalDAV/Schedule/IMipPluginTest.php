@@ -161,7 +161,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'simple.ics', $this->ical);
 
         $this->calendarURI = self::NAME;
-        $_SERVER["REQUEST_URI"] = "/calendars/54b64eadf6d7d8e41d263e0f/".$this->calendarURI."/171EBEFC-C951-499D-B234-7BA7D677B45D.ics";
+        $_SERVER["REQUEST_URI"] = "/calendars/54b64eadf6d7d8e41d263e0f/".$this->calendarURI."/event1.ics";
 
         $this->server->exec();
     }

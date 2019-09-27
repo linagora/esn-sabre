@@ -1471,7 +1471,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $schedulePlugin->expects($this->once())->method('scheduleLocalDelivery')->will($this->returnCallback(function($message) {
             $this->assertInstanceOf(Message::class, $message);
             $this->assertEquals('REPLY', $message->method);
-            $this->assertEquals('75EE3C60-34AC-4A97-953D-56CC004D6705', $message->uid);
+            $this->assertEquals('recur', $message->uid);
             $this->assertEquals('1', $message->sequence);
             $this->assertEquals('mailto:a@linagora.com', $message->sender);
             $this->assertEquals('mailto:b@linagora.com', $message->recipient);
@@ -1501,7 +1501,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $schedulePlugin->expects($this->once())->method('scheduleLocalDelivery')->will($this->returnCallback(function($message) {
             $this->assertInstanceOf(Message::class, $message);
             $this->assertEquals('REQUEST', $message->method);
-            $this->assertEquals('75EE3C60-34AC-4A97-953D-56CC004D6705', $message->uid);
+            $this->assertEquals('recur', $message->uid);
             $this->assertEquals('0', $message->sequence);
             $this->assertEquals('mailto:a@linagora.com', $message->sender);
             $this->assertEquals('mailto:b@linagora.com', $message->recipient);

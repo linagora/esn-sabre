@@ -16,31 +16,31 @@ class FreeBusyPluginTest extends \ESN\DAV\ServerMock {
         'start' => '20120101T000000Z',
         'end' => '20150101T000000Z',
         'users' => ['54b64eadf6d7d8e41d263e0f']
-      ];
+    ];
 
     protected $freebusyBulkWithFilterData = [
         'start' => '20120101T000000Z',
         'end' => '20150101T000000Z',
         'users' => ['54b64eadf6d7d8e41d263e0f'],
         'uids' => ['event1']
-      ];
+    ];
 
     protected $freebusyBulkWithDurationEvent = [
         'start' => '20180401T000000Z',
         'end' => '20180401T003000Z',
         'users' => ['54b64eadf6d7d8e41d263e0f'],
         'uids' => ['event1']
-      ];
+    ];
 
     protected $freebusyBulkWithRecurringEvent = [
         'start' => '20180501T010000Z',
         'end' => '20180501T013000Z',
         'users' => ['54b64eadf6d7d8e41d263e0f'],
         'uids' => ['event1']
-      ];
+    ];
 
     protected $durationEvent =
-    'BEGIN:VCALENDAR
+        'BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
 CREATED:20180313T142342Z
@@ -83,7 +83,7 @@ END:VCALENDAR
 
         $this->assertEquals($response->status, 200);
         $this->assertCount(1, $jsonResponse->users);
-        $this->assertCount(2, $jsonResponse->users[0]->calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $jsonResponse->users[0]->calendars);
         $this->assertCount(2, $jsonResponse->users[0]->calendars[0]->busy);
     }
 
@@ -102,7 +102,7 @@ END:VCALENDAR
 
         $this->assertEquals($response->status, 200);
         $this->assertCount(1, $jsonResponse->users);
-        $this->assertCount(2, $jsonResponse->users[0]->calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $jsonResponse->users[0]->calendars);
         $this->assertCount(1, $jsonResponse->users[0]->calendars[0]->busy);
     }
 
@@ -121,7 +121,7 @@ END:VCALENDAR
 
         $this->assertEquals($response->status, 200);
         $this->assertCount(1, $jsonResponse->users);
-        $this->assertCount(2, $jsonResponse->users[0]->calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $jsonResponse->users[0]->calendars);
         $this->assertCount(1, $jsonResponse->users[0]->calendars[0]->busy);
     }
 
@@ -140,7 +140,7 @@ END:VCALENDAR
 
         $this->assertEquals($response->status, 200);
         $this->assertCount(1, $jsonResponse->users);
-        $this->assertCount(2, $jsonResponse->users[0]->calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $jsonResponse->users[0]->calendars);
         $this->assertCount(1, $jsonResponse->users[0]->calendars[0]->busy);
     }
 }

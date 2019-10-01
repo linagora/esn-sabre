@@ -341,7 +341,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     private function checkCalendars($calendars) {
-        $this->assertCount(3, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
 
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
@@ -437,7 +437,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
 
-        $this->assertCount(2, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
 
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
@@ -526,7 +526,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertFalse(isset($calendars[1]->{'invite'}));
         $this->assertFalse(isset($calendars[1]->{'acl'}));
 
-        $this->assertCount(3, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
 
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
@@ -551,7 +551,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
 
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
-        $this->assertCount(2, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
 
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
@@ -653,10 +653,10 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 201);
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(3, $calendars);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
 
-        $cal = $calendars[2];
+        $cal = $calendars[count($calendars) - 1];
         $this->assertEquals('NAME', $cal['{DAV:}displayname']);
         $this->assertEquals('DESCRIPTION', $cal['{urn:ietf:params:xml:ns:caldav}calendar-description']);
         $this->assertEquals('#0190FFFF', $cal['{http://apple.com/ns/ical/}calendar-color']);
@@ -679,8 +679,8 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'apple:order' => '99'
         ];
 
-        $calendarsBefore = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(2, $calendarsBefore);
+        $calendarsBefore = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendarsBefore);
 
         $request->setBody(json_encode($calendar));
         $firstCall = $this->request($request);
@@ -689,10 +689,10 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals(201, $firstCall->status);
         $this->assertEquals(405, $secondCall->status);
 
-        $calendarsAfter = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(3, $calendarsAfter);
+        $calendarsAfter = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + 1, $calendarsAfter);
 
-        $cal = $calendarsAfter[2];
+        $cal = $calendarsAfter[count($calendarsAfter) - 1];
         $this->assertEquals('NAME', $cal['{DAV:}displayname']);
         $this->assertEquals('DESCRIPTION', $cal['{urn:ietf:params:xml:ns:caldav}calendar-description']);
         $this->assertEquals('#0190FFFF', $cal['{http://apple.com/ns/ical/}calendar-color']);
@@ -746,7 +746,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 201);
 
-        $calendars = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $calendars = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertCount(2, $calendars);
 
         $cal = $calendars[1];
@@ -778,8 +778,8 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 400);
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(2, $calendars);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
     }
 
     function testCreateSubscriptionMissingId() {
@@ -803,7 +803,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 400);
 
-        $calendars = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $calendars = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertCount(1, $calendars);
     }
 
@@ -814,14 +814,14 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(2, $calendars);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
 
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(1, $calendars);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) - 1, $calendars);
     }
 
     function testDeleteCalendarsOfHome() {
@@ -831,13 +831,13 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
         ));
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(2, $calendars);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
 
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
         $this->assertCount(0, $calendars);
     }
 
@@ -854,7 +854,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);
 
-        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertEquals($nameUpdated, $subscriptions[0]['{DAV:}displayname']);
     }
 
@@ -865,13 +865,13 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json',
         ));
 
-        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertCount(1, $subscriptions);
 
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);
 
-        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertCount(0, $subscriptions);
     }
 
@@ -1040,13 +1040,13 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ));
 
         $calendars = $this->caldavBackend->getCalendarsForUser($mainCalDavCalendar['principaluri']);
-        $this->assertCount(3, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
 
         $response = $this->request($request);
         $this->assertEquals(403, $response->status);
 
         $calendars = $this->caldavBackend->getCalendarsForUser($mainCalDavCalendar['principaluri']);
-        $this->assertCount(3, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
     }
 
     function testDeleteWrongCollection() {

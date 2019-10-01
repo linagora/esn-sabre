@@ -26,50 +26,57 @@ define('PRINCIPALS_DOMAINS', 'principals/domains');
  */
 class ServerMock extends \PHPUnit_Framework_TestCase {
 
-    protected $caldavCalendar = array(
-        '{DAV:}displayname' => 'Calendar',
-        '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
-        '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
-        '{http://apple.com/ns/ical/}calendar-order' => '2',
-        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
-        'uri' => 'calendar1',
-    );
+    protected $user1Calendars = [
+        'ownedCalendars' => [
+            'user1Calendar1' => [
+                '{DAV:}displayname' => 'Calendar',
+                '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
+                '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
+                '{http://apple.com/ns/ical/}calendar-order' => '2',
+                'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'uri' => 'calendar1'
+            ],
+            'user1DelegatedCalendar1' => [
+                '{DAV:}displayname' => 'delegatedCalendar',
+                '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description of the delegated calendar',
+                '{http://apple.com/ns/ical/}calendar-color' => '#33333333',
+                '{http://apple.com/ns/ical/}calendar-order' => '2',
+                'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'uri' => 'delegatedCal1',
+            ]
+        ],
+        'otherCalendars' => [
+            'user1SubscriptionCalendar1' => [
+                '{DAV:}displayname' => 'Subscription',
+                '{http://calendarserver.org/ns/}source' => '',
+                '{http://apple.com/ns/ical/}calendar-color' => '#33333333',
+                '{http://apple.com/ns/ical/}calendar-order' => '2',
+                'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'uri' => 'subscription1'
+            ]
+        ]
+    ];
 
-    protected $caldavCalendarUser2 = array(
-        '{DAV:}displayname' => 'Calendar',
-        '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
-        '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
-        '{http://apple.com/ns/ical/}calendar-order' => '2',
-        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0e',
-        'uri' => 'calendar2',
-    );
-
-    protected $publicCaldavCalendar = array(
-        '{DAV:}displayname' => 'Calendar',
-        '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
-        '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
-        '{http://apple.com/ns/ical/}calendar-order' => '2',
-        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0e',
-        'uri' => 'publicCal1',
-    );
-
-    protected $delegatedCaldavCalendar = array(
-        '{DAV:}displayname' => 'delegatedCalendar',
-        '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description of the delegated calendar',
-        '{http://apple.com/ns/ical/}calendar-color' => '#33333333',
-        '{http://apple.com/ns/ical/}calendar-order' => '2',
-        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
-        'uri' => 'delegatedCal1',
-    );
-
-    protected $caldavSubscription = array(
-        '{DAV:}displayname' => 'Subscription',
-        '{http://calendarserver.org/ns/}source' => '',
-        '{http://apple.com/ns/ical/}calendar-color' => '#33333333',
-        '{http://apple.com/ns/ical/}calendar-order' => '2',
-        'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
-        'uri' => 'subscription1',
-    );
+    protected $user2Calendars = [
+        'ownedCalendars' => [
+            'user2Calendar1' => [
+                '{DAV:}displayname' => 'Calendar',
+                '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
+                '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
+                '{http://apple.com/ns/ical/}calendar-order' => '2',
+                'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0e',
+                'uri' => 'calendar2'
+            ],
+            'user2PublicCalendar1' => [
+                '{DAV:}displayname' => 'Calendar',
+                '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
+                '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',
+                '{http://apple.com/ns/ical/}calendar-order' => '2',
+                'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0e',
+                'uri' => 'publicCal1'
+            ]
+        ]
+    ];
 
     protected $oldCaldavCalendar = array(
         '{DAV:}displayname' => 'null',
@@ -361,16 +368,16 @@ END:VCALENDAR'
         $this->caldavBackend->createCalendarObject($this->oldCal['id'], 'event1.ics', $this->caldavCalendarObjects['event1.ics']);
         $this->caldavBackend->createCalendarObject($this->oldCal['id'], 'event2.ics', $this->caldavCalendarObjects['event2.ics']);
         
-        $this->cal = $this->caldavCalendar;
+        $this->cal = $this->user1Calendars['ownedCalendars']['user1Calendar1'];
         $this->cal['id'] = $this->caldavBackend->createCalendar($this->cal['principaluri'], $this->cal['uri'], $this->cal);
         foreach ($this->caldavCalendarObjects as $eventUri => $data) {
             $this->caldavBackend->createCalendarObject($this->cal['id'], $eventUri, $data);
         }
 
-        $this->calUser2 = $this->caldavCalendarUser2;
+        $this->calUser2 = $this->user2Calendars['ownedCalendars']['user2Calendar1'];
         $this->calUser2['id'] = $this->caldavBackend->createCalendar($this->calUser2['principaluri'], $this->calUser2['uri'], $this->calUser2);
 
-        $this->publicCal = $this->publicCaldavCalendar;
+        $this->publicCal = $this->user2Calendars['ownedCalendars']['user2PublicCalendar1'];
         $this->publicCal['id'] = $this->caldavBackend->createCalendar($this->publicCal['principaluri'], $this->publicCal['uri'], $this->publicCal);
 
         $calendarInfo = [];
@@ -379,11 +386,11 @@ END:VCALENDAR'
         $this->caldavBackend->saveCalendarPublicRight($this->publicCal['id'], '{DAV:}all', $calendarInfo);
         $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'privateRecurEvent.ics', $this->privateRecurEvent);
 
-        $this->delegatedCal = $this->delegatedCaldavCalendar;
+        $this->delegatedCal = $this->user1Calendars['ownedCalendars']['user1DelegatedCalendar1'];
         $this->delegatedCal['id'] = $this->caldavBackend->createCalendar($this->delegatedCal['principaluri'], $this->delegatedCal['uri'], $this->delegatedCal);
         $this->delegateCalendar();
 
-        $this->subscription = $this->caldavSubscription;
+        $this->subscription = $this->user1Calendars['otherCalendars']['user1SubscriptionCalendar1'];
         $this->subscription['{http://calendarserver.org/ns/}source'] = new \Sabre\DAV\Xml\Property\Href('calendars/54b64eadf6d7d8e41d263e0e/publicCal1');
         $this->subscription['id'] = $this->caldavBackend->createSubscription($this->subscription['principaluri'], $this->subscription['uri'], $this->subscription);
 

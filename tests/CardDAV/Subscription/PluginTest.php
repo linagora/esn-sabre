@@ -127,7 +127,7 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
 
         $this->assertEquals(204, $response->status);
 
-        $subscriptions = $this->carddavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $subscriptions = $this->carddavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertEquals('subscription tested', $subscriptions[0]['{DAV:}displayname']);
         $this->assertEquals('description updated', $subscriptions[0]['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
     }

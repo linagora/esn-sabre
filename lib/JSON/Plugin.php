@@ -219,6 +219,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->getCalendarObjects($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
             list($code, $body) = $this->getCalendarObjectsForSubscription($path, $node, $jsonData);
+        } else if ($node instanceof \ESN\CalDAV\CalendarRoot) {
+            list($code, $body) = $this->getMultipleCalendarObjectsFromPaths($path, $jsonData);
         } else {
             $code = 200;
             $body = [];
@@ -839,6 +841,47 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $this->getMultipleDAVItems($nodePath, $node, [$eventPath])];
     }
 
+    function getMultipleCalendarObjectsFromPaths($nodePath, $jsonData) {
+        if (!isset($jsonData->eventPaths)) {
+            return [400, null];
+        }
+
+        $eventUrisByCalendar = [];
+        foreach ($jsonData->eventPaths as $eventPath) {
+            list($calendarPath, $eventUri) = Utils::splitEventPath($eventPath);
+
+            if (!$calendarPath) continue;
+
+            if (isset($eventUrisByCalendar[$calendarPath])) {
+                $eventUrisByCalendar[$calendarPath][] = $eventUri;
+            } else {
+                $eventUrisByCalendar[$calendarPath] = [$eventUri];
+            }
+        }
+
+        $items = [];
+        foreach ($eventUrisByCalendar as $calendarPath => $eventUris) {
+            $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+
+            $davItems = $this->getMultipleDAVItems(
+                $calendarPath,
+                $calendarNode,
+                $eventUris
+            )['_embedded']['dav:item'];
+
+            foreach ($davItems as $davItem) {
+                $items[] = $davItem;
+            }
+        }
+
+        return [207, [
+            '_links' => [
+                'self' => [ 'href' => $this->server->getBaseUri() . $nodePath . '.json']
+            ],
+            '_embedded' => [ 'dav:item' => $items ]
+        ]];
+    }
+
     function getCalendarObjectsForSubscription($nodePath, $subscription, $jsonData) {
         $propertiesList = ['{http://calendarserver.org/ns/}source'];
         $subprops = $subscription->getProperties($propertiesList);
@@ -889,15 +932,18 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return [200, $this->getMultipleDAVItems($nodePath, $node, $node->calendarQuery($filters), $start, $end)];
     }
 
-    private function getMultipleDAVItems($parentNodePath, $parentNode, $paths, $start = false, $end = false) {
-        $items = [];
+    private function getMultipleDAVItems($parentNodePath, $parentNode, $calendarObjectUris, $start = false, $end = false) {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
-        foreach ($paths as $path) {
-            list($properties) = $this->server->getPropertiesForPath($parentNodePath . '/' . $path, $props);
+        $paths = [];
+        foreach ($calendarObjectUris as $calendarObjectUri) {
+            $paths[] = $parentNodePath . '/' . $calendarObjectUri;
+        }
 
-            $vObject = VObject\Reader::read($properties[200]['{' . self::NS_CALDAV . '}calendar-data']);
+        $propertyList = [];
+        foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
+            $vObject = VObject\Reader::read($objProps[200][$props[0]]);
 
             // If we have start and end date, we're getting an expanded list of occurrences between these dates
             if ($start && $end) {
@@ -924,21 +970,22 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
 
             $vevent = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+            $objProps[200][$props[0]] = $vObject->jsonSerialize();
 
-            $items[] = [
-                '_links' => [
-                    'self' => [ 'href' => $baseUri . $properties['href' ] ]
-                ],
-                'etag' => $properties[200]['{DAV:}getetag'],
-                'data' => $vObject->jsonSerialize()
-            ];
+            $propertyList[] = $objProps;
         }
 
         return [
             '_links' => [
                 'self' => [ 'href' => $baseUri . $parentNodePath . '.json']
             ],
-            '_embedded' => [ 'dav:item' => $items ]
+            '_embedded' => [
+                'dav:item' => Utils::generateJSONMultiStatus([
+                    'fileProperties' => $propertyList,
+                    'dataKey' => $props[0],
+                    'baseUri' => $baseUri
+                ])
+            ]
         ];
     }
 

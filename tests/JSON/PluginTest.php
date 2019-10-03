@@ -58,6 +58,26 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertCount(2, $jsonResponse->_embedded->{'dav:item'});
     }
 
+    function testTimeRangeQueryShouldReturnMultistatusResponse() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeDataBothEvents));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(2, $items);
+        foreach ($items as $item) {
+            $this->assertEquals(200, $item->status);
+        }
+    }
+
     function testTimeRangeQueryRecur() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',
@@ -321,7 +341,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
     }
 
     private function checkCalendars($calendars) {
-        $this->assertCount(3, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
 
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
@@ -333,9 +353,12 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($calendars[1]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/delegatedCal1.json');
         $this->assertEquals($calendars[1]->{'dav:name'}, 'delegatedCalendar');
 
-        $this->assertEquals($calendars[2]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json');
-        $this->assertEquals($calendars[2]->{'dav:name'}, 'Subscription');
-        $this->assertEquals($calendars[2]->{'calendarserver:source'}->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
+        $this->assertEquals($calendars[2]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/user1Calendar2.json');
+        $this->assertEquals($calendars[2]->{'dav:name'}, 'User1 Calendar2');
+
+        $this->assertEquals($calendars[3]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json');
+        $this->assertEquals($calendars[3]->{'dav:name'}, 'Subscription');
+        $this->assertEquals($calendars[3]->{'calendarserver:source'}->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
 
         return $calendars;
     }
@@ -369,7 +392,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $this->assertEquals([
             // 4 users
-            '54b64eadf6d7d8e41d263e0f' => [ 'calendar1', 'delegatedCal1' ],
+            '54b64eadf6d7d8e41d263e0f' => [ 'calendar1', 'delegatedCal1', 'user1Calendar2' ],
             '54b64eadf6d7d8e41d263e0e' => [ 'calendar2', 'publicCal1' ],
             '54b64eadf6d7d8e41d263e0d' => [],
             '54b64eadf6d7d8e41d263e0c' => [ '54b64eadf6d7d8e41d263e0c' ],
@@ -417,7 +440,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
 
-        $this->assertCount(2, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
 
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
@@ -506,7 +529,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertFalse(isset($calendars[1]->{'invite'}));
         $this->assertFalse(isset($calendars[1]->{'acl'}));
 
-        $this->assertCount(3, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
 
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
@@ -520,10 +543,14 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($calendars[1]->{'dav:name'}, 'delegatedCalendar');
         $this->assertFalse(property_exists($calendars[1], 'calendarserver:delegatedsource'));
 
-        $this->assertEquals($calendars[2]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json');
-        $this->assertEquals($calendars[2]->{'dav:name'}, 'Subscription');
-        $this->assertEquals($calendars[2]->{'calendarserver:source'}->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
+        $this->assertEquals($calendars[2]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/user1Calendar2.json');
+        $this->assertEquals($calendars[2]->{'dav:name'}, 'User1 Calendar2');
         $this->assertFalse(property_exists($calendars[2], 'calendarserver:delegatedsource'));
+
+        $this->assertEquals($calendars[3]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json');
+        $this->assertEquals($calendars[3]->{'dav:name'}, 'Subscription');
+        $this->assertEquals($calendars[3]->{'calendarserver:source'}->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
+        $this->assertFalse(property_exists($calendars[3], 'calendarserver:delegatedsource'));
     }
 
     function testFilteredCalendarLisWithPersonalOnly() {
@@ -531,7 +558,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
 
         $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f.json');
-        $this->assertCount(2, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
 
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
@@ -633,10 +660,10 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 201);
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(3, $calendars);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
 
-        $cal = $calendars[2];
+        $cal = $calendars[count($calendars) - 1];
         $this->assertEquals('NAME', $cal['{DAV:}displayname']);
         $this->assertEquals('DESCRIPTION', $cal['{urn:ietf:params:xml:ns:caldav}calendar-description']);
         $this->assertEquals('#0190FFFF', $cal['{http://apple.com/ns/ical/}calendar-color']);
@@ -659,8 +686,8 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'apple:order' => '99'
         ];
 
-        $calendarsBefore = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(2, $calendarsBefore);
+        $calendarsBefore = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendarsBefore);
 
         $request->setBody(json_encode($calendar));
         $firstCall = $this->request($request);
@@ -669,10 +696,10 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals(201, $firstCall->status);
         $this->assertEquals(405, $secondCall->status);
 
-        $calendarsAfter = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(3, $calendarsAfter);
+        $calendarsAfter = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + 1, $calendarsAfter);
 
-        $cal = $calendarsAfter[2];
+        $cal = $calendarsAfter[count($calendarsAfter) - 1];
         $this->assertEquals('NAME', $cal['{DAV:}displayname']);
         $this->assertEquals('DESCRIPTION', $cal['{urn:ietf:params:xml:ns:caldav}calendar-description']);
         $this->assertEquals('#0190FFFF', $cal['{http://apple.com/ns/ical/}calendar-color']);
@@ -726,7 +753,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 201);
 
-        $calendars = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $calendars = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertCount(2, $calendars);
 
         $cal = $calendars[1];
@@ -758,8 +785,8 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 400);
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(2, $calendars);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
     }
 
     function testCreateSubscriptionMissingId() {
@@ -783,7 +810,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 400);
 
-        $calendars = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $calendars = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertCount(1, $calendars);
     }
 
@@ -794,14 +821,14 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(2, $calendars);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
 
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(1, $calendars);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) - 1, $calendars);
     }
 
     function testDeleteCalendarsOfHome() {
@@ -811,13 +838,13 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
         ));
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
-        $this->assertCount(2, $calendars);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
 
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->caldavCalendar['principaluri']);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
         $this->assertCount(0, $calendars);
     }
 
@@ -834,7 +861,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);
 
-        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertEquals($nameUpdated, $subscriptions[0]['{DAV:}displayname']);
     }
 
@@ -845,13 +872,13 @@ class PluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json',
         ));
 
-        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertCount(1, $subscriptions);
 
         $response = $this->request($request);
         $this->assertEquals(204, $response->status);
 
-        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->caldavCalendar['principaluri']);
+        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
         $this->assertCount(0, $subscriptions);
     }
 
@@ -1020,13 +1047,13 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ));
 
         $calendars = $this->caldavBackend->getCalendarsForUser($mainCalDavCalendar['principaluri']);
-        $this->assertCount(3, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
 
         $response = $this->request($request);
         $this->assertEquals(403, $response->status);
 
         $calendars = $this->caldavBackend->getCalendarsForUser($mainCalDavCalendar['principaluri']);
-        $this->assertCount(3, $calendars);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
     }
 
     function testDeleteWrongCollection() {
@@ -1451,7 +1478,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $schedulePlugin->expects($this->once())->method('scheduleLocalDelivery')->will($this->returnCallback(function($message) {
             $this->assertInstanceOf(Message::class, $message);
             $this->assertEquals('REPLY', $message->method);
-            $this->assertEquals('75EE3C60-34AC-4A97-953D-56CC004D6705', $message->uid);
+            $this->assertEquals('recur', $message->uid);
             $this->assertEquals('1', $message->sequence);
             $this->assertEquals('mailto:a@linagora.com', $message->sender);
             $this->assertEquals('mailto:b@linagora.com', $message->recipient);
@@ -1481,7 +1508,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $schedulePlugin->expects($this->once())->method('scheduleLocalDelivery')->will($this->returnCallback(function($message) {
             $this->assertInstanceOf(Message::class, $message);
             $this->assertEquals('REQUEST', $message->method);
-            $this->assertEquals('75EE3C60-34AC-4A97-953D-56CC004D6705', $message->uid);
+            $this->assertEquals('recur', $message->uid);
             $this->assertEquals('0', $message->sequence);
             $this->assertEquals('mailto:a@linagora.com', $message->sender);
             $this->assertEquals('mailto:b@linagora.com', $message->recipient);
@@ -1588,6 +1615,63 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ));
 
         $response = $this->request($request);
+        $this->assertEquals($response->status, 404);
+    }
+
+    function testGetMultipleCalendarObjectsFromPathsAll200s() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars',
+        ));
+
+        $requestBody = array_replace([], $this->getMultipleCalendarObjectsFromPathsRequestBody);
+        $request->setBody(json_encode($requestBody));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(count($this->getMultipleCalendarObjectsFromPathsRequestBody['eventPaths']), $items);
+        $this->assertEquals(200, $items[0]->status);
+    }
+
+    function testGetMultipleCalendarObjectsFromPathsAll200sWith404sStripped() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars',
+        ));
+
+        $requestBody = array_replace([], $this->getMultipleCalendarObjectsFromPathsRequestBody);
+        $requestBody['eventPaths'][count($requestBody['eventPaths']) - 1] = '/calendars/54b64eadf6d7d8e41d263e0f/user1Calendar2/nonExistentEvent.ics';
+        $request->setBody(json_encode($requestBody));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $this->assertEquals($response->status, 207);
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(count($this->getMultipleCalendarObjectsFromPathsRequestBody['eventPaths']) - 1, $items);
+        foreach($items as $item) {
+            $this->assertEquals(200, $item->status);
+        }
+    }
+
+    function testGetMultipleCalendarObjectsFromPathsShouldReturn404WhenOneCalendarNotFound() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars',
+        ));
+
+        $requestBody = array_replace([], $this->getMultipleCalendarObjectsFromPathsRequestBody);
+        $requestBody['eventPaths'][] = '/calendars/54b64eadf6d7d8e41d263e0f/nonExistentCalendar/event1.ics';
+        $request->setBody(json_encode($requestBody));
+        $response = $this->request($request);
+
         $this->assertEquals($response->status, 404);
     }
 

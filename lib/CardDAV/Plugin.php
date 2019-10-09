@@ -219,7 +219,17 @@ class Plugin extends \ESN\JSON\BasePlugin {
         foreach ($addressBooks as $addressBook) {
             $shouldInclude = false;
 
-            if ($addressBook instanceof AddressBook) {
+            if ($addressBook instanceof Group\GroupAddressBook) {
+                if ($addressBook->isDisabled()) continue;
+
+                if ($options->personal) {
+                    $shouldInclude = true;
+                }
+
+                if ($options->public) {
+                    $shouldInclude = $addressBook->isPublic();
+                }
+            } else if ($addressBook instanceof AddressBook) {
                 if ($options->personal) {
                     $shouldInclude = true;
                 }

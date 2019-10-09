@@ -164,10 +164,9 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
 
         $addressBooks = $jsonResponse->{'_embedded'}->{'dav:addressbook'};
 
-        $this->assertCount(3, $addressBooks);
+        $this->assertCount(2, $addressBooks);
         $this->assertEquals($addressBooks[0]->{'_links'}->self->href, '/addressbooks/' . $userID . '/collected.json');
         $this->assertEquals($addressBooks[1]->{'_links'}->self->href, '/addressbooks/' . $userID . '/contacts.json');
-        $this->assertEquals($addressBooks[2]->{'_links'}->self->href, '/addressbooks/' . $domainID . '/gab.json');
     }
 
     function testGetSubscribedAddressBooks() {

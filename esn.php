@@ -133,6 +133,10 @@ $aclPlugin->principalCollectionSet = [
 $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
 $server->addPlugin($aclPlugin);
 
+// JSON api support for DAVACL plugin
+$esnAclPlugin = new ESN\DAVACL\Plugin();
+$server->addPlugin($esnAclPlugin);
+
 // JSON api support
 $jsonPlugin = new ESN\JSON\Plugin(JSON_ROOT);
 $server->addPlugin($jsonPlugin);

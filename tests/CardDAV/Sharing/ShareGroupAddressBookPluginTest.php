@@ -68,7 +68,7 @@ class ShareGroupAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
 
         $response = $this->makeRequest(
             'POST',
-            '/addressbooks/' . self::ADMINISTRATOR_ID_1 . '/gab.json',
+            '/addressbooks/' . self::DOMAIN_ID . '/gab.json',
             [
                 'dav:share-resource' => [
                     'dav:sharee' => [
@@ -105,7 +105,7 @@ class ShareGroupAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
 
         $response = $this->makeRequest(
             'POST',
-            '/addressbooks/' . self::ADMINISTRATOR_ID_1 . '/gab.json',
+            '/addressbooks/' . self::DOMAIN_ID . '/gab.json',
             [
                 'dav:share-resource' => [
                     'dav:sharee' => [

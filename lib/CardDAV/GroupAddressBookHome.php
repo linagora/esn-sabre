@@ -48,9 +48,9 @@ class GroupAddressBookHome extends AddressBookHome {
             $children = $this->updateChildrenWithSharedAddressBooks($children);
         }
 
-        // Add group address books
+        // Remove children that are shared by group address books
         if (isset($this->principal['groupPrincipals'])) {
-            $children = $this->updateChildrenWithGroupAddressBooks($children);
+            $children = $this->removeChildrenSharedByGroupAddressBooks($children);
         }
 
         return $children;

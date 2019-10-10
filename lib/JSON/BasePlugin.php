@@ -7,7 +7,8 @@ class BasePlugin extends ServerPlugin {
 
     const USER_AGENT_REGEXP = [
         "/DAVdroid.*/",
-        "/Thunderbird.*/"
+        "/Thunderbird.*/",
+        "/DAVx5*/"
     ];
 
     function initialize(\Sabre\DAV\Server $server) {

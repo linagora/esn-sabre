@@ -66,7 +66,7 @@ class GroupAddressBookMembersRightPluginTest extends \ESN\CardDAV\PluginTestBase
 
         $response = $this->makeRequest(
             'POST',
-            '/addressbooks/' . self::USER_ID . '/gab.json',
+            '/addressbooks/' . self::DOMAIN_ID . '/gab.json',
             [
                 'dav:group-addressbook' => [ 'privileges' => [] ]
             ]
@@ -81,7 +81,7 @@ class GroupAddressBookMembersRightPluginTest extends \ESN\CardDAV\PluginTestBase
 
         $response = $this->makeRequest(
             'POST',
-            '/addressbooks/' . self::ADMINISTRATOR_ID . '/gab.json',
+            '/addressbooks/' . self::DOMAIN_ID . '/gab.json',
             array(
                 'dav:group-addressbook' => [ 'privileges' => [] ]
             )
@@ -94,7 +94,7 @@ class GroupAddressBookMembersRightPluginTest extends \ESN\CardDAV\PluginTestBase
 
         $response = $this->makeRequest(
             'POST',
-            '/addressbooks/' . self::ADMINISTRATOR_ID . '/gab.json',
+            '/addressbooks/' . self::DOMAIN_ID . '/gab.json',
             array(
                 'dav:group-addressbook' => [ 'privileges' => [ '{DAV:}invalid' ] ]
             )
@@ -107,7 +107,7 @@ class GroupAddressBookMembersRightPluginTest extends \ESN\CardDAV\PluginTestBase
 
         $response = $this->makeRequest(
             'POST',
-            '/addressbooks/' . self::ADMINISTRATOR_ID . '/gab.json',
+            '/addressbooks/' . self::DOMAIN_ID . '/gab.json',
             array(
                 'dav:group-addressbook' => [ 'privileges' => [ '{DAV:}read', '{DAV:}write-content' ] ]
             )

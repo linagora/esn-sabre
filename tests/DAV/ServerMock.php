@@ -366,6 +366,9 @@ END:VCALENDAR'
         $this->server->sapi = new \Sabre\HTTP\SapiMock();
         $this->server->debugExceptions = true;
 
+        $davACLPlugin = new \ESN\DAVACL\Plugin();
+        $this->server->addPlugin($davACLPlugin);
+
         $caldavPlugin = new \ESN\CalDAV\Plugin();
         $this->server->addPlugin($caldavPlugin);
 

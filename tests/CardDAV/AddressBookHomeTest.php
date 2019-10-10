@@ -45,10 +45,9 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
         $this->carddavBackend->createAddressBook($this->domainPrincipal, 'GAB', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
 
         $children = $this->books->getChildren();
-        $this->assertCount(3, $children);
+        $this->assertCount(2, $children);
         $this->assertInstanceOf('\ESN\CardDAV\AddressBook', $children[0]);
         $this->assertInstanceOf('\ESN\CardDAV\AddressBook', $children[1]);
-        $this->assertInstanceOf('\ESN\CardDAV\AddressBook', $children[2]);
 
         $childrenNames = [];
         foreach ($children as $child) {
@@ -58,9 +57,6 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
         // Default address books
         $this->assertContains('collected', $childrenNames);
         $this->assertContains('contacts', $childrenNames);
-
-        // Domain address book
-        $this->assertContains('GAB', $childrenNames);
 
         // Check ACL of GAB
         $expectACL = [
@@ -85,13 +81,9 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
                 'protected' => true
             ]
         ];
-
-        $index = array_search('GAB', $childrenNames);
-        $this->assertEquals($children[$index]->getACL(), $expectACL);
-        $this->assertEquals($children[$index]->getProperties([])['{DAV:}group'], 'principals/domains/' . self::DOMAIN_ID);
     }
 
-    function testGetChildrenWithGroupAdressBookIsDelegated() {
+    function testGetChildrenExceptSharedByGroupAdressBook() {
         $createGroupAddressBookId = $this->carddavBackend->createAddressBook($this->domainPrincipal, 'GAB', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
         $delegatedAddressBookName = 'DelegatedGAB';
 
@@ -110,37 +102,17 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
         );
 
         $children = $this->books->getChildren();
-        $this->assertCount(3, $children);
+        $this->assertCount(2, $children);
 
         $childrenNames = [];
-        $delegatedAddressBooks = [];
 
         foreach ($children as $child) {
             $childrenNames[] = $child->getName();
-
-            if ($child instanceof \ESN\CardDAV\Sharing\SharedAddressBook) {
-                $delegatedAddressBooks[] = $child;
-            }
         }
 
         // Default address books
         $this->assertContains('collected', $childrenNames);
         $this->assertContains('contacts', $childrenNames);
-
-        // Delegated address book
-        $this->assertCount(1, $delegatedAddressBooks);
-
-        $expectACL = [
-            [
-                'privilege' => '{DAV:}read',
-                'principal' => 'principals/users/' . self::USER_ID,
-                'protected' => true
-            ]
-        ];
-        $properties = $delegatedAddressBooks[0]->getProperties([ 'acl', 'share_displayname' ]);
-
-        $this->assertEquals($properties['acl'], $expectACL);
-        $this->assertEquals($properties['share_displayname'], $delegatedAddressBookName);
     }
 
     function testGetChildrenWithDisabledGroupAdressBook() {

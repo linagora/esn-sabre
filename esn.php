@@ -41,12 +41,16 @@ $logger = ESN\Log\EsnLoggerFactory::initLogger($loggerConfig);
 $loggerPlugin = new ESN\Log\ExceptionLoggerPlugin($logger);
 
 try {
-    $mongoEsn = new \MongoDB\Client($dbConfig['esn']['connectionString'], $dbConfig['esn']['connectionOptions']);
-    if ($dbConfig['esn']['connectionString'] == $dbConfig['sabre']['connectionString']) {
-        $mongoSabre = $mongoEsn;
-    } else {
-        $mongoSabre = new \MongoDB\Client($dbConfig['sabre']['connectionString'], $dbConfig['sabre']['connectionOptions']);
-    }
+    $esnMongoConnectionString = $dbConfig['esn']['connectionString'];
+    $esnMongoClient = new \MongoDB\Client($esnMongoConnectionString, $dbConfig['esn']['connectionOptions']);
+    $sabreMongoConnectionString = $dbConfig['sabre']['connectionString'];
+    $sabreMongoClient = new \MongoDB\Client($sabreMongoConnectionString, $dbConfig['sabre']['connectionOptions']);
+
+    list(,,,$esnMongoDbName) = explode('/', $esnMongoConnectionString);
+    list(,,,$sabreMongoDbName) = explode('/', $sabreMongoConnectionString);
+
+    $esnDb = $esnMongoClient->{$esnMongoDbName};
+    $sabreDb = $sabreMongoClient->{$sabreMongoDbName};
 
     if(!empty($config['amqp']['host'])) {
         $amqpLogin = !empty($config['amqp']['login']) ? $config['amqp']['login'] : 'guest';
@@ -77,10 +81,6 @@ try {
     $server->exec();
     return;
 }
-
-// Databases
-$esnDb = $mongoEsn->{$dbConfig['esn']['db']};
-$sabreDb = $mongoSabre->{$dbConfig['sabre']['db']};
 
 // Backends
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm']);

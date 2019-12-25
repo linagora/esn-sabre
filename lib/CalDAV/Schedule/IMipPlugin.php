@@ -70,9 +70,11 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $attendees = [];
 
         foreach ($vCal->VEVENT as $vevent) {
-            foreach ($vevent->ATTENDEE as $eventAttendee) {
-                if (!isset($attendees[$eventAttendee->getNormalizedValue()])) {
-                    $attendees[$eventAttendee->getNormalizedValue()] = 1;
+            if(isset($vevent->ATTENDEE) && $vevent->ATTENDEE) {
+                foreach ($vevent->ATTENDEE as $eventAttendee) {
+                    if (!isset($attendees[$eventAttendee->getNormalizedValue()])) {
+                        $attendees[$eventAttendee->getNormalizedValue()] = 1;
+                    }
                 }
             }
         }

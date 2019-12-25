@@ -456,6 +456,24 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($attendees, ['mailto:robertocarlos@realmadrid.com' => 1, 'mailto:two@example.org' => 1]);
     }
 
+    function testCalendarObjectChangeEventModificationWithoutAttendee() {
+        $data = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'BEGIN:VEVENT',
+            'UID:e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1560',
+            'DTSTART:20180305T120000Z',
+            'DTEND:20180305T130000Z',
+            'SUMMARY:Lunch',
+            'ORGANIZER:mailto:robertocarlos@realmadrid.com',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            '']);
+
+        $attendees = $this->emitCalendarChange('simple.ics', $data, false);
+
+        $this->assertEquals($attendees, []);
+    }
+
     private function emitCalendarChange(string $eventId, string $data, bool $isNew): array
     {
         $plugin = $this->getPlugin();

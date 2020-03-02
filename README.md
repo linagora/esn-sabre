@@ -220,6 +220,7 @@ In order to run, the ESN sabre instance must access to the ESN, and mongo instan
 
 - SABRE_MONGO_HOST: Mongodb instance used to store sabre data, defaults to 'sabre_mongo'
 - SABRE_MONGO_PORT: Port used by the Mongodb instance defined above, defaults to '27017'
+- SABRE_MONGO_DBNAME: Sabre database name in the MongoDB instance, defaults to 'sabre'
 - SABRE_ENV: Specify if Sabre is in `dev` mode or `production` mode (default).
 - ESN_MONGO_HOST: Mongodb instance of the ESN, used to create principals, defaults to 'esn_mongo'
 - ESN_MONGO_PORT: Port of the ESN Mongodb instance, defaults to '27017'

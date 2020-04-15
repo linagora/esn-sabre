@@ -9,8 +9,6 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $this->db = $db;
         $this->collectionMap = [
             'users' => $this->db->users,
-            //'communities' => $this->db->communities,
-            'projects' => $this->db->projects,
             'resources' => $this->db->resources,
             'domains' => $this->db->domains
         ];
@@ -59,10 +57,6 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     function searchPrincipals($prefixPath, array $searchProperties, $test = 'allof') {
         if ($prefixPath == "principals/users") {
             return $this->searchUserPrincipals($searchProperties, $test);
-        } else if ($prefixPath == "principals/communities") {
-            //return $this->searchGroupPrincipals('communities', $searchProperties, $test);
-        } else if ($prefixPath == "principals/projects") {
-            return $this->searchGroupPrincipals('projects', $searchProperties, $test);
         } else if ($prefixPath == "principals/resources") {
             return $this->searchGroupPrincipals('resources', $searchProperties, $test);
         } else if ($prefixPath == "principals/domains" && isset($searchProperties['{DAV:}displayname'])) {
@@ -105,14 +99,6 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $principals = [];
         if (count($parts) == 3 && $parts[0] == 'principals' && $parts[1] == 'users') {
             $collaborationQuery = [ 'members' => [ '$elemMatch' => [ 'member.id' => new \MongoDB\BSON\ObjectId($parts[2]) ] ] ];
-
-            /*foreach ($this->db->communities->find($collaborationQuery, [ 'projection' => [ '_id' => 1 ]]) as $community) {
-                $principals[] = 'principals/communities/' . $community['_id'];
-            }*/
-
-            foreach ($this->db->projects->find($collaborationQuery, [ 'projection' => [ '_id' => 1 ]]) as $project) {
-                $principals[] = 'principals/projects/' . $project['_id'];
-            }
 
             $user = $this->db->users->findOne(
                 [ '_id' => new \MongoDB\BSON\ObjectId($parts[2]) ],
@@ -160,13 +146,6 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     }
                 }
 
-                break;
-            case "communities":
-            case "projects":
-                $principal = [
-                    'id' => (string)$obj['_id'],
-                    '{DAV:}displayname' => $obj['title'],
-                ];
                 break;
             case "resources":
                 $displayname = "";

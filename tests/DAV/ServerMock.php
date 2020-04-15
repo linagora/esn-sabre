@@ -16,8 +16,6 @@ require_once ESN_TEST_BASE . '/DAV/Auth/PluginMock.php';
 
 define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
-define('PRINCIPALS_COMMUNITIES', 'principals/communities');
-define('PRINCIPALS_PROJECTS', 'principals/projects');
 define('PRINCIPALS_RESOURCES', 'principals/resources');
 define('PRINCIPALS_DOMAINS', 'principals/domains');
 
@@ -392,8 +390,6 @@ END:VCALENDAR'
         $aclPlugin = new \Sabre\DAVACL\Plugin();
         $aclPlugin->principalCollectionSet = [
             PRINCIPALS_USERS,
-            PRINCIPALS_COMMUNITIES,
-            PRINCIPALS_PROJECTS,
             PRINCIPALS_RESOURCES,
             PRINCIPALS_DOMAINS
         ];
@@ -404,7 +400,7 @@ END:VCALENDAR'
         $this->oldCal['id'] = $this->caldavBackend->createCalendar($this->oldCal['principaluri'], $this->oldCal['uri'], $this->oldCal);
         $this->caldavBackend->createCalendarObject($this->oldCal['id'], 'event1.ics', $this->caldavCalendarObjects['event1.ics']);
         $this->caldavBackend->createCalendarObject($this->oldCal['id'], 'event2.ics', $this->caldavCalendarObjects['event2.ics']);
-        
+
         $this->cal = $this->user1Calendars['ownedCalendars']['user1Calendar1'];
         $this->cal['id'] = $this->caldavBackend->createCalendar($this->cal['principaluri'], $this->cal['uri'], $this->cal);
         foreach ($this->caldavCalendarObjects as $eventUri => $data) {

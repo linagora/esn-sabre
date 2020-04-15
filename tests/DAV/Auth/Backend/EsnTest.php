@@ -154,23 +154,11 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $server->httpRequest = $request;
         $server->httpResponse = $response;
 
-        $plugin = new ESNHookPluginMock('/', $esnauth);
-        $server->addPlugin($plugin);
-
         list($rv, $msg) = $esnauth->check($request, $response);
 
         $this->assertTrue($rv);
         $this->assertEquals($msg, 'principals/users/123456789');
         $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
-
-        $pluginrequest = $plugin->createRequest('principals/communities/123456789', 'calendars/123123/events', 'body');
-        $this->assertEquals($pluginrequest->getHeader('Cookie'), 'test=passed');
-    }
-}
-
-class ESNHookPluginMock extends \ESN\CalDAV\ESNHookPlugin {
-    public function createRequest($owner, $path, $body) {
-        return parent::createRequest($owner, $path, $body);
     }
 }
 

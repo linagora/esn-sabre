@@ -49,8 +49,6 @@ class MockAuthBackend {
 
 class MockPrincipalDb {
     public $users = null;
-    public $communities = null;
-    public $projects = null;
     public $resources = null;
     public $domains = null;
 }

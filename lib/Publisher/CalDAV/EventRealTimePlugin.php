@@ -200,7 +200,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         if (!$eventPath) {
             return false;
         }
-        
+
         $dataMessage = [
             'eventPath' => '/' . $eventPath,
             'event' => VObject\Reader::read($upToDateEventIcs)

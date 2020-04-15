@@ -8,8 +8,6 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
 
     const PRINCIPAL_SUPPORTED_SET = [
         'principals/users',
-        // 'principals/communities', // Uncomment to reactive the fetch for communities
-        'principals/projects',
         'principals/domains'
     ];
 

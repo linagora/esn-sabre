@@ -22,8 +22,6 @@ date_default_timezone_set('UTC');
 define('PRINCIPALS_COLLECTION', 'principals');
 define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
-define('PRINCIPALS_COMMUNITIES', 'principals/communities');
-define('PRINCIPALS_PROJECTS', 'principals/projects');
 define('PRINCIPALS_RESOURCES', 'principals/resources');
 define('PRINCIPALS_DOMAINS', 'principals/domains');
 define('JSON_ROOT', 'json');
@@ -103,8 +101,6 @@ $authEmitter->on("auth:success", [$calendarBackend, "getCalendarsForUser"]);
 $tree = [
     new Sabre\DAV\SimpleCollection(PRINCIPALS_COLLECTION, [
       new ESN\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_USERS),
-      new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_COMMUNITIES),
-      new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_PROJECTS),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_RESOURCES),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_TECHNICAL_USER),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_DOMAINS)
@@ -131,8 +127,6 @@ $server->addPlugin($authPlugin);
 $aclPlugin = new Sabre\DAVACL\Plugin();
 $aclPlugin->principalCollectionSet = [
     PRINCIPALS_USERS,
-    PRINCIPALS_COMMUNITIES,
-    PRINCIPALS_PROJECTS,
     PRINCIPALS_RESOURCES,
     PRINCIPALS_DOMAINS
 ];
@@ -235,9 +229,6 @@ $corsPlugin->allowHeaders[] = 'ESNToken';
 
 $server->addPlugin($corsPlugin);
 
-$esnHookPlugin = new ESN\CalDAV\ESNHookPlugin($config['esn']['calendarRoot'], $authBackend);
-$server->addPlugin($esnHookPlugin);
-
 // Rabbit publisher plugin
 if(!empty($config['amqp']['host'])){
     $channel = $amqpConnection->channel();
@@ -260,12 +251,6 @@ if(!empty($config['amqp']['host'])){
     $subscriptionRealTimePlugin = new ESN\Publisher\CardDAV\SubscriptionRealTimePlugin($AMQPPublisher, $addressbookBackend);
     $server->addPlugin($subscriptionRealTimePlugin);
 }
-
-$communityMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'communities');
-$server->addPlugin($communityMembersPlugin);
-
-$projectMembersPlugin = new ESN\CalDAV\CollaborationMembersPlugin($esnDb, 'projects');
-$server->addPlugin($projectMembersPlugin);
 
 $server->addPlugin(new ESN\CalDAV\ParticipationPlugin());
 

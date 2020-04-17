@@ -34,13 +34,6 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
             '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID),
             'domains' => []
         ]);
-        //$this->esndb->communities->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b4') ]);
-        $this->esndb->projects->insertOne(
-            [
-                '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0f'),
-                'title' => 'project'
-            ]
-            );
         $this->esndb->domains->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
             'administrators' => [
@@ -59,18 +52,12 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
 
     function testChildren() {
         $children = $this->root->getChildren();
-        $this->assertEquals(3, count($children));
+        $this->assertEquals(2, count($children));
 
         $user = $children[0];
-        //$community = $children[1];
-        $project = $children[1];
-        $domain = $children[2];
+        $domain = $children[1];
 
         $this->checkUser($user);
-
-        //$this->checkCommunity($community);
-
-        $this->checkProject($project);
 
         $this->checkDomain($domain);
     }
@@ -78,14 +65,6 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
     function testGetChild() {
         $user = $this->root->getChild('54313fcc398fef406b0041b6');
         $this->checkUser($user);
-
-        /*
-        $community = $this->root->getChild('54313fcc398fef406b0041b4');
-        $this->checkCommunity($user);
-        */
-
-        $project = $this->root->getChild('54b64eadf6d7d8e41d263e0f');
-        $this->checkProject($project);
 
         $domain = $this->root->getChild(self::DOMAIN_ID);
         $this->checkDomain($domain);
@@ -98,18 +77,6 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($user instanceof \Sabre\CardDAV\AddressBookHome);
         $this->assertEquals($user->getName(), '54313fcc398fef406b0041b6');
         $this->assertEquals($user->getOwner(), 'principals/users/54313fcc398fef406b0041b6');
-    }
-
-    function checkCommunity($communitiy) {
-        $this->assertTrue($community instanceof \Sabre\CardDAV\AddressBookHome);
-        $this->assertEquals($community->getName(), '54313fcc398fef406b0041b4');
-        $this->assertEquals($community->getOwner(), 'principals/communities/54313fcc398fef406b0041b4');
-    }
-
-    function checkProject($project) {
-        $this->assertTrue($project instanceof \Sabre\CardDAV\AddressBookHome);
-        $this->assertEquals($project->getName(), '54b64eadf6d7d8e41d263e0f');
-        $this->assertEquals($project->getOwner(), 'principals/projects/54b64eadf6d7d8e41d263e0f');
     }
 
     function checkDomain($domain) {

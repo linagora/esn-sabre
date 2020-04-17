@@ -14,7 +14,6 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
     const USER_WITH_NO_FIRSTNAME = '54313fcc398fef406b0041c1';
     const USER_WITH_NO_LASTNAME = '54313fcc398fef406b0041c2';
     const USER_DOMAIN_ADMIN_ID = '54313fcc398fef406b0041c3';
-    const COMMUNITY_ID = '54313fcc398fef406b0041b4';
     const PROJECT_ID = '54b64eadf6d7d8e41d263e0f';
     const RESOURCE_ID = '82113fcc398fef406b0041b7';
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
@@ -128,30 +127,6 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
                 [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]
             ]
         ]);
-        self::$esndb->communities->insertOne([
-            '_id' => new \MongoDB\BSON\ObjectId(self::COMMUNITY_ID),
-            'title' => 'community',
-            'members' => [
-              [
-                'member' => [
-                  'objectType' => 'user',
-                  'id' => new \MongoDB\BSON\ObjectId(self::USER_ID)
-                ]
-              ]
-            ]
-        ]);
-        self::$esndb->projects->insertOne([
-            '_id' => new \MongoDB\BSON\ObjectId(self::PROJECT_ID),
-            'title' => 'project',
-            'members' => [
-              [
-                'member' => [
-                  'objectType' => 'user',
-                  'id' => new \MongoDB\BSON\ObjectId(self::USER_ID)
-                ]
-              ]
-            ]
-        ]);
 
         self::$esndb->resources->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_ID),
@@ -203,16 +178,6 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             '{DAV:}displayname' => 'first last',
             '{http://sabredav.org/ns}email-address' => 'user@example.com',
             'groupPrincipals' => [
-                // [
-                //     'uri' => 'principals/communities/' . self::COMMUNITY_ID,
-                //     'administrators' => [],
-                //     'members' => [ 'principals/users/' . self::USER_ID ]
-                // ],
-                [
-                    'uri' => 'principals/projects/' . self::PROJECT_ID,
-                    'administrators' => [],
-                    'members' => [ 'principals/users/' . self::USER_ID ]
-                ],
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
                     'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
@@ -328,28 +293,6 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $this->assertSame($expected['id'], $principal['id']);
     }
 
-    function testCommunityPrincipalsByPrefix() {
-        $this->markTestSkipped('To be reactivate when communities calendar gonna be Ok');
-        $backend = new Mongo(self::$esndb);
-
-        $principals = $backend->getPrincipalsByPrefix('principals/communities');
-        $principal = $backend->getPrincipalByPath('principals/communities/' . self::COMMUNITY_ID);
-        $this->assertEquals(count($principals), 1);
-
-        $expected = [
-            'uri' => 'principals/communities/' . self::COMMUNITY_ID,
-            'id' => self::COMMUNITY_ID,
-            '{DAV:}displayname' => 'community',
-            'groupPrincipals' => []
-        ];
-        $this->assertEquals($expected, $principals[0]);
-        $this->assertEquals($expected, $principal);
-
-        // Extra check to make sure no mongo ids are used
-        $this->assertSame($expected['id'], $principals[0]['id']);
-        $this->assertSame($expected['id'], $principal['id']);
-    }
-
     function testDomainPrincipalsByPrefix() {
         $backend = new Mongo(self::$esndb);
 
@@ -368,27 +311,6 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
             'members' => self::$domainMembers
         ];
 
-        $this->assertEquals($expected, $principals[0]);
-        $this->assertEquals($expected, $principal);
-
-        // Extra check to make sure no mongo ids are used
-        $this->assertSame($expected['id'], $principals[0]['id']);
-        $this->assertSame($expected['id'], $principal['id']);
-    }
-
-    function testProjectPrincipalsByPrefix() {
-        $backend = new Mongo(self::$esndb);
-
-        $principals = $backend->getPrincipalsByPrefix('principals/projects');
-        $principal = $backend->getPrincipalByPath('principals/projects/' . self::PROJECT_ID);
-        $this->assertEquals(count($principals), 1);
-
-        $expected = [
-            'uri' => 'principals/projects/' . self::PROJECT_ID,
-            'id' => self::PROJECT_ID,
-            '{DAV:}displayname' => 'project',
-            'groupPrincipals' => []
-        ];
         $this->assertEquals($expected, $principals[0]);
         $this->assertEquals($expected, $principal);
 
@@ -431,9 +353,6 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $backend = new Mongo(self::$esndb);
         $expected = array('principals/users/' . self::USER_ID);
 
-        //$this->assertEquals($expected,$backend->getGroupMemberSet('principals/communities/' . self::COMMUNITY_ID));
-        $this->assertEquals($expected,$backend->getGroupMemberSet('principals/projects/' . self::PROJECT_ID));
-
         $expectedFromDomain = [
             'principals/users/' . self::USER_ID,
             'principals/users/' . self::USER_WITH_NO_LASTNAME,
@@ -453,19 +372,9 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $backend  = new Mongo(self::$esndb);
 
         $expected = array(
-            // 'principals/communities/' . self::COMMUNITY_ID,
-            'principals/projects/' . self::PROJECT_ID,
             'principals/domains/' . self::DOMAIN_ID
         );
         $this->assertEquals($expected,$backend->getGroupMembership('principals/users/' . self::USER_ID));
-    }
-
-    /**
-     * @expectedException \Sabre\DAV\Exception\MethodNotAllowed
-     */
-    function testSetGroupMemberSetCommunity() {
-        $backend = new Mongo(self::$esndb);
-        $backend->setGroupMemberSet('principals/' . self::COMMUNITY_ID, array());
     }
 
     /**
@@ -481,12 +390,6 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
 
         $result = $backend->searchPrincipals('principals/users', array('{DAV:}blabla' => 'foo'));
         $this->assertEquals(array(), $result);
-
-        // $result = $backend->searchPrincipals('principals/communities', array('{DAV:}displayname' => 'com'));
-        // $this->assertEquals(array('principals/communities/' . self::COMMUNITY_ID), $result);
-
-        $result = $backend->searchPrincipals('principals/projects', array('{DAV:}displayname' => 'proj'));
-        $this->assertEquals(array('principals/projects/' . self::PROJECT_ID), $result);
 
         $result = $backend->searchPrincipals('principals/users', array('{DAV:}displayname' => 'FIrST', '{http://sabredav.org/ns}email-address' => 'USER@EXAMPLE.CoM'));
         $this->assertEquals(array('principals/users/' . self::USER_ID), $result);

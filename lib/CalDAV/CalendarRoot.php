@@ -5,8 +5,6 @@ namespace ESN\CalDAV;
 class CalendarRoot extends \Sabre\DAV\Collection {
 
     const USER_PREFIX = 'principals/users';
-    const COMMUNITY_PREFIX = 'principals/communities';
-    const PROJECT_PREFIX = 'principals/projects';
     const RESOURCES_PREFIX = 'principals/resources';
 
     function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CalDAV\Backend\BackendInterface $caldavBackend, \MongoDB\Database $db) {
@@ -25,17 +23,6 @@ class CalendarRoot extends \Sabre\DAV\Collection {
         $res = $this->db->users->find([], [ 'projection' => ['_id' => 1 ]]);
         foreach ($res as $user) {
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $user['_id'] ];
-            $homes[] = new CalendarHome($this->caldavBackend, $principal);
-        }
-        //@Chamerling Here to reactivate the fetch of communities calendar
-        /*$res = $this->db->communities->find([], [ 'projection' => ['_id' => 1 ]);
-        foreach ($res as $community) {
-            $principal = [ 'uri' => self::COMMUNITY_PREFIX . '/' . $community['_id'] ];
-            $homes[] = new CalendarHome($this->caldavBackend, $principal);
-        }*/
-        $res = $this->db->projects->find([], [ 'projection' => ['_id' => 1 ]]);
-        foreach ($res as $project) {
-            $principal = [ 'uri' => self::PROJECT_PREFIX . '/' . $project['_id'] ];
             $homes[] = new CalendarHome($this->caldavBackend, $principal);
         }
         $res = $this->db->resources->find([], [ 'projection' => ['_id' => 1 ]]);
@@ -57,19 +44,6 @@ class CalendarRoot extends \Sabre\DAV\Collection {
         $res = $this->db->users->findOne(['_id' => $mongoName]);
         if ($res) {
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $name ];
-            return new CalendarHome($this->caldavBackend, $principal);
-        }
-
-        //@Chamerling Here to reactivate the fetch of communities calendar
-        /*$res = $this->db->communities->findOne(['_id' => $mongoName], [ 'projection' => []]);
-        if ($res) {
-            $principal = [ 'uri' => self::COMMUNITY_PREFIX . '/' . $name ];
-            return new CalendarHome($this->caldavBackend, $principal);
-        }*/
-
-        $res = $this->db->projects->findOne(['_id' => $mongoName], [ 'projection' => []]);
-        if ($res) {
-            $principal = [ 'uri' => self::PROJECT_PREFIX . '/' . $name ];
             return new CalendarHome($this->caldavBackend, $principal);
         }
 

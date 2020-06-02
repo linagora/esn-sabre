@@ -165,7 +165,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $message->uid = $payload->uid;
         $message->method = $issetdef('method', 'REQUEST');
         $message->sequence = $issetdef('sequence', '0');
-        $message->sender = 'mailto:' . $payload->sender;
+        $message->sender = 'mailto:' . $issetdef('replyTo', $payload->sender);
         $message->recipient = 'mailto:' . $payload->recipient;
         $message->message = VObject\Reader::read($payload->ical);
 

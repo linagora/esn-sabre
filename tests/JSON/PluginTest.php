@@ -1464,7 +1464,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($response->status, 400);
     }
 
-    function testITIPShouldDelegateToSchedulingPluginAndReturn200() {
+    function testITIPShouldDelegateToSchedulingPluginAndReturn204() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'ITIP',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -1511,6 +1511,35 @@ class PluginTest extends \ESN\DAV\ServerMock {
             $this->assertEquals('recur', $message->uid);
             $this->assertEquals('0', $message->sequence);
             $this->assertEquals('mailto:a@linagora.com', $message->sender);
+            $this->assertEquals('mailto:b@linagora.com', $message->recipient);
+            $this->assertInstanceOf(Document::class, $message->message);
+        }));
+
+        $this->server->addPlugin($schedulePlugin);
+
+        $request->setBody(json_encode($this->itipRequestData));
+        $response = $this->request($request);
+
+        $this->assertEquals($response->status, 204);
+    }
+
+    function testITIPShouldSetSenderAsReplyToEmailIfProvidedInstesdOfSenderEmail() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ITIP',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f',
+        ));
+        $this->itipRequestData['replyTo'] = 'reply-to@linagora.com';
+
+        $schedulePlugin = $this->getMockBuilder(ServerPlugin::class)->setMethods(['getPluginName', 'scheduleLocalDelivery', 'initialize'])->getMock();
+        $schedulePlugin->expects($this->any())->method('getPluginName')->will($this->returnValue('caldav-schedule'));
+        $schedulePlugin->expects($this->once())->method('scheduleLocalDelivery')->will($this->returnCallback(function($message) {
+            var_dump($message->sender);
+            $this->assertInstanceOf(Message::class, $message);
+            $this->assertEquals('REPLY', $message->method);
+            $this->assertEquals('recur', $message->uid);
+            $this->assertEquals('mailto:reply-to@linagora.com', $message->sender);
             $this->assertEquals('mailto:b@linagora.com', $message->recipient);
             $this->assertInstanceOf(Document::class, $message->message);
         }));

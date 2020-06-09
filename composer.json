@@ -1,6 +1,6 @@
 {
     "name": "linagora/esn-sabre",
-    "version": "test-webpack",
+    "version": "1.8.0-devwebpack",
     "description": "SabreDAV Backend for Linagora ESN",
     "keywords": ["WebDAV", "CalDAV", "CardDAV", "iCalendar"],
     "license" : "AGPL-3.0",

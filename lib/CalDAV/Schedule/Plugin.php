@@ -1,14 +1,11 @@
 <?php
 namespace ESN\CalDAV\Schedule;
 
-// @codeCoverageIgnoreStart
 use
     Sabre\HTTP\RequestInterface,
     Sabre\HTTP\ResponseInterface,
     Sabre\VObject\Component\VCalendar,
-    Sabre\VObject\ITip,
-    Sabre\CalDAV\ICalendarObject,
-    Sabre\CalDAV\ISchedulingObject;
+    Sabre\VObject\ITip;
 
 // @codeCoverageIgnoreEnd
 
@@ -56,15 +53,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
-        $authPlugin = $this->server->getPlugin('auth');
-        $principal = !is_null($authPlugin) ? $authPlugin->getCurrentPrincipal() : $calendarNode->getOwner();
-
-        // Because technical user does not interfere here, just initialize some action for someone.
-        if(strpos($principal, PRINCIPALS_TECHNICAL_USER) !== false) {
-            $principal = $calendarNode->getOwner();
-        }
-
-        $addresses = $this->getAddressesForPrincipal($principal);
+        $addresses = $this->getAddressesForPrincipal($calendarNode->getOwner());
 
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
@@ -74,34 +63,5 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         $this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
-    }
-
-    function beforeUnbind($path) {
-
-        // FIXME: We shouldn't trigger this functionality when we're issuing a
-        // MOVE. This is a hack.
-        if ($this->server->httpRequest->getMethod()==='MOVE') return;
-
-        $node = $this->server->tree->getNodeForPath($path);
-
-        if (!$node instanceof ICalendarObject || $node instanceof ISchedulingObject) {
-            return;
-        }
-
-        if (!$this->scheduleReply($this->server->httpRequest)) {
-            return;
-        }
-
-        $authPlugin = $this->server->getPlugin('auth');
-        $principal = !is_null($authPlugin) ? $authPlugin->getCurrentPrincipal() : $calendarNode->getOwner();
-
-        $addresses = $this->getAddressesForPrincipal($principal);
-
-        $broker = new ITip\Broker();
-        $messages = $broker->parseEvent(null, $addresses, $node->get());
-
-        foreach($messages as $message) {
-            $this->deliver($message);
-        }
     }
 }

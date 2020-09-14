@@ -152,6 +152,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return true;
     }
 
+    /*
+    This is the method called when a user receives an invitation through EMAIL.
+    */
     function itip($request) {
         $payload = json_decode($request->getBodyAsString());
         $issetdef = $this->propertyOrDefault($payload);
@@ -168,6 +171,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $message->sender = 'mailto:' . $issetdef('replyTo', $payload->sender);
         $message->recipient = 'mailto:' . $payload->recipient;
         $message->message = VObject\Reader::read($payload->ical);
+
+        // we need to check that the current user ($message->recipient) is related to the event,
+        // because he's either organizer, or attendee, or both.
+        //
+        // Some use cases, like a user forwarding an invite email to another user, brings a recipient
+        // that is not, at all, in the event. We ignore it
+        if (!$this->assertRecipientIsConcernedByEvent($message->message->vevent, $message->recipient)) {
+            error_log("Recipient ". $message->recipient ." is not organizer, not attendee of event ". (string)$message->message->VEVENT->UID .": skipping");
+            return $this->send(400, null);
+        }
 
         if($message->method !== 'COUNTER'){
             $this->server->getPlugin('caldav-schedule')->scheduleLocalDelivery($message);
@@ -1130,5 +1143,27 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     private function getBooleanParameter($queryParams, $str) {
         return isset($queryParams[$str]) && $queryParams[$str] === 'true';
+    }
+
+    private function assertRecipientIsConcernedByEvent($vevent, $recipient) {
+        $isConcerned = false;
+        try {
+            $organizer = (string)$vevent->ORGANIZER;
+            if (strtolower($organizer) === strtolower($recipient)) {
+                $isConcerned = true;
+            }
+        } catch (Exception $e) {
+            error_log("Error while trying to fetch event organizer: ".(string)$e);
+        }
+        if ($vevent->ATTENDEE) {
+            foreach($vevent->ATTENDEE as $attendee) {
+                if (strtolower((string)$attendee) === strtolower($recipient)) {
+                    $isConcerned = true;
+                    break 1;
+                }
+            }
+        }
+
+        return $isConcerned;
     }
 }

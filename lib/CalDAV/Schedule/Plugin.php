@@ -1,6 +1,9 @@
 <?php
 namespace ESN\CalDAV\Schedule;
 
+use ESN\Utils\Utils;
+use Sabre\CalDAV\ICalendarObject;
+use Sabre\CalDAV\Schedule\ISchedulingObject;
 use
     Sabre\HTTP\RequestInterface,
     Sabre\HTTP\ResponseInterface,
@@ -34,8 +37,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      *
      * @param ITip\Message $iTipMessage The Message to deliver.
      */
-    function deliver(ITip\Message $iTipMessage)
-    {
+    function deliver(ITip\Message $iTipMessage) {
         if ($iTipMessage->message->VEVENT->SEQUENCE && !$iTipMessage->message->VEVENT->SEQUENCE->getValue()) {
             $iTipMessage->message->VEVENT->SEQUENCE->setValue(0);
         } else if(!$iTipMessage->message->VEVENT->SEQUENCE) {
@@ -45,15 +47,20 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         parent::deliver($iTipMessage);
     }
 
+    /**
+     *
+     * Override default method because:
+     *  * ITIP operations must not be processed
+     *  * user addresses must be the calendar owner ones to handle delegation
+     *
+     */
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
         // ITIP operations are silent -> no email should be sent
         if ($request->getMethod() === 'ITIP' || !$this->scheduleReply($this->server->httpRequest)) {
             return;
         }
 
-        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
-
-        $addresses = $this->getAddressesForPrincipal($calendarNode->getOwner());
+        $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
 
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
@@ -63,5 +70,52 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         $this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
+    }
+
+    /**
+     *
+     * Override default method because:
+     *  * user addresses must be the calendar owner ones to handle delegation
+     *
+     */
+    function beforeUnbind($path) {
+
+        // FIXME: We shouldn't trigger this functionality when we're issuing a
+        // MOVE. This is a hack.
+        if ($this->server->httpRequest->getMethod() === 'MOVE') return;
+
+        $node = $this->server->tree->getNodeForPath($path);
+
+        if (!$node instanceof ICalendarObject || $node instanceof ISchedulingObject) {
+            return;
+        }
+
+        if (!$this->scheduleReply($this->server->httpRequest)) {
+            return;
+        }
+
+        list($calendarPath,) = Utils::splitEventPath('/'.$path);
+
+        $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
+
+        $broker = new ITip\Broker();
+        $messages = $broker->parseEvent(null, $addresses, $node->get());
+
+        foreach ($messages as $message) {
+            $this->deliver($message);
+        }
+    }
+
+    /**
+     * Fetches calendar owner email addresses
+     *
+     * @param $calendarPath
+     * @return array
+     * @throws \Sabre\DAV\Exception\NotFound
+     */
+    private function fetchCalendarOwnerAddresses($calendarPath): array {
+        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+
+        return $this->getAddressesForPrincipal($calendarNode->getOwner());
     }
 }

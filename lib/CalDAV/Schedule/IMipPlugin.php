@@ -4,35 +4,31 @@ namespace ESN\CalDAV\Schedule;
 
 use DateTimeZone;
 use \Sabre\DAV;
+use Sabre\VObject\Component\VCalendar;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
-use Sabre\VObject\Component\VCalendar;
 use \Sabre\VObject\ITip;
 use \Sabre\VObject\Property;
-use \Sabre\HTTP;
 use \ESN\Utils\Utils as Utils;
 use Sabre\VObject\Reader;
 
-
 class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
-    protected $server;
     protected $httpClient;
+    protected $server;
     protected $apiroot;
-    protected $db;
-
+    protected $amqpPublisher;
     protected $newAttendees;
 
     const HIGHER_PRIORITY_BEFORE_SCHEDULE = 90;
     const SCHEDSTAT_SUCCESS_PENDING = '1.0';
     const SCHEDSTAT_SUCCESS_UNKNOWN = '1.1';
-    const SCHEDSTAT_SUCCESS_DELIVERED = '1.2';
     const SCHEDSTAT_FAIL_TEMPORARY = '5.1';
     const SCHEDSTAT_FAIL_PERMANENT = '5.2';
+    const SEND_NOTIFICATION_EMAIL_TOPIC = 'calendar:event:notificationEmail:send';
 
-    function __construct($apiroot, $authBackend, $db) {
+    function __construct($apiroot, $amqpPublisher) {
         $this->apiroot = $apiroot;
-        $this->authBackend = $authBackend;
-        $this->db = $db;
+        $this->amqpPublisher = $amqpPublisher;
     }
 
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
@@ -117,7 +113,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
         foreach ($eventMessages as $eventMessage) {
             $message = [
-                'email' => substr($iTipMessage->recipient, 7),
+                'senderEmail' => substr($iTipMessage->sender, 7),
+                'recipientEmail' => substr($iTipMessage->recipient, 7),
                 'method' => $iTipMessage->method,
                 'event' => $eventMessage->serialize(),
                 'notify' => true,
@@ -126,29 +123,10 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             ];
 
             if (isset($this->newAttendees[$iTipMessage->recipient])) {
-                $message['newEvent'] = true;
+                $message['isNewEvent'] = true;
             }
 
-            $body = json_encode($message);
-
-            $url = $this->apiroot . '/calendars/inviteattendees';
-            $request = new HTTP\Request('POST', $url);
-            $request->setHeader('Content-type', 'application/json');
-            $request->setHeader('Content-length', strlen($body));
-            $cookie = $this->authBackend->getAuthCookies();
-            $request->setHeader('Cookie', $cookie);
-            $request->setBody($body);
-
-            $response = $this->httpClient->send($request);
-            $status = $response->getStatus();
-
-            if (floor($status / 100) == 2) {
-                $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_DELIVERED;
-            } else {
-                $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_TEMPORARY;
-                error_log("iTip Delivery failed for " . $iTipMessage->recipient .
-                    ": " . $status . " " . $response->getStatusText());
-            }
+            $this->amqpPublisher->publish(self::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($message));
         }
     }
 
@@ -172,7 +150,6 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     function initialize(DAV\Server $server) {
         parent::initialize($server);
         $this->server = $server;
-        $this->httpClient = new HTTP\Client();
 
         $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], self::HIGHER_PRIORITY_BEFORE_SCHEDULE);
     }

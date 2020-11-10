@@ -9,12 +9,13 @@ require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/Mock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CardDAV/Backend/Mock.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
+use \ESN\Utils\Utils as Utils;
 
 /**
  * @medium
  */
 class IMipPluginTest extends \PHPUnit_Framework_TestCase {
-
+    protected $amqpPublisher;
     const NAME = "calendar1";
 
     protected $caldavCalendar = array(
@@ -166,31 +167,42 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->server->exec();
     }
 
-    private function getPlugin($sendResult = true) {
-        $plugin = new IMipPluginMock("/api", $this->server, null);
+    private function getPlugin() {
+        $this->amqpPublisher = $this->getMockBuilder(AMQPPublisherMock::class)->getMock();
+        $plugin = new IMipPluginMock("/api", $this->server, $this->amqpPublisher);
 
         $this->msg = new \Sabre\VObject\ITip\Message();
         if ($this->ical) {
             $this->msg->message = \Sabre\VObject\Reader::read($this->ical);
         }
 
-        $client = $plugin->getClient();
-        $client->on('curlExec', function(&$return) use ($sendResult) {
-            if ($sendResult) {
-                $return = "HTTP/1.1 OK\r\n\r\nOk";
-            } else {
-                $return = "HTTP/1.1 NOT OK\r\n\r\nNot ok";
-            }
-        });
-        $client->on('curlStuff', function(&$return) use ($sendResult) {
-            if ($sendResult) {
-                $return = [ [ 'http_code' => 200, 'header_size' => 0 ], 0, '' ];
-            } else {
-                $return = [ [ 'http_code' => 503, 'header_size' => 0 ], 0, '' ];
-            }
-        });
-
         return $plugin;
+    }
+
+    private function getMessageForPublisher($iTipMessage, $iMipPlugin, $eventIcs = null) {
+        $recipientPrincipalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
+        list($eventPath, ) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+        $matched = preg_match("|/(calendars/.*/.*)/|", $_SERVER["REQUEST_URI"], $matches);
+
+        if ($matched) {
+            $calendarPath = $matches[1];
+        }
+
+        $message = [
+            'senderEmail' => substr($iTipMessage->sender, 7),
+            'recipientEmail' => substr($iTipMessage->recipient, 7),
+            'method' => $iTipMessage->method,
+            'event' => is_null($eventIcs) ? $iTipMessage->message->serialize() : $eventIcs,
+            'notify' => true,
+            'calendarURI' => $this->caldavCalendar['uri'],
+            'eventPath' => $eventPath ? '/' . $eventPath : '/' . $calendarPath . '/' . $iTipMessage->uid . '.ics'
+        ];
+
+        if (isset($iMipPlugin->getNewAttendees()[$iTipMessage->recipient])) {
+            $message['isNewEvent'] = true;
+        }
+
+        return $message;
     }
 
     function testScheduleNoconfig() {
@@ -225,62 +237,23 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($this->msg->scheduleStatus, 'unchanged');
     }
 
-    function testCannotFindRecipient() {
-        $plugin = $this->getPlugin(false);
-        $client = $plugin->getClient();
-
-        $this->msg->sender = 'mailto:test@example.com';
-        $this->msg->recipient = 'mailto:unknown@example.org';
-        $this->msg->method = "CANCEL";
-
-        $plugin->schedule($this->msg);
-        $this->assertEquals('5.1', $this->msg->scheduleStatus);
-    }
-
-    function testCannotFindCalendarObject() {
-        $plugin = $this->getPlugin(false);
-        $client = $plugin->getClient();
-
-        $this->msg->sender = 'mailto:test@example.com';
-        $this->msg->recipient = 'mailto:johndoe@example.org';
-        $this->msg->method = "CANCEL";
-        $this->msg->uid = "fakeUid";
-
-        $plugin->schedule($this->msg);
-        $this->assertEquals('5.1', $this->msg->scheduleStatus);
-    }
-
-    function testSendSuccess() {
+    function testSendUpdatedEvent() {
         $plugin = $this->getPlugin();
-        $client = $plugin->getClient();
 
         $this->msg->sender = 'mailto:test@example.com';
         $this->msg->recipient = 'mailto:johndoe@example.org';
         $this->msg->method = "REQUEST";
         $this->msg->uid = "daab17fe-fac4-4946-9105-0f2cdb30f5ab";
 
-        $requestCalled = false;
-        $self = $this;
-
-        $client->on('doRequest', function($request, &$response) use ($self, &$requestCalled) {
-            $jsondata = json_decode($request->getBodyAsString());
-            $self->assertEquals($jsondata->method, 'REQUEST');
-            $self->assertEquals($jsondata->email, 'johndoe@example.org');
-            $self->assertEquals($jsondata->event, $self->ical);
-            $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
-            $self->assertFalse(isset($jsondata->newEvent));
-            $self->assertTrue($jsondata->notify);
-            $requestCalled = true;
-        });
+        $this->amqpPublisher->expects($this->once())
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($this->msg, $plugin)));
 
         $plugin->schedule($this->msg);
-        $this->assertEquals('1.2', $this->msg->scheduleStatus);
-        $this->assertTrue($requestCalled);
     }
 
-    function testSendNewEventSuccess() {
+    function testSendNewEvent() {
         $plugin = $this->getPlugin();
-        $client = $plugin->getClient();
 
         $this->msg->sender = 'mailto:test@example.com';
         $this->msg->recipient = 'mailto:johndoe@example.org';
@@ -289,54 +262,15 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
 
         $plugin->setNewAttendees((['mailto:johndoe@example.org' => ['master']]));
 
-        $requestCalled = false;
-        $self = $this;
-
-        $client->on('doRequest', function($request, &$response) use ($self, &$requestCalled) {
-            $jsondata = json_decode($request->getBodyAsString());
-            $self->assertEquals($jsondata->method, 'REQUEST');
-            $self->assertEquals($jsondata->email, 'johndoe@example.org');
-            $self->assertEquals($jsondata->event, $self->ical);
-            $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
-            $self->assertTrue($jsondata->newEvent);
-            $self->assertTrue($jsondata->notify);
-            $requestCalled = true;
-        });
-        $plugin->schedule($this->msg);
-        $this->assertEquals('1.2', $this->msg->scheduleStatus);
-        $this->assertTrue($requestCalled);
-    }
-
-    function testSendFailed() {
-        $plugin = $this->getPlugin(false);
-        $client = $plugin->getClient();
-
-        $this->msg->sender = 'mailto:test@example.com';
-        $this->msg->recipient = 'mailto:johndoe@example.org';
-        $this->msg->method = "CANCEL";
-        $this->msg->uid = "daab17fe-fac4-4946-9105-0f2cdb30f5ab";
-
-        $requestCalled = false;
-        $self = $this;
-
-        $client->on('doRequest', function($request, &$response) use ($self, &$requestCalled) {
-            $jsondata = json_decode($request->getBodyAsString());
-            $self->assertEquals($jsondata->method, 'CANCEL');
-            $self->assertEquals($jsondata->email, 'johndoe@example.org');
-            $self->assertEquals($jsondata->event, $self->ical);
-            $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
-            $self->assertTrue($jsondata->notify);
-            $requestCalled = true;
-        });
+        $this->amqpPublisher->expects($this->once())
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($this->msg, $plugin)));
 
         $plugin->schedule($this->msg);
-        $this->assertEquals('5.1', $this->msg->scheduleStatus);
-        $this->assertTrue($requestCalled);
     }
 
     function testSendRecToOpUser() {
         $plugin = $this->getPlugin();
-        $client = $plugin->getClient();
 
         $this->msg->message = \Sabre\VObject\Reader::read($this->icalRec);
         $this->msg->sender = 'mailto:test@example.com';
@@ -344,22 +278,11 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->msg->method = "REQUEST";
         $this->msg->uid = "e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1550";
 
-        $requestCalled = false;
-        $self = $this;
-
-        $client->on('doRequest', function($request, &$response) use ($self, &$requestCalled) {
-            $jsondata = json_decode($request->getBodyAsString());
-            $self->assertEquals($jsondata->method, 'REQUEST');
-            $self->assertEquals($jsondata->email, 'johndoe@example.org');
-            $self->assertEquals($jsondata->event, $self->icalRec);
-            $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
-            $self->assertTrue($jsondata->notify);
-            $requestCalled = true;
-        });
+        $this->amqpPublisher->expects($this->once())
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($this->msg, $plugin)));
 
         $plugin->schedule($this->msg);
-        $this->assertEquals('1.2', $this->msg->scheduleStatus);
-        $this->assertTrue($requestCalled);
     }
 
     function testSendRecToExternalUser() {
@@ -388,7 +311,6 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
             '']);
 
         $plugin = $this->getPlugin();
-        $client = $plugin->getClient();
 
         $this->msg->message = \Sabre\VObject\Reader::read($this->icalRec);
         $this->msg->sender = 'mailto:test@example.com';
@@ -396,23 +318,24 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         $this->msg->method = "REQUEST";
         $this->msg->uid = "e5f6e3cd-90e5-46fe-9c5a-f9aaa1aa1550";
 
-        $timesCalled = 0;
-        $self = $this;
+        $this->amqpPublisher->expects($this->at(0))
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher(
+                $this->msg,
+                $plugin,
+                $messages[0]
+            )));
 
-        $client->on('doRequest', function($request, &$response) use ($self, &$timesCalled, $messages) {
-            $jsondata = json_decode($request->getBodyAsString());
-            $self->assertEquals($jsondata->method, 'REQUEST');
-            $self->assertEquals($jsondata->email, 'johndoe@other.org');
-            $self->assertEquals($jsondata->calendarURI, $self->calendarURI);
-            $self->assertTrue($jsondata->notify);
-            $self->assertEquals($jsondata->event, $messages[$timesCalled]);
 
-            $timesCalled++;
-        });
+        $this->amqpPublisher->expects($this->at(1))
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher(
+                $this->msg,
+                $plugin,
+                $messages[1]
+            )));
 
         $plugin->schedule($this->msg);
-        $this->assertEquals('1.2', $this->msg->scheduleStatus);
-        $this->assertEquals(2, $timesCalled);
     }
 
     function testCalendarObjectChangeEventModification() {
@@ -502,27 +425,15 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
     }
 }
 
-class MockAuthBackend {
-    function getAuthCookies() {
-        return "coookies!!!";
-    }
-}
-
 class IMipPluginMock extends IMipPlugin {
-    function __construct($apiroot, $server, $db) {
+    function __construct($apiroot, $server, $amqpPublisher) {
         require_once ESN_TEST_VENDOR . '/sabre/http/tests/HTTP/ClientTest.php';
-        $authBackend = new MockAuthBackend();
-        parent::__construct($apiroot, $authBackend, $db);
+        parent::__construct($apiroot, $amqpPublisher);
         $this->initialize($server);
-        $this->httpClient = new \Sabre\HTTP\ClientMock();
     }
 
     function setApiRoot($val) {
         $this->apiroot = $val;
-    }
-
-    function getClient() {
-        return $this->httpClient;
     }
 
     function getServer() {
@@ -535,5 +446,10 @@ class IMipPluginMock extends IMipPlugin {
 
     function getNewAttendees() {
         return $this->newAttendees;
+    }
+}
+
+class AMQPPublisherMock {
+    function publish() {
     }
 }

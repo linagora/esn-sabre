@@ -189,10 +189,6 @@ $server->addPlugin(
     new ESN\CalDAV\Schedule\Plugin()
 );
 
-$server->addPlugin(
-    new ESN\CalDAV\Schedule\IMipPlugin($config['esn']['calendarRoot'], $authBackend, $sabreDb)
-);
-
 // WebDAV-Sync plugin
 $server->addPlugin(new Sabre\DAV\Sync\Plugin());
 
@@ -230,7 +226,7 @@ $corsPlugin->allowHeaders[] = 'ESNToken';
 $server->addPlugin($corsPlugin);
 
 // Rabbit publisher plugin
-if(!empty($config['amqp']['host'])){
+if (!empty($config['amqp']['host'])) {
     $channel = $amqpConnection->channel();
     $AMQPPublisher = new ESN\Publisher\AMQPPublisher($channel);
     $eventRealTimePlugin = new ESN\Publisher\CalDAV\EventRealTimePlugin($AMQPPublisher, $calendarBackend);
@@ -250,6 +246,11 @@ if(!empty($config['amqp']['host'])){
 
     $subscriptionRealTimePlugin = new ESN\Publisher\CardDAV\SubscriptionRealTimePlugin($AMQPPublisher, $addressbookBackend);
     $server->addPlugin($subscriptionRealTimePlugin);
+
+    // iMip Plugin to handle sending emails
+    $server->addPlugin(
+        new ESN\CalDAV\Schedule\IMipPlugin($config['esn']['calendarRoot'], $AMQPPublisher)
+    );
 }
 
 $server->addPlugin(new ESN\CalDAV\ParticipationPlugin());

@@ -28,7 +28,7 @@ test:
     - mongo:3.2
   script:
     - composer up
-    - ./vendor/bin/phpcs -p --standard=vendor/sabre/dav/tests/phpcs/ruleset.xml --report-checkstyle=checkstyle.xml lib/
+    - ./vendor/bin/phpcs -p --standard=vendor/sabre/dav/tests/phpcs/ruleset.xml lib/
     - cd tests
     - ../vendor/bin/phpunit --coverage-clover=${CI_PROJECT_DIR}/clover.xml --log-junit=${CI_PROJECT_DIR}/junit.xml .
   except:

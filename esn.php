@@ -260,6 +260,8 @@ $server->addPlugin(new ESN\CardDAV\MobileRequestPlugin());
 
 $server->addPlugin(new ESN\CalDAV\ImportPlugin());
 
+$server->addPlugin(new ESN\DAV\XHttpMethodOverridePlugin());
+
 // And off we go!
 $server->exec();
 

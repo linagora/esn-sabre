@@ -44,8 +44,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     function __construct(\MongoDB\Database $db) {
         $this->db = $db;
-
         $this->eventEmitter = new EventEmitter();
+
+        $this->ensureIndex();
     }
 
     function getEventEmitter() {
@@ -1114,5 +1115,15 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $update = [ '$inc' => [ 'synctoken' => 1 ] ];
         $calcollection->updateOne($query, $update);
+    }
+
+    private function ensureIndex() {
+        // create a unique compound index on 'principaluri' and 'uri' for calendar instance collection
+        // Avoid calendar instances duplication
+        $calendarInstanceCollection = $this->db->selectCollection($this->calendarInstancesTableName);
+        $calendarInstanceCollection->createIndex(
+            array('principaluri' => 1, 'uri' => 1),
+            array('unique' => true)
+        );
     }
 }

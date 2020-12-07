@@ -169,7 +169,7 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
 
     private function getPlugin() {
         $this->amqpPublisher = $this->getMockBuilder(AMQPPublisherMock::class)->getMock();
-        $plugin = new IMipPluginMock("/api", $this->server, $this->amqpPublisher);
+        $plugin = new IMipPluginMock($this->server, $this->amqpPublisher);
 
         $this->msg = new \Sabre\VObject\ITip\Message();
         if ($this->ical) {
@@ -203,14 +203,6 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
         }
 
         return $message;
-    }
-
-    function testScheduleNoconfig() {
-        $plugin = $this->getPlugin();
-        $plugin->setApiRoot(null);
-        $plugin->schedule($this->msg);
-        $this->assertEquals($this->msg->scheduleStatus, '5.2');
-        return $plugin;
     }
 
     function testScheduleNotSignificant() {
@@ -426,9 +418,9 @@ class IMipPluginTest extends \PHPUnit_Framework_TestCase {
 }
 
 class IMipPluginMock extends IMipPlugin {
-    function __construct($apiroot, $server, $amqpPublisher) {
+    function __construct($server, $amqpPublisher) {
         require_once ESN_TEST_VENDOR . '/sabre/http/tests/HTTP/ClientTest.php';
-        parent::__construct($apiroot, $amqpPublisher);
+        parent::__construct($amqpPublisher);
         $this->initialize($server);
     }
 

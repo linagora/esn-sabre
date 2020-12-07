@@ -13,9 +13,7 @@ use \ESN\Utils\Utils as Utils;
 use Sabre\VObject\Reader;
 
 class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
-    protected $httpClient;
     protected $server;
-    protected $apiroot;
     protected $amqpPublisher;
     protected $newAttendees;
 
@@ -26,9 +24,15 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     const SCHEDSTAT_FAIL_PERMANENT = '5.2';
     const SEND_NOTIFICATION_EMAIL_TOPIC = 'calendar:event:notificationEmail:send';
 
-    function __construct($apiroot, $amqpPublisher) {
-        $this->apiroot = $apiroot;
+    function __construct($amqpPublisher) {
         $this->amqpPublisher = $amqpPublisher;
+    }
+
+    function initialize(DAV\Server $server) {
+        parent::initialize($server);
+        $this->server = $server;
+
+        $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], self::HIGHER_PRIORITY_BEFORE_SCHEDULE);
     }
 
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
@@ -90,17 +94,6 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             return;
         }
 
-        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
-
-        list($eventPath, ) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
-
-        // If event doesn't exist in recipient home, we define event path
-        if (!$eventPath) {
-            $fullEventPath = '/' . $calendarPath . '/' . $iTipMessage->uid . '.ics';
-        } else {
-            $fullEventPath = '/' . $eventPath;
-        }
-
         // No need to split iTip message for Sabre User
         // Sabre can handle multiple event iTip message
         if ($iTipMessage->method === 'COUNTER' || $recipientPrincipalUri) {
@@ -108,6 +101,9 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         } else {
             $eventMessages = $this->explodeItipMessageEvents($iTipMessage->message);
         }
+
+        $fullEventPath = $this->getEventFullPath($recipientPrincipalUri, $iTipMessage, $calendarPath);
+        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
         foreach ($eventMessages as $eventMessage) {
             $message = [
@@ -125,6 +121,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             }
 
             $this->amqpPublisher->publish(self::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($message));
+
+            $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_UNKNOWN;
         }
     }
 
@@ -145,20 +143,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         return $messages;
     }
 
-    function initialize(DAV\Server $server) {
-        parent::initialize($server);
-        $this->server = $server;
-
-        $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], self::HIGHER_PRIORITY_BEFORE_SCHEDULE);
-    }
-
     private function checkPreconditions(ITip\Message $iTipMessage, int $matched, $principalUri): bool
     {
-        if (!$this->apiroot) {
-            $iTipMessage->scheduleStatus = self::SCHEDSTAT_FAIL_PERMANENT;
-            return false;
-        }
-
         // Not sending any emails if the system considers the update
         // insignificant.
         if (!$iTipMessage->significantChange && !$iTipMessage->hasChange) {
@@ -189,5 +175,25 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         }
 
         return true;
+    }
+
+    /**
+     * @param $recipientPrincipalUri
+     * @param ITip\Message $iTipMessage
+     * @param $calendarPath
+     * @return string
+     */
+    private function getEventFullPath($recipientPrincipalUri, ITip\Message $iTipMessage, $calendarPath): string
+    {
+        list($eventPath,) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+
+        // If event doesn't exist in recipient home, we define event path
+        if (!$eventPath) {
+            $fullEventPath = '/' . $calendarPath . '/' . $iTipMessage->uid . '.ics';
+        } else {
+            $fullEventPath = '/' . $eventPath;
+        }
+
+        return $fullEventPath;
     }
 }

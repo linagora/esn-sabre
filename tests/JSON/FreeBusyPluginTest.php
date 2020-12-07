@@ -39,6 +39,13 @@ class FreeBusyPluginTest extends \ESN\DAV\ServerMock {
         'uids' => ['event1']
     ];
 
+    protected $freebusyBulkInvalidData = [
+        'start' => '20180501T010000Z',
+        'end' => '20180501T013000Z',
+        'users' => ['invalid', 'something'],
+        'uids' => ['event1']
+    ];
+
     protected $durationEvent =
         'BEGIN:VCALENDAR
 VERSION:2.0
@@ -142,5 +149,22 @@ END:VCALENDAR
         $this->assertCount(1, $jsonResponse->users);
         $this->assertCount(count($this->user1Calendars['ownedCalendars']), $jsonResponse->users[0]->calendars);
         $this->assertCount(1, $jsonResponse->users[0]->calendars[0]->busy);
+    }
+
+    function testFreeBusyWithInvalidData() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/freebusy',
+        ));
+
+        $request->setBody(json_encode($this->freebusyBulkInvalidData));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $this->assertEquals($response->status, 200);
+        $this->assertCount(0, $jsonResponse->users);
     }
 }

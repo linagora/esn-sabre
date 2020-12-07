@@ -81,12 +81,14 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
         foreach ($params->users as $key => $userId) {
             $nodePath = 'calendars/' . $userId;
             $node = $this->server->tree->getNodeForPath($nodePath);
-            $calendars = $this->getFreeBusyCalendars($nodePath, $node, $params);
-
-            array_push($body->users, (object) [
-                'id' => $userId,
-                'calendars' => $calendars
-            ]);
+            if (!is_null($node)) {
+                $calendars = $this->getFreeBusyCalendars($nodePath, $node, $params);
+              
+                array_push($body->users, (object) [
+                    'id' => $userId,
+                    'calendars' => $calendars
+                ]);
+            }
         }
 
         return [200, $body];

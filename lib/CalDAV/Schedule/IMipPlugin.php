@@ -92,8 +92,6 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
-        $this->sanitizeDateTimeZones($iTipMessage);
-
         list($eventPath, ) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
 
         // If event doesn't exist in recipient home, we define event path
@@ -152,17 +150,6 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $this->server = $server;
 
         $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], self::HIGHER_PRIORITY_BEFORE_SCHEDULE);
-    }
-
-    private function sanitizeDateTimeZones(ITip\Message $iTipMessage) {
-        foreach ($iTipMessage->message->VEVENT->children() as $componentChild) {
-            if ($componentChild instanceof Property\ICalendar\DateTime && $componentChild->hasTime()) {
-
-                $dt = $componentChild->getDateTimes(new DateTimeZone('UTC'));
-                $dt[0] = $dt[0]->setTimeZone(new DateTimeZone('UTC'));
-                $componentChild->setDateTimes($dt);
-            }
-        }
     }
 
     private function checkPreconditions(ITip\Message $iTipMessage, int $matched, $principalUri): bool

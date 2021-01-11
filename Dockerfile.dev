@@ -8,6 +8,6 @@
 FROM linagora/esn-sabre
 LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
-RUN pecl install xdebug
+RUN pecl install xdebug-2.7.2
 
 CMD ["sh", "./scripts/start.sh"]

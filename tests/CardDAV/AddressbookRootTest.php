@@ -25,7 +25,7 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
         $this->esndb->drop();
         $this->sabredb->drop();
 
-        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\EsnRequest($this->esndb);
+        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
 
         $this->root = new AddressBookRoot($this->principalBackend, $this->carddavBackend);

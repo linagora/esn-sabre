@@ -89,7 +89,7 @@ try {
 // Backends
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm']);
 $addressbookBackend = new ESN\CardDAV\Backend\Esn($sabreDb);
-$principalBackend = new ESN\DAVACL\PrincipalBackend\EsnRequest($esnDb, $authBackend, $config['esn']['apiRoot']);
+$principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
 $calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend);
 
 // listener

@@ -27,7 +27,6 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertTrue($rv);
         $this->assertEquals($esnauth->getCurrentPrincipal(), 'principals/users/123456789');
-        $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
         $this->assertEquals(['principals/users/123456789'], $authNotificationResult);
     }
 
@@ -50,7 +49,6 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertTrue($rv);
         $this->assertEquals($msg, 'principals/technicalUser');
-        $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
     }
 
     function testAuthenticatePasswordSuccess() {
@@ -77,7 +75,6 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertTrue($rv);
         $this->assertEquals($esnauth->getCurrentPrincipal(), 'principals/users/123456789');
-        $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
     }
 
     function testAuthenticateFailedCode() {
@@ -158,7 +155,6 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertTrue($rv);
         $this->assertEquals($msg, 'principals/users/123456789');
-        $this->assertEquals($esnauth->getAuthCookies(), 'test=passed');
     }
 }
 

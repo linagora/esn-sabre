@@ -12,8 +12,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     protected $currentUserId;
     protected $apiroot;
 
-    private $lastConnectCookies;
-
     protected $principalPrefix = 'principals/users/';
     protected $technicalPrincipal = 'principals/technicalUser';
     protected $technicalUserType = 'technical';
@@ -48,40 +46,9 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             return [false, null];
         }
 
-        $cookies = $response->getHeaderAsArray('Set-Cookie');
-        if (count($cookies) > 0) {
-            $cookies = self::parseCookie($cookies);
-            $cookiestr = self::buildCookie($cookies);
-
-            $this->lastConnectCookies = $cookiestr;
-        }
         $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
         $this->currentUserId = $user->_id;
         return [true, $type];
-    }
-
-    private static function buildCookie($cookies) {
-        $cookieval = [];
-        foreach ($cookies as $k => $v) {
-            $cookieval[] = $k . '=' . $v . '';
-        }
-        return implode('; ', $cookieval);
-    }
-
-    private static function parseCookie($headers) {
-        $meta = array('domain', 'expires', 'path', 'secure', 'comment', 'httponly', 'max-age');
-        $cookies = [];
-        foreach ($headers as $header) {
-            $parts = explode(';', $header);
-            $cdata = array();
-            foreach ($parts as $part) {
-                $kv = array_map("trim", explode('=', $part, 2));
-                if (!in_array(strtolower($kv[0]), $meta)) {
-                    $cookies[$kv[0]] = $kv[1];
-                }
-            }
-        }
-        return $cookies;
     }
 
     protected function validateUserPass($username, $password) {
@@ -100,10 +67,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     function getCurrentPrincipal() {
         $id = $this->currentUserId;
         return $id ? "principals/users/" . $id : null;
-    }
-
-    function getAuthCookies() {
-        return $this->lastConnectCookies;
     }
 
     function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {

@@ -199,6 +199,213 @@ class IMipPluginRecurrentEventTest extends IMipPluginTestBase {
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);
     }
 
+    function testAddDescriptionOfRecurringEvent()
+    {
+        $plugin = $this->getPlugin();
+
+        $user1ExistingEvent = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'RRULE:FREQ=DAILY',
+            'DTSTART:20201028T170000Z',
+            'DTEND:20201028T173000Z',
+            'SUMMARY:Test',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'DTSTAMP:20201025T145516Z',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]);
+
+        $plugin->setFormerEventICal($user1ExistingEvent);
+        $plugin->setNewEvent(false);
+
+        $scheduledIcal = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'RRULE:FREQ=DAILY',
+            'DTSTART:20201028T170000Z',
+            'DTEND:20201028T173000Z',
+            'SUMMARY:Test',
+            'DESCRIPTION:Test',
+            'LOCATION:Test',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'DTSTAMP:20201025T145516Z',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]);
+
+        $itipMessage = new \Sabre\VObject\ITip\Message();
+        $itipMessage->uid = 'ab9e450a-3080-4274-affd-fdd0e9eefdcc';
+        $itipMessage->component = 'VEVENT';
+        $itipMessage->method = 'REQUEST';
+        $itipMessage->sequence = 1;
+        $itipMessage->sender = 'mailto:' . $this->user1Email;
+        $itipMessage->recipient = 'mailto:' . $this->user2Email;
+        $itipMessage->scheduleStatus = null;
+        $itipMessage->hasChange = true;
+        $itipMessage->message = Reader::read($scheduledIcal);
+
+        $this->amqpPublisher->expects($this->once())
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($itipMessage, false)));
+
+        $plugin->schedule($itipMessage);
+        $this->assertEquals('1.1', $itipMessage->scheduleStatus);
+    }
+
+    function testAddLocationOfRecurringEvent()
+    {
+        $plugin = $this->getPlugin();
+
+        $user1ExistingEvent = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'RRULE:FREQ=DAILY',
+            'DTSTART:20201028T170000Z',
+            'DTEND:20201028T173000Z',
+            'SUMMARY:Test',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'DTSTAMP:20201025T145516Z',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]);
+
+        $plugin->setFormerEventICal($user1ExistingEvent);
+        $plugin->setNewEvent(false);
+
+        $scheduledIcal = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'RRULE:FREQ=DAILY',
+            'DTSTART:20201029T170000Z',
+            'DTEND:20201029T173000Z',
+            'SUMMARY:Test',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'DTSTAMP:20201027T182723Z',
+            'SEQUENCE:0',
+            'LOCATION:Test',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $itipMessage = new \Sabre\VObject\ITip\Message();
+        $itipMessage->uid = 'ab9e450a-3080-4274-affd-fdd0e9eefdcc';
+        $itipMessage->component = 'VEVENT';
+        $itipMessage->method = 'REQUEST';
+        $itipMessage->sequence = 1;
+        $itipMessage->sender = 'mailto:' . $this->user1Email;
+        $itipMessage->recipient = 'mailto:' . $this->user2Email;
+        $itipMessage->scheduleStatus = null;
+        $itipMessage->hasChange = true;
+        $itipMessage->message = Reader::read($scheduledIcal);
+
+        $this->amqpPublisher->expects($this->once())
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($itipMessage, false)));
+
+        $plugin->schedule($itipMessage);
+        $this->assertEquals('1.1', $itipMessage->scheduleStatus);
+    }
+
+
+    function testAddSummaryOfRecurringEvent()
+    {
+        $plugin = $this->getPlugin();
+
+        $user1ExistingEvent = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'RRULE:FREQ=DAILY',
+            'DTSTART:20201028T170000Z',
+            'DTEND:20201028T173000Z',
+            'SUMMARY:Test',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'DTSTAMP:20201025T145516Z',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]);
+
+        $plugin->setFormerEventICal($user1ExistingEvent);
+        $plugin->setNewEvent(false);
+
+        $scheduledIcal = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'RRULE:FREQ=DAILY',
+            'DTSTART:20201029T170000Z',
+            'DTEND:20201029T173000Z',
+            'SUMMAZERY:Test',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'DTSTAMP:20201027T182723Z',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $itipMessage = new \Sabre\VObject\ITip\Message();
+        $itipMessage->uid = 'ab9e450a-3080-4274-affd-fdd0e9eefdcc';
+        $itipMessage->component = 'VEVENT';
+        $itipMessage->method = 'REQUEST';
+        $itipMessage->sequence = 1;
+        $itipMessage->sender = 'mailto:' . $this->user1Email;
+        $itipMessage->recipient = 'mailto:' . $this->user2Email;
+        $itipMessage->scheduleStatus = null;
+        $itipMessage->hasChange = true;
+        $itipMessage->message = Reader::read($scheduledIcal);
+
+        $this->amqpPublisher->expects($this->once())
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($itipMessage, false)));
+
+        $plugin->schedule($itipMessage);
+        $this->assertEquals('1.1', $itipMessage->scheduleStatus);
+    }
+
     function testCancelRecurringEventWithAttendee()
     {
         $plugin = $this->getPlugin();

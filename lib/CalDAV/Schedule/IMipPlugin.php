@@ -389,6 +389,28 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $previousEventSequence = isset($previousEvent->SEQUENCE) ? $previousEvent->SEQUENCE->getValue() : 0;
         $currentEventSequence = isset($currentEvent->SEQUENCE) ? $currentEvent->SEQUENCE->getValue() : 0;
 
-        return $previousEventSequence < $currentEventSequence;
+        return $previousEventSequence < $currentEventSequence || $this->hasPropertyChanges($previousEvent, $currentEvent);
+    }
+
+    /**
+     * Check if instance has non significant changes that should be notified to attendees
+     *
+     * @param $previousEvent
+     * @param $currentEvent
+     * @return bool
+     */
+    private function hasPropertyChanges($previousEvent, $currentEvent) {
+        $changeProperties = ['SUMMARY', 'LOCATION', 'DESCRIPTION'];
+
+        foreach ($changeProperties as $changeProperty) {
+            $previousPropertyValue = isset($previousEvent->$changeProperty) ? $previousEvent->$changeProperty->getValue() : '';
+            $currentPropertyValue = isset($currentEvent->$changeProperty) ? $currentEvent->$changeProperty->getValue() : '';
+
+            if ($previousPropertyValue !== $currentPropertyValue) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

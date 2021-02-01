@@ -112,4 +112,18 @@ class UtilsTest extends \PHPUnit_Framework_TestCase {
             $this->assertEquals($eventUri, null);
         }
     }
+
+    function testGetCalendarHomePathFromEventPath() {
+        $eventPath = 'calendars/599aefa0a310ed32d28d52e6/events/sabredav-63884fc4-e0ea-456f-97f6-36e0e274f703.ics';
+        $result = Utils::getCalendarHomePathFromEventPath($eventPath);
+
+        $this->assertEquals($result, 'calendars/599aefa0a310ed32d28d52e6');
+    }
+
+    function testGetEventUriFromPath() {
+        $eventPath = 'calendars/599aefa0a310ed32d28d52e6/events/sabredav-63884fc4-e0ea-456f-97f6-36e0e274f703.ics';
+        $result = Utils::getEventUriFromPath($eventPath);
+
+        $this->assertEquals($result, 'sabredav-63884fc4-e0ea-456f-97f6-36e0e274f703.ics');
+    }
 }

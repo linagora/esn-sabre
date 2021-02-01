@@ -59,4 +59,17 @@ class CalendarHomeTest extends \PHPUnit_Framework_TestCase {
 
         $this->assertEquals($calendar->getACL(), $expected);
     }
+
+    function testGetDuplicateCalendarObjectsByURI() {
+        // Prepare backend
+        $backend = $this->getBackend();
+        $calendarHome = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user2/userID']);
+        $calendarId = $backend->createCalendar('principals/user2/userID', 'calendar2', []);
+        $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:event1\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $backend->createCalendarObject($calendarId, 'URI1.ics', $object);
+
+        // Test
+        $result = $calendarHome->getDuplicateCalendarObjectsByURI('URI1.ics');
+        $this->assertCount(1, $result);
+    }
 }

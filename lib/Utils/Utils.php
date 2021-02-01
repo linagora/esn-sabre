@@ -28,6 +28,12 @@ class Utils {
         return '/calendars/' . $uriExploded[2] . '/' . $calendarUri . '/' . $objectUri;
     }
 
+    static function getCalendarHomePathFromEventPath($eventPath) {
+        list($namespace, $homeId, $calendarUri, $objectUri) = explode('/', $eventPath);
+
+        return $namespace . '/' . $homeId;
+    }
+
     static function isResourceFromPrincipal($principal) {
         return strpos($principal, 'resources') !== false;
     }
@@ -271,5 +277,11 @@ class Utils {
         $lastSlashPos = strrpos($eventPath, '/');
 
         return [substr($eventPath, 1, $lastSlashPos - 1), substr($eventPath, $lastSlashPos + 1)];
+    }
+
+    static function getEventUriFromPath($eventPath) {
+        list(,,, $eventURI) = explode('/', $eventPath);
+
+        return $eventURI;
     }
 }

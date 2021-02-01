@@ -50,6 +50,28 @@ class ImportPluginTest extends \ESN\DAV\ServerMock {
         $this->assertTrue($this->server->emit('schedule', [$this->newItipMessage('')]));
     }
 
+    function testRemoveDuplicateObjects() {
+        // when the node is deleted an 'afterUnbind' event will be emitted, so we're gonna play with that. 
+        $this->server->on('afterUnbind',    [$this, 'assertUnbindPath']);
+
+        // create a request to import stuff using an already created node in the ServerMock class
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/calendar',
+            'HTTP_ACCEPT'       => 'text/calendar',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event1.ics?import',
+        ));
+
+        // make the request
+        $response = $this->request($request);
+    }
+
+    // this shouldn't be anything else other than public visiblity or server->on method won't work
+    function assertUnbindPath($path) {
+        // this should be equal to the path of the node that was deleted
+        $this->assertEquals($path, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event1.ics');
+    }
+
     private function newItipMessage($sequence) {
         $message = new Message();
         $ical = "BEGIN:VCALENDAR

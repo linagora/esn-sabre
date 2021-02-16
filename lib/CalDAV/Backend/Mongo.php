@@ -549,25 +549,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getCalendarObjectByUID($principalUri, $uid) {
-        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-        $query = [ 'principaluri' => $principalUri ];
-        $projection = [
-            'calendarid' => 1,
-            'uri' => 1,
-            'access' => 1
-        ];
-        $calendarInstances = $collection->find($query, [ 'projection' => $projection ]);
-        if (!$calendarInstances) return null;
-
-        $calendarUris = array();
-        foreach($calendarInstances as $calendarInstance) {
-            // Because we do not want retrieve event from delegation
-            // This check make sense only for event where I am attendee and also have a delegation
-            // So we are able to retrieve event from delegation and add new event in default calendar because I am attendee
-            if ($calendarInstance['access'] === 1) {
-                $calendarUris[(string) $calendarInstance['calendarid']] = (string) $calendarInstance['uri'];
-            }
-        }
+        $calendarUris = $this->getCalendarInstancesByPrincipalUri($principalUri);
         if (empty($calendarUris)) return null;
 
         $collection = $this->db->selectCollection($this->calendarObjectTableName);
@@ -580,6 +562,38 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         if (!$objrow) return null;
 
         return $calendarUris[(string) $objrow['calendarid']] . '/' . $objrow['uri'];
+    }
+
+    function getDuplicateCalendarObjectsByURI($principalUri, $uri) {
+        $calendarUris = $this->getCalendarInstancesByPrincipalUri($principalUri);
+
+        if (empty($calendarUris)) return null;
+
+        // find the uid of the event having the provided URI
+        $collection = $this->db->selectCollection($this->calendarObjectTableName);
+
+        $query = ['calendarid' => ['$in' => array_keys($calendarUris)] , 'uri' => $uri];
+        $projection = ['uid' => 1];
+
+        $objrow = $collection->findOne($query, ['projection' => $projection]);
+
+        if (!$objrow) return [];
+
+        // find the events having the found uid.
+        $collection = $this->db->selectCollection($this->calendarObjectTableName);
+        $query = ['calendarid' => ['$in' => array_keys($calendarUris)] , 'uid' => $objrow['uid']];
+        $projection = [
+            'uri' => 1,
+            'calendarid' => 1
+        ];
+        $objrows = $collection->find($query, ['projection' => $projection]);
+        $result = [];
+
+        foreach($objrows as $row) {
+            $result[] = $calendarUris[(string) $row['calendarid']] . '/' . $row['uri'];
+        }
+
+        return $result;
     }
 
     function getChangesForCalendar($calendarId, $syncToken, $syncLevel, $limit = null) {
@@ -1125,5 +1139,29 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             array('principaluri' => 1, 'uri' => 1),
             array('unique' => true)
         );
+    }
+
+    private function getCalendarInstancesByPrincipalUri($principalUri) {
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+        $query = ['principaluri' => $principalUri];
+        $projection = [
+            'calendarid' => 1,
+            'uri' => 1,
+            'access' => 1
+        ];
+        $calendarInstances = $collection->find($query, ['projection' => $projection]);
+        if (!$calendarInstances) return [];
+
+        $calendarUris = array();
+        foreach($calendarInstances as $calendarInstance) {
+            // Because we do not want retrieve event from delegation
+            // This check make sense only for event where I am attendee and also have a delegation
+            // So we are able to retrieve event from delegation and add new event in default calendar because I am attendee
+            if ($calendarInstance['access'] === 1) {
+                $calendarUris[(string) $calendarInstance['calendarid']] = (string) $calendarInstance['uri'];
+            }
+        }
+
+        return $calendarUris;
     }
 }

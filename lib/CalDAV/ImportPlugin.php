@@ -6,6 +6,9 @@ use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use \Sabre\Uri;
 use DateTimeZone;
+use \Sabre\HTTP\RequestInterface;
+use \Sabre\HTTP\ResponseInterface;
+use ESN\Utils\Utils;
 
 class ImportPlugin extends \ESN\JSON\BasePlugin  {
 
@@ -18,6 +21,7 @@ class ImportPlugin extends \ESN\JSON\BasePlugin  {
         parent::initialize($server);
 
         $server->on('schedule', [$this, 'schedule'], 99);
+        $server->on('beforeMethod:PUT', [$this, 'removeDuplicateObjects'], 98);
     }
 
     /**
@@ -56,5 +60,25 @@ class ImportPlugin extends \ESN\JSON\BasePlugin  {
         if (!array_key_exists('import', $queryParams)) return;
 
         return false;
+    }
+
+    function removeDuplicateObjects(RequestInterface $request, ResponseInterface $response) {
+        $queryParams = $request->getQueryParameters();
+        if (!array_key_exists('import', $queryParams)) return;
+
+        $path = $request->getPath();
+
+        $homePath = Utils::getCalendarHomePathFromEventPath($path);
+        $home = $this->server->tree->getNodeForPath($homePath);
+
+        $eventURI = Utils::getEventUriFromPath($path);
+
+        $eventPaths = $home->getDuplicateCalendarObjectsByURI($eventURI);
+
+        foreach($eventPaths as $eventpath) {
+            $fullPath = $homePath . '/' . $eventpath;
+            $this->server->tree->delete($fullPath);
+            $this->server->emit('afterUnbind', [$fullPath]);
+        }
     }
 }

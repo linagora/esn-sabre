@@ -18,7 +18,7 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     const PARENT = 'calendars/456456/123123';
     const ETAG = 'The etag';
 
-        protected $caldavCalendar = array(
+    protected $caldavCalendar = array(
         '{DAV:}displayname' => 'Calendar',
         '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',
         '{http://apple.com/ns/ical/}calendar-color' => '#0190FFFF',

@@ -26,7 +26,6 @@
         "sabre/vobject": "dev-waiting-merges-2 as 4.1.0",
         "mongodb/mongodb": "1.4.1",
         "monolog/monolog": "1.24.0",
-        "ruflin/elastica": "6.0.2",
         "firebase/php-jwt": "5.2.0"
     },
     "require-dev" : {

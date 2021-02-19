@@ -424,4 +424,22 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         ]);
         $backend->updatePrincipal('principals/users/' . self::USER_ID, $propPatch);
     }
+
+    function testGetPrincipalIdByEmailWhenUserExists() {
+        $backend  = new Mongo(self::$esndb);
+
+        $this->assertEquals(self::USER_ID, $backend->getPrincipalIdByEmail('user@example.com'));
+    }
+
+    function testGetPrincipalIdByEmailWhenUserDoesNotExist() {
+        $backend  = new Mongo(self::$esndb);
+
+        $this->assertNull($backend->getPrincipalIdByEmail('drogba@nouri.com'));
+    }
+
+    function testGetPrincipalIdByEmailWhenEmailIsNotValid() {
+        $backend  = new Mongo(self::$esndb);
+
+        $this->assertNull($backend->getPrincipalIdByEmail('drogba'));
+    }
 }

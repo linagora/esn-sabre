@@ -118,6 +118,19 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         throw new \Sabre\DAV\Exception\MethodNotAllowed('Changing group membership is not permitted');
     }
 
+    function getPrincipalIdByEmail($email) {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return null;
+
+        $projection = ['_id' => 1];
+        $query = ['accounts.emails' => strtolower($email)];
+
+        $user = $this->db->users->findOne($query, ['projection' => $projection]);
+
+        if (!$user) return null;
+
+        return $user['_id'];
+    }
+
     private function objectToPrincipal($obj, $type) {
         $principal = null;
         $principalUri = 'principals/' . $type . '/' . $obj['_id'];

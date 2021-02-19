@@ -68,10 +68,7 @@ This is the configuration the Caldav server will use to send emails.
 
 ### Configure advanced logging
 
-Sabre can use [Monolog](https://github.com/Seldaek/monolog) to push log to :
-
- * Standard file
- * Elastic Search
+Sabre can use [Monolog](https://github.com/Seldaek/monolog) to push log to standard file.
 
 To configure logger add the `"logger"` item in config file with each logger needed
 
@@ -85,15 +82,6 @@ Full configuration is:
                 "fileLogger": {
                         "path": "Path to the file (required)",
                         "level": "debug level (default ERROR)"
-                },
-                "esLogger": {
-                        "host": "ES hostname (default localhost)",
-                        "port": "ES port (default 9200)",
-                        "level": "debug level (default ERROR)",
-                        "index": "index name (default monolog)",
-                        "appendDateToIndexName": "date format (default none)",
-                        "username":"ES user name (default none)",
-                        "password":"ES user password (default none)"
                 },
                 "envFields": {
                         "myFirstEnvFieldName": "MY_FIRST_ENV_VARIABLE_NAME",

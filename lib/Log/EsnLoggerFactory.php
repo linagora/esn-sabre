@@ -22,11 +22,6 @@ class EsnLoggerFactory
                     $handlers[] = $fileHandler;
                 }
             }
-
-            if (isset($loggerConfig['esLogger'])) {
-                $esLoggerConfig = $loggerConfig['esLogger'];
-                $handlers[] = self::initESHandler($esLoggerConfig);
-            }
         }
 
         $logger = new \Monolog\Logger('EsnSabre');
@@ -50,53 +45,5 @@ class EsnLoggerFactory
         }
 
         return null;
-    }
-
-    private static function initESHandler($esLoggerConfig)
-    {
-        $esHost = isset($esLoggerConfig['host']) ? $esLoggerConfig['host'] : 'localhost';
-        $esPort = isset($esLoggerConfig['port']) ? $esLoggerConfig['port'] : 9200;
-
-        $logLevel = self::DEFAULT_LEVEL;
-        if (isset($esLoggerConfig['level']) && defined('Monolog\Logger::'.$esLoggerConfig['level'])) {
-            $logLevel = constant('Monolog\Logger::'.$esLoggerConfig['level']);
-        }
-
-        $clientOptions = [
-            'host' => $esHost,
-            'port' => $esPort
-        ];
-
-        if (isset($esLoggerConfig['username']) && isset($esLoggerConfig['password'])) {
-            $clientOptions[] = ['username' => $esLoggerConfig['username']];
-            $clientOptions[] = ['password' => $esLoggerConfig['password']];
-        }
-
-        $elasticaClient = new \Elastica\Client($clientOptions);
-
-        $indexName = 'monolog';
-        $indexType = '_doc';
-
-        if (isset($esLoggerConfig['index'])) {
-            $indexName = $esLoggerConfig['index'];
-        }
-
-        if (isset($esLoggerConfig['appendDateToIndexName'])) {
-            $indexName .= date($esLoggerConfig['appendDateToIndexName']);
-        }
-
-        if (isset($esLoggerConfig['type'])) {
-            $indexType = $esLoggerConfig['type'];
-        }
-
-        $options = [
-            'index' => $indexName,
-            'type' => $indexType
-        ];
-
-        $handler = new \Monolog\Handler\ElasticSearchHandler($elasticaClient, $options, $logLevel);
-        $handler->setFormatter(new EsnLoggerFormatter($handler->getOptions()['index'], $handler->getOptions()['type']));
-
-        return $handler;
     }
 }

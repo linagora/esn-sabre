@@ -106,6 +106,12 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                 'eventPath' => $fullEventPath
             ];
 
+            if ($message['method'] === 'COUNTER') {
+                $formerEventICal = $this->server->tree->getNodeForPath($fullEventPath)->get();
+
+                $message['oldEvent'] = $formerEventICal;
+            }
+
             if (isset($eventMessage['newEvent'])) {
                 $message['isNewEvent'] = true;
             }

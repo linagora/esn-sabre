@@ -252,4 +252,53 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
         $plugin->schedule($itipMessage);
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);
     }
+
+    function testCounterMethod() {
+        $plugin = $this->getPlugin();
+        $plugin->setNewEvent(false);
+
+        $scheduledIcal = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:COUNTER',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'DTSTART:20201028T170000Z',
+            'DTEND:20201028T173000Z',
+            'SUMMARY:Test',
+            'COMMENT:Propose new time',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'DTSTAMP:20201029T182723Z',
+            'SEQUENCE:1',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $itipMessage = new \Sabre\VObject\ITip\Message();
+        $itipMessage->uid = 'ab9e450a-3080-4274-affd-fdd0e9eefdcc';
+        $itipMessage->component = 'VEVENT';
+        $itipMessage->method = 'COUNTER';
+        $itipMessage->sequence = 1;
+        $itipMessage->sender = 'mailto:' . $this->user1Email;
+        $itipMessage->recipient = 'mailto:' . $this->user2Email;
+        $itipMessage->scheduleStatus = null;
+        $itipMessage->significantChange = true;
+        $itipMessage->hasChange = true;
+        $itipMessage->message = Reader::read($scheduledIcal);
+
+        $messageForPublisher = $this->getMessageForPublisher($itipMessage, false);
+        $messageForPublisher['oldEvent'] = $plugin->getServer()->tree->getNodeForPath($messageForPublisher['eventPath'])->get();
+
+        $this->amqpPublisher->expects($this->once())
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($messageForPublisher));
+
+        $plugin->schedule($itipMessage);
+        $this->assertEquals('1.1', $itipMessage->scheduleStatus);
+    }
 }

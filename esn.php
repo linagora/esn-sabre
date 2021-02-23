@@ -248,9 +248,7 @@ if (!empty($config['amqp']['host'])) {
     $server->addPlugin($subscriptionRealTimePlugin);
 
     // iMip Plugin to handle sending emails
-    $server->addPlugin(
-        new ESN\CalDAV\Schedule\IMipPlugin($config['esn']['calendarRoot'], $AMQPPublisher)
-    );
+    $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));
 }
 
 $server->addPlugin(new ESN\CalDAV\ParticipationPlugin());

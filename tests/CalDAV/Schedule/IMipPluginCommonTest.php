@@ -20,7 +20,7 @@ class IMipPluginCommonTest extends IMipPluginTestBase {
             'UID:daab17fe-fac4-4946-9105-0f2cdb30f5ab',
             'SUMMARY:Hello',
             'DTSTART:20150228T030000Z',
-            'DTEND:20150228T040000Z',
+            'DTEND:20500228T040000Z',
             'END:VEVENT',
             'END:VCALENDAR',
             '']);

@@ -21,7 +21,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
             'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTEND:20501028T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -66,7 +66,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
             'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTEND:20501028T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -88,7 +88,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
             'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTEND:20501028T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -134,7 +134,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
             'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTEND:20501028T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -156,7 +156,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
             'DTSTART:20201029T170000Z',
-            'DTEND:20201029T173000Z',
+            'DTEND:20501029T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -233,7 +233,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
             'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTEND:20501028T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -254,7 +254,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
             'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTEND:20501028T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -299,7 +299,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
             'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTEND:20501028T173000Z',
             'SUMMARY:Test',
             'COMMENT:Propose new time',
             'ORGANIZER:mailto:' . $this->user1Email,
@@ -334,4 +334,6 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
         $plugin->schedule($itipMessage);
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);
     }
+
+  
 }

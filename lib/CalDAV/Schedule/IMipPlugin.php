@@ -28,6 +28,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     const SCHEDSTAT_FAIL_TEMPORARY = '5.1';
     const SCHEDSTAT_FAIL_PERMANENT = '5.2';
     const SEND_NOTIFICATION_EMAIL_TOPIC = 'calendar:event:notificationEmail:send';
+    const MAX_DATE = '2050-01-01';
+
 
     const MASTER_EVENT = 'master';
 
@@ -97,10 +99,10 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
         foreach ($eventMessages as $eventMessage) {
-            $isExpired=$this->testIfEventIsNotExpired($eventMessage['message']);
-           // $recurrentEventIsExpired=$this->testIfRecurrentEventFinishOnPast($iTipMessage,$eventMessage['message']);
-            if (!empty($isExpired)){
-               continue;
+            $isExpired = $this->testIfEventIsNotExpired($eventMessage['message']);
+            $recurrentEventIsExpired = $this->testIfRecurrentEventIsNotExpired($eventMessage['message']);
+            if (!empty($isExpired) || !empty($recurrentEventIsExpired)) {
+                continue;
             }
              
             $message = [
@@ -139,35 +141,39 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
      *
      * @param event
      */
-    private function  testIfEventIsNotExpired($event){
-        $endDate=$event->VEVENT->DTEND->getDateTime()->getTimeStamp();
-        $currentDate=$_SERVER['REQUEST_TIME'];
-       
-        return !($event->RRUle || $endDate>$currentDate);
+    private function  testIfEventIsNotExpired($event)
+    {
+        $endDate = $event->VEVENT->DTEND->getDateTime()->getTimeStamp();
+        $currentDate = new \DateTime();
+        return (isset($event->RRULE) && $endDate < $currentDate->getTimeStamp());
     }
 
-private function testIfRecurrentEventFinishOnPast($event){
-    $vuid=$event->vEVENT;
-    echo($vuid);
-   // $it = new VObject\Recur\EventIterator($event, (string) $vuid);
-    $maxDate = new \DateTime(self::MAX_DATE);
-    $currentDate=$_SERVER['REQUEST_TIME'];
+    /**
+     * Test if recurrent event is not expired
+     *
+     * @param event
+     */
+
+    private function testIfRecurrentEventIsNotExpired($event)
+    {
+        $vuid = (string)$event->VEVENT->UID;
+        $maxDate = new \DateTime(self::MAX_DATE);
+        $it = new VObject\Recur\EventIterator($event, $vuid);
+        $currentDate = new \DateTime();
 
 
-  /*  if ($it->isInfinite()) {
-        $lastOccurence = $maxDate->getTimeStamp();
-    } else {
-        $end = $it->getDtEnd();
-        while($it->valid() && $end < $maxDate) {
+        if ($it->isInfinite()) {
+            $lastOccurence = $maxDate->getTimeStamp();
+        } else {
             $end = $it->getDtEnd();
-            $it->next();
-
+            while ($it->valid() && $end < $currentDate) {
+                $end = $it->getDtEnd();
+                $it->next();
+            }
+            $lastOccurence = $end->getTimeStamp();
         }
-        $lastOccurence = $end->getTimeStamp();
+        return (!isset($event->RRULE) && $lastOccurence < $currentDate->getTimeStamp());
     }
-    return $lastOccurence;*/
-    return true
-}
 
 
     /**

@@ -28,6 +28,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     const SCHEDSTAT_FAIL_TEMPORARY = '5.1';
     const SCHEDSTAT_FAIL_PERMANENT = '5.2';
     const SEND_NOTIFICATION_EMAIL_TOPIC = 'calendar:event:notificationEmail:send';
+    const MAX_DATE = '2050-01-01';
+
 
     const MASTER_EVENT = 'master';
 

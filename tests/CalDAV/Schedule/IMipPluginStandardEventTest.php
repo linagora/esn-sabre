@@ -182,7 +182,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
 
         $message = $this->getMessageForPublisher($itipMessage, false);
 
-       /* $message['changes'] = [
+        $message['changes'] = [
             'dtstart' => [
                 'previous' => [
                     'isAllDay' => false,
@@ -211,7 +211,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
                     'timezone' => 'UTC'
                 ]
             ]
-        ];*/
+        ];
 
         $this->amqpPublisher->expects($this->once())
             ->method('publish')

@@ -99,9 +99,10 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
         foreach ($eventMessages as $eventMessage) {
+         
             $isExpired = $this->testIfEventIsNotExpired($eventMessage['message']);
-            $recurrentEventIsExpired = $this->testIfRecurrentEventIsNotExpired($eventMessage['message']);
-            if (!empty($isExpired) || !empty($recurrentEventIsExpired)) {
+
+            if (!empty($isExpired)) {
                 continue;
             }
              
@@ -143,36 +144,32 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
      */
     private function  testIfEventIsNotExpired($event)
     {
-        $endDate = $event->VEVENT->DTEND->getDateTime()->getTimeStamp();
-        $currentDate = new \DateTime();
-        return (isset($event->RRULE) && $endDate < $currentDate->getTimeStamp());
-    }
-
-    /**
-     * Test if recurrent event is not expired
-     *
-     * @param event
-     */
-
-    private function testIfRecurrentEventIsNotExpired($event)
-    {
-        $vuid = (string)$event->VEVENT->UID;
-        $maxDate = new \DateTime(self::MAX_DATE);
-        $it = new VObject\Recur\EventIterator($event, $vuid);
-        $currentDate = new \DateTime();
-
-
-        if ($it->isInfinite()) {
-            $lastOccurence = $maxDate->getTimeStamp();
-        } else {
-            $end = $it->getDtEnd();
-            while ($it->valid() && $end < $currentDate) {
-                $end = $it->getDtEnd();
-                $it->next();
-            }
-            $lastOccurence = $end->getTimeStamp();
+        //Case 1: Non recurrent event 
+        if (!$event->RRULE) {
+            $endDate = $event->VEVENT->DTEND->getDateTime()->getTimeStamp();
+            $currentDate = new \DateTime();
+            return $endDate < $currentDate->getTimeStamp();
         }
-        return (!isset($event->RRULE) && $lastOccurence < $currentDate->getTimeStamp());
+        //Case 2 : Recurrent event
+        else {
+
+            $vuid = (string)$event->VEVENT->UID;
+            $it = new VObject\Recur\EventIterator($event, $vuid);
+            $currentDate = new \DateTime();
+
+            if ($it->isInfinite()) {
+                return false;
+            } else {
+                $end = $it->getDtEnd();
+                while ($it->valid() && $end < $currentDate) {
+                    $end = $it->getDtEnd();
+                    $it->next();
+                }
+                $lastOccurence = $end->getTimeStamp();
+                return (!isset($event->RRULE) && $lastOccurence < $currentDate->getTimeStamp());
+            }
+        }
+        return false;
     }
 
 
@@ -313,11 +310,9 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             }
 
             // Create message if instance have been created or modified
-            if (!isset($cancelledInstancesId[$recurrenceId]) && (
-                    !isset($previousEventVEvents[$recurrenceId]) ||
-                    $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId])
-                )) {
-                $currentMessage = clone($scheduledEvent);
+            if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
+                $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]))) {
+                $currentMessage = clone ($scheduledEvent);
 
                 $currentMessage->remove('VEVENT');
                 $currentMessage->add($currentEventVEvents[$recurrenceId]);

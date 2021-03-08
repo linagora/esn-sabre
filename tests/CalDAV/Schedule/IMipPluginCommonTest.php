@@ -2,6 +2,8 @@
 
 namespace ESN\CalDAV\Schedule;
 
+use DateInterval;
+
 require_once ESN_TEST_BASE. '/CalDAV/Schedule/IMipPluginTestBase.php';
 
 class IMipPluginCommonTest extends IMipPluginTestBase {
@@ -12,8 +14,8 @@ class IMipPluginCommonTest extends IMipPluginTestBase {
     public function setUp()
     {
         parent::setUp();
-
-        $this->iTipMessageIcal = join("\r\n", [
+        
+      $this->iTipMessageIcal = join("\r\n", [
             'BEGIN:VCALENDAR',
             'METHOD:REQUEST',
             'BEGIN:VEVENT',

@@ -39,7 +39,7 @@ class IMipPluginTestBase extends \PHPUnit_Framework_TestCase {
         $sabredb->drop();
         $esndb->drop();
 
-        $this->afterCurrentDate=date('Ymd\THis', strtotime('+2 days', time()));  
+        $this->afterCurrentDate = date('Ymd', strtotime('+2 days', time()));
         $this->user1Calendar = [
             '{DAV:}displayname' => 'Calendar',
             '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'description',

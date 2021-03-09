@@ -116,6 +116,10 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                 $message['isNewEvent'] = true;
             }
 
+            if (isset($eventMessage['changes']) && !empty($eventMessage['changes'])) {
+                $message['changes'] = $eventMessage['changes'];
+            }
+
             $this->amqpPublisher->publish(self::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($message));
 
             $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_UNKNOWN;
@@ -278,6 +282,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                     $modifiedInstance['newEvent'] = 1;
                 }
 
+                $modifiedInstance['changes'] = $this->getPropertyChanges($previousEventVEvents[$recurrenceId] ?? null, $currentEventVEvents[$recurrenceId]);
+
                 $modifiedInstances[] = $modifiedInstance;
             }
         }
@@ -418,5 +424,44 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         }
 
         return false;
+    }
+
+    private function getPropertyChanges($previousEvent, $currentEvent) {
+        $changeProperties = ['SUMMARY', 'LOCATION', 'DESCRIPTION', 'DTSTART', 'DTEND', 'DURATION'];
+        $changes = [];
+
+        foreach ($changeProperties as $changeProperty) {
+            if ($changeProperty === 'DTSTART' || $changeProperty === 'DTEND') {
+                $previousPropertyValue = isset($previousEvent) && isset($previousEvent->$changeProperty) ? $previousEvent->$changeProperty->getDateTime()->getTimeStamp() : null;
+                $currentPropertyValue = isset($currentEvent->$changeProperty) ? $currentEvent->$changeProperty->getDateTime()->getTimeStamp() : null;
+
+                if ($previousPropertyValue !== $currentPropertyValue) {
+                    $changes[strtolower($changeProperty)] = [
+                        'previous' => isset($previousEvent) && isset($previousEvent->$changeProperty) ? $previousEvent->$changeProperty->getDateTime() : [],
+                        'current' => $currentEvent->$changeProperty->getDateTime(),
+                    ];
+
+                    if (isset($previousEvent) && isset($previousEvent->$changeProperty)) {
+                        $changes[strtolower($changeProperty)]['previous']->isAllDay = strlen($previousEvent->$changeProperty->getValue()) === 8;
+                    }
+
+                    $changes[strtolower($changeProperty)]['current']->isAllDay = strlen($currentEvent->$changeProperty->getValue()) === 8;
+                }
+
+                continue;
+            }
+
+            $previousPropertyValue = isset($previousEvent) && isset($previousEvent->$changeProperty) ? $previousEvent->$changeProperty->getValue() : '';
+            $currentPropertyValue = isset($currentEvent->$changeProperty) ? $currentEvent->$changeProperty->getValue() : '';
+
+            if ($previousPropertyValue !== $currentPropertyValue) {
+                $changes[strtolower($changeProperty)] = [
+                    'previous' => $previousPropertyValue,
+                    'current' => $currentPropertyValue
+                ];
+            }
+        }
+
+        return $changes;
     }
 }

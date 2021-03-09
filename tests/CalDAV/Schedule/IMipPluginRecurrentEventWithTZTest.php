@@ -453,9 +453,36 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
             ''
         ]);
 
+        $message = $this->getMessageForPublisher($itipMessage, false, $expectedMessageEvent);
+
+        $message['changes'] = [
+            'summary' => [
+                'previous' => '',
+                'current' => 'Test'
+            ],
+            'dtstart' => [
+                'previous' => [],
+                'current' => [
+                    'isAllDay' => false,
+                    'date' => '2020-10-29 16:00:00.000000',
+                    'timezone_type' => 3,
+                    'timezone' => 'Asia/Jakarta'
+                ]
+            ],
+            'dtend' => [
+                'previous' => [],
+                'current' => [
+                    'isAllDay' => false,
+                    'date' => '2020-10-29 16:30:00.000000',
+                    'timezone_type' => 3,
+                    'timezone' => 'Asia/Jakarta'
+                ]
+            ]
+        ];
+
         $this->amqpPublisher->expects($this->once())
             ->method('publish')
-            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($itipMessage, false, $expectedMessageEvent)));
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($message));
 
         $plugin->schedule($itipMessage);
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);

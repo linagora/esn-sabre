@@ -225,9 +225,42 @@ class IMipPluginStandardEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
+        $message = $this->getMessageForPublisher($itipMessage, false);
+
+        $message['changes'] = [
+            'dtstart' => [
+                'previous' => [
+                    'isAllDay' => false,
+                    'date' => '2020-10-28 17:00:00.000000',
+                    'timezone_type' => 3,
+                    'timezone' => 'Asia/Jakarta'
+                ],
+                'current' => [
+                    'isAllDay' => false,
+                    'date' => '2020-10-29 17:00:00.000000',
+                    'timezone_type' => 3,
+                    'timezone' => 'Asia/Jakarta'
+                ]
+            ],
+            'dtend' => [
+                'previous' => [
+                    'isAllDay' => false,
+                    'date' => '2020-10-28 17:30:00.000000',
+                    'timezone_type' => 3,
+                    'timezone' => 'Asia/Jakarta'
+                ],
+                'current' => [
+                    'isAllDay' => false,
+                    'date' => '2020-10-29 17:30:00.000000',
+                    'timezone_type' => 3,
+                    'timezone' => 'Asia/Jakarta'
+                ]
+            ]
+        ];
+
         $this->amqpPublisher->expects($this->once())
             ->method('publish')
-            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($itipMessage, false)));
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($message));
 
         $plugin->schedule($itipMessage);
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);

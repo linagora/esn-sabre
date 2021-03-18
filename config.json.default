@@ -28,7 +28,8 @@
         "fsync": true,
         "connectTimeoutMS": 10000
       }
-    }
+    },
+    "schedulingObjectTTLInDays": 56
   },
   "esn": {
     "apiRoot": "http://esn_host:8080",

@@ -20,9 +20,9 @@ class Esn extends Mongo {
 
     private $principalBackend;
 
-    public function __construct(Database $db, BackendInterface $principalBackend)
+    public function __construct(Database $db, BackendInterface $principalBackend, $schedulingObjectTTLInDays = 0)
     {
-        parent::__construct($db);
+        parent::__construct($db, $schedulingObjectTTLInDays);
 
         $this->principalBackend = $principalBackend;
     }

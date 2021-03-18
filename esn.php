@@ -89,7 +89,9 @@ try {
 // Backends
 $addressbookBackend = new ESN\CardDAV\Backend\Esn($sabreDb);
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
-$calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend);
+
+$schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 56;
+$calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend, $schedulingObjectTTLInDays);
 
 // Directory structure
 $tree = [

@@ -1,5 +1,5 @@
 <?php
-namespace ESN\CalDAV;
+namespace ESN\Log;
 
 use \Sabre\DAV\Server;
 

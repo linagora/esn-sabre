@@ -267,9 +267,9 @@ $server->addPlugin(new ESN\CalDAV\ImportPlugin());
 
 $server->addPlugin(new ESN\DAV\XHttpMethodOverridePlugin());
 
-//Logger request plugin
-$requestLoggerPLugin = new  ESN\CalDAV\RequestLoggerPlugin();
-$server->addPlugin($requestLoggerPLugin);
+// Logger request plugin
+$requestLoggerPlugin = new  ESN\Log\RequestLoggerPlugin();
+$server->addPlugin($requestLoggerPlugin);
 
 // And off we go!
 $server->exec();

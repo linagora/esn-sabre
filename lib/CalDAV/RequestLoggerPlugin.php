@@ -48,7 +48,11 @@ class RequestLoggerPlugin extends \ESN\JSON\BasePlugin {
 
     function afterResponseLogger($request, $response)
     {
-        $this->server->getLogger()->debug('Request : ', [$request]);
-        $this->server->getLogger()->debug('Response : ', [$response]);
+        $logger = $this->server->getLogger();
+
+        if (isset($logger) && isset($logger->debug)) {
+            $logger->debug('Request: ', [$request]);
+            $logger->debug('Response: ', [$response]);
+        }
     }
 }

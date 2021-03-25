@@ -267,9 +267,11 @@ $server->addPlugin(new ESN\CalDAV\ImportPlugin());
 
 $server->addPlugin(new ESN\DAV\XHttpMethodOverridePlugin());
 
-//Logger request plugin
-$requestLoggerPLugin = new  ESN\CalDAV\RequestLoggerPlugin();
-$server->addPlugin($requestLoggerPLugin);
+// Logger request plugin
+if (SABRE_ENV === SABRE_ENV_DEV) {
+    $requestLoggerPlugin = new  ESN\Log\RequestLoggerPlugin();
+    $server->addPlugin($requestLoggerPlugin);
+}
 
 // And off we go!
 $server->exec();

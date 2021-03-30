@@ -58,6 +58,26 @@ DTSTART:20180401T000000Z
 DURATION:PT3H
 DTSTAMP:20180313T142416Z
 SEQUENCE:1
+ORGANIZER;CN=John0 Doe0:mailto:robertocarlos@realmadrid.com
+ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=FALSE;CN=John0 Doe0:mailto:robertocarlos@realmadrid.com
+END:VEVENT
+END:VCALENDAR
+';
+
+    protected $acceptedDurationEvent =
+        'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20180313T142342Z
+UID:28CCB90C-0F2F-48FC-B1D9-33A2BA3D9595
+TRANSP:OPAQUE
+SUMMARY:Event with duration
+DTSTART:20180401T000000Z
+DURATION:PT3H
+DTSTAMP:20180313T142416Z
+SEQUENCE:1
+ORGANIZER;CN=John0 Doe0:mailto:robertocarlos@realmadrid.com
+ATTENDEE;PARTSTAT=ACCEPTED;RSVP=FALSE;CN=John0 Doe0:mailto:robertocarlos@realmadrid.com
 END:VEVENT
 END:VCALENDAR
 ';
@@ -114,6 +134,8 @@ END:VCALENDAR
     }
 
     function testFreeBusyWithDurationEvent() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'event4.ics', $this->acceptedDurationEvent);
+
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',

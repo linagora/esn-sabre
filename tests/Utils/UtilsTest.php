@@ -4,7 +4,9 @@ namespace ESN\Utils;
 
 use ESN\Utils\Utils;
 
-class UtilsTest extends \PHPUnit_Framework_TestCase {
+require_once ESN_TEST_BASE. '/DAV/ServerMock.php';
+
+class UtilsTest extends \ESN\DAV\ServerMock {
 
     protected static $responseDetails = [
         'fileProperties' => [
@@ -125,5 +127,43 @@ class UtilsTest extends \PHPUnit_Framework_TestCase {
         $result = Utils::getEventUriFromPath($eventPath);
 
         $this->assertEquals($result, 'sabredav-63884fc4-e0ea-456f-97f6-36e0e274f703.ics');
+    }
+
+    function testIsPrincipalNotAttendingEvent() {
+        $event = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20140718T120000Z
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=White;PARTSTAT=NEEDS-ACTION:mailto:user1@example.com
+ATTENDEE;CN=White;PARTSTAT=ACCEPTED:mailto:user2@example.com
+ATTENDEE;CN=White;PARTSTAT=DECLINED:mailto:user3@example.com
+DTSTART:20140718T120000Z
+DURATION:PT1H
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $eventNode = \Sabre\VObject\Reader::read($event);
+        $vevent = $eventNode->VEVENT;
+
+        $result = Utils::isPrincipalNotAttendingEvent($vevent, 'mailto:user1@example.com');
+        $this->assertTrue($result);
+
+        $result = Utils::isPrincipalNotAttendingEvent($vevent, 'mailto:user2@example.com');
+        $this->assertFalse($result);
+
+        $result = Utils::isPrincipalNotAttendingEvent($vevent, 'mailto:user3@example.com');
+        $this->assertTrue($result);
+    }
+
+    function testGetPrincipalEmail() {
+        $principal = 'principals/users/54b64eadf6d7d8e41d263e0f';
+
+        $result = Utils::getPrincipalEmail($principal, $this->server);
+        
+        $this->assertEquals($result, 'mailto:robertocarlos@realmadrid.com');
     }
 }

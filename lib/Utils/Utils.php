@@ -284,4 +284,47 @@ class Utils {
 
         return $eventURI;
     }
+
+    /**
+     * @param VEVENT $vevent    the event object VEVENT.
+     * @param String $email     the user email to be used in the participation check.
+     *
+     * @return Boolean          true if he is not attending the event, false otherwise.
+     */
+    static function isPrincipalNotAttendingEvent($vevent, $email) {
+        foreach ($vevent->ATTENDEE as $attendee) {
+            if (strtolower($attendee->getValue()) === $email) {
+                if (isset($attendee['PARTSTAT'])) {
+                    $partstat = $attendee['PARTSTAT']->getValue();
+
+                    return ($partstat == 'NEEDS-ACTION' || $partstat == 'DECLINED');
+                }
+
+                return true; // mainly to prevent looping on all the attendees (ie events with hundreds of attendees)
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param String $principal    the pricipal uri for the desired user.
+     * @param Object $server       the sabre \Sabre\DAV\Server instance.
+     *
+     * @return String              the email adress of the principal
+     */
+    static function getPrincipalEmail($principal, $server) {
+        $CUAS = '{urn:ietf:params:xml:ns:caldav}calendar-user-address-set';
+
+        $properties = $server->getProperties(
+            $principal,
+            [$CUAS]
+        );
+
+        if (!isset($properties[$CUAS])) return;
+
+        $addresses = $properties[$CUAS]->getHrefs();
+    
+        return $addresses[0];
+    }
 }

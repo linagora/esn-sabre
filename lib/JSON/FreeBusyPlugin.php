@@ -5,6 +5,7 @@ use \Sabre\VObject;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use DateTimeZone;
+use ESN\Utils\Utils;
 
 class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
 
@@ -82,7 +83,9 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
             $nodePath = 'calendars/' . $userId;
             $node = $this->server->tree->getNodeForPath($nodePath);
             if (!is_null($node)) {
-                $calendars = $this->getFreeBusyCalendars($nodePath, $node, $params);
+                $principal = $node->getOwner();
+                $email = Utils::getPrincipalEmail($principal, $this->server);
+                $calendars = $this->getFreeBusyCalendars($nodePath, $node, $params, $email);
               
                 array_push($body->users, (object) [
                     'id' => $userId,
@@ -94,7 +97,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
         return [200, $body];
     }
 
-    function getFreeBusyCalendars($nodePath, $node, $params) {
+    function getFreeBusyCalendars($nodePath, $node, $params, $email) {
         $calendars = $node->getChildren();
 
         $items = [];
@@ -119,10 +122,14 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
                     'time-range'     => null,
                 ]);
 
-                $busyEvents = array_map(function($eventUri) use ($calendar) {
+                $busyEvents = array_map(function($eventUri) use ($calendar, $email) {
                     $obj = $calendar->getChild($eventUri)->get();
                     $vObject = VObject\Reader::read($obj);
                     $vevent = $vObject->VEVENT;
+
+                    if ($vevent->ATTENDEE && Utils::isPrincipalNotAttendingEvent($vevent, $email)) {
+                        return;
+                    }
 
                     $timeZone = new DateTimeZone('UTC');
 
@@ -145,6 +152,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
                     return (object) $freebusy;
                 }, $busyEventUris);
 
+                $busyEvents = array_filter($busyEvents);
                 $filteredBusyEvent = isset($params->uids)
                     ? array_values(array_filter($busyEvents, function ($busy) use ($params) {
                         return !in_array($busy->uid, $params->uids);

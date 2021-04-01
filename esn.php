@@ -87,15 +87,9 @@ try {
 }
 
 // Backends
-$authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm']);
 $addressbookBackend = new ESN\CardDAV\Backend\Esn($sabreDb);
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
 $calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend);
-
-// listener
-$authEmitter = $authBackend->getEventEmitter();
-$authEmitter->on("auth:success", [$addressbookBackend, "getAddressBooksForUser"]);
-$authEmitter->on("auth:success", [$calendarBackend, "getCalendarsForUser"]);
 
 // Directory structure
 $tree = [
@@ -111,12 +105,22 @@ $tree = [
 
 $server = new Sabre\DAV\Server($tree);
 
+// logger plugin
+$server->addPlugin($loggerPlugin);
+
+// Auth backend
+$authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm'], $principalBackend, $server);
+
+// listener
+$authEmitter = $authBackend->getEventEmitter();
+$authEmitter->on("auth:success", [$addressbookBackend, "getAddressBooksForUser"]);
+$authEmitter->on("auth:success", [$calendarBackend, "getCalendarsForUser"]);
+
 // Add stack trace to HTML response in dev mode
 if (SABRE_ENV === SABRE_ENV_DEV) {
     $server->debugExceptions = true;
 }
 
-$server->addPlugin($loggerPlugin);
 
 $server->setBaseUri($config['webserver']['baseUri']);
 

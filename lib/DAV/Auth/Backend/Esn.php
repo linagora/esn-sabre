@@ -5,6 +5,9 @@ namespace ESN\DAV\Auth\Backend;
 use \Sabre\DAV;
 use \Sabre\HTTP;
 use Sabre\Event\EventEmitter;
+use \Firebase\JWT\JWT;
+
+define('ESN_PUBLIC_KEY', __DIR__ . '/../../../../config/esn.key.pub');
 
 class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
@@ -16,10 +19,12 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     protected $technicalPrincipal = 'principals/technicalUser';
     protected $technicalUserType = 'technical';
 
-    function __construct($apiroot, $realm = null) {
+    function __construct($apiroot, $realm = null, $principalBackend, $server) {
         $this->apiroot = $apiroot;
         $this->httpClient = new HTTP\Client();
         $this->eventEmitter = new EventEmitter();
+        $this->principalBackend = $principalBackend;
+        $this->server = $server;
 
         if (!is_null($realm)) {
             $this->realm = $realm;
@@ -70,10 +75,17 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     }
 
     function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
-        $auth = $request->getHeader("ESNToken");
+        $authorizationHeader = $request->getHeader("Authorization");
+        $esnToken = $request->getHeader("ESNToken");
         $type = '';
-        if ($auth) {
-            list($rv, $type) = $this->checkAuthByToken($auth);
+
+        if ($authorizationHeader && $this->checkJWT($authorizationHeader)) {
+            $rv = true;
+            $msg = 'jwt';
+            $type = 'user';
+        }
+        elseif ($esnToken) {
+            list($rv, $type) = $this->checkAuthByToken($esnToken);
             $msg = "Invalid Token";
         } else {
             list($rv, $msg) = parent::check($request, $response);
@@ -85,5 +97,40 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         return [$rv, $msg];
+    }
+
+    private function checkJWT($authorizationHeader) {
+        // No public key = no jwt
+        if (!file_exists(ESN_PUBLIC_KEY)) return false;
+
+        if (preg_match('/Bearer\s((.*)\.(.*)\.(.*))/', $authorizationHeader, $matches)) {
+            $token = $matches[1];
+            // Load esn's public key
+            $key = file_get_contents(ESN_PUBLIC_KEY);
+
+            try {
+                // Try to decode the token with the public key
+                $user = JWT::decode($token, $key, array('RS256'));
+
+                // Get the user Id associated with the identifier of the token ( email in sub field )
+                $principleId = $this->principalBackend->getPrincipalIdByEmail($user->sub);
+                // No user found by that email
+                if (!$principleId) return false;
+                // we set the userId to be used as the current principle
+                $this->currentUserId = $principleId;
+                
+                return true;
+            } catch(\exception $e) {
+                // something wrong happened during decoding the JWT
+                // things like unsupported algorithm, expired token...
+                $this->server->getLogger()->error(
+                    'An unexpected error happened when decoding the JWT',
+                    ['error' => $e->getMessage()]
+                );
+                return false;
+            }
+        }
+        // the JWT format is weird
+        return false;
     }
 }

@@ -868,10 +868,16 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'description' => $sharerAddressBook['description'],
                 'share_access' => $sharee->access,
                 'share_href' => $sharee->href,
-                'share_invitestatus' => $sharee->inviteStatus ?: SPlugin::INVITE_NORESPONSE,
+                'share_invitestatus' => $sharee->inviteStatus ?: SPlugin::INVITE_ACCEPTED,
                 'share_displayname' => $this->getValue($sharee->properties, '{DAV:}displayname')
             ];
             $shareeCollection->insertOne($newShareeAddressBook);
+
+            $this->eventEmitter->emit('sabre:addressBookSubscriptionCreated', [
+                [
+                    'path' => $this->buildAddressBookPath($newShareeAddressBook['principaluri'], $newShareeAddressBook['uri'])
+                ]
+            ]);
         }
     }
 

@@ -13,6 +13,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     protected $db;
     protected $eventEmitter;
+    protected $schedulingObjectTTLInDays;
 
     public $calendarTableName = 'calendars';
     public $calendarInstancesTableName = 'calendarinstances';
@@ -42,9 +43,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     const MAX_DATE = '2038-01-01';
     const RESOURCE_CALENDAR_PUBLIC_PRIVILEGE = '{DAV:}read';
 
-    function __construct(\MongoDB\Database $db) {
+    function __construct(\MongoDB\Database $db, $schedulingObjectTTLInDays = 0) {
         $this->db = $db;
         $this->eventEmitter = new EventEmitter();
+        $this->schedulingObjectTTLInDays = $schedulingObjectTTLInDays;
 
         $this->ensureIndex();
     }
@@ -882,7 +884,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             'uri' => $objectUri,
             'lastmodified' => time(),
             'etag' => md5($objectData),
-            'size' => strlen($objectData)
+            'size' => strlen($objectData),
+            'dateCreated' => new \MongoDB\BSON\UTCDateTime(time() * 1000)
         ];
         $collection->insertOne($obj);
     }
@@ -1139,6 +1142,14 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             array('principaluri' => 1, 'uri' => 1),
             array('unique' => true)
         );
+
+        if (isset($this->schedulingObjectTTLInDays) && $this->schedulingObjectTTLInDays !== 0) {
+            // Create a TTL index that expires after a period of time on 'dateCreated' in the 'schedulingobjects' collection.
+            $schedulingObjectCollection = $this->db->selectCollection($this->schedulingObjectTableName);
+            $schedulingObjectCollection->createIndex(
+                ['dateCreated' => 1], ['expireAfterSeconds' => $this->schedulingObjectTTLInDays * 86400]
+            );
+        }
     }
 
     private function getCalendarInstancesByPrincipalUri($principalUri) {

@@ -89,7 +89,9 @@ try {
 // Backends
 $addressbookBackend = new ESN\CardDAV\Backend\Esn($sabreDb);
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
-$calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend);
+
+$schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 56;
+$calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend, $schedulingObjectTTLInDays);
 
 // Directory structure
 $tree = [
@@ -252,9 +254,7 @@ if (!empty($config['amqp']['host'])) {
     $server->addPlugin($subscriptionRealTimePlugin);
 
     // iMip Plugin to handle sending emails
-    $server->addPlugin(
-        new ESN\CalDAV\Schedule\IMipPlugin($config['esn']['calendarRoot'], $AMQPPublisher)
-    );
+    $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));
 }
 
 $server->addPlugin(new ESN\CalDAV\ParticipationPlugin());
@@ -266,6 +266,12 @@ $server->addPlugin(new ESN\CardDAV\MobileRequestPlugin());
 $server->addPlugin(new ESN\CalDAV\ImportPlugin());
 
 $server->addPlugin(new ESN\DAV\XHttpMethodOverridePlugin());
+
+// Logger request plugin
+if (SABRE_ENV === SABRE_ENV_DEV) {
+    $requestLoggerPlugin = new  ESN\Log\RequestLoggerPlugin();
+    $server->addPlugin($requestLoggerPlugin);
+}
 
 // And off we go!
 $server->exec();

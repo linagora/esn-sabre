@@ -257,6 +257,8 @@ if (!empty($config['amqp']['host'])) {
     $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));
 }
 
+$server->addPlugin(new ESN\CalDAV\Schedule\ITipPlugin());
+
 $server->addPlugin(new ESN\CalDAV\ParticipationPlugin());
 
 $server->addPlugin(new ESN\CalDAV\MobileRequestPlugin());

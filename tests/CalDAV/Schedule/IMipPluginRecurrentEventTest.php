@@ -166,8 +166,8 @@ class IMipPluginRecurrentEventTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
             'RRULE:FREQ=DAILY',
-            'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTSTART:20201029T170000Z',
+            'DTEND:20201029T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:masilto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -457,8 +457,8 @@ class IMipPluginRecurrentEventTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
             'RRULE:FREQ=DAILY',
-            'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTSTART:20201029T170000Z',
+            'DTEND:20201029T173000Z',
             'SUMMAZERY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -701,7 +701,7 @@ class IMipPluginRecurrentEventTest extends IMipPluginTestBase {
                 'previous' => [],
                 'current' => [
                     'isAllDay' => false,
-                    'date' => '2020-10-29 16:00:00.000000',
+                    'date' => $this->formattedAfterCurrentDate .' 16:00:00.000000',
                     'timezone_type' => 3,
                     'timezone' => 'UTC'
                 ]
@@ -710,7 +710,7 @@ class IMipPluginRecurrentEventTest extends IMipPluginTestBase {
                 'previous' => [],
                 'current' => [
                     'isAllDay' => false,
-                    'date' => '2020-10-29 16:30:00.000000',
+                    'date' => $this->formattedAfterCurrentDate .' 16:30:00.000000',
                     'timezone_type' => 3,
                     'timezone' => 'UTC'
                 ]

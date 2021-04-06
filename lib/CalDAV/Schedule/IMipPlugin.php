@@ -97,9 +97,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
         foreach ($eventMessages as $eventMessage) {
-            $isExpired = $this->testIfEventIsNotExpired($eventMessage['message']);
-
-            if ($isExpired) {
+            if ($this->testIfEventIsExpired($eventMessage['message'])) {
                 continue;
             }
              
@@ -139,7 +137,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
      *
      * @param VEVENT event
      */
-    private function  testIfEventIsNotExpired($event)
+    private function  testIfEventIsExpired($event)
     {
         if (!isset($event->VEVENT->RRULE)) {
             $startDate = $event->VEVENT->DTSTART->getDateTime()->getTimeStamp();

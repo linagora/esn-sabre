@@ -169,8 +169,8 @@ class IMipPluginStandardEventWithTZTest extends IMipPluginTestBase {
             'END:VTIMEZONE',
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
-            'DTSTART;TZID=Asia/Jakarta:'. $this->afterCurrentDate.'T170000',
-            'DTEND;TZID=Asia/Jakarta:'. $this->afterCurrentDate.'T173000',
+            'DTSTART;TZID=Asia/Jakarta:20201028T170000',
+            'DTEND;TZID=Asia/Jakarta:20201028T173000',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -237,7 +237,7 @@ class IMipPluginStandardEventWithTZTest extends IMipPluginTestBase {
                 ],
                 'current' => [
                     'isAllDay' => false,
-                    'date' => '2020-10-29 17:00:00.000000',
+                    'date' => $this->formattedAfterCurrentDate .' 17:00:00.000000',
                     'timezone_type' => 3,
                     'timezone' => 'Asia/Jakarta'
                 ]
@@ -251,7 +251,7 @@ class IMipPluginStandardEventWithTZTest extends IMipPluginTestBase {
                 ],
                 'current' => [
                     'isAllDay' => false,
-                    'date' => '2020-10-29 17:30:00.000000',
+                    'date' => $this->formattedAfterCurrentDate .' 17:30:00.000000',
                     'timezone_type' => 3,
                     'timezone' => 'Asia/Jakarta'
                 ]

@@ -133,8 +133,8 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'CALSCALE:GREGORIAN',
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
-            'DTSTART:'. $this->afterCurrentDate.'T170000Z',
-            'DTEND:'. $this->afterCurrentDate.'T173000Z',
+            'DTSTART:20201028T170000Z',
+            'DTEND:20201028T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -192,7 +192,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
                 ],
                 'current' => [
                     'isAllDay' => false,
-                    'date' => '2020-10-29 17:00:00.000000',
+                    'date' => $this->formattedAfterCurrentDate .' 17:00:00.000000',
                     'timezone_type' => 3,
                     'timezone' => 'UTC'
                 ]
@@ -206,7 +206,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
                 ],
                 'current' => [
                     'isAllDay' => false,
-                    'date' => '2020-10-29 17:30:00.000000',
+                    'date' => $this->formattedAfterCurrentDate .' 17:30:00.000000',
                     'timezone_type' => 3,
                     'timezone' => 'UTC'
                 ]

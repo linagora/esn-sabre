@@ -24,6 +24,8 @@ class IMipPluginTestBase extends \PHPUnit_Framework_TestCase {
 
     protected $user1Calendar;
     protected $user2Calendar;
+    protected $afterCurrentDate;
+    protected $formattedAfterCurrentDate;
 
     private $server;
     private $caldavBackend;
@@ -37,6 +39,9 @@ class IMipPluginTestBase extends \PHPUnit_Framework_TestCase {
 
         $sabredb->drop();
         $esndb->drop();
+
+        $this->afterCurrentDate = date('Ymd', strtotime('+2 days', time()));
+        $this->formattedAfterCurrentDate = date('Y-m-d', strtotime('+2 days', time()));
 
         $this->user1Calendar = [
             '{DAV:}displayname' => 'Calendar',

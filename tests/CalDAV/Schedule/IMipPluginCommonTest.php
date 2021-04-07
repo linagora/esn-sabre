@@ -8,7 +8,7 @@ class IMipPluginCommonTest extends IMipPluginTestBase {
 
     private $iTipMessage;
     private $iTipMessageIcal;
-
+    
     public function setUp()
     {
         parent::setUp();
@@ -19,11 +19,12 @@ class IMipPluginCommonTest extends IMipPluginTestBase {
             'BEGIN:VEVENT',
             'UID:daab17fe-fac4-4946-9105-0f2cdb30f5ab',
             'SUMMARY:Hello',
-            'DTSTART:20150228T030000Z',
-            'DTEND:20150228T040000Z',
+            'DTSTART:'. $this->afterCurrentDate.'T030000Z',
+            'DTEND:' . $this->afterCurrentDate.'T040000Z',
             'END:VEVENT',
             'END:VCALENDAR',
-            '']);
+            ''
+        ]);
 
         $this->iTipMessage = new \Sabre\VObject\ITip\Message();
         $this->iTipMessage->message = \Sabre\VObject\Reader::read($this->iTipMessageIcal);

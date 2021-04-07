@@ -20,8 +20,8 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'METHOD:REQUEST',
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
-            'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTSTART:'. $this->afterCurrentDate.'T170000Z',
+            'DTEND:'. $this->afterCurrentDate.'T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -65,8 +65,8 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'CALSCALE:GREGORIAN',
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
-            'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTSTART:'. $this->afterCurrentDate.'T170000Z',
+            'DTEND:'. $this->afterCurrentDate.'T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -87,8 +87,8 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'METHOD:REQUEST',
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
-            'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTSTART:'. $this->afterCurrentDate.'T170000Z',
+            'DTEND:'. $this->afterCurrentDate.'T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -155,8 +155,8 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'METHOD:REQUEST',
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
-            'DTSTART:20201029T170000Z',
-            'DTEND:20201029T173000Z',
+            'DTSTART:'. $this->afterCurrentDate.'T170000Z',
+            'DTEND:'. $this->afterCurrentDate.'T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -192,7 +192,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
                 ],
                 'current' => [
                     'isAllDay' => false,
-                    'date' => '2020-10-29 17:00:00.000000',
+                    'date' => $this->formattedAfterCurrentDate .' 17:00:00.000000',
                     'timezone_type' => 3,
                     'timezone' => 'UTC'
                 ]
@@ -206,7 +206,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
                 ],
                 'current' => [
                     'isAllDay' => false,
-                    'date' => '2020-10-29 17:30:00.000000',
+                    'date' => $this->formattedAfterCurrentDate .' 17:30:00.000000',
                     'timezone_type' => 3,
                     'timezone' => 'UTC'
                 ]
@@ -232,8 +232,8 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'CALSCALE:GREGORIAN',
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
-            'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTSTART:'. $this->afterCurrentDate.'T170000Z',
+            'DTEND:'. $this->afterCurrentDate.'T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -253,8 +253,8 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'METHOD:CANCEL',
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
-            'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTSTART:'. $this->afterCurrentDate.'T170000Z',
+            'DTEND:'. $this->afterCurrentDate.'T173000Z',
             'SUMMARY:Test',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
@@ -298,8 +298,8 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'METHOD:COUNTER',
             'BEGIN:VEVENT',
             'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
-            'DTSTART:20201028T170000Z',
-            'DTEND:20201028T173000Z',
+            'DTSTART:'. $this->afterCurrentDate.'T170000Z',
+            'DTEND:'. $this->afterCurrentDate.'T173000Z',
             'SUMMARY:Test',
             'COMMENT:Propose new time',
             'ORGANIZER:mailto:' . $this->user1Email,
@@ -334,4 +334,53 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
         $plugin->schedule($itipMessage);
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);
     }
+
+    function testEventIsExpired()
+    {
+        $plugin = $this->getPlugin();
+        $plugin->setNewEvent(true);
+
+        $scheduledIcal = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'DTSTART:20201028T170000Z',
+            'DTEND:20201028T170000Z',
+            'SUMMARY:Test',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'DTSTAMP:20201029T145516Z',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $itipMessage = new \Sabre\VObject\ITip\Message();
+        $itipMessage->uid = 'ab9e450a-3080-4274-affd-fdd0e9eefdcc';
+        $itipMessage->component = 'VEVENT';
+        $itipMessage->method = 'REQUEST';
+        $itipMessage->sequence = null;
+        $itipMessage->sender = 'mailto:' . $this->user1Email;
+        $itipMessage->recipient = 'mailto:' . $this->user2Email;
+        $itipMessage->recipientName = 'John2 Doe2';
+        $itipMessage->scheduleStatus = 'null';
+        $itipMessage->significantChange = true;
+        $itipMessage->hasChange = true;
+        $itipMessage->message = Reader::read($scheduledIcal);
+
+        $this->amqpPublisher->expects($this->never())
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($itipMessage, true)));
+
+        $plugin->schedule($itipMessage);
+        $this->assertEquals('1.1', $itipMessage->scheduleStatus);
+    }
+
+  
 }

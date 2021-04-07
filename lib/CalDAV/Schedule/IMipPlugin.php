@@ -4,6 +4,7 @@ namespace ESN\CalDAV\Schedule;
 
 use DateTimeZone;
 use \Sabre\DAV;
+use \Sabre\VObject;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
@@ -96,6 +97,10 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
         foreach ($eventMessages as $eventMessage) {
+            if ($this->testIfEventIsExpired($eventMessage['message'])) {
+                continue;
+            }
+             
             $message = [
                 'senderEmail' => substr($iTipMessage->sender, 7),
                 'recipientEmail' => substr($iTipMessage->recipient, 7),
@@ -122,9 +127,41 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
             $this->amqpPublisher->publish(self::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($message));
 
-            $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_UNKNOWN;
         }
+        $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_UNKNOWN;
     }
+
+
+    /**
+     * Test if event is not expired (compare date end with current date)
+     *
+     * @param VEVENT event
+     */
+    private function  testIfEventIsExpired($event)
+    {
+        if (!isset($event->VEVENT->RRULE)) {
+            $startDate = $event->VEVENT->DTSTART->getDateTime()->getTimeStamp();
+            $currentDate = new \DateTime();
+
+            return $startDate < $currentDate->getTimeStamp();
+        }
+        $vEventUID = (string)$event->VEVENT->UID;
+        $eventIterator = new VObject\Recur\EventIterator($event, $vEventUID);
+        $currentDate = new \DateTime();
+
+        if ($eventIterator->isInfinite()) {
+            return false;
+        }
+        $start = $eventIterator->getDtStart();
+        while ($eventIterator->valid() && $start < $currentDate) {
+            $start = $eventIterator->getDtStart();
+            $eventIterator->next();
+        }
+        $lastOccurence = $start->getTimeStamp();
+
+        return $lastOccurence < $currentDate->getTimeStamp();
+    }
+
 
     /**
      * Split ITip message in one message per VEVENT
@@ -143,7 +180,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
             $currentMessage->remove('VEVENT');
             $currentMessage->add($vevent);
-
+            
             $messageToSend = ['message' => $currentMessage];
             if ($isNewEvent) {
                 $messageToSend['newEvent'] = 1;
@@ -264,11 +301,9 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             }
 
             // Create message if instance have been created or modified
-            if (!isset($cancelledInstancesId[$recurrenceId]) && (
-                    !isset($previousEventVEvents[$recurrenceId]) ||
-                    $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId])
-                )) {
-                $currentMessage = clone($scheduledEvent);
+            if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
+                $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]))) {
+                $currentMessage = clone ($scheduledEvent);
 
                 $currentMessage->remove('VEVENT');
                 $currentMessage->add($currentEventVEvents[$recurrenceId]);

@@ -13,6 +13,7 @@ use Sabre\VObject\Document;
 use \Sabre\VObject\ITip;
 use \Sabre\VObject\Property;
 use \ESN\Utils\Utils as Utils;
+use ESN\Utils\DateTime;
 use Sabre\VObject\Reader;
 
 class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
@@ -477,10 +478,10 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                     ];
 
                     if (isset($previousEvent) && isset($previousEvent->$changeProperty)) {
-                        $changes[strtolower($changeProperty)]['previous']->isAllDay = strlen($previousEvent->$changeProperty->getValue()) === 8;
+                        $changes[strtolower($changeProperty)]['previous']->isAllDay = !$previousEvent->$changeProperty->hasTime();
                     }
 
-                    $changes[strtolower($changeProperty)]['current']->isAllDay = strlen($currentEvent->$changeProperty->getValue()) === 8;
+                    $changes[strtolower($changeProperty)]['current']->isAllDay = !$currentEvent->$changeProperty->hasTime();
                 }
 
                 continue;

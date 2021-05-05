@@ -399,7 +399,7 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
             'RECURRENCE-ID;TZID=Asia/Jakarta:'. $this->afterCurrentDate.'T170000',
             'DTSTART;TZID=Asia/Jakarta:'. $this->afterCurrentDate.'T160000',
             'DTEND;TZID=Asia/Jakarta:'. $this->afterCurrentDate.'T163000',
-            'SUMMARY:Test',
+            'SUMMARY:Test EX#1',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user2Email,
@@ -442,7 +442,7 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
             'RECURRENCE-ID;TZID=Asia/Jakarta:'. $this->afterCurrentDate.'T170000',
             'DTSTART;TZID=Asia/Jakarta:'. $this->afterCurrentDate.'T160000',
             'DTEND;TZID=Asia/Jakarta:'. $this->afterCurrentDate.'T163000',
-            'SUMMARY:Test',
+            'SUMMARY:Test EX#1',
             'ORGANIZER:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user2Email,
@@ -457,11 +457,16 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
 
         $message['changes'] = [
             'summary' => [
-                'previous' => '',
-                'current' => 'Test'
+                'previous' => 'Test',
+                'current' => 'Test EX#1'
             ],
             'dtstart' => [
-                'previous' => [],
+                'previous' => [
+                    'isAllDay' => false,
+                    'date' => $this->formattedAfterCurrentDate . ' 17:00:00.000000',
+                    'timezone_type' => 3,
+                    'timezone' => 'Asia/Jakarta'
+                ],
                 'current' => [
                     'isAllDay' => false,
                     'date' => $this->formattedAfterCurrentDate .' 16:00:00.000000',
@@ -470,7 +475,12 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
                 ]
             ],
             'dtend' => [
-                'previous' => [],
+                'previous' => [
+                    'isAllDay' => false,
+                    'date' => $this->formattedAfterCurrentDate . ' 17:30:00.000000',
+                    'timezone_type' => 3,
+                    'timezone' => 'Asia/Jakarta'
+                ],
                 'current' => [
                     'isAllDay' => false,
                     'date' => $this->formattedAfterCurrentDate .' 16:30:00.000000',

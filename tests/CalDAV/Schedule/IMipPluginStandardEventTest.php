@@ -94,7 +94,7 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
             'ATTENDEE:mailto:' . $this->user1Email,
             'ATTENDEE:mailto:' . $this->user2Email,
             'DTSTAMP:20201025T145516Z',
-            'SEQUENCE:1',
+            'SEQUENCE:0',
             'END:VEVENT',
             'END:VCALENDAR',
             ''

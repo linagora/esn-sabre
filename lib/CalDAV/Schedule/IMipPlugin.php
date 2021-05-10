@@ -305,6 +305,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
                 $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]))) {
                 $currentMessage = clone ($scheduledEvent);
+                $modifiedInstance = [];
 
                 $currentMessage->remove('VEVENT');
                 $currentMessage->add($currentEventVEvents[$recurrenceId]);
@@ -488,7 +489,22 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             }
         }
 
-        return false;
+        return $this->hasAttendeesChanged($previousEvent, $currentEvent);
+    }
+
+    private function hasAttendeesChanged(VEvent $previousEvent, VEvent $currentEvent) {
+        $currentAttendeeEmails = [];
+        $previousAttendeeEmails = [];
+
+        foreach ($previousEvent->ATTENDEE as $prevEventAttendee) {
+            $previousAttendeeEmails[] = $prevEventAttendee->getNormalizedValue();
+        }
+
+        foreach ($currentEvent->ATTENDEE as $curEventAttendee) {
+            $currentAttendeeEmails[] = $curEventAttendee->getNormalizedValue();
+        }
+
+        return $previousAttendeeEmails !== $currentAttendeeEmails;
     }
 
     private function getPropertyChanges($previousEvent, $currentEvent) {

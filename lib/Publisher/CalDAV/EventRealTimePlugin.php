@@ -50,6 +50,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $server->on('beforeUnbind',       [$this, 'beforeUnbind']);
         $server->on('afterUnbind',        [$this, 'after']);
 
+        $server->on('afterMove',          [$this, 'afterMove']);
         //we want that the schedule plugin get called before so attendee's event are created
         $server->on('schedule', [$this, 'schedule'], self::PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN);
         $server->on('itip', [$this, 'itip']);
@@ -67,6 +68,35 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         }
 
         return $data;
+    }
+
+    function afterMove($path, $destinationPath) {
+        $eventNode = $this->server->tree->getNodeForPath($destinationPath);
+        $eventPath = '/' . $destinationPath;
+
+        list($calendarNodePath, $eventURI) = Utils::splitEventPath($eventPath);
+        $calendar = $this->server->tree->getNodeForPath($calendarNodePath);
+
+        list(,, $calendarUid) = explode('/', $calendarNodePath);
+
+        $options = [
+            'action' => 'CREATED',
+            'eventSourcePath' => $destinationPath,
+            'objectUri' => $eventURI,
+            'calendarid' => $calendar->getCalendarId(),
+            'calendarUri' => $calendarUid,
+        ];
+
+        $dataMessage = [
+            'eventPath' => $eventPath,
+            'event' => VObject\Reader::read($eventNode->get())
+        ];
+
+        $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+        $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
+        $this->publishMessages();
+
+        return true;
     }
 
     function after($path) {

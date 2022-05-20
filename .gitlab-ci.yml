@@ -25,7 +25,8 @@ test:
   tags:
     - docker
   services:
-    - mongo:3.2
+    - name: mongo:3.2
+      alias: mongodb
   script:
     - composer up
     - ./vendor/bin/phpcs -p --standard=vendor/sabre/dav/tests/phpcs/ruleset.xml lib/

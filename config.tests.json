@@ -13,7 +13,7 @@
   "database": {
     "esn": {
       "db": "esn",
-      "connectionString" : "mongodb://mongo:27017/",
+      "connectionString" : "mongodb://mongodb:27017/",
       "connectionOptions": {
         "w": 1,
         "fsync": true,
@@ -22,7 +22,7 @@
     },
     "sabre": {
       "db": "sabre",
-      "connectionString" : "mongodb://mongo:27017/",
+      "connectionString" : "mongodb://mongodb:27017/",
       "connectionOptions": {
         "w": 1,
         "fsync": true,

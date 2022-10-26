@@ -101,17 +101,22 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                             $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'];
                         }
                     } else {
-                        if($responseProps[200]['{DAV:}displayname'] === 'My contacts') {
-                            $addressBookDisplayName = 'Contacts - ' . $userDisplayName;
-                        }
-                        else if($responseProps[200]['{DAV:}displayname'] === 'Collected contacts') {
-                            $addressBookDisplayName = 'Collected Contacts - '. $userDisplayName;
+                        if (array_key_exists("{DAV:}displayname", $responseProps[200])) {
+                            if($responseProps[200]['{DAV:}displayname'] === 'Collected contacts') {
+                                $addressBookDisplayName = 'Collected Contacts - '. $userDisplayName;
+                            }
+                            else if($responseProps[200]['{DAV:}displayname'] === 'My contacts') {
+                                $addressBookDisplayName = 'Contacts - ' . $userDisplayName;
+                            }
+                            else {
+                                $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName;
+                            }
                         }
                         else if($addressbookType === 'dab') {
                             $addressBookDisplayName = 'Domain address book - '. $userDisplayName;
                         }
                         else {
-                            $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName;
+                            $addressBookDisplayName = "Domain members";
                         }
                     }
 

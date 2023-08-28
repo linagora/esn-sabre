@@ -8,8 +8,10 @@
 # docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre
 #
 
-FROM debian:stretch-slim
+FROM debian:stretch
 LABEL maintainer Linagora Folks <openpaas@linagora.com>
+
+ADD sources.list /etc/apt
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \

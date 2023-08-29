@@ -65,7 +65,12 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             return [false, "No 'Authorization: Basic' header found. Either the client didn't send one, or the server is misconfigured"];
         }
 
-        list($result, $mail) = $this->validateUserPass($userpass[0], $userpass[1]);
+        $username = $userpass[0];
+        if (strpos($username, '@') != false) {
+            $username = explode('@', $username)[0];
+        }
+
+        list($result, $mail) = $this->validateUserPass($username, $userpass[1]);
         if (!$result) {
             return [false, "Username or password was incorrect"];
         }

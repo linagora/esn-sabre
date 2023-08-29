@@ -9,6 +9,12 @@ use \Firebase\JWT\JWT;
 
 define('ESN_PUBLIC_KEY', __DIR__ . '/../../../../config/esn.key.pub');
 
+define('LDAP_ADMIN_DN', getenv("LDAP_ADMIN_DN"));
+define('LDAP_ADMIN_PASSWORD', getenv("LDAP_ADMIN_PASSWORD"));
+define('LDAP_BASE', getenv("LDAP_BASE"));
+define('LDAP_SERVER', getenv("LDAP_SERVER"));
+define('OPENPASS_BASIC_AUTH', getenv("OPENPASS_BASIC_AUTH"));
+
 class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     protected $httpClient;
@@ -41,33 +47,105 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         return $this->decodeResponse($this->httpClient->send($request));
     }
 
+    # <Added by xguimard>
+    #  * copied from \Sabre\DAV\Auth\Backend\AbstractBasic
+    #  * changes:
+    #    + get mail from validateUserPass instead of using $userpass[0]
+    function checkBasicAuth(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
+        $auth = new HTTP\Auth\Basic(
+            $this->realm,
+            $request,
+            $response
+        );
+
+        $userpass = $auth->getCredentials();
+        $myObjDump = print_r($userpass, true);
+
+        if (!$userpass) {
+            return [false, "No 'Authorization: Basic' header found. Either the client didn't send one, or the server is misconfigured"];
+        }
+
+        list($result, $mail) = $this->validateUserPass($userpass[0], $userpass[1]);
+        if (!$result) {
+            return [false, "Username or password was incorrect"];
+        }
+        return [true, $this->principalPrefix . $mail];
+
+    }
+    # </Added>
+
     private function decodeResponse($response) {
         if ($response->getStatus() != 200) {
             return [false, null];
         }
 
-        $user = json_decode($response->getBodyAsString());
+        $user = json_decode($response->getBodyAsString())[0];
+
         if (!$user) {
             return [false, null];
         }
+
 
         $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
         $this->currentUserId = $user->_id;
         return [true, $type];
     }
 
+    # <Modified by xguimard>
     protected function validateUserPass($username, $password) {
         $user = trim($username);
-        $url = $this->apiroot . '/api/login';
-        $headers = [ 'Content-Type' => 'application/json' ];
-        $body = json_encode([
-            'username' => $username,
-            'password' => $password
-        ]);
-        $request = new HTTP\Request('POST', $url, $headers, $body);
+
+        # Open LDAP connection
+        $ldapCon = ldap_connect(LDAP_SERVER);
+        if (!$ldapCon) {
+            error_log('Unable to connect to LDAP server');
+            return [false];
+        }
+        ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
+        ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
+
+        # Try to authenticate
+        $ldapBind = ldap_bind($ldapCon, "uid=$username," . LDAP_BASE, $password);
+
+        if (!$ldapBind) {
+            error_log("Bad credentials");
+            return [false];
+        }
+
+        $ldapBind2 = ldap_bind($ldapCon, LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD);
+
+        if (!$ldapBind2) {
+            error_log("Bad admin credentials");
+            return [false];
+        }
+
+        # Get real mail
+        $searchResult = ldap_search($ldapCon, LDAP_BASE, "(uid=$username)");
+        $entries = ldap_get_entries($ldapCon, $searchResult);
+
+        if ($entries['count'] == 0) {
+            error_log("Unable to find $username which is valid for auth!");
+            return [false];
+        }
+        if ($entries['count'] > 1) {
+            error_log("More than one entry for $username");
+        }
+        if (!$entries[0]['mail']) {
+            error_log("$username has no mail attribute");
+            return [false];
+        }
+        $mail = $entries[0]['mail'][0];
+        ldap_close($ldapCon);
+
+        # Get OpenPaaS id
+        $url = $this->apiroot . "/api/users?email=$mail";
+        $headers = [ 'Accept' => 'application/json', 'Authorization' => 'Basic ' . OPENPASS_BASIC_AUTH ];
+        $request = new HTTP\Request('GET', $url, $headers);
         list($response, $type) = $this->decodeResponse($this->httpClient->send($request));
-        return $response;
+
+        return [$response, $mail];
     }
+    # </Modified>
 
     function getCurrentPrincipal() {
         $id = $this->currentUserId;
@@ -88,7 +166,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             list($rv, $type) = $this->checkAuthByToken($esnToken);
             $msg = "Invalid Token";
         } else {
-            list($rv, $msg) = parent::check($request, $response);
+            list($rv, $msg) = $this->checkBasicAuth($request, $response);
         }
 
         if ($rv) {

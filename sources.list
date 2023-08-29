@@ -1,3 +1,4 @@
 deb http://archive.debian.org/debian/ stretch main contrib non-free
 deb http://archive.debian.org/debian/ stretch-proposed-updates main contrib non-free
 deb http://archive.debian.org/debian-security stretch/updates main contrib non-free
+deb http://deb.freexian.com/extended-lts stretch-lts main contrib non-free

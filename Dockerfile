@@ -12,6 +12,7 @@ FROM debian:stretch
 LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
 ADD sources.list /etc/apt
+ADD freexian-archive-extended-lts.gpg /etc/apt/trusted.gpg.d
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \

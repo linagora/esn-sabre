@@ -12,6 +12,7 @@ define('ESN_PUBLIC_KEY', __DIR__ . '/../../../../config/esn.key.pub');
 define('LDAP_ADMIN_DN', getenv("LDAP_ADMIN_DN"));
 define('LDAP_ADMIN_PASSWORD', getenv("LDAP_ADMIN_PASSWORD"));
 define('LDAP_BASE', getenv("LDAP_BASE"));
+define('LDAP_BASE_WITH_MAIL', getenv("LDAP_BASE_WITH_MAIL"));
 define('LDAP_SERVER', getenv("LDAP_SERVER"));
 define('OPENPASS_BASIC_AUTH', getenv("OPENPASS_BASIC_AUTH"));
 
@@ -66,11 +67,13 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         $username = $userpass[0];
+        $ldapBase = LDAP_BASE;
         if (strpos($username, '@') != false) {
             $username = explode('@', $username)[0];
+            $ldapBase = LDAP_BASE_WITH_MAIL;
         }
 
-        list($result, $mail) = $this->validateUserPass($username, $userpass[1]);
+        list($result, $mail) = $this->validateUserPassLDAP($username, $ldapBase, $userpass[1]);
         if (!$result) {
             return [false, "Username or password was incorrect"];
         }
@@ -97,6 +100,60 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     }
 
     # <Modified by xguimard>
+    protected function validateUserPassLDAP($username, $ldapBase, $password) {
+        $user = trim($username);
+
+        # Open LDAP connection
+        $ldapCon = ldap_connect(LDAP_SERVER);
+        if (!$ldapCon) {
+            error_log('Unable to connect to LDAP server');
+            return [false];
+        }
+        ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
+        ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
+
+        # Try to authenticate
+        $ldapBind = ldap_bind($ldapCon,  "uid=$username," . $ldapBase, $password);
+
+        if (!$ldapBind) {
+            error_log("Bad credentials");
+            return [false];
+        }
+
+        $ldapBind2 = ldap_bind($ldapCon, LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD);
+
+        if (!$ldapBind2) {
+            error_log("Bad admin credentials");
+            return [false];
+        }
+
+        # Get real mail
+        $searchResult = ldap_search($ldapCon, $ldapBase, "(uid=$username)");
+        $entries = ldap_get_entries($ldapCon, $searchResult);
+
+        if ($entries['count'] == 0) {
+            error_log("Unable to find $username which is valid for auth!");
+            return [false];
+        }
+        if ($entries['count'] > 1) {
+            error_log("More than one entry for $username");
+        }
+        if (!$entries[0]['mail']) {
+            error_log("$username has no mail attribute");
+            return [false];
+        }
+        $mail = $entries[0]['mail'][0];
+        ldap_close($ldapCon);
+
+        # Get OpenPaaS id
+        $url = $this->apiroot . "/api/users?email=$mail";
+        $headers = [ 'Accept' => 'application/json', 'Authorization' => 'Basic ' . OPENPASS_BASIC_AUTH ];
+        $request = new HTTP\Request('GET', $url, $headers);
+        list($response, $type) = $this->decodeResponse($this->httpClient->send($request));
+
+        return [$response, $mail];
+    }
+
     protected function validateUserPass($username, $password) {
         $user = trim($username);
 

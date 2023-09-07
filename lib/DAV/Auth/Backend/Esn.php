@@ -82,7 +82,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     }
     # </Added>
 
-    private function decodeResponse($response) {
+    private function decodeResponseV2($response) {
         if ($response->getStatus() != 200) {
             return [false, null];
         }
@@ -98,6 +98,22 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         $this->currentUserId = $user->_id;
         return [true, $type];
     }
+
+    private function decodeResponse($response) {
+        if ($response->getStatus() != 200) {
+            return [false, null];
+        }
+
+        $user = json_decode($response->getBodyAsString());
+        if (!$user) {
+            return [false, null];
+        }
+
+        $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
+        $this->currentUserId = $user->_id;
+        return [true, $type];
+    }
+
 
     # <Modified by xguimard>
     protected function validateUserPassLDAP($username, $ldapBase, $password) {
@@ -149,7 +165,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         $url = $this->apiroot . "/api/users?email=$mail";
         $headers = [ 'Accept' => 'application/json', 'Authorization' => 'Basic ' . OPENPASS_BASIC_AUTH ];
         $request = new HTTP\Request('GET', $url, $headers);
-        list($response, $type) = $this->decodeResponse($this->httpClient->send($request));
+        list($response, $type) = $this->decodeResponseV2($this->httpClient->send($request));
 
         return [$response, $mail];
     }
@@ -203,7 +219,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         $url = $this->apiroot . "/api/users?email=$mail";
         $headers = [ 'Accept' => 'application/json', 'Authorization' => 'Basic ' . OPENPASS_BASIC_AUTH ];
         $request = new HTTP\Request('GET', $url, $headers);
-        list($response, $type) = $this->decodeResponse($this->httpClient->send($request));
+        list($response, $type) = $this->decodeResponseV2($this->httpClient->send($request));
 
         return [$response, $mail];
     }

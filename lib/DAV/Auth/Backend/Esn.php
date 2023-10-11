@@ -12,7 +12,6 @@ define('ESN_PUBLIC_KEY', __DIR__ . '/../../../../config/esn.key.pub');
 define('LDAP_ADMIN_DN', getenv("LDAP_ADMIN_DN"));
 define('LDAP_ADMIN_PASSWORD', getenv("LDAP_ADMIN_PASSWORD"));
 define('LDAP_BASE', getenv("LDAP_BASE"));
-define('LDAP_BASE_WITH_MAIL', getenv("LDAP_BASE_WITH_MAIL"));
 define('LDAP_SERVER', getenv("LDAP_SERVER"));
 define('OPENPASS_BASIC_AUTH', getenv("OPENPASS_BASIC_AUTH"));
 
@@ -67,13 +66,11 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         $username = $userpass[0];
-        $ldapBase = LDAP_BASE;
         if (strpos($username, '@') != false) {
             $username = explode('@', $username)[0];
-            $ldapBase = LDAP_BASE_WITH_MAIL;
         }
 
-        list($result, $mail) = $this->validateUserPassLDAP($username, $ldapBase, $userpass[1]);
+        list($result, $mail) = $this->validateUserPass($username, $userpass[1]);
         if (!$result) {
             return [false, "Username or password was incorrect"];
         }

@@ -1,4 +1,4 @@
-Source code in this repository is covered by the AGPL V3 with extra clauses 
-as described in LICENSE-AGPL-v3-OPENPAAS.txt file and requires to be run 
+Source code in this repository is covered by the AGPL V3
+as described in LICENSE-AGPL-v3.txt file and requires to be run 
 within Sabre DAV source code, licensed under BSD 3-Clause "New" or "Revised" License,
 as described in LICENSE-SABRE.txt.

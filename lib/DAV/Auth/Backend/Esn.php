@@ -65,7 +65,14 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             return [false, "No 'Authorization: Basic' header found. Either the client didn't send one, or the server is misconfigured"];
         }
 
-        list($result, $mail) = $this->validateUserPass($userpass[0], $userpass[1]);
+        $user = trim($userpass[0]);
+        $env_ldap_username_mode = getenv('LDAP_USERNAME_MODE');
+        if ($env_ldap_username_mode == 'username') {
+          $user = explode('@', $user);
+          $user = $user[0];
+        }
+
+        list($result, $mail) = $this->validateUserPass($user, $userpass[1]);
         if (!$result) {
             return [false, "Username or password was incorrect"];
         }
@@ -136,7 +143,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         # Get real mail
-        $searchResult = ldap_search($ldapCon, $ldapBase, "(uid=$username)");
+        $searchResult = ldap_search($ldapCon, $ldapBase, "(uid=$user)");
         $entries = ldap_get_entries($ldapCon, $searchResult);
 
         if ($entries['count'] == 0) {
@@ -175,7 +182,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
 
         # Try to authenticate
-        $ldapBind = ldap_bind($ldapCon, "uid=$username," . LDAP_BASE, $password);
+        $ldapBind = ldap_bind($ldapCon, "uid=$user," . LDAP_BASE, $password);
 
         if (!$ldapBind) {
             error_log("Bad credentials");

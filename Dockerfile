@@ -13,10 +13,11 @@ LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
 ADD sources.list /etc/apt
 ADD freexian-archive-extended-lts.gpg /etc/apt/trusted.gpg.d
+ADD 20-apcu.ini /etc/php/7.0/fpm/conf.d/20-apcu.ini
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \
-  DEBIAN_FRONTEND=noninteractive apt-get -y install php7.0-fpm php7.0-cli curl supervisor nginx git php7.0-curl php7.0-ldap php7.0-bcmath php7.0-mbstring php7.0-zip php-pear php7.0-dev make pkg-config && \
+  DEBIAN_FRONTEND=noninteractive apt-get -y install php7.0-fpm php7.0-cli curl supervisor nginx git php7.0-curl php7.0-ldap php7.0-bcmath php7.0-mbstring php7.0-zip php-pear php7.0-dev make pkg-config php7.0-apcu && \
   DEBIAN_FRONTEND=noninteractive apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Configure PHP

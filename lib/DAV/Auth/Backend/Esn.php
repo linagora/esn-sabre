@@ -14,6 +14,8 @@ define('LDAP_ADMIN_PASSWORD', getenv("LDAP_ADMIN_PASSWORD"));
 define('LDAP_BASE', getenv("LDAP_BASE"));
 define('LDAP_SERVER', getenv("LDAP_SERVER"));
 define('OPENPASS_BASIC_AUTH', getenv("OPENPASS_BASIC_AUTH"));
+define('SABRE_ADMIN_LOGIN', getenv("SABRE_ADMIN_LOGIN"));
+define('SABRE_ADMIN_PASSWORD', getenv("SABRE_ADMIN_PASSWORD"));
 
 class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
@@ -66,11 +68,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         $user = trim($userpass[0]);
-        $env_ldap_username_mode = getenv('LDAP_USERNAME_MODE');
-        if ($env_ldap_username_mode == 'username') {
-          $user = explode('@', $user);
-          $user = $user[0];
-        }
 
         list($result, $mail) = $this->validateUserPass($user, $userpass[1]);
         if (!$result) {
@@ -113,64 +110,32 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         return [true, $type];
     }
 
-
-    # <Modified by xguimard>
-    protected function validateUserPassLDAP($username, $ldapBase, $password) {
-        $user = trim($username);
-
-        # Open LDAP connection
-        $ldapCon = ldap_connect(LDAP_SERVER);
-        if (!$ldapCon) {
-            error_log('Unable to connect to LDAP server');
-            return [false];
-        }
-        ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
-        ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
-
-        # Try to authenticate
-        $ldapBind = ldap_bind($ldapCon,  "uid=$username," . $ldapBase, $password);
-
-        if (!$ldapBind) {
-            error_log("Bad credentials");
-            return [false];
-        }
-
-        $ldapBind2 = ldap_bind($ldapCon, LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD);
-
-        if (!$ldapBind2) {
-            error_log("Bad admin credentials");
-            return [false];
-        }
-
-        # Get real mail
-        $searchResult = ldap_search($ldapCon, $ldapBase, "(uid=$user)");
-        $entries = ldap_get_entries($ldapCon, $searchResult);
-
-        if ($entries['count'] == 0) {
-            error_log("Unable to find $username which is valid for auth!");
-            return [false];
-        }
-        if ($entries['count'] > 1) {
-            error_log("More than one entry for $username");
-        }
-        if (!$entries[0]['mail']) {
-            error_log("$username has no mail attribute");
-            return [false];
-        }
-        $mail = $entries[0]['mail'][0];
-        ldap_close($ldapCon);
-
-        # Get OpenPaaS id
-        $url = $this->apiroot . "/api/users?email=$mail";
-        $headers = [ 'Accept' => 'application/json', 'Authorization' => 'Basic ' . OPENPASS_BASIC_AUTH ];
-        $request = new HTTP\Request('GET', $url, $headers);
-        list($response, $type) = $this->decodeResponseV2($this->httpClient->send($request));
-
-        return [$response, $mail];
-    }
-
     protected function validateUserPass($username, $password) {
         $user = trim($username);
+
+        $adminPrefix = SABRE_ADMIN_LOGIN . '&';
+        if (strlen(SABRE_ADMIN_LOGIN) > 0 && strpos($user, $adminPrefix) === 0) {
+            $requestedUsername = substr($user, strlen($adminPrefix));
+            if ($password != SABRE_ADMIN_PASSWORD) {
+                error_log('Bad admin password.');
+                return [false];
+            }
+
+            # Get OpenPaaS id
+            $url = $this->apiroot . "/api/users?email=$requestedUsername";
+            $headers = [ 'Accept' => 'application/json', 'Authorization' => 'Basic ' . OPENPASS_BASIC_AUTH ];
+            $request = new HTTP\Request('GET', $url, $headers);
+            list($response, $type) = $this->decodeResponseV2($this->httpClient->send($request));
+
+            return [$response, $requestedUsername];
+        }
+
+        $env_ldap_username_mode = getenv('LDAP_USERNAME_MODE');
+        if ($env_ldap_username_mode == 'username') {
+          $user = explode('@', $user);
+          $user = $user[0];
+        }
+
 
         # Open LDAP connection
         $ldapCon = ldap_connect(LDAP_SERVER);
@@ -197,7 +162,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         # Get real mail
-        $searchResult = ldap_search($ldapCon, LDAP_BASE, "(uid=$username)");
+        $searchResult = ldap_search($ldapCon, LDAP_BASE, "(uid=$user)");
         $entries = ldap_get_entries($ldapCon, $searchResult);
 
         if ($entries['count'] == 0) {
@@ -205,10 +170,10 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             return [false];
         }
         if ($entries['count'] > 1) {
-            error_log("More than one entry for $username");
+            error_log("More than one entry for $user");
         }
         if (!$entries[0]['mail']) {
-            error_log("$username has no mail attribute");
+            error_log("$user has no mail attribute");
             return [false];
         }
         $mail = $entries[0]['mail'][0];

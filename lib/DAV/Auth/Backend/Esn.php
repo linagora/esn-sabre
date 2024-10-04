@@ -147,7 +147,8 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
 
         # Try to authenticate
-        $ldapBind = ldap_bind($ldapCon, "uid=$user," . LDAP_BASE, $password);
+        $safeUser = ldap_escape($user, '', 0);
+        $ldapBind = ldap_bind($ldapCon, "uid=$safeUser," . LDAP_BASE, $password);
 
         if (!$ldapBind) {
             error_log("Bad credentials");
@@ -162,7 +163,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         # Get real mail
-        $searchResult = ldap_search($ldapCon, LDAP_BASE, "(uid=$user)");
+        $searchResult = ldap_search($ldapCon, LDAP_BASE, "(uid=$safeUser)");
         $entries = ldap_get_entries($ldapCon, $searchResult);
 
         if ($entries['count'] == 0) {

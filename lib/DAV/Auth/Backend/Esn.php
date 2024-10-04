@@ -13,6 +13,7 @@ define('LDAP_ADMIN_DN', getenv("LDAP_ADMIN_DN"));
 define('LDAP_ADMIN_PASSWORD', getenv("LDAP_ADMIN_PASSWORD"));
 define('LDAP_BASE', getenv("LDAP_BASE"));
 define('LDAP_SERVER', getenv("LDAP_SERVER"));
+define('LDAP_FILTER', getenv("LDAP_FILTER"));
 define('OPENPASS_BASIC_AUTH', getenv("OPENPASS_BASIC_AUTH"));
 define('SABRE_ADMIN_LOGIN', getenv("SABRE_ADMIN_LOGIN"));
 define('SABRE_ADMIN_PASSWORD', getenv("SABRE_ADMIN_PASSWORD"));
@@ -163,7 +164,12 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         # Get real mail
-        $searchResult = ldap_search($ldapCon, LDAP_BASE, "(uid=$safeUser)");
+        $searchResult = null;
+        if (LDAP_FILTER != null) {
+            $searchResult = ldap_search($ldapCon, LDAP_BASE, "(& (uid=$safeUser) " . LDAP_FILTER . ')');
+        } else {
+            $searchResult = ldap_search($ldapCon, LDAP_BASE, "(uid=$safeUser)");
+        }
         $entries = ldap_get_entries($ldapCon, $searchResult);
 
         if ($entries['count'] == 0) {

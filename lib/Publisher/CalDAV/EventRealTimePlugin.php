@@ -77,7 +77,12 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         list($calendarNodePath, $eventURI) = Utils::splitEventPath($eventPath);
         $calendar = $this->server->tree->getNodeForPath($calendarNodePath);
 
-        list(,, $calendarUid) = explode('/', $calendarNodePath);
+        $parts = explode('/', $calendarNodePath);
+        if (count($parts) < 3) {
+            return true; // Not a calendar
+        }
+
+        list(,, $calendarUid) = $parts;
 
         $options = [
             'action' => 'CREATED',

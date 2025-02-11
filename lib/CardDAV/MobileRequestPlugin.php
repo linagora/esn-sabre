@@ -98,7 +98,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                             $addressBookDisplayName = 'My Collected Contacts';
                         }
                         else {
-                            $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'];
+                            $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] ?? "Carnet d'addresse - nom indefinit";
                         }
                     } else {
                         if (array_key_exists("{DAV:}displayname", $responseProps[200])) {

@@ -399,7 +399,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             $collection = $this->db->selectCollection($this->addressBookChangesTableName);
             $query = [
                 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
-                'synctoken' => [ '$gt' => $syncToken, '$lt' => $currentToken ]
+                'synctoken' => [ '$gte' => (int) $syncToken, '$lte' => (int) $currentToken ]
             ];
 
             $projection = [

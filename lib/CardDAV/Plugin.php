@@ -413,6 +413,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $queryParams = $request->getQueryParameters();
         $offset = isset($queryParams['offset']) ? $queryParams['offset'] : 0;
         $limit = isset($queryParams['limit']) ? $queryParams['limit'] : 0;
+        $search = isset($queryParams['search']) ? $queryParams['search'] : null;
         $sort = isset($queryParams['sort']) ? $queryParams['sort'] : null;
         $modifiedBefore = isset($queryParams['modifiedBefore']) ? (int)$queryParams['modifiedBefore'] : 0;
 
@@ -420,6 +421,11 @@ class Plugin extends \ESN\JSON\BasePlugin {
         if ($modifiedBefore > 0) {
             $filters = [
                 'modifiedBefore' => $modifiedBefore
+            ];
+        }
+        if ($search === null) {
+            $filters = [
+                'search' => $search
             ];
         }
 

@@ -60,15 +60,17 @@ class ParticipationPlugin extends ServerPlugin {
         $newInstances = $this->getAllInstancePartstatForAttendee($data, $addresses[0]);
         $oldInstances = $this->getAllInstancePartstatForAttendee($oldCal, $addresses[0]);
 
-        if ($newInstances['master']['partstat'] && $oldInstances['master']['partstat'] && $newInstances['master']['partstat'] !== $oldInstances['master']['partstat']) {
-            foreach ($data->VEVENT as $vevent) {
-                if (!isset($vevent->{'RECURRENCE-ID'})) {
-                    continue;
-                }
+        if (isset($newInstances['master']) && isset($oldInstances['master'])) {
+            if ($newInstances['master']['partstat'] && $oldInstances['master']['partstat'] && $newInstances['master']['partstat'] !== $oldInstances['master']['partstat']) {
+                foreach ($data->VEVENT as $vevent) {
+                    if (!isset($vevent->{'RECURRENCE-ID'})) {
+                        continue;
+                    }
 
-                foreach ($vevent->ATTENDEE as $attendee) {
-                    if (strtolower($attendee->getValue()) == $addresses[0]) {
-                        isset($attendee['PARTSTAT']) ? $attendee['PARTSTAT']->setValue($newInstances['master']['partstat']) : $attendee['PARTSTAT'] = $newInstances['master']['partstat'];
+                    foreach ($vevent->ATTENDEE as $attendee) {
+                        if (strtolower($attendee->getValue()) == $addresses[0]) {
+                            isset($attendee['PARTSTAT']) ? $attendee['PARTSTAT']->setValue($newInstances['master']['partstat']) : $attendee['PARTSTAT'] = $newInstances['master']['partstat'];
+                        }
                     }
                 }
             }

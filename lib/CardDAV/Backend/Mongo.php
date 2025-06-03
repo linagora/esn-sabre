@@ -259,7 +259,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         if ($filters) {
             if (isset($filters['search'])) {
                  $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
-                 'carddata' => new MongoDB\BSON\Regex('.*' . $filters['search'] . '.*', 'i') ];
+                 'carddata' => new \MongoDB\BSON\Regex('.*' . $filters['search'] . '.*', 'i') ];
             }
             if (isset($filters['modifiedBefore'])) {
                 $query['lastmodified'] = [

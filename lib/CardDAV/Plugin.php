@@ -423,7 +423,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 'modifiedBefore' => $modifiedBefore
             ];
         }
-        if ($search === null) {
+        if (!($search === null)) {
             $filters = [
                 'search' => $search
             ];

@@ -98,6 +98,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
 
+        if (empty($addresses)) {
+            return;
+        }
+
         $broker = new ITip\Broker();
         $messages = $broker->parseEvent(null, $addresses, $node->get());
 
@@ -115,6 +119,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      */
     private function fetchCalendarOwnerAddresses($calendarPath): array {
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+
+        if ($calendarNode === null || !method_exists($calendarNode, 'getOwner')) {
+            return [];
+        }
 
         return $this->getAddressesForPrincipal($calendarNode->getOwner());
     }

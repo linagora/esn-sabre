@@ -51,7 +51,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     }
 
     private function checkAuthByTCalendarToken($token) {
-        $url = $this->apiroot . '/api/tecknicalToken/introspect';
+        $url = $this->apiroot . '/api/technicalToken/introspect';
         $headers = ['X-TECHNICAL-TOKEN' => $token];
         $request = new HTTP\Request('GET', $url, $headers);
         return $this->decodeResponse($this->httpClient->send($request));
@@ -223,7 +223,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             list($rv, $type) = $this->checkAuthByToken($esnToken);
             $msg = "Invalid Token";
         } elseif ($tCalendarToken) {
-            list($rv, $type) = $this->checkAuthByTCalendarToken($esnToken);
+            list($rv, $type) = $this->checkAuthByTCalendarToken($tCalendarToken);
             $msg = "Invalid Token";
         } else {
             list($rv, $msg) = $this->checkBasicAuth($request, $response);

@@ -96,6 +96,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         list($calendarPath,) = Utils::splitEventPath('/'.$path);
 
+        if (!$calendarPath) {
+            return;
+        }
+
         $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
 
         if (empty($addresses)) {

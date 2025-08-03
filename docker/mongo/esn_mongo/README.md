@@ -1,0 +1,1 @@
+mongo shared volume for esn_mongo

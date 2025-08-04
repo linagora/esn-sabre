@@ -1,0 +1,41 @@
+#
+# minimal compose infrastucture for testing
+#
+version: '3.8'
+
+services:
+  sabre_mongo:
+    image: docker.io/library/mongo:3.4.0
+    container_name: sabre_mongo
+    hostname: sabre_mongo
+    networks:
+      - esn-sabre-net
+
+  esn_mongo:
+    image: docker.io/library/mongo:3.4.0
+    container_name: esn_mongo
+    hostname: esn_mongo
+    networks:
+      - esn-sabre-net
+
+  ampq_host:
+    image: docker.io/library/rabbitmq:3
+    container_name: ampq_host
+    hostname: ampq_host
+    networks:
+      - esn-sabre-net
+
+  esn_host:
+    image: linagora/esn-sabre
+    container_name: esn_host
+    hostname: esn_host
+    volumes:
+       - ./:/var/www
+    networks:
+       - esn-sabre-net
+    entrypoint: [ './scripts/start.sh' ]
+    ports:
+       - "8001:80"
+
+networks:
+  esn-sabre-net:

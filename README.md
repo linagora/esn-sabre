@@ -245,11 +245,18 @@ docker run --hostname="amqp_host" --name amqp_host --network esn-sabre-net -d do
 docker run --hostname="esn_host" --name esn_host -p 8001:80 -d -v ./:/var/www --network esn-sabre-net linagora/esn-sabre ./scripts/start.sh
 ```
 
+You may use also docker-compose:
+```
+docker-compose -f ./compose-minimal.yml up -d
+```
+
 Once MongoDB container is started, you can run the unit test like this:
 
 ```
 docker exec -it esn_host /bin/bash
 $ make
 ```
+
+
 
 It will use the `linagora/esn-sabre` image, you may need to rebuid it in some cases, but the `make` command will update composer dependencies automatically.

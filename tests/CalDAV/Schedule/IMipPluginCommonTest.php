@@ -32,6 +32,8 @@ class IMipPluginCommonTest extends IMipPluginTestBase {
 
     function testScheduleNotSignificant() {
         $plugin = $this->getPlugin();
+        $this->iTipMessage->sender = 'mailto:test@example.com';
+        $this->iTipMessage->recipient = 'mailto:johndoe@example.org';
         $this->iTipMessage->significantChange = false;
         $this->iTipMessage->hasChange = false;
 

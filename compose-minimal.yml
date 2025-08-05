@@ -36,6 +36,8 @@ services:
     entrypoint: [ './scripts/start.sh' ]
     ports:
        - "8001:80"
+    environment:
+       - SABRE_ENV=dev
 
 networks:
   esn-sabre-net:

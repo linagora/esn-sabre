@@ -19,11 +19,16 @@ services:
       - esn-sabre-net
 
   ampq_host:
-    image: docker.io/library/rabbitmq:3
-    container_name: ampq_host
-    hostname: ampq_host
+    image: docker.io/library/rabbitmq:3.13.3-management
+    container_name: amqp_host
+    hostname: amqp_host
     networks:
       - esn-sabre-net
+    volumes:
+      - type: tmpfs
+        target: /var/lib/rabbitmq
+        tmpfs:
+          size: 104857600
 
   esn_host:
     image: linagora/esn-sabre

@@ -18,13 +18,9 @@ services:
     networks:
       - esn-sabre-net
 
-<<<<<<< HEAD
+
   amqp_host:
-    image: docker.io/library/rabbitmq:3
-=======
-  ampq_host:
     image: docker.io/library/rabbitmq:3.13.3-management
->>>>>>> 6ab3647 (Add a little bit more space of rabbitmq)
     container_name: amqp_host
     hostname: amqp_host
     networks:

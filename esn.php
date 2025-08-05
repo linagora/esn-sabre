@@ -103,7 +103,7 @@ try {
 
     $server->addPlugin($loggerPlugin);
 
-    $server->on('beforeMethod', function() use ($e) {
+    $server->on('beforeMethod:*', function() use ($e) {
         throw new Sabre\DAV\Exception\ServiceUnavailable($e->getTraceAsString());
     }, 1);
     $server->exec();

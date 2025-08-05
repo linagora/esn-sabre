@@ -275,6 +275,7 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $message->method = 'REQUEST';
         $message->significantChange = false;
         $message->recipient = 'mailto:54b64eadf6d7d8e41d263e0e@example.com';
+        $message->sender = 'mailto:54b64eadf6d7d8e41d263e0e@example.com';
         $message->uid = "daab17fe-fac4-4946-9105-0f2cdb30f5ab";
 
         $plugin->itip($message);

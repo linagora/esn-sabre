@@ -16,7 +16,7 @@
     "repositories": [
         {
             "type": "git",
-            "url": "https://github.com/bastien-roucaries/vobject"
+            "url": "https://github.com/linagora/sabre-vobject"
         }
     ],
     "require": {

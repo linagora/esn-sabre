@@ -140,8 +140,8 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
         $env_ldap_username_mode = getenv('LDAP_USERNAME_MODE');
         if ($env_ldap_username_mode == 'username') {
-          $user = explode('@', $user);
-          $user = $user[0];
+            $user = explode('@', $user);
+            $user = $user[0];
         }
 
 

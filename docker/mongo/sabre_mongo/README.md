@@ -1,0 +1,1 @@
+mongo shared volume for sabre_mongo

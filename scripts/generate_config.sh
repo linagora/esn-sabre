@@ -83,4 +83,4 @@ config="{
   }
 }"
 
-echo $config
+echo "$config"

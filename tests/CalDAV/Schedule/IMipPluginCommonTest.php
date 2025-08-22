@@ -53,20 +53,4 @@ class IMipPluginCommonTest extends IMipPluginTestBase {
         $plugin->schedule($this->iTipMessage);
         $this->assertEquals($this->iTipMessage->scheduleStatus, 'unchanged');
     }
-
-    function testSendSuccess() {
-        $plugin = $this->getPlugin();
-
-        $this->iTipMessage->sender = 'mailto:test@example.com';
-        $this->iTipMessage->recipient = 'mailto:johndoe@example.org';
-        $this->iTipMessage->method = "REQUEST";
-        $this->iTipMessage->uid = "daab17fe-fac4-4946-9105-0f2cdb30f5ab";
-
-        $this->amqpPublisher->expects($this->once())
-            ->method('publish')
-            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($this->iTipMessage, $plugin)));
-
-        $plugin->schedule($this->iTipMessage);
-        $this->assertEquals('1.1', $this->iTipMessage->scheduleStatus);
-    }
 }

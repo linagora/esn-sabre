@@ -1,0 +1,25 @@
+# linagora.com
+dn: dc=linagora.com,dc=lng
+objectClass: dcObject
+objectClass: organization
+dc: linagora.com
+o: example organization
+
+# users, linagora.com
+dn: ou=users,dc=linagora.com,dc=lng
+objectClass: organizationalUnit
+ou: users
+
+dn: uid=username,ou=users,dc=linagora.com,dc=lng
+objectClass: inetOrgPerson
+uid: username
+cn: username
+givenName: userFirstname
+sn: userSurname
+mail: username@linagora.com
+userPassword: password
+description: username
+
+dn: ou=lists,dc=linagora.com,dc=lng
+objectClass: organizationalUnit
+ou: lists

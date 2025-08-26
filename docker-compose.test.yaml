@@ -1,0 +1,61 @@
+#
+# minimal compose infrastucture for testing
+#
+services:
+  mongodb:
+    image: docker.io/library/mongo:3.4.0
+    container_name: mongodb
+    hostname: mongodb
+    networks:
+      - esn-sabre-test-net
+
+  ampq_host:
+    image: docker.io/library/rabbitmq:3
+    container_name: ampq_host
+    hostname: ampq_host
+    networks:
+      - esn-sabre-test-net
+
+  esn_ldap:
+    image: bitnami/openldap:2.6.10
+    container_name: esn_ldap
+    hostname: esn_ldap
+    volumes:
+      - ./tests/ldap/populate.ldif:/ldifs/populate.ldif
+    environment:
+      - LDAP_PORT_NUMBER=389
+      - LDAP_ADMIN_USERNAME=admin
+      - LDAP_ADMIN_PASSWORD=admin
+      - LDAP_ROOT=dc=linagora.com,dc=lng
+      - BITNAMI_DEBUG=true
+    networks:
+      - esn-sabre-test-net
+
+  esn_test:
+    image: chibenwa/sabre:lng-21-02-2025
+    container_name: esn_test
+    hostname: esn_test
+    environment:
+      - LDAP_ADMIN_DN=cn=admin,dc=linagora.com,dc=lng
+      - LDAP_ADMIN_PASSWORD=admin
+      - LDAP_BASE=ou=users,dc=linagora.com,dc=lng
+      - LDAP_BASE_WITH_MAIL=ou=users,dc=linagora.com,dc=lng
+      - LDAP_SERVER=ldap://esn_ldap:389
+      - LDAP_USERNAME_MODE=username
+    volumes:
+      - ./:/app
+    working_dir: /app
+    networks:
+      - esn-sabre-test-net
+    command: bash -c "sleep 10; make test"
+    depends_on:
+      esn_ldap:
+        condition: service_started
+      mongodb:
+        condition: service_started
+      ampq_host:
+        condition: service_started
+
+networks:
+  esn-sabre-test-net:
+    driver: bridge

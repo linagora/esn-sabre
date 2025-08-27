@@ -13,7 +13,7 @@ pipeline {
     stages {
         stage('Compile and Test') {
             steps {
-                sh 'run_test.sh'
+                sh 'bash run_test.sh'
             }
         }
     }

@@ -188,6 +188,9 @@ make test                        # Run all tests
 make test TARGET=tests/CalDAV/   # Run only certain tests
 make test-report                 # Run tests and create a coverage report
 
+# run tests with docker compose
+./run_test.sh
+
 make lint                        # Check code style for the whole project
 make lint TARGET=lib/            # Check only certain files for lint
 ```

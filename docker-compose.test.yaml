@@ -33,8 +33,8 @@ services:
 
   esn_test:
     image: linagora/esn-sabre
-    container_name: esn_test
-    hostname: esn_test
+    container_name: esn_sabre_test
+    hostname: esn_sabre_test
     environment:
       - LDAP_ADMIN_DN=cn=admin,dc=linagora.com,dc=lng
       - LDAP_ADMIN_PASSWORD=admin

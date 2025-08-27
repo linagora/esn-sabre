@@ -17,11 +17,9 @@ services:
       - esn-sabre-test-net
 
   esn_ldap:
-    image: bitnami/openldap:2.6.10
+    image: esn-sabre-ldap-test
     container_name: esn_ldap
     hostname: esn_ldap
-    volumes:
-      - ./tests/ldap/populate.ldif:/ldifs/populate.ldif
     environment:
       - LDAP_PORT_NUMBER=389
       - LDAP_ADMIN_USERNAME=admin
@@ -42,12 +40,10 @@ services:
       - LDAP_BASE_WITH_MAIL=ou=users,dc=linagora.com,dc=lng
       - LDAP_SERVER=ldap://esn_ldap:389
       - LDAP_USERNAME_MODE=username
-    volumes:
-      - ./:/app
-    working_dir: /app
+    working_dir: /var/www
     networks:
       - esn-sabre-test-net
-    command: bash -c "sleep 5; make test"
+    command: bash -c "sleep 5 && make test"
     depends_on:
       esn_ldap:
         condition: service_started
@@ -59,3 +55,4 @@ services:
 networks:
   esn-sabre-test-net:
     driver: bridge
+

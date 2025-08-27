@@ -32,7 +32,7 @@ services:
       - esn-sabre-test-net
 
   esn_test:
-    image: linagora/esn-sabre
+    image: esn_sabre_test
     container_name: esn_sabre_test
     hostname: esn_sabre_test
     environment:

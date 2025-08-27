@@ -17,11 +17,9 @@ services:
       - esn-sabre-test-net
 
   esn_ldap:
-    image: bitnami/openldap:2.6.10
+    image: esn-sabre-ldap-test
     container_name: esn_ldap
     hostname: esn_ldap
-    volumes:
-      - ./tests/ldap/populate.ldif:/ldifs/populate.ldif
     environment:
       - LDAP_PORT_NUMBER=389
       - LDAP_ADMIN_USERNAME=admin

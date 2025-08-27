@@ -42,9 +42,7 @@ services:
       - LDAP_BASE_WITH_MAIL=ou=users,dc=linagora.com,dc=lng
       - LDAP_SERVER=ldap://esn_ldap:389
       - LDAP_USERNAME_MODE=username
-    volumes:
-      - ./:/app
-    working_dir: /app
+    working_dir: /var/www
     networks:
       - esn-sabre-test-net
     command: bash -c "sleep 5; make test"
@@ -59,3 +57,4 @@ services:
 networks:
   esn-sabre-test-net:
     driver: bridge
+

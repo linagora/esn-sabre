@@ -61,6 +61,10 @@ class Utils {
     }
 
     static function getEventObjectFromAnotherPrincipalHome($principalUri, $eventUid, $method, \Sabre\DAV\Server $server) {
+        if ($principalUri === null) {
+            return;
+        }
+
         $aclPlugin = $server->getPlugin('acl');
 
         if (!$aclPlugin) {

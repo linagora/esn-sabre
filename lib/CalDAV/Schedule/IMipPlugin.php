@@ -434,6 +434,10 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
      * @return string
      */
     private function getEventFullPath($recipientPrincipalUri, ITip\Message $iTipMessage, $calendarPath) {
+        if ($recipientPrincipalUri === null) {
+            return '/' . $calendarPath . '/' . $iTipMessage->uid . '.ics';
+        }
+
         list($eventPath,) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
 
         // If event doesn't exist in recipient home, we define event path

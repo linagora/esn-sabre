@@ -63,6 +63,8 @@ RUN cp -v docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh \
     && /root/set_nginx_htpasswd.sh \
     && mkdir -p /var/run/php
 
+RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject'
+
 RUN composer clearcache && composer update
 
 EXPOSE 80

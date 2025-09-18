@@ -8,9 +8,15 @@ class ExceptionLoggerPlugin extends DAV\ServerPlugin
 {
     protected $logger;
     protected $server;
+    protected $logTrace = false;
 
     public function __construct($logger) {
         $this->logger = $logger;
+        $env = getenv('LOG_TRACE');
+        if ($env !== false) {
+            $env = strtolower(trim($env));
+            $this->logTrace = in_array($env, ['1','true','yes','on'], true);
+        }
     }
 
     function initialize(DAV\Server $server) {
@@ -47,12 +53,15 @@ class ExceptionLoggerPlugin extends DAV\ServerPlugin
             }
         }
 
+        $context = ['exception' => $e];
+        if ($this->logTrace) {
+            $context['trace'] = $e->getTraceAsString();
+        }
+
         $this->server->getLogger()->log(
             $logLevel,
             'Uncaught exception',
-            [
-                'exception' => $e,
-            ]
+            $context
         );
     }
 

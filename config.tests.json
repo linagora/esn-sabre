@@ -5,14 +5,15 @@
     "realm": "ESN"
   },
   "amqp": {
-    "host": "amqp_host",
+    "host": "localhost",
     "port": "5672",
     "login": "guest",
     "password": "guest"
   },
   "database": {
     "esn": {
-      "connectionString" : "mongodb://esn_mongo:27017/esn",
+      "db": "esn",
+      "connectionString" : "mongodb://mongodb:27017/",
       "connectionOptions": {
         "w": 1,
         "fsync": true,
@@ -20,19 +21,18 @@
       }
     },
     "sabre": {
-      "connectionString" : "mongodb://sabre_mongo:27017/sabre",
+      "db": "sabre",
+      "connectionString" : "mongodb://mongodb:27017/",
       "connectionOptions": {
         "w": 1,
         "fsync": true,
         "connectTimeoutMS": 10000
       }
-    }
+    },
+    "schedulingObjectTTLInDays": 56
   },
   "esn": {
-    "apiRoot": "http://esn_host:8080",
-    "calendarRoot": "http://esn_host:8080/calendar/api"
-  },
-  "environment": {
-    "SABRE_ENV": "production"
+    "apiRoot": "http://localhost:8080",
+    "calendarRoot": "http://localhost:8080/calendar/api"
   }
 }

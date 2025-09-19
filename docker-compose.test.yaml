@@ -4,21 +4,18 @@
 services:
   mongodb:
     image: docker.io/library/mongo:3.4.0
-    container_name: mongodb
     hostname: mongodb
     networks:
       - esn-sabre-test-net
 
   ampq_host:
     image: docker.io/library/rabbitmq:3
-    container_name: ampq_host
     hostname: ampq_host
     networks:
       - esn-sabre-test-net
 
   esn_ldap:
     image: esn-sabre-ldap-test
-    container_name: esn_ldap
     hostname: esn_ldap
     environment:
       - LDAP_PORT_NUMBER=389
@@ -31,7 +28,6 @@ services:
 
   esn_test:
     image: esn_sabre_test
-    container_name: esn_sabre_test
     hostname: esn_sabre_test
     environment:
       - LDAP_ADMIN_DN=cn=admin,dc=linagora.com,dc=lng

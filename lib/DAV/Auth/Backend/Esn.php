@@ -126,7 +126,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             $requestedUsername = substr($user, strlen($adminPrefix));
             if ($password != SABRE_ADMIN_PASSWORD) {
                 error_log('Bad admin password.');
-                return [false];
+                return [false, "Bad admin password"];
             }
 
             # Get OpenPaaS id
@@ -149,25 +149,30 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         $ldapCon = ldap_connect(LDAP_SERVER);
         if (!$ldapCon) {
             error_log('Unable to connect to LDAP server');
-            return [false];
+            return [false, "Unable to connect to LDAP server"];
         }
         ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
         ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
 
         # Try to authenticate
         $safeUser = ldap_escape($user, '', 0);
-        $ldapBind = ldap_bind($ldapCon, "uid=$safeUser," . LDAP_BASE, $password);
 
-        if (!$ldapBind) {
-            error_log("Bad credentials");
-            return [false];
+        try {
+            $ldapBind = ldap_bind($ldapCon, "uid=$safeUser," . LDAP_BASE, $password);
+            if (!$ldapBind) {
+                error_log("Bad credentials for $user");
+                return [false, "Bad credentials"];
+            }
+        } catch (\ErrorException $e) {
+            error_log("LDAP bind user failed for $user: " . $e->getMessage());
+            return [false, "Bad credentials"];
         }
 
         $ldapBind2 = ldap_bind($ldapCon, LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD);
 
         if (!$ldapBind2) {
             error_log("Bad admin credentials");
-            return [false];
+            return [false, "Bad admin credentials"];
         }
 
         # Get real mail
@@ -181,14 +186,14 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
         if ($entries['count'] == 0) {
             error_log("Unable to find $username which is valid for auth!");
-            return [false];
+            return [false, "Unable to find $username which is valid for auth"];
         }
         if ($entries['count'] > 1) {
             error_log("More than one entry for $user");
         }
         if (!$entries[0]['mail']) {
             error_log("$user has no mail attribute");
-            return [false];
+            return [false, "$user has no mail attribute"];
         }
         $mail = $entries[0]['mail'][0];
         ldap_close($ldapCon);

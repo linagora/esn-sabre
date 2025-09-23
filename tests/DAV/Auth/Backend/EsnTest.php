@@ -2,6 +2,21 @@
 
 namespace ESN\DAV\Auth\Backend;
 
+$GLOBALS['__ldap_bind_behavior'] = 'default';
+
+function ldap_bind($conn, $dn = null, $pwd = null) {
+    switch ($GLOBALS['__ldap_bind_behavior']) {
+        case 'return_false':
+            return false;
+        case 'throw':
+            throw new \ErrorException("Simulated LDAP exception");
+        default:
+            return \ldap_bind($conn, $dn, $pwd);
+    }
+}
+
+namespace ESN\DAV\Auth\Backend;
+
 class EsnTest extends \PHPUnit_Framework_TestCase {
     const USER_ID = '54313fcc398fef406b0041b6';
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
@@ -314,6 +329,44 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $this->assertNull($esnauth->getCurrentPrincipal());
         $this->assertEquals([], $authNotificationResult);
     }
+
+
+    function testAuthenticateInvalidLdapCredential() {
+        $GLOBALS['__ldap_bind_behavior'] = 'return_false';
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'wronguser',
+            'PHP_AUTH_PW'   => 'wrongpass',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        list($rv, $msg) = $esnauth->check($request, $response);
+
+        $this->assertFalse($rv);
+        $this->assertEquals("Username or password was incorrect", $msg);
+
+        $GLOBALS['__ldap_bind_behavior'] = 'default';
+    }
+
+    function testAuthenticateLdapBindThrowsException() {
+        $GLOBALS['__ldap_bind_behavior'] = 'throw';
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'wronguser',
+            'PHP_AUTH_PW'   => 'wrongpass',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        list($rv, $msg) = $esnauth->check($request, $response);
+
+        $this->assertFalse($rv);
+        $this->assertEquals("Username or password was incorrect", $msg);
+
+        $GLOBALS['__ldap_bind_behavior'] = 'default';
+    }
+
 }
 
 class EsnMock extends Esn {

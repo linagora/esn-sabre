@@ -232,8 +232,6 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 $icsExportPlugin = new Sabre\CalDAV\ICSExportPlugin();
 $server->addPlugin($icsExportPlugin);
 
-$server->addPlugin($corsPlugin);
-
 // Rabbit publisher plugin
 if (!empty($config['amqp']['host'])) {
     $channel = $amqpConnection->channel();

@@ -346,6 +346,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'PHP_AUTH_USER' => 'wronguser',
             'PHP_AUTH_PW'   => 'wrongpass',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
         ]);
         $response = new \Sabre\HTTP\Response();
 
@@ -364,6 +366,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'PHP_AUTH_USER' => 'wronguser',
             'PHP_AUTH_PW'   => 'wrongpass',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
         ]);
         $response = new \Sabre\HTTP\Response();
 

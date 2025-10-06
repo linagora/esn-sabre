@@ -232,27 +232,6 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 $icsExportPlugin = new Sabre\CalDAV\ICSExportPlugin();
 $server->addPlugin($icsExportPlugin);
 
-// Support CORS
-$corsPlugin = new ESN\DAV\CorsPlugin();
-if (isset($config['webserver']['corsAllowMethods'])) {
-    $corsPlugin->allowMethods = $config['webserver']['corsAllowMethods'];
-}
-if (isset($config['webserver']['corsAllowHeaders'])) {
-    $corsPlugin->allowHeaders = $config['webserver']['corsAllowHeaders'];
-}
-if (isset($config['webserver']['corsAllowOrigin'])) {
-    $corsPlugin->allowOrigin = $config['webserver']['corsAllowOrigin'];
-}
-if (isset($config['webserver']['corsAllowCredentials'])) {
-    $corsPlugin->allowCredentials = $config['webserver']['corsAllowCredentials'];
-}
-if (isset($config['webserver']['corsExposeHeaders'])) {
-    $corsPlugin->exposeHeaders = $config['webserver']['corsExposeHeaders'];
-}
-
-// Regardless of the webserver settings, we need to support the ESNToken header
-$corsPlugin->allowHeaders[] = 'ESNToken';
-
 $server->addPlugin($corsPlugin);
 
 // Rabbit publisher plugin

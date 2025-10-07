@@ -496,12 +496,20 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $currentAttendeeEmails = [];
         $previousAttendeeEmails = [];
 
-        foreach ($previousEvent->ATTENDEE as $prevEventAttendee) {
-            $previousAttendeeEmails[] = $prevEventAttendee->getNormalizedValue();
+        try {
+            foreach ($previousEvent->ATTENDEE as $prevEventAttendee) {
+                $previousAttendeeEmails[] = $prevEventAttendee->getNormalizedValue();
+            }
+        } catch (\Throwable $e) {
+            // Previous event attendees not iterable
         }
 
-        foreach ($currentEvent->ATTENDEE as $curEventAttendee) {
-            $currentAttendeeEmails[] = $curEventAttendee->getNormalizedValue();
+        try {
+            foreach ($currentEvent->ATTENDEE as $curEventAttendee) {
+                $currentAttendeeEmails[] = $curEventAttendee->getNormalizedValue();
+            }
+        } catch (\Throwable $e) {
+            // Current event attendees not iterable
         }
 
         return $previousAttendeeEmails !== $currentAttendeeEmails;

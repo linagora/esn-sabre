@@ -11,7 +11,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     protected static $db;
     protected static $userPrincipal;
 
-    static function setUpBeforeClass() {
+    static function setUpBeforeClass(): void {
         $mc = new \MongoDB\Client(ESN_MONGO_ESNURI);
         self::$db = $mc->{ESN_MONGO_ESNDB};
 
@@ -29,7 +29,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         self::$userPrincipal = "principals/users/" . (string)$userId;
     }
 
-    static function tearDownAfterClass() {
+    static function tearDownAfterClass(): void {
         self::$db->drop();
         self::$db = null;
     }

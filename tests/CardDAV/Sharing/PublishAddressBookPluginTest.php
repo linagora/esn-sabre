@@ -28,7 +28,7 @@ class PublishAddressBook extends \ESN\CardDAV\PluginTestBase {
         );
 
         $this->assertEquals(403, $response->status);
-        $this->assertContains('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
+        $this->assertStringContainsString('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
     }
 
     function testPublishingAddressbookWithInvalidPrivilegeResponds400() {
@@ -43,7 +43,7 @@ class PublishAddressBook extends \ESN\CardDAV\PluginTestBase {
         );
 
         $this->assertEquals(400, $response->status);
-        $this->assertContains('Privilege must be either {DAV:}read or {DAV:}write', $response->getBodyAsString());
+        $this->assertStringContainsString('Privilege must be either {DAV:}read or {DAV:}write', $response->getBodyAsString());
     }
 
     function testPublishingAddressbookWithOwnerResponds204() {

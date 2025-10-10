@@ -82,7 +82,7 @@ END:VEVENT
 END:VCALENDAR
 ';
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $aclPlugin = new \Sabre\DAVACL\Plugin();

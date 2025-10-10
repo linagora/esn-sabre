@@ -11,7 +11,7 @@ class GroupAddressBookTest extends \ESN\CardDAV\PluginTestBase {
     const USER_ID = '54b64eadf6d7d8e41d263e8f';
     const ADMINISTRATOR_ID = '54b64eadf6d7d8e41d263e9f';
 
-    function setUp() {
+    function setUp(): void {
         $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
         $this->sabredb->drop();

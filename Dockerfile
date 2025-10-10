@@ -11,40 +11,44 @@
 FROM debian:bullseye
 LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
-ADD 20-apcu.ini /etc/php/7.4/fpm/conf.d/20-apcu.ini
+ENV PHPVERSION=7.4
+
+ADD 20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
 
 # Fix for CI environments with clock skew issues
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \
-  DEBIAN_FRONTEND=noninteractive apt-get -y install php7.4-fpm php7.4-cli curl supervisor nginx git php7.4-curl php7.4-ldap php7.4-bcmath php7.4-mbstring php7.4-zip php-pear php7.4-dev make pkg-config php-apcu && \
+  DEBIAN_FRONTEND=noninteractive apt-get -y install php${PHPVERSION}-fpm php${PHPVERSION}-cli curl supervisor nginx git \
+    php${PHPVERSION}-curl php${PHPVERSION}-ldap php${PHPVERSION}-bcmath php${PHPVERSION}-mbstring php${PHPVERSION}-zip \
+    php-pear php${PHPVERSION}-dev make pkg-config php-apcu && \
   DEBIAN_FRONTEND=noninteractive apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Configure PHP
-RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/7.4/fpm/php.ini && \
-  sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/7.4/cli/php.ini && \
-  sed -i -e "s/;daemonize\s*=\s*yes/daemonize = no/g" /etc/php/7.4/fpm/php-fpm.conf && \
-  sed -i "s/;cgi.fix_pathinfo=1/cgi.fix_pathinfo=0/" /etc/php/7.4/fpm/php.ini && \
-  sed -i -e "s/memory_limit\s*=\s*128M/memory_limit = 512M/g" /etc/php/7.4/fpm/php.ini && \
-  sed -i "s/max_execution_time = 30/max_execution_time = 120/" /etc/php/7.4/fpm/php.ini && \
-  sed -i "s/;listen.owner = www-data/listen.owner = www-data/" /etc/php/7.4/fpm/pool.d/www.conf && \
-  sed -i "s/;listen.group = www-data/listen.group = www-data/" /etc/php/7.4/fpm/pool.d/www.conf && \
-  sed -i "s/;listen.mode = 0660/listen.mode = 0660/" /etc/php/7.4/fpm/pool.d/www.conf && \
-  sed -i "s/;listen.backlog = 511/listen.backlog = 4096/" /etc/php/7.4/fpm/pool.d/www.conf && \
-  sed -i "s/pm.max_children = 5/pm.max_children = 96/" /etc/php/7.4/fpm/pool.d/www.conf && \
-  sed -i "s/pm.start_servers = 2/pm.start_servers = 8/" /etc/php/7.4/fpm/pool.d/www.conf && \
-  sed -i "s/pm.max_spare_servers = 3/pm.max_spare_servers = 16/" /etc/php/7.4/fpm/pool.d/www.conf && \
-  sed -i "s/;clear_env = no/clear_env = no/" /etc/php/7.4/fpm/pool.d/www.conf && \
-  sed -i "s/;request_terminate_timeout = 0/request_terminate_timeout = 0/" /etc/php/7.4/fpm/pool.d/www.conf
+RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fpm/php.ini && \
+  sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/cli/php.ini && \
+  sed -i -e "s/;daemonize\s*=\s*yes/daemonize = no/g" /etc/php/${PHPVERSION}/fpm/php-fpm.conf && \
+  sed -i "s/;cgi.fix_pathinfo=1/cgi.fix_pathinfo=0/" /etc/php/${PHPVERSION}/fpm/php.ini && \
+  sed -i -e "s/memory_limit\s*=\s*128M/memory_limit = 512M/g" /etc/php/${PHPVERSION}/fpm/php.ini && \
+  sed -i "s/max_execution_time = 30/max_execution_time = 120/" /etc/php/${PHPVERSION}/fpm/php.ini && \
+  sed -i "s/;listen.owner = www-data/listen.owner = www-data/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
+  sed -i "s/;listen.group = www-data/listen.group = www-data/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
+  sed -i "s/;listen.mode = 0660/listen.mode = 0660/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
+  sed -i "s/;listen.backlog = 511/listen.backlog = 4096/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
+  sed -i "s/pm.max_children = 5/pm.max_children = 96/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
+  sed -i "s/pm.start_servers = 2/pm.start_servers = 8/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
+  sed -i "s/pm.max_spare_servers = 3/pm.max_spare_servers = 16/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
+  sed -i "s/;clear_env = no/clear_env = no/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
+  sed -i "s/;request_terminate_timeout = 0/request_terminate_timeout = 0/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf
 
 # Logs configuration
-RUN sed -i "s/error_log = \/var\/log\/php7.4-fpm.log/error_log = \/proc\/self\/fd\/2/" /etc/php/7.4/fpm/php-fpm.conf && \
-    sed -i "s/;catch_workers_output = yes/catch_workers_output = yes/" /etc/php/7.4/fpm/pool.d/www.conf
+RUN sed -i "s/error_log = \/var\/log\/php${PHPVERSION}-fpm.log/error_log = \/proc\/self\/fd\/2/" /etc/php/${PHPVERSION}/fpm/php-fpm.conf && \
+    sed -i "s/;catch_workers_output = yes/catch_workers_output = yes/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf
 
 RUN pecl install mongodb-1.9.0 \
-    && echo "extension=mongodb.so" >> /etc/php/7.4/fpm/php.ini \
-    && echo "extension=mongodb.so" >> /etc/php/7.4/cli/php.ini
+    && echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini \
+    && echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini
 
 # Set up Sabre DAV
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer

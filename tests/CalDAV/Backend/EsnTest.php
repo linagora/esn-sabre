@@ -28,7 +28,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
         );
 
-        $this->assertIsArray( $calendars);
+        $this->assertIsArray(, $calendars);
         $this->assertEquals(1, count($calendars));
 
         foreach ($elementCheck as $name => $value) {
@@ -48,7 +48,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
         );
 
-        $this->assertIsArray( $calendars);
+        $this->assertIsArray(, $calendars);
         $this->assertEquals(1, count($calendars));
 
         foreach ($elementCheck as $name => $value) {

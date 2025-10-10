@@ -30,7 +30,7 @@ class IMipPluginTestBase extends \PHPUnit\Framework\TestCase {
     private $server;
     private $caldavBackend;
 
-    function setUp() {
+    function setUp(): void {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
         $esndb = $mcesn->{ESN_MONGO_ESNDB};
 

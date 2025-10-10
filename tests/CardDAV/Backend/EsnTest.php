@@ -29,7 +29,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
             '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
         );
 
-        $this->assertIsArray($books);
+        $this->assertIsArray(,$books);
         $this->assertEquals(2, count($books));
 
         $this->checkAddressbook($collectedAddressBook, $books[0]);
@@ -61,7 +61,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
 
         $books = $backend->getAddressBooksForUser('principals/users/user2');
 
-        $this->assertIsArray($books);
+        $this->assertIsArray(,$books);
         $this->assertEquals(3, count($books));
 
         $this->checkAddressbook($anotherAddressBook, $books[0]);

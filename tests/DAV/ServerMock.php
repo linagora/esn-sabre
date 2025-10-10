@@ -22,7 +22,7 @@ define('PRINCIPALS_DOMAINS', 'principals/domains');
 /**
  * @medium
  */
-class ServerMock extends \PHPUnit_Framework_TestCase {
+class ServerMock extends \PHPUnit\Framework\TestCase {
 
     protected $user1Calendars = [
         'ownedCalendars' => [

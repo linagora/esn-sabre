@@ -192,16 +192,6 @@ docker compose -f docker-compose.test.yaml logs esn_ldap
 
 Increase Docker memory limit or reduce test parallelism.
 
-## Test Statistics
-
-Current test suite:
-- **416 tests** across all categories
-- **1,179 assertions**
-- Coverage target: >80% for critical paths
-- Runtime: ~30-40 seconds
-
 ## Related Documentation
 
 - [PHPUnit Documentation](https://phpunit.de/documentation.html)
-- [Sabre/DAV Testing](https://sabre.io/dav/building-a-caldav-client/)
-- [iCalendar RFC 5545](https://tools.ietf.org/html/rfc5545) (Recurrence rules)

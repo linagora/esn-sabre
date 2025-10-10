@@ -40,7 +40,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('transparent'),
         );
 
-        $this->assertIsArray(,$calendars);
+        $this->assertIsArray($calendars);
         $this->assertEquals(1,count($calendars));
 
         foreach($elementCheck as $name=>$value) {
@@ -84,7 +84,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('transparent'),
         );
 
-        $this->assertIsArray(,$calendars);
+        $this->assertIsArray($calendars);
         $this->assertEquals(1,count($calendars));
 
         foreach($elementCheck as $name=>$value) {

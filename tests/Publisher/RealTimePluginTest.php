@@ -1,7 +1,7 @@
 <?php
 namespace ESN\Publisher;
 
-class RealTimePluginTest extends \PHPUnit_Framework_TestCase {
+class RealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     protected $publisher;
     protected $plugin;

@@ -3,7 +3,7 @@ namespace ESN\Publisher\CardDAV;
 
 require_once ESN_TEST_BASE . '/Publisher/CardDAV/CardDAVBackendMock.php';
 
-class AddressBookRealTimePluginTest extends \PHPUnit_Framework_TestCase {
+class AddressBookRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "addressbooks/456456/123123";
     const PRINCIPAL_URI = "principals/users/456456";

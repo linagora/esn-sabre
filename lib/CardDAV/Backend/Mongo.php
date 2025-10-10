@@ -806,6 +806,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $collection = $this->db->selectCollection($this->addressBooksTableName);
         $sharerAddressBook = $collection->findOne([ '_id' => $mongoAddressBookId ]);
 
+        if (!$sharerAddressBook) {
+            return;
+        }
+
         $shareeCollection = $this->db->selectCollection($this->sharedAddressBooksTableName);
 
         $shareesToCreate = [];
@@ -993,6 +997,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $adrcollection = $this->db->selectCollection($this->addressBooksTableName);
         $query = [ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ];
         $res = $adrcollection->findOne($query, [ 'projection' => [ 'synctoken' => 1 ] ]);
+
+        if (!$res) {
+            return;
+        }
 
         $changecollection = $this->db->selectCollection($this->addressBookChangesTableName);
 

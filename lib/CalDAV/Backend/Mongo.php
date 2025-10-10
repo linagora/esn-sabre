@@ -914,7 +914,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function updateInvites($calendarId, array $sharees) {
         $this->_assertIsArray($calendarId);
 
-        $calendarInstance = [];
+        $calendarInstances = [];
 
         $currentInvites = $this->getInvites($calendarId);
         list($calendarId, $instanceId) = $calendarId;
@@ -930,11 +930,13 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 $uri = $collection->findone([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ], [ 'projection' => [ 'uri' => 1 ]] );
                 $collection->deleteMany([ 'calendarid' => $mongoCalendarId, 'share_href' => $sharee->href ]);
 
-                $calendarInstances[] = [
-                    'uri' => $uri['uri'],
-                    'type' => 'delete',
-                    'sharee' => $sharee
-                ];
+                if ($uri) {
+                    $calendarInstances[] = [
+                        'uri' => $uri['uri'],
+                        'type' => 'delete',
+                        'sharee' => $sharee
+                    ];
+                }
 
                 continue;
             }
@@ -1141,6 +1143,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $mongoCalendarId = new \MongoDB\BSON\ObjectId($calendarId);
         $query = [ '_id' => $mongoCalendarId ];
         $res = $calcollection->findOne($query, [ 'projection' => [ 'synctoken' => 1 ] ] );
+
+        if (!$res) {
+            return;
+        }
 
         $changecollection = $this->db->selectCollection($this->calendarChangesTableName);
         $obj = [

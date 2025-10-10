@@ -79,12 +79,16 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
     /**
      * Test weekly recurring event with BYDAY
+     *
+     * BYDAY values: MO=Monday, TU=Tuesday, WE=Wednesday, TH=Thursday,
+     *               FR=Friday, SA=Saturday, SU=Sunday
      */
     function testWeeklyRecurringEventWithBYDAY() {
         $backend = $this->getBackend();
         $id = $this->generateId();
 
         // Create weekly event on Mondays, Wednesdays, Fridays
+        // BYDAY=MO,WE,FR means every Monday, Wednesday, and Friday
         $ical = join("\r\n", [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -213,6 +217,10 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
     /**
      * Test recurring event with EXDATE (excluded instances)
+     *
+     * EXDATE format: Comma-separated list of datetime values to exclude
+     * Example: EXDATE:20250105T100000Z,20250107T100000Z
+     * This excludes occurrences on Jan 5 and Jan 7 at 10:00 UTC
      */
     function testRecurringEventWithEXDATE() {
         $backend = $this->getBackend();
@@ -282,6 +290,8 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
     /**
      * Test DST transition - Europe/Paris Spring forward (last Sunday of March)
      * Clocks go from 2:00 AM to 3:00 AM (CET -> CEST, UTC+1 -> UTC+2)
+     *
+     * BYDAY=-1SU means "last Sunday" (negative values count from end of period)
      */
     function testDSTTransitionSpringForwardParis() {
         $backend = $this->getBackend();
@@ -300,7 +310,7 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
             'TZOFFSETTO:+0200',
             'TZNAME:CEST',
             'DTSTART:19700329T020000',
-            'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU',
+            'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU', // -1SU = last Sunday
             'END:DAYLIGHT',
             'BEGIN:STANDARD',
             'TZOFFSETFROM:+0200',
@@ -360,6 +370,8 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
     /**
      * Test DST transition - Europe/Paris Fall back (last Sunday of October)
      * Clocks go from 3:00 AM to 2:00 AM (CEST -> CET, UTC+2 -> UTC+1)
+     *
+     * BYDAY=-1SU means "last Sunday" (negative values count from end of period)
      */
     function testDSTTransitionFallBackParis() {
         $backend = $this->getBackend();
@@ -378,7 +390,7 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
             'TZOFFSETTO:+0200',
             'TZNAME:CEST',
             'DTSTART:19700329T020000',
-            'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU',
+            'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU', // -1SU = last Sunday
             'END:DAYLIGHT',
             'BEGIN:STANDARD',
             'TZOFFSETFROM:+0200',

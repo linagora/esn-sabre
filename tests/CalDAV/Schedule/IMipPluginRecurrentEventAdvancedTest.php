@@ -256,10 +256,17 @@ class IMipPluginRecurrentEventAdvancedTest extends IMipPluginTestBase {
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);
     }
 
+    /**
+     * Test complex BYDAY patterns with position numbers
+     *
+     * BYDAY with numbers: 1MO = first Monday, 2MO = second Monday, -1SU = last Sunday
+     * Positive numbers count from start of period, negative from end
+     */
     function testModifyRecurringEventWithComplexBYDAY()
     {
         $plugin = $this->getPlugin();
 
+        // BYDAY=2MO means "second Monday of the month"
         $user1ExistingEvent = join("\r\n", [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -267,7 +274,7 @@ class IMipPluginRecurrentEventAdvancedTest extends IMipPluginTestBase {
             'CALSCALE:GREGORIAN',
             'BEGIN:VEVENT',
             'UID:complex-byday-uid',
-            'RRULE:FREQ=MONTHLY;BYDAY=2MO',
+            'RRULE:FREQ=MONTHLY;BYDAY=2MO', // 2MO = second Monday
             'DTSTART:' . $this->afterCurrentDate . 'T140000Z',
             'DTEND:' . $this->afterCurrentDate . 'T150000Z',
             'SUMMARY:Second Monday of Month',
@@ -283,7 +290,7 @@ class IMipPluginRecurrentEventAdvancedTest extends IMipPluginTestBase {
         $plugin->setFormerEventICal($user1ExistingEvent);
         $plugin->setNewEvent(false);
 
-        // Modify to third Monday
+        // Modify to third Monday (BYDAY=3MO means "third Monday of the month")
         $scheduledIcal = join("\r\n", [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -292,7 +299,7 @@ class IMipPluginRecurrentEventAdvancedTest extends IMipPluginTestBase {
             'METHOD:REQUEST',
             'BEGIN:VEVENT',
             'UID:complex-byday-uid',
-            'RRULE:FREQ=MONTHLY;BYDAY=3MO',
+            'RRULE:FREQ=MONTHLY;BYDAY=3MO', // 3MO = third Monday
             'DTSTART:' . $this->afterCurrentDate . 'T140000Z',
             'DTEND:' . $this->afterCurrentDate . 'T150000Z',
             'SUMMARY:Third Monday of Month',
@@ -334,6 +341,11 @@ class IMipPluginRecurrentEventAdvancedTest extends IMipPluginTestBase {
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);
     }
 
+    /**
+     * Test multiple EXDATE values
+     *
+     * EXDATE can contain comma-separated list of dates to exclude from recurrence
+     */
     function testRecurringEventWithMultipleEXDATE()
     {
         $plugin = $this->getPlugin();

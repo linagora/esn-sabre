@@ -9,7 +9,7 @@ use Sabre\VObject\ITip\Message;
 /**
  * @medium
  */
-class ITipPluginTest extends \PHPUnit_Framework_TestCase
+class ITipPluginTest extends \PHPUnit\Framework\TestCase
 {
 
     use \Sabre\VObject\PHPUnitAssertions;

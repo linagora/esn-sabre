@@ -7,7 +7,7 @@ use \Sabre\DAV\Sharing\Plugin as SPlugin;
 /**
  * @medium
  */
-class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
+class AddressBookHomeTest extends \PHPUnit\Framework\TestCase {
     protected $sabredb;
     protected $carddavBackend;
 

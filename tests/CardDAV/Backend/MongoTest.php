@@ -11,7 +11,7 @@ require_once 'AbstractDatabaseTest.php';
  */
 class MongoTest extends AbstractDatabaseTest {
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $book = [

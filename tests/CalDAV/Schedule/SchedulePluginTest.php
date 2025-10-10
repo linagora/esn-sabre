@@ -9,7 +9,7 @@ use Sabre\VObject\Reader;
 class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     private $plugin;
 
-    function setUp() {
+    function setUp(): void {
         $server = new Server();
 
         $this->plugin = new Plugin();

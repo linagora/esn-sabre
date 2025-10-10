@@ -86,6 +86,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
             'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
         ));
         $response = new \Sabre\HTTP\Response();
 
@@ -110,6 +112,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
             'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/foo/bar',
+            'REQUEST_METHOD' => 'GET',
         ));
         $response = new \Sabre\HTTP\Response();
 
@@ -136,6 +140,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
             'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/foo/bar',
+            'REQUEST_METHOD' => 'GET',
         ));
         $response = new \Sabre\HTTP\Response();
 
@@ -162,6 +168,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
             'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/foo/bar',
+            'REQUEST_METHOD' => 'GET',
         ));
         $response = new \Sabre\HTTP\Response();
 
@@ -338,6 +346,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'PHP_AUTH_USER' => 'wronguser',
             'PHP_AUTH_PW'   => 'wrongpass',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
         ]);
         $response = new \Sabre\HTTP\Response();
 
@@ -356,6 +366,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'PHP_AUTH_USER' => 'wronguser',
             'PHP_AUTH_PW'   => 'wrongpass',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
         ]);
         $response = new \Sabre\HTTP\Response();
 

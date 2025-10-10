@@ -61,6 +61,10 @@ class Utils {
     }
 
     static function getEventObjectFromAnotherPrincipalHome($principalUri, $eventUid, $method, \Sabre\DAV\Server $server) {
+        if ($principalUri === null) {
+            return;
+        }
+
         $aclPlugin = $server->getPlugin('acl');
 
         if (!$aclPlugin) {
@@ -73,22 +77,22 @@ class Utils {
         // We have a principal URL, now we need to find its inbox.
         // Unfortunately we may not have sufficient privileges to find this, so
         // we are temporarily turning off ACL to let this come through.
-        //
-        // Once we support PHP 5.5, this should be wrapped in a try..finally
-        // block so we can ensure that this privilege gets added again after.
         $server->removeListener('propFind', [$aclPlugin, 'propFind']);
-        $result = $server->getProperties(
-            $principalUri,
-            [
-                '{DAV:}principal-URL',
-                 $caldavNS . 'calendar-home-set',
-                 $caldavNS . 'schedule-inbox-URL',
-                 $caldavNS . 'schedule-default-calendar-URL',
-                '{http://sabredav.org/ns}email-address',
-            ]
-        );
-        // Re-registering the ACL event
-        $server->on('propFind', [$aclPlugin, 'propFind'], 20);
+        try {
+            $result = $server->getProperties(
+                $principalUri,
+                [
+                    '{DAV:}principal-URL',
+                    $caldavNS . 'calendar-home-set',
+                    $caldavNS . 'schedule-inbox-URL',
+                    $caldavNS . 'schedule-default-calendar-URL',
+                    '{http://sabredav.org/ns}email-address',
+                ]
+            );
+        } finally {
+            // Re-registering the ACL event
+            $server->on('propFind', [$aclPlugin, 'propFind'], 20);
+        }
         if (!isset($result[$caldavNS . 'schedule-inbox-URL'])) {
             error_log('5.2;Could not find local inbox');
             return;

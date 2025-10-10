@@ -2,7 +2,7 @@
 
 namespace ESN\DAVACL\PrincipalBackend;
 
-class MongoTest extends \PHPUnit_Framework_TestCase {
+class MongoTest extends \PHPUnit\Framework\TestCase {
     protected static $esndb;
     protected static $domainMembers;
 

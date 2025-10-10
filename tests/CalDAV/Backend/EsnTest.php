@@ -5,7 +5,7 @@ namespace ESN\CalDAV\Backend;
 /**
  * @medium
  */
-class EsnTest extends \PHPUnit_Framework_TestCase {
+class EsnTest extends \PHPUnit\Framework\TestCase {
     protected function getBackend() {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $db = $mc->{ESN_MONGO_SABREDB};

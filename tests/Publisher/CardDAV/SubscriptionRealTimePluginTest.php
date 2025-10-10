@@ -13,7 +13,7 @@ class SubscriptionRealTimePluginTest extends \PHPUnit\Framework\TestCase {
     protected $publisher;
     protected $server;
 
-    function setUp() {
+    function setUp(): void {
         $this->cardDAVBackend = new CardDAVBackendMock();
         $this->cardDAVBackend->setEventEmitter($this->createMock(\Sabre\Event\EventEmitter::class));
 

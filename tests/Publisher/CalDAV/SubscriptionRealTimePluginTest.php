@@ -13,7 +13,7 @@ class SubscriptionRealTimePluginTest extends \PHPUnit\Framework\TestCase {
     protected $publisher;
     protected $server;
 
-    function setUp() {
+    function setUp(): void {
         $this->eventEmitter = $this->createMock(\Sabre\Event\EventEmitter::class);
         $this->eventEmitter->expects($this->exactly(3))->method('on');
 

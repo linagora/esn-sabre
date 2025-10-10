@@ -9,7 +9,7 @@ require_once ESN_TEST_BASE . '/CardDAV/PluginTestBase.php';
 
 class PublishAddressBook extends \ESN\CardDAV\PluginTestBase {
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $plugin = new Plugin();

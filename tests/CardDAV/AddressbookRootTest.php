@@ -15,7 +15,7 @@ class AddressbookRootTest extends \PHPUnit\Framework\TestCase {
     const USER_ID = '54313fcc398fef406b0041b6';
     const ADMINISTRATOR_ID = '54313fcc398fef406b0041b7';
 
-    function setUp() {
+    function setUp(): void {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
         $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
 

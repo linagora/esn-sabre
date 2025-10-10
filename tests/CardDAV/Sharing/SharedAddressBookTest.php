@@ -7,7 +7,7 @@ use \Sabre\DAV\Sharing\Plugin as SPlugin;
 require_once ESN_TEST_BASE . '/CardDAV/PluginTestBase.php';
 
 class SharedAddressBookTest extends \ESN\CardDAV\PluginTestBase {
-    function setUp() {
+    function setUp(): void {
         $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
         $this->sabredb->drop();

@@ -11,7 +11,7 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
     protected $principalBackend;
     protected $caldavBackend;
 
-    function setUp() {
+    function setUp(): void {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
         $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
 

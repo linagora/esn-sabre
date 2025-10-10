@@ -13,7 +13,7 @@ class MongoRecurrenceExpansionTest extends RecurrenceExpansionTest {
     protected $sabredb;
     protected $backend;
 
-    function setUp() {
+    function setUp(): void {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $this->sabredb = $mc->{ESN_MONGO_SABREDB};
         $this->sabredb->drop();
@@ -21,7 +21,7 @@ class MongoRecurrenceExpansionTest extends RecurrenceExpansionTest {
         $this->backend = new Mongo($this->sabredb);
     }
 
-    function tearDown() {
+    function tearDown(): void {
         if ($this->sabredb) {
             $this->sabredb->drop();
         }

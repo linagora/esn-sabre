@@ -1,33 +1,35 @@
-<phpunit
-  colors="true"
-  bootstrap="bootstrap.php"
-  convertErrorsToExceptions="true"
-  convertNoticesToExceptions="true"
-  convertWarningsToExceptions="true"
-  reportUselessTests="true"
-  strictCoverage="true"
-  disallowTestOutput="true"
-  enforceTimeLimit="true"
-  >
-  <testsuite name="linagora-esn-sabre-dav">
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.3/phpunit.xsd"
+         colors="true"
+         bootstrap="bootstrap.php"
+         convertErrorsToExceptions="true"
+         convertNoticesToExceptions="true"
+         convertWarningsToExceptions="true"
+         enforceTimeLimit="true"
+         failOnRisky="true"
+         failOnWarning="true"
+         beStrictAboutOutputDuringTests="true">
+  <coverage>
+    <include>
+      <directory suffix=".php">../lib/</directory>
+    </include>
+  </coverage>
+  <testsuites>
+    <testsuite name="linagora-esn-sabre-dav">
       <directory>DAV</directory>
-  </testsuite>
-  <testsuite name="linagora-esn-sabre-davacl">
+    </testsuite>
+    <testsuite name="linagora-esn-sabre-davacl">
       <directory>DAVACL</directory>
-  </testsuite>
-  <testsuite name="linagora-esn-sabre-caldav">
+    </testsuite>
+    <testsuite name="linagora-esn-sabre-caldav">
       <directory>CalDAV</directory>
-  </testsuite>
-  <testsuite name="linagora-esn-sabre-carddav">
+    </testsuite>
+    <testsuite name="linagora-esn-sabre-carddav">
       <directory>CardDAV</directory>
-  </testsuite>
-  <testsuite name="linagora-esn-sabre-json">
+    </testsuite>
+    <testsuite name="linagora-esn-sabre-json">
       <directory>JSON</directory>
-  </testsuite>
-
-  <filter>
-    <whitelist addUncoveredFilesFromWhitelist="true">
-       <directory suffix=".php">../lib/</directory>
-    </whitelist>
-  </filter>
+    </testsuite>
+  </testsuites>
 </phpunit>

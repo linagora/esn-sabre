@@ -11,7 +11,7 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
     protected $publisher;
     protected $server;
 
-    function setUp() {
+    function setUp(): void {
         $this->calendarBackend = new CalendarBackendMock();
         $this->calendarBackend->setEventEmitter($this->createMock(\Sabre\Event\EventEmitter::class));
 

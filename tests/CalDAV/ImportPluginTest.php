@@ -17,7 +17,7 @@ class ImportPluginTest extends \ESN\DAV\ServerMock {
     protected $userTestId = '5aa1f6639751b711008b4567';
     protected $plugin;
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $plugin = new ImportPlugin("import");

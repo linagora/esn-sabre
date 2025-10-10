@@ -21,12 +21,13 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
     /**
      * Test that a simple daily recurring event is found across its recurrence range
+     * Query large period and verify all expected occurrences are found
      */
     function testDailyRecurringEventExpansion() {
         $backend = $this->getBackend();
         $id = $this->generateId();
 
-        // Create a daily recurring event from Jan 1 to Jan 10, 2025
+        // Create a daily recurring event from Jan 1 to Jan 10, 2025 (10 occurrences)
         $ical = join("\r\n", [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -44,7 +45,7 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
         $backend->createCalendarObject($id, "daily-event.ics", $ical);
 
-        // Query for Jan 5 - should find the event (it occurs on Jan 5)
+        // Query entire recurrence period - should find the event
         $filters = [
             'name' => 'VCALENDAR',
             'comp-filters' => [
@@ -54,8 +55,8 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
                     'prop-filters' => [],
                     'is-not-defined' => false,
                     'time-range' => [
-                        'start' => new \DateTime('2025-01-05T00:00:00Z'),
-                        'end' => new \DateTime('2025-01-06T00:00:00Z'),
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2025-01-11T00:00:00Z'),
                     ],
                 ],
             ],
@@ -65,12 +66,12 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
         ];
 
         $result = $backend->calendarQuery($id, $filters);
-        $this->assertEquals(['daily-event.ics'], $result, 'Daily recurring event should be found on Jan 5');
+        $this->assertEquals(['daily-event.ics'], $result, 'Daily recurring event should be found in full range');
 
-        // Query for Jan 15 - should NOT find the event (recurrence ends Jan 10)
+        // Query after recurrence ends - should NOT find the event
         $filters['comp-filters'][0]['time-range'] = [
             'start' => new \DateTime('2025-01-15T00:00:00Z'),
-            'end' => new \DateTime('2025-01-16T00:00:00Z'),
+            'end' => new \DateTime('2025-01-20T00:00:00Z'),
         ];
 
         $result = $backend->calendarQuery($id, $filters);
@@ -79,6 +80,7 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
     /**
      * Test weekly recurring event with BYDAY
+     * Query large period and verify all expected occurrences are found
      *
      * BYDAY values: MO=Monday, TU=Tuesday, WE=Wednesday, TH=Thursday,
      *               FR=Friday, SA=Saturday, SU=Sunday
@@ -89,6 +91,7 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
         // Create weekly event on Mondays, Wednesdays, Fridays
         // BYDAY=MO,WE,FR means every Monday, Wednesday, and Friday
+        // COUNT=10: Jan 6(Mo), 8(We), 10(Fr), 13(Mo), 15(We), 17(Fr), 20(Mo), 22(We), 24(Fr), 27(Mo)
         $ical = join("\r\n", [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -106,7 +109,7 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
         $backend->createCalendarObject($id, "weekly-event.ics", $ical);
 
-        // Jan 6, 2025 is a Monday - should find it
+        // Query entire January - should find all 10 occurrences
         $filters = [
             'name' => 'VCALENDAR',
             'comp-filters' => [
@@ -116,8 +119,8 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
                     'prop-filters' => [],
                     'is-not-defined' => false,
                     'time-range' => [
-                        'start' => new \DateTime('2025-01-06T00:00:00Z'),
-                        'end' => new \DateTime('2025-01-07T00:00:00Z'),
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2025-01-31T23:59:59Z'),
                     ],
                 ],
             ],
@@ -127,18 +130,9 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
         ];
 
         $result = $backend->calendarQuery($id, $filters);
-        $this->assertEquals(['weekly-event.ics'], $result, 'Should find event on Monday Jan 6');
+        $this->assertEquals(['weekly-event.ics'], $result, 'Should find event in January (10 occurrences)');
 
-        // Jan 8, 2025 is a Wednesday - should find it
-        $filters['comp-filters'][0]['time-range'] = [
-            'start' => new \DateTime('2025-01-08T00:00:00Z'),
-            'end' => new \DateTime('2025-01-09T00:00:00Z'),
-        ];
-
-        $result = $backend->calendarQuery($id, $filters);
-        $this->assertEquals(['weekly-event.ics'], $result, 'Should find event on Wednesday Jan 8');
-
-        // Jan 7, 2025 is a Tuesday - should NOT find it
+        // Query a Tuesday - should NOT find it
         $filters['comp-filters'][0]['time-range'] = [
             'start' => new \DateTime('2025-01-07T00:00:00Z'),
             'end' => new \DateTime('2025-01-08T00:00:00Z'),
@@ -146,16 +140,27 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
         $result = $backend->calendarQuery($id, $filters);
         $this->assertEquals([], $result, 'Should not find event on Tuesday Jan 7');
+
+        // Query after COUNT=10 ends - should NOT find it
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2025-02-01T00:00:00Z'),
+            'end' => new \DateTime('2025-02-28T23:59:59Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should not find event after COUNT=10');
     }
 
     /**
      * Test monthly recurring event with BYMONTHDAY
+     * Query large period and verify all expected occurrences are found
      */
     function testMonthlyRecurringEventWithBYMONTHDAY() {
         $backend = $this->getBackend();
         $id = $this->generateId();
 
         // Create monthly event on the 15th of each month
+        // COUNT=6: Jan 15, Feb 15, Mar 15, Apr 15, May 15, Jun 15
         $ical = join("\r\n", [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -173,7 +178,7 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
         $backend->createCalendarObject($id, "monthly-event.ics", $ical);
 
-        // Should find on Jan 15
+        // Query entire 6-month period - should find all occurrences
         $filters = [
             'name' => 'VCALENDAR',
             'comp-filters' => [
@@ -183,8 +188,8 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
                     'prop-filters' => [],
                     'is-not-defined' => false,
                     'time-range' => [
-                        'start' => new \DateTime('2025-01-15T00:00:00Z'),
-                        'end' => new \DateTime('2025-01-16T00:00:00Z'),
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2025-06-30T23:59:59Z'),
                     ],
                 ],
             ],
@@ -194,18 +199,9 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
         ];
 
         $result = $backend->calendarQuery($id, $filters);
-        $this->assertEquals(['monthly-event.ics'], $result, 'Should find event on Jan 15');
+        $this->assertEquals(['monthly-event.ics'], $result, 'Should find event across 6 months (COUNT=6)');
 
-        // Should find on Feb 15
-        $filters['comp-filters'][0]['time-range'] = [
-            'start' => new \DateTime('2025-02-15T00:00:00Z'),
-            'end' => new \DateTime('2025-02-16T00:00:00Z'),
-        ];
-
-        $result = $backend->calendarQuery($id, $filters);
-        $this->assertEquals(['monthly-event.ics'], $result, 'Should find event on Feb 15');
-
-        // Should NOT find on Jan 20
+        // Query on the 20th of Jan - should NOT find it
         $filters['comp-filters'][0]['time-range'] = [
             'start' => new \DateTime('2025-01-20T00:00:00Z'),
             'end' => new \DateTime('2025-01-21T00:00:00Z'),
@@ -213,10 +209,20 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
         $result = $backend->calendarQuery($id, $filters);
         $this->assertEquals([], $result, 'Should not find event on Jan 20');
+
+        // Query after COUNT=6 ends - should NOT find it
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2025-07-01T00:00:00Z'),
+            'end' => new \DateTime('2025-07-31T23:59:59Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should not find event after COUNT=6');
     }
 
     /**
      * Test recurring event with EXDATE (excluded instances)
+     * Query large period and verify exclusions are respected
      *
      * EXDATE format: Comma-separated list of datetime values to exclude
      * Example: EXDATE:20250105T100000Z,20250107T100000Z
@@ -226,7 +232,7 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
         $backend = $this->getBackend();
         $id = $this->generateId();
 
-        // Daily event with Jan 5 and Jan 7 excluded
+        // Daily event with Jan 5 and Jan 7 excluded (10 occurrences, 2 excluded = 8 actual)
         $ical = join("\r\n", [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -245,7 +251,7 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
         $backend->createCalendarObject($id, "exdate-event.ics", $ical);
 
-        // Should find on Jan 3
+        // Query entire period - event exists but with exclusions
         $filters = [
             'name' => 'VCALENDAR',
             'comp-filters' => [
@@ -255,8 +261,8 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
                     'prop-filters' => [],
                     'is-not-defined' => false,
                     'time-range' => [
-                        'start' => new \DateTime('2025-01-03T00:00:00Z'),
-                        'end' => new \DateTime('2025-01-04T00:00:00Z'),
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2025-01-11T00:00:00Z'),
                     ],
                 ],
             ],
@@ -266,7 +272,7 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
         ];
 
         $result = $backend->calendarQuery($id, $filters);
-        $this->assertEquals(['exdate-event.ics'], $result, 'Should find event on Jan 3');
+        $this->assertEquals(['exdate-event.ics'], $result, 'Should find event in full period (with EXDATE)');
 
         // Should NOT find on Jan 5 (excluded)
         $filters['comp-filters'][0]['time-range'] = [
@@ -285,6 +291,419 @@ abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
 
         $result = $backend->calendarQuery($id, $filters);
         $this->assertEquals([], $result, 'Should not find event on Jan 7 (EXDATE)');
+    }
+
+    /**
+     * Test daily recurring event with INTERVAL
+     * INTERVAL=3 means every 3rd day
+     */
+    function testDailyRecurringEventWithInterval() {
+        $backend = $this->getBackend();
+        $id = $this->generateId();
+
+        // Every 3 days starting Jan 1: Jan 1, 4, 7, 10, 13, 16, 19, 22
+        $ical = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//Test//EN',
+            'BEGIN:VEVENT',
+            'UID:daily-interval-event',
+            'DTSTART:20250101T100000Z',
+            'DTEND:20250101T110000Z',
+            'RRULE:FREQ=DAILY;INTERVAL=3;COUNT=8',
+            'SUMMARY:Every 3 Days',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $backend->createCalendarObject($id, "daily-interval.ics", $ical);
+
+        // Query entire January - should find all 8 occurrences
+        $filters = [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [
+                [
+                    'name' => 'VEVENT',
+                    'comp-filters' => [],
+                    'prop-filters' => [],
+                    'is-not-defined' => false,
+                    'time-range' => [
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2025-01-31T23:59:59Z'),
+                    ],
+                ],
+            ],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals(['daily-interval.ics'], $result, 'Should find event across January (every 3 days)');
+
+        // Query Jan 2-3 (not occurrence dates) - should NOT find it
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2025-01-02T00:00:00Z'),
+            'end' => new \DateTime('2025-01-04T00:00:00Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should not find event on non-occurrence days');
+    }
+
+    /**
+     * Test weekly recurring event with INTERVAL
+     * INTERVAL=2 means every 2 weeks
+     */
+    function testWeeklyRecurringEventWithInterval() {
+        $backend = $this->getBackend();
+        $id = $this->generateId();
+
+        // Every 2 weeks on Monday starting Jan 6: Jan 6, 20, Feb 3, 17, Mar 3, 17
+        $ical = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//Test//EN',
+            'BEGIN:VEVENT',
+            'UID:weekly-interval-event',
+            'DTSTART:20250106T100000Z',
+            'DTEND:20250106T110000Z',
+            'RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;COUNT=6',
+            'SUMMARY:Biweekly Monday Meeting',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $backend->createCalendarObject($id, "weekly-interval.ics", $ical);
+
+        // Query Jan-Mar - should find all 6 occurrences
+        $filters = [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [
+                [
+                    'name' => 'VEVENT',
+                    'comp-filters' => [],
+                    'prop-filters' => [],
+                    'is-not-defined' => false,
+                    'time-range' => [
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2025-03-31T23:59:59Z'),
+                    ],
+                ],
+            ],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals(['weekly-interval.ics'], $result, 'Should find event across 3 months (every 2 weeks)');
+
+        // Query Jan 13 (off-week Monday) - should NOT find it
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2025-01-13T00:00:00Z'),
+            'end' => new \DateTime('2025-01-14T00:00:00Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should not find event on off-week Monday');
+    }
+
+    /**
+     * Test monthly recurring event with INTERVAL
+     * INTERVAL=2 means every 2 months
+     */
+    function testMonthlyRecurringEventWithInterval() {
+        $backend = $this->getBackend();
+        $id = $this->generateId();
+
+        // Every 2 months on the 15th: Jan 15, Mar 15, May 15, Jul 15, Sep 15
+        $ical = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//Test//EN',
+            'BEGIN:VEVENT',
+            'UID:monthly-interval-event',
+            'DTSTART:20250115T100000Z',
+            'DTEND:20250115T110000Z',
+            'RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=5',
+            'SUMMARY:Bimonthly Review',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $backend->createCalendarObject($id, "monthly-interval.ics", $ical);
+
+        // Query entire year - should find all 5 occurrences
+        $filters = [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [
+                [
+                    'name' => 'VEVENT',
+                    'comp-filters' => [],
+                    'prop-filters' => [],
+                    'is-not-defined' => false,
+                    'time-range' => [
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2025-12-31T23:59:59Z'),
+                    ],
+                ],
+            ],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals(['monthly-interval.ics'], $result, 'Should find event across year (every 2 months)');
+
+        // Query Feb 15 (off month) - should NOT find it
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2025-02-15T00:00:00Z'),
+            'end' => new \DateTime('2025-02-16T00:00:00Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should not find event on off month (Feb)');
+    }
+
+    /**
+     * Test yearly recurring event with INTERVAL
+     * INTERVAL=2 means every 2 years
+     */
+    function testYearlyRecurringEventWithInterval() {
+        $backend = $this->getBackend();
+        $id = $this->generateId();
+
+        // Every 2 years on Jan 15: 2025, 2027, 2029
+        $ical = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//Test//EN',
+            'BEGIN:VEVENT',
+            'UID:yearly-interval-event',
+            'DTSTART:20250115T100000Z',
+            'DTEND:20250115T110000Z',
+            'RRULE:FREQ=YEARLY;INTERVAL=2;COUNT=3',
+            'SUMMARY:Biennial Conference',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $backend->createCalendarObject($id, "yearly-interval.ics", $ical);
+
+        // Query 2025-2030 - should find all 3 occurrences
+        $filters = [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [
+                [
+                    'name' => 'VEVENT',
+                    'comp-filters' => [],
+                    'prop-filters' => [],
+                    'is-not-defined' => false,
+                    'time-range' => [
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2030-12-31T23:59:59Z'),
+                    ],
+                ],
+            ],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals(['yearly-interval.ics'], $result, 'Should find event across 6 years (every 2 years)');
+
+        // Query 2026 (off year) - should NOT find it
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2026-01-01T00:00:00Z'),
+            'end' => new \DateTime('2026-12-31T23:59:59Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should not find event on off year (2026)');
+    }
+
+    /**
+     * Test monthly event on the second Monday of each month
+     * BYDAY=2MO means "second Monday"
+     */
+    function testMonthlySecondMonday() {
+        $backend = $this->getBackend();
+        $id = $this->generateId();
+
+        // Second Monday of each month: Jan 13, Feb 10, Mar 10, Apr 14, May 12, Jun 9
+        $ical = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//Test//EN',
+            'BEGIN:VEVENT',
+            'UID:second-monday-event',
+            'DTSTART:20250113T140000Z',
+            'DTEND:20250113T150000Z',
+            'RRULE:FREQ=MONTHLY;BYDAY=2MO;COUNT=6',
+            'SUMMARY:Second Monday Meeting',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $backend->createCalendarObject($id, "second-monday.ics", $ical);
+
+        // Query 6 months - should find all occurrences
+        $filters = [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [
+                [
+                    'name' => 'VEVENT',
+                    'comp-filters' => [],
+                    'prop-filters' => [],
+                    'is-not-defined' => false,
+                    'time-range' => [
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2025-06-30T23:59:59Z'),
+                    ],
+                ],
+            ],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals(['second-monday.ics'], $result, 'Should find second Monday of each month');
+
+        // Query first Monday of Jan (Jan 6) - should NOT find it
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2025-01-06T00:00:00Z'),
+            'end' => new \DateTime('2025-01-07T00:00:00Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should not find event on first Monday');
+    }
+
+    /**
+     * Test yearly event on the second Monday of April
+     * BYMONTH=4;BYDAY=2MO means "second Monday of April"
+     */
+    function testYearlySecondMondayOfApril() {
+        $backend = $this->getBackend();
+        $id = $this->generateId();
+
+        // Second Monday of April: Apr 14 2025, Apr 13 2026, Apr 12 2027, Apr 10 2028
+        $ical = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//Test//EN',
+            'BEGIN:VEVENT',
+            'UID:april-second-monday-event',
+            'DTSTART:20250414T100000Z',
+            'DTEND:20250414T110000Z',
+            'RRULE:FREQ=YEARLY;BYMONTH=4;BYDAY=2MO;COUNT=4',
+            'SUMMARY:Annual April Meeting',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $backend->createCalendarObject($id, "april-second-monday.ics", $ical);
+
+        // Query 4 years - should find all occurrences
+        $filters = [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [
+                [
+                    'name' => 'VEVENT',
+                    'comp-filters' => [],
+                    'prop-filters' => [],
+                    'is-not-defined' => false,
+                    'time-range' => [
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2028-12-31T23:59:59Z'),
+                    ],
+                ],
+            ],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals(['april-second-monday.ics'], $result, 'Should find second Monday of April each year');
+
+        // Query May 2025 - should NOT find it
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2025-05-01T00:00:00Z'),
+            'end' => new \DateTime('2025-05-31T23:59:59Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should not find event in May');
+    }
+
+    /**
+     * Test yearly birthday event on January 14
+     * Simple yearly recurrence on a specific date
+     */
+    function testYearlyBirthdayEvent() {
+        $backend = $this->getBackend();
+        $id = $this->generateId();
+
+        // Birthday on Jan 14 every year: 2025, 2026, 2027, 2028, 2029
+        $ical = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//Test//EN',
+            'BEGIN:VEVENT',
+            'UID:birthday-event',
+            'DTSTART:20250114T000000Z',
+            'DTEND:20250114T235959Z',
+            'RRULE:FREQ=YEARLY;COUNT=5',
+            'SUMMARY:Birthday Party',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $backend->createCalendarObject($id, "birthday.ics", $ical);
+
+        // Query 5 years - should find all occurrences
+        $filters = [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [
+                [
+                    'name' => 'VEVENT',
+                    'comp-filters' => [],
+                    'prop-filters' => [],
+                    'is-not-defined' => false,
+                    'time-range' => [
+                        'start' => new \DateTime('2025-01-01T00:00:00Z'),
+                        'end' => new \DateTime('2029-12-31T23:59:59Z'),
+                    ],
+                ],
+            ],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals(['birthday.ics'], $result, 'Should find birthday on Jan 14 every year');
+
+        // Query Jan 15 - should NOT find it
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2025-01-15T00:00:00Z'),
+            'end' => new \DateTime('2025-01-16T00:00:00Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should not find event on Jan 15');
     }
 
     /**

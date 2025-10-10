@@ -112,7 +112,7 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         $response = $this->request($request);
 
         $this->assertEquals(403, $response->status);
-        $this->assertContains('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
+        $this->assertStringContainsString('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
     }
 
     function testShareAddressBookOfOtherUserWithAdminAccessResponds204() {
@@ -179,6 +179,6 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         );
 
         $this->assertEquals(403, $response->status);
-        $this->assertContains('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
+        $this->assertStringContainsString('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
     }
 }

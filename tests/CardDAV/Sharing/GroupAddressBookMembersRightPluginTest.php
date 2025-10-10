@@ -73,7 +73,7 @@ class GroupAddressBookMembersRightPluginTest extends \ESN\CardDAV\PluginTestBase
         );
 
         $this->assertEquals(403, $response->status);
-        $this->assertContains('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
+        $this->assertStringContainsString('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
     }
 
     function testUpdateMembersRightWithEmptyPrivilegesResponds400() {

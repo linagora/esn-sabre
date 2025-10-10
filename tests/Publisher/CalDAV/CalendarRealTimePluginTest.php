@@ -3,7 +3,7 @@ namespace ESN\Publisher\CalDAV;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
-class CalendarRealTimePluginTest extends \PHPUnit_Framework_TestCase {
+class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "calendars/123123/uid.ics";
     protected $eventEmitter;

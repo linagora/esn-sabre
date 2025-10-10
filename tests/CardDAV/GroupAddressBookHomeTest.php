@@ -15,7 +15,7 @@ class GroupAddressBookHomeTest extends \PHPUnit\Framework\TestCase {
     const DOMAIN_ID = '54313fcc398fef406b0041b8';
     const USER_ID = '54313fcc398fef406b0041c9';
 
-    function setUp() {
+    function setUp(): void {
         $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
 

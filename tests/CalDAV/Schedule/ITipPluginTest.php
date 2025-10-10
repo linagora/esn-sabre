@@ -38,7 +38,7 @@ END:VEVENT
 END:VCALENDAR'
     ];
 
-    function setUp()
+    function setUp(): void
     {
         $this->iTipPlugin = new ITipPlugin();
         $this->calDavPlugin = new CalDavPluginMock();

@@ -17,7 +17,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
     protected $etienneCard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Etienne\r\nEND:VCARD\r\n";
     protected $accentedEtienneCard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ⓔtienne\r\nEND:VCARD\r\n";
 
-    public function setUp() {
+    public function setUp(): void {
         $this->backend = $this->getBackend();
         //$pdo->exec('INSERT INTO addressbooks (principaluri, displayname, uri,
         //description, synctoken) VALUES ("principals/user1", "book1", "book1",

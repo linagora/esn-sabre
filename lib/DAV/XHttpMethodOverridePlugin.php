@@ -34,7 +34,7 @@ class XHttpMethodOverridePlugin extends ServerPlugin {
      */
     function initialize(Server $server) {
         $this->server = $server;
-        $this->server->on('beforeMethod*', [$this, 'override'], 90);
+        $this->server->on('beforeMethod:*', [$this, 'override'], 90);
     }
 
     /**

@@ -9,7 +9,7 @@ class IMipPluginCommonTest extends IMipPluginTestBase {
     private $iTipMessage;
     private $iTipMessageIcal;
     
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 

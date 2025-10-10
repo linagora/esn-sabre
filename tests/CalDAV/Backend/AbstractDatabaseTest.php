@@ -40,7 +40,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('transparent'),
         );
 
-        $this->assertIsArray(,$calendars);
+        $this->assertIsArray($calendars);
         $this->assertEquals(1,count($calendars));
 
         foreach($elementCheck as $name=>$value) {
@@ -84,7 +84,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('transparent'),
         );
 
-        $this->assertIsArray(,$calendars);
+        $this->assertIsArray($calendars);
         $this->assertEquals(1,count($calendars));
 
         foreach($elementCheck as $name=>$value) {
@@ -136,9 +136,9 @@ abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
 
     /**
      * @depends testCreateCalendarAndFetch
-     * @expectedException \Sabre\DAV\Exception
      */
-    function testCreateCalendarIncorrectComponentSet() {;
+    function testCreateCalendarIncorrectComponentSet() {
+        $this->expectException(\Sabre\DAV\Exception::class);
         $backend = $this->getBackend();
 
         //Creating a new calendar
@@ -526,10 +526,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
         }
     }
 
-    /**
-     * @expectedException \Sabre\DAV\Exception\Forbidden
-     */
     function testCreateSubscriptionFail() {
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
         $props = [];
         $backend = $this->getBackend();
         $backend->createSubscription('principals/user1/userID', 'sub1', $props);

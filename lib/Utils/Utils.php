@@ -5,11 +5,19 @@ namespace ESN\Utils;
 class Utils {
 
     static function firstEmailAddress($user) {
-        if (array_key_exists('accounts', $user)) {
-            foreach ($user['accounts'] as $account) {
-                if ($account['type'] === 'email') {
-                    return $account['emails'][0];
-                }
+        if (is_array($user) && array_key_exists('accounts', $user)) {
+            $accounts = $user['accounts'];
+        } elseif (is_object($user) && isset($user->accounts)) {
+            $accounts = $user->accounts;
+        } else {
+            return null;
+        }
+
+        foreach ($accounts as $account) {
+            if ((is_array($account) && $account['type'] === 'email')
+             || (is_object($account) && $account->type === 'email')) {
+
+                return is_array($account) ? $account['emails'][0] : $account->emails[0];
             }
         }
 

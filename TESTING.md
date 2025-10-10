@@ -166,8 +166,6 @@ tests/
 Tests run automatically on:
 - Pull requests
 - Commits to master
-- Scheduled nightly builds
-
 CI configuration: `.gitlab-ci.yml`
 
 ## Troubleshooting

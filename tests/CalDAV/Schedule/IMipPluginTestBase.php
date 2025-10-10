@@ -11,7 +11,7 @@ require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
 require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
 use \ESN\Utils\Utils as Utils;
 
-class IMipPluginTestBase extends \PHPUnit_Framework_TestCase {
+class IMipPluginTestBase extends \PHPUnit\Framework\TestCase {
     protected $amqpPublisher;
     const USER_1_CALENDAR_NAME = "calendar1";
 

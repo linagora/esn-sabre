@@ -4,13 +4,13 @@ use Sabre\DAV\ServerPlugin;
 use \Sabre\CalDAV\Schedule\IMipPlugin;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVACL/PrincipalBackend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CardDAV/Backend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/HTTP/ResponseMock.php';
+require_once ESN_TEST_BASE . '/Sabre/HTTP/SapiMock.php';
+require_once ESN_TEST_BASE . '/Sabre/DAVACL/PrincipalBackend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/CalDAV/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/CardDAV/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/DAVServerTest.php';
+require_once ESN_TEST_BASE . '/Sabre/DAV/Auth/Backend/Mock.php';
 
 class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 

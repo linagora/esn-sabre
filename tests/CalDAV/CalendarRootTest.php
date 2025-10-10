@@ -5,7 +5,7 @@ namespace ESN\CalDAV;
 /**
  * @medium
  */
-class CalendarRootTest extends \PHPUnit_Framework_TestCase {
+class CalendarRootTest extends \PHPUnit\Framework\TestCase {
     protected $esndb;
     protected $sabredb;
     protected $principalBackend;

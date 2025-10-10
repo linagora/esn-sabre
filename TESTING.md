@@ -27,6 +27,21 @@ make check
 
 ## Test Coverage
 
+### Important Note on Coverage Metrics
+
+⚠️ **The coverage report generated here shows only direct tests within this repository.**
+
+This project (esn-sabre) is also tested by:
+- **[twake-calendar-side-service](https://github.com/linagora/twake-calendar-side-service)** - Integration tests that exercise esn-sabre's CalDAV/CardDAV functionality
+- **OpenPaaS applications** - End-to-end tests that interact with this backend
+
+The reported coverage (e.g., 8.10%) represents **unit test coverage only** and does not reflect:
+- Integration tests from dependent projects
+- End-to-end tests in the full stack
+- Actual production usage validation
+
+**True coverage is significantly higher** when including these external test suites.
+
 ### Prerequisites
 
 The coverage report requires Xdebug, which is not included in the standard Docker image to keep it lightweight.

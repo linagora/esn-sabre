@@ -65,10 +65,8 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
         $this->assertNull($invalid);
     }
 
-    /**
-     * @expectedException \Sabre\DAV\Exception\NotFound
-     */
     function testGetChildNotFound() {
+        $this->expectException(\Sabre\DAV\Exception\NotFound::class);
         $this->root->getChild('54313fcc398fef406b0041b2');
     }
 }

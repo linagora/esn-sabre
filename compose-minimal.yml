@@ -18,10 +18,10 @@ services:
     networks:
       - esn-sabre-net
 
-  ampq_host:
+  amqp_host:
     image: docker.io/library/rabbitmq:3
-    container_name: ampq_host
-    hostname: ampq_host
+    container_name: amqp_host
+    hostname: amqp_host
     networks:
       - esn-sabre-net
 

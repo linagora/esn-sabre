@@ -235,8 +235,6 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $message->scheduleStatus = \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_TEMPORARY;
 
         $plugin->itip($message);
-
-        $this->verifyMockObjects();
     }
 
     function testItipDelegateToScheduleAndPublishMessage() {
@@ -252,7 +250,6 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $plugin->expects($this->once())->method('publishMessages');
 
         $plugin->itip(new \Sabre\VObject\ITip\Message());
-        $this->verifyMockObjects();
     }
 
     function testNoResourceCreationMessageWhenNoSignificantChange() {

@@ -227,7 +227,7 @@ In order to run, the ESN sabre instance must access to the ESN, and mongo instan
 For example:
 
 ```
-docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre .
+docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre
 ```
 
 This will launch the Sabre container, create its configuration, launch Sabre and expose on port 8001 on your host.

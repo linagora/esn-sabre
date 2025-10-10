@@ -1,5 +1,5 @@
 #
-# minimal compose infrastucture for testing
+# minimal compose infrastructure for testing
 #
 version: '3.8'
 

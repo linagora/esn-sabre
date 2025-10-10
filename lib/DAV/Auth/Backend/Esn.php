@@ -91,7 +91,12 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             return [false, null];
         }
 
-        $user = json_decode($response->getBodyAsString())[0];
+        $decoded = json_decode($response->getBodyAsString());
+        if (!$decoded || !is_array($decoded) || count($decoded) === 0) {
+            return [false, null];
+        }
+
+        $user = $decoded[0];
 
         if (!$user) {
             return [false, null];

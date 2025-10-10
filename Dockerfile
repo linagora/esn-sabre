@@ -13,6 +13,9 @@ LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
 ADD 20-apcu.ini /etc/php/7.4/fpm/conf.d/20-apcu.ini
 
+# Fix for CI environments with clock skew issues
+RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \
   DEBIAN_FRONTEND=noninteractive apt-get -y install php7.4-fpm php7.4-cli curl supervisor nginx git php7.4-curl php7.4-ldap php7.4-bcmath php7.4-mbstring php7.4-zip php-pear php7.4-dev make pkg-config php-apcu && \

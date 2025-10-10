@@ -2,7 +2,7 @@
 
 namespace ESN\DAV\Auth\Backend;
 
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
+require_once ESN_TEST_BASE . '/Sabre/HTTP/ResponseMock.php';
 
 class MongoTest extends \PHPUnit\Framework\TestCase {
 

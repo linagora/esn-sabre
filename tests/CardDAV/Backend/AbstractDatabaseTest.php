@@ -167,10 +167,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(array(), $this->backend->getAddressBooksForUser('principals/users/user1'));
     }
 
-    /**
-     * @expectedException Sabre\DAV\Exception\BadRequest
-     */
     public function testCreateAddressBookUnsupportedProp() {
+        $this->expectException(\Sabre\DAV\Exception\BadRequest::class);
         $this->backend->createAddressBook('principals/users/user1','book2', array(
             '{DAV:}foo' => 'bar',
         ));

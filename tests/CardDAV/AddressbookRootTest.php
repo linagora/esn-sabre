@@ -97,10 +97,8 @@ class AddressbookRootTest extends \PHPUnit\Framework\TestCase {
         ]);
     }
 
-    /**
-     * @expectedException \Sabre\DAV\Exception\NotFound
-     */
     function testGetChildNotFound() {
+        $this->expectException(\Sabre\DAV\Exception\NotFound::class);
         $this->root->getChild('000011110000111100001111');
     }
 }

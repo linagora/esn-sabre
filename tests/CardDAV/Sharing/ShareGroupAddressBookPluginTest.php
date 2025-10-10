@@ -82,7 +82,7 @@ class ShareGroupAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         );
 
         $this->assertEquals(405, $response->status);
-        $this->assertContains('Can not delegate for group administrators', $response->getBodyAsString());
+        $this->assertStringContainsString('Can not delegate for group administrators', $response->getBodyAsString());
     }
 
     function testShareGroupAddressBookForGroupMemberRespond204() {

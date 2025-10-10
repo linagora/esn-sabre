@@ -14,9 +14,9 @@ services:
     networks:
       - esn-sabre-test-net
 
-  ampq_host:
+  amqp_host:
     image: docker.io/library/rabbitmq:3
-    hostname: ampq_host
+    hostname: amqp_host
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 10s
@@ -57,7 +57,7 @@ services:
         condition: service_started
       mongodb:
         condition: service_started
-      ampq_host:
+      amqp_host:
         condition: service_started
 
 networks:

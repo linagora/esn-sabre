@@ -102,11 +102,6 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     function testCalendarPublicRightUpdatedWithSubscribers() {
 
-        $this->publisher
-            ->expects($this->exactly(3))
-            ->method('publish')
-            ->with('calendar:calendar:updated');
-
         $firstExpectedData = [
             'calendarPath' => '/calendars/1/uri1',
             'calendarProps' => [
@@ -114,23 +109,12 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
             ]
         ];
 
-        $this->publisher
-            ->expects($this->at(0))
-            ->method('publish')
-            ->with('calendar:calendar:updated', json_encode($firstExpectedData) );
-
-
         $secondfirstExpectedData = [
             'calendarPath' => '/calendars/2/uri2',
             'calendarProps' => [
                 'public_right' => 'privilege'
             ]
         ];
-
-        $this->publisher
-            ->expects($this->at(1))
-            ->method('publish')
-            ->with('calendar:calendar:updated', json_encode($secondfirstExpectedData) );
 
         $thirdExpectedData = [
             'calendarPath' => '/calendars/3/uri3',
@@ -140,19 +124,18 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         ];
 
         $this->publisher
-            ->expects($this->at(2))
+            ->expects($this->exactly(3))
             ->method('publish')
-            ->with('calendar:calendar:updated', json_encode($thirdExpectedData) );
+            ->withConsecutive(
+                ['calendar:calendar:updated', json_encode($firstExpectedData)],
+                ['calendar:calendar:updated', json_encode($secondfirstExpectedData)],
+                ['calendar:calendar:updated', json_encode($thirdExpectedData)]
+            );
 
         $this->plugin->updatePublicRight('/' . self::PATH);
     }
 
     function testCalendarPublicRightUpdatedWithoutSubscribers() {
-
-        $this->publisher
-            ->expects($this->exactly(1))
-            ->method('publish')
-            ->with('calendar:calendar:updated');
 
         $expectedData = [
             'calendarPath' => '/calendars/3/uri3',
@@ -162,9 +145,9 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         ];
 
         $this->publisher
-            ->expects($this->at(0))
+            ->expects($this->once())
             ->method('publish')
-            ->with('calendar:calendar:updated', json_encode($expectedData) );
+            ->with('calendar:calendar:updated', json_encode($expectedData));
 
         $this->plugin->updatePublicRight('/' . self::PATH, false);
     }

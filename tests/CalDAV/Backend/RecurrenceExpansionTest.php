@@ -14,7 +14,7 @@ namespace ESN\CalDAV\Backend;
  *
  * @medium
  */
-abstract class RecurrenceExpansionTest extends \PHPUnit_Framework_TestCase {
+abstract class RecurrenceExpansionTest extends \PHPUnit\Framework\TestCase {
 
     abstract protected function getBackend();
     abstract protected function generateId();

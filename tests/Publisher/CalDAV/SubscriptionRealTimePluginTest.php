@@ -3,7 +3,7 @@ namespace ESN\Publisher\CalDAV;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
-class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
+class SubscriptionRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "/calendars/123123.json";
     const ETAG = 'The etag';
@@ -13,7 +13,7 @@ class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     protected $publisher;
     protected $server;
 
-    function setUp() {
+    function setUp(): void {
         $this->eventEmitter = $this->createMock(\Sabre\Event\EventEmitter::class);
         $this->eventEmitter->expects($this->exactly(3))->method('on');
 

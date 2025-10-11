@@ -4,15 +4,15 @@ use Sabre\DAV\ServerPlugin;
 use \Sabre\CalDAV\Schedule\IMipPlugin;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVACL/PrincipalBackend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CardDAV/Backend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/HTTP/ResponseMock.php';
+require_once ESN_TEST_BASE . '/Sabre/HTTP/SapiMock.php';
+require_once ESN_TEST_BASE . '/Sabre/DAVACL/PrincipalBackend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/CalDAV/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/CardDAV/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/DAVServerTest.php';
+require_once ESN_TEST_BASE . '/Sabre/DAV/Auth/Backend/Mock.php';
 
-class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
+class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "calendars/456456/123123/uid.ics";
     const PARENT = 'calendars/456456/123123';
@@ -235,8 +235,6 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $message->scheduleStatus = \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_TEMPORARY;
 
         $plugin->itip($message);
-
-        $this->verifyMockObjects();
     }
 
     function testItipDelegateToScheduleAndPublishMessage() {
@@ -252,7 +250,6 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $plugin->expects($this->once())->method('publishMessages');
 
         $plugin->itip(new \Sabre\VObject\ITip\Message());
-        $this->verifyMockObjects();
     }
 
     function testNoResourceCreationMessageWhenNoSignificantChange() {

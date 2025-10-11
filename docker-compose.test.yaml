@@ -56,9 +56,9 @@ services:
       esn_ldap:
         condition: service_started
       mongodb:
-        condition: service_started
+        condition: service_healthy
       amqp_host:
-        condition: service_started
+        condition: service_healthy
 
 networks:
   esn-sabre-test-net:

@@ -3,7 +3,7 @@
 namespace ESN\CalDAV;
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
-class PluginTest extends \PHPUnit_Framework_TestCase {
+class PluginTest extends \PHPUnit\Framework\TestCase {
 
     function  testGetCalendarHomeForPrincipal() {
         $plugin = new Plugin();

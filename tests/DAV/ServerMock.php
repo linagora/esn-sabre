@@ -5,13 +5,13 @@ namespace ESN\DAV;
 use Sabre\DAV\ServerPlugin;
 use Sabre\DAV\Xml\Property\Href;
 
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVACL/PrincipalBackend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CardDAV/Backend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/HTTP/ResponseMock.php';
+require_once ESN_TEST_BASE . '/Sabre/HTTP/SapiMock.php';
+require_once ESN_TEST_BASE . '/Sabre/DAVACL/PrincipalBackend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/CalDAV/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/CardDAV/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/DAVServerTest.php';
+require_once ESN_TEST_BASE . '/Sabre/DAV/Auth/Backend/Mock.php';
 require_once ESN_TEST_BASE . '/DAV/Auth/PluginMock.php';
 
 define('PRINCIPALS_USERS', 'principals/users');
@@ -22,7 +22,7 @@ define('PRINCIPALS_DOMAINS', 'principals/domains');
 /**
  * @medium
  */
-class ServerMock extends \PHPUnit_Framework_TestCase {
+class ServerMock extends \PHPUnit\Framework\TestCase {
 
     protected $user1Calendars = [
         'ownedCalendars' => [
@@ -276,7 +276,7 @@ END:VCALENDAR'
 
     protected $cal;
 
-    function setUp() {
+    function setUp(): void {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
         $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
 

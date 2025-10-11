@@ -4,7 +4,7 @@ namespace ESN\Publisher\CardDAV;
 
 require_once ESN_TEST_BASE . '/Publisher/CardDAV/CardDAVBackendMock.php';
 
-class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
+class SubscriptionRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "addressbooks/456456/123123";
     const PRINCIPAL_URI = "principals/users/456456";
@@ -13,7 +13,7 @@ class SubscriptionRealTimePluginTest extends \PHPUnit_Framework_TestCase {
     protected $publisher;
     protected $server;
 
-    function setUp() {
+    function setUp(): void {
         $this->cardDAVBackend = new CardDAVBackendMock();
         $this->cardDAVBackend->setEventEmitter($this->createMock(\Sabre\Event\EventEmitter::class));
 

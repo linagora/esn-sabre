@@ -11,7 +11,7 @@ class ShareGroupAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
     const ADMINISTRATOR_ID_1 = '54b64eadf6d7d8e41d263e8f';
     const ADMINISTRATOR_ID_2 = '54b64eadf6d7d8e41d263e9f';
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $this->esndb->domains->insertOne([
@@ -82,7 +82,7 @@ class ShareGroupAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         );
 
         $this->assertEquals(405, $response->status);
-        $this->assertContains('Can not delegate for group administrators', $response->getBodyAsString());
+        $this->assertStringContainsString('Can not delegate for group administrators', $response->getBodyAsString());
     }
 
     function testShareGroupAddressBookForGroupMemberRespond204() {

@@ -4,7 +4,7 @@ use Sabre\DAV\ServerPlugin;
 
 require_once ESN_TEST_BASE . '/CardDAV/MockUtils.php';
 
-class ContactRealTimePluginTest extends \PHPUnit_Framework_TestCase {
+class ContactRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const SHARED_ADDRESSBOOK = [[
         'id' => 'shared-one',

@@ -14,10 +14,10 @@
 # docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre
 #
 
-FROM debian:bullseye-slim
-LABEL maintainer="Linagora Folks <openpaas@linagora.com>"
+FROM debian:bookworm-slim
+LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
-ENV PHPVERSION=7.4
+ENV PHPVERSION=8.2
 
 # Copy PHP configuration files first (these rarely change)
 ADD 20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini

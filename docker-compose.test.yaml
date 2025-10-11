@@ -3,7 +3,7 @@
 #
 services:
   mongodb:
-    image: docker.io/library/mongo:3.4.0
+    image: docker.io/library/mongo:3.6
     hostname: mongodb
     healthcheck:
       test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]

@@ -46,7 +46,7 @@ RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fp
 RUN sed -i "s/error_log = \/var\/log\/php${PHPVERSION}-fpm.log/error_log = \/proc\/self\/fd\/2/" /etc/php/${PHPVERSION}/fpm/php-fpm.conf && \
     sed -i "s/;catch_workers_output = yes/catch_workers_output = yes/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf
 
-RUN pecl install mongodb-1.9.0 \
+RUN pecl install mongodb-1.15.0 \
     && echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini \
     && echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini
 

@@ -22,7 +22,7 @@
     "require": {
         "php-amqplib/php-amqplib": "^3.3",
         "php": ">=7.4",
-        "sabre/dav": "4.1.5",
+        "sabre/dav": "4.2.3",
         "sabre/vobject": "dev-waiting-merges-4.2.2 as 4.2.2",
         "mongodb/mongodb": "^1.15",
         "monolog/monolog": "1.24.0",

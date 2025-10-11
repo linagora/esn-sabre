@@ -7,6 +7,8 @@ LABEL maintainer Linagora Folks <openpaas@linagora.com>
 ENV PHPVERSION=8.2
 
 ADD ./docker/config/20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
+ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini
+ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.ini
 
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
 

@@ -4,7 +4,7 @@
 FROM debian:bullseye
 LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
-ENV PHPVERSION=7.4
+ENV PHPVERSION=8.2
 
 ADD 20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
 

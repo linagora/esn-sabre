@@ -147,6 +147,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $isImport = false;
 
             $event = \Sabre\VObject\Reader::read($data);
+
+            if (is_resource($data)) {
+                rewind($data);
+            }
             $event->remove('method');
 
             if (array_key_exists('import', $this->server->httpRequest->getQueryParameters())) {

@@ -6,7 +6,7 @@ use \Sabre\DAV;
 use \Sabre\HTTP;
 use Sabre\Event\EventEmitter;
 use \Firebase\JWT\JWT;
-use Firebase\JWT\Key;
+use \Firebase\JWT\Key;
 
 define('ESN_PUBLIC_KEY', __DIR__ . '/../../../../config/esn.key.pub');
 

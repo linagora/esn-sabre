@@ -7,6 +7,7 @@
          convertNoticesToExceptions="true"
          convertWarningsToExceptions="true"
          enforceTimeLimit="true"
+         defaultTimeLimit="5"
          failOnRisky="true"
          failOnWarning="true"
          beStrictAboutOutputDuringTests="true">

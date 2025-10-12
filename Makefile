@@ -20,7 +20,7 @@ $(PHPCS) $(PHPUNIT):
 	composer install --working-dir $(BASEDIR)
 
 test: $(PHPUNIT)
-	$(PHPUNIT) -c $(PHPUNIT_CONFIG) $(UNIT_TARGET)
+	$(PHPUNIT) -c $(PHPUNIT_CONFIG) --display-deprecations $(UNIT_TARGET)
 
 test-report: $(PHPUNIT)
 	$(PHPUNIT) -c $(PHPUNIT_CONFIG) --coverage-html $(PHPUNIT_REPORT) $(UNIT_TARGET)

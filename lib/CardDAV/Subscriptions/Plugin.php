@@ -13,6 +13,7 @@ use Sabre\DAV\ServerPlugin;
  * Some clients support 'managed subscriptions' server-side. This is basically
  * a list of subscription urls a user is using.
  */
+#[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
 
     /**

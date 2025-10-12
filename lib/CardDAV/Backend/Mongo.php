@@ -5,6 +5,7 @@ namespace ESN\CardDAV\Backend;
 use Sabre\Event\EventEmitter;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 
+#[\AllowDynamicProperties]
 class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     \Sabre\CardDAV\Backend\SyncSupport,
     SubscriptionSupport,

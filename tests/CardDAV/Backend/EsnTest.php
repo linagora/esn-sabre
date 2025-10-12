@@ -5,6 +5,7 @@ namespace ESN\CardDAV\Backend;
 /**
  * @medium
  */
+#[\AllowDynamicProperties]
 class EsnTest extends \PHPUnit\Framework\TestCase {
     protected function getBackend() {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);

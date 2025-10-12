@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+#[\AllowDynamicProperties]
 class CalDAVBackendMock extends \Sabre\CalDAV\Backend\AbstractBackend {
     // @codingStandardsIgnoreStart
     function getCalendarsForUser($principalUri) { return []; }
@@ -19,12 +20,14 @@ class CalDAVBackendMock extends \Sabre\CalDAV\Backend\AbstractBackend {
 }
 
 
+#[\AllowDynamicProperties]
 class MockAuthBackend {
     function getAuthCookies() {
         return "coookies!!!";
     }
 }
 
+#[\AllowDynamicProperties]
 class MockedDocument extends \Sabre\VObject\Document {
 
 }

@@ -4,6 +4,7 @@ namespace ESN\Utils;
 
 use Sabre\VObject;
 
+#[\AllowDynamicProperties]
 class DateTimeTest extends \PHPUnit\Framework\TestCase {
 
     // The computeVEventDuration function tests

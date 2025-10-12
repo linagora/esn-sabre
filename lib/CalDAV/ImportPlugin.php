@@ -10,6 +10,7 @@ use \Sabre\HTTP\RequestInterface;
 use \Sabre\HTTP\ResponseInterface;
 use ESN\Utils\Utils;
 
+#[\AllowDynamicProperties]
 class ImportPlugin extends \ESN\JSON\BasePlugin  {
 
     /**

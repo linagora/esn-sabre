@@ -3,6 +3,7 @@ namespace ESN\Publisher\CalDAV;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
+#[\AllowDynamicProperties]
 class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "calendars/123123/uid.ics";
@@ -235,6 +236,7 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
     }
 }
 
+#[\AllowDynamicProperties]
 class ShareeSimple {
     public $principal;
     public $access;

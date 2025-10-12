@@ -14,6 +14,7 @@ use Sabre\DAVACL\IACL;
  *
  * This node represents a subscription.
  */
+#[\AllowDynamicProperties]
 class Subscription extends Collection implements ISubscription, IACL {
 
     use ACLTrait;

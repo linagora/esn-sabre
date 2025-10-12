@@ -4,6 +4,7 @@ namespace ESN\DAV\Sharing;
 
 use Sabre\DAV\Exception\Forbidden;
 
+#[\AllowDynamicProperties]
 class Plugin extends \Sabre\DAV\Sharing\Plugin {
 
     const ACCESS_ADMINISTRATION = 5;

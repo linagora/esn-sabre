@@ -4,6 +4,7 @@ namespace ESN\Log;
 
 use \Sabre\DAV;
 
+#[\AllowDynamicProperties]
 class ExceptionLoggerPlugin extends DAV\ServerPlugin
 {
     protected $logger;

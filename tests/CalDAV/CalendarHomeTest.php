@@ -5,6 +5,7 @@ namespace ESN\CalDAV;
 /**
  * @medium
  */
+#[\AllowDynamicProperties]
 class CalendarHomeTest extends \PHPUnit\Framework\TestCase {
 
     protected function getBackend() {

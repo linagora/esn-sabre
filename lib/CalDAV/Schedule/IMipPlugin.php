@@ -16,6 +16,7 @@ use \ESN\Utils\Utils as Utils;
 use ESN\Utils\DateTime;
 use Sabre\VObject\Reader;
 
+#[\AllowDynamicProperties]
 class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     protected $server;
     protected $amqpPublisher;

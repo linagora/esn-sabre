@@ -4,6 +4,7 @@ namespace ESN\CardDAV;
 
 use ESN\Utils\Utils as Utils;
 
+#[\AllowDynamicProperties]
 class AddressBookRoot extends \Sabre\DAV\Collection {
 
     const PRINCIPAL_SUPPORTED_SET = [

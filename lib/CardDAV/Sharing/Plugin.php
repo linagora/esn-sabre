@@ -22,6 +22,7 @@ use \ESN\Utils\Utils as Utils;
  * This specification allows people to share webdav resources with others.
  *
  */
+#[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
 
     /**

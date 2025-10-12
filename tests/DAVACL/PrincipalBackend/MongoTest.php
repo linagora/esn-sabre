@@ -2,6 +2,7 @@
 
 namespace ESN\DAVACL\PrincipalBackend;
 
+#[\AllowDynamicProperties]
 class MongoTest extends \PHPUnit\Framework\TestCase {
     protected static $esndb;
     protected static $domainMembers;

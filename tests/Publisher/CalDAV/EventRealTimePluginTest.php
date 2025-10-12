@@ -12,6 +12,7 @@ require_once ESN_TEST_BASE . '/Sabre/CardDAV/Backend/Mock.php';
 require_once ESN_TEST_BASE . '/Sabre/DAVServerTest.php';
 require_once ESN_TEST_BASE . '/Sabre/DAV/Auth/Backend/Mock.php';
 
+#[\AllowDynamicProperties]
 class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "calendars/456456/123123/uid.ics";

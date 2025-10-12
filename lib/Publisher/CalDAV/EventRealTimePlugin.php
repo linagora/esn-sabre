@@ -10,6 +10,7 @@ use Sabre\Uri;
 use \ESN\Utils\Utils as Utils;
 use \ESN\CalDAV\Schedule\IMipPlugin;
 
+#[\AllowDynamicProperties]
 class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     const PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN = 101;
 

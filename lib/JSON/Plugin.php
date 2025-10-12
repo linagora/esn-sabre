@@ -91,7 +91,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $request->setUrl($url);
         }
 
-        $this->acceptHeader = explode(', ', $request->getHeader('Accept'));
+        $this->acceptHeader = explode(', ', $request->getHeader('Accept') ?? '');
         $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
 
         if ($this->_isOldDefaultCalendarUriNotFound($request->getPath())) {

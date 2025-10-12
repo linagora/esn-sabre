@@ -87,6 +87,18 @@ RUN echo "daemon off;" >> /etc/nginx/nginx.conf && \
     ln -sf /dev/stderr /var/log/nginx/error.log && \
     ln -sf /dev/stdout /var/log/nginx/access.log
 
+RUN pecl install mongodb-2.1.4 \
+    && echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini \
+    && echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini
+
+# Set up Sabre DAV
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --filename=composer
+
+# Set up Nginx
+RUN echo "daemon off;" >> /etc/nginx/nginx.conf
+RUN ln -sf /dev/stderr /var/log/nginx/error.log
+RUN ln -sf /dev/stdout /var/log/nginx/access.log
+
 # Copy composer from official image
 COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
 

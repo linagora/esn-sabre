@@ -4,6 +4,7 @@ namespace ESN\CardDAV;
 
 use Sabre\DAV\MkCol;
 
+#[\AllowDynamicProperties]
 class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
 
     protected $principal;

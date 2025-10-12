@@ -5,6 +5,7 @@ namespace ESN\DAV\Auth;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 
+#[\AllowDynamicProperties]
 class PluginMock extends \Sabre\DAV\Auth\Plugin {
 
     /**

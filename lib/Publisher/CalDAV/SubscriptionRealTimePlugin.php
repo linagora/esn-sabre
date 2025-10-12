@@ -9,6 +9,7 @@ use Sabre\VObject\Document;
 use Sabre\Uri;
 use Sabre\Event\EventEmitter;
 
+#[\AllowDynamicProperties]
 class SubscriptionRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     protected $eventEmitter;

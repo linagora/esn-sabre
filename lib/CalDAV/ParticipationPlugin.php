@@ -9,6 +9,7 @@ use \Sabre\CalDAV\ICalendar;
 use \Sabre\Uri;
 use \Sabre\HTTP\RequestInterface;
 
+#[\AllowDynamicProperties]
 class ParticipationPlugin extends ServerPlugin {
 
     /**

@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+#[\AllowDynamicProperties]
 class CalendarRoot extends \Sabre\DAV\Collection {
 
     const USER_PREFIX = 'principals/users';

@@ -5,6 +5,7 @@ namespace ESN\CalDAV\Backend;
 use \Sabre\VObject;
 use Sabre\Event\EventEmitter;
 
+#[\AllowDynamicProperties]
 class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     \Sabre\CalDAV\Backend\SubscriptionSupport,
     \Sabre\CalDAV\Backend\SyncSupport,

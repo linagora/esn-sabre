@@ -26,7 +26,7 @@ use
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
-    private function scheduleReply(RequestInterface $request) {
+    protected function scheduleReply(RequestInterface $request) {
 
         $scheduleReply = $request->getHeader('Schedule-Reply');
         return $scheduleReply!=='F';

@@ -14,6 +14,7 @@ use \Sabre\VObject\ITip;
 use \Sabre\VObject\Property;
 use \ESN\Utils\Utils as Utils;
 use ESN\Utils\DateTime;
+use ESN\Utils\DateTimeWithAllDay;
 use Sabre\VObject\Reader;
 
 #[\AllowDynamicProperties]

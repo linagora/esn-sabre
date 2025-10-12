@@ -4,6 +4,7 @@ namespace ESN\DAV\Auth\Backend;
 
 require_once ESN_TEST_BASE . '/Sabre/HTTP/ResponseMock.php';
 
+#[\AllowDynamicProperties]
 class MongoTest extends \PHPUnit\Framework\TestCase {
 
     const PRINCIPAL_PREFIX = "principals/users";

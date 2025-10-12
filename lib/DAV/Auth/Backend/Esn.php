@@ -19,6 +19,7 @@ define('OPENPASS_BASIC_AUTH', getenv("OPENPASS_BASIC_AUTH"));
 define('SABRE_ADMIN_LOGIN', getenv("SABRE_ADMIN_LOGIN"));
 define('SABRE_ADMIN_PASSWORD', getenv("SABRE_ADMIN_PASSWORD"));
 
+#[\AllowDynamicProperties]
 class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     protected $httpClient;

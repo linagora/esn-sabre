@@ -2,6 +2,7 @@
 
 namespace ESN\DAV;
 
+#[\AllowDynamicProperties]
 class XHttpMethodOverridePluginTest extends \PHPUnit\Framework\TestCase {
 
     private function prepareServer() {
@@ -51,6 +52,7 @@ class XHttpMethodOverridePluginTestSapiMock {
     }
 }
 
+#[\AllowDynamicProperties]
 class MockItipPlugin extends \Sabre\DAV\ServerPlugin {
 
     function initialize(\Sabre\DAV\Server $server) {
@@ -65,6 +67,7 @@ class MockItipPlugin extends \Sabre\DAV\ServerPlugin {
     }
 }
 
+#[\AllowDynamicProperties]
 class MockPostPlugin extends \Sabre\DAV\ServerPlugin {
 
     function initialize(\Sabre\DAV\Server $server) {

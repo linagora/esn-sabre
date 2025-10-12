@@ -9,6 +9,7 @@ use Sabre\VObject\ITip\Message;
 /**
  * @medium
  */
+#[\AllowDynamicProperties]
 class ITipPluginTest extends \PHPUnit\Framework\TestCase
 {
 
@@ -178,6 +179,7 @@ END:VCALENDAR'
 
 }
 
+#[\AllowDynamicProperties]
 class CalDavPluginMock extends ServerPlugin
 {
     function getPluginName()

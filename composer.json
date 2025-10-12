@@ -18,7 +18,7 @@
         "php": ">=8.2",
         "sabre/dav": "4.7.0",
         "sabre/vobject": "^4.5.7",
-        "mongodb/mongodb": "^1.15",
+        "mongodb/mongodb": "^2.4",
         "monolog/monolog": "^2.9",
         "firebase/php-jwt": "^6.0"
     },

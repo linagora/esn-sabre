@@ -17,6 +17,7 @@ function ldap_bind($conn, $dn = null, $pwd = null) {
 
 namespace ESN\DAV\Auth\Backend;
 
+#[\AllowDynamicProperties]
 class EsnTest extends \PHPUnit\Framework\TestCase {
     const USER_ID = '54313fcc398fef406b0041b6';
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';

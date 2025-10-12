@@ -6,6 +6,7 @@ use Sabre\DAV\Server;
 use Sabre\VObject\ITip\Message;
 use Sabre\VObject\Reader;
 
+#[\AllowDynamicProperties]
 class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     private $plugin;
 

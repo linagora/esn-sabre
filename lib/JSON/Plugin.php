@@ -8,6 +8,7 @@ use \Sabre\VObject,
     \Sabre\DAV;
 use Sabre\VObject\ITip\Message;
 
+#[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Plugin {
 
     const FREE_BUSY_QUERY = 'free-busy-query';

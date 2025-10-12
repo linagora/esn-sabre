@@ -5,6 +5,7 @@ namespace ESN\CalDAV;
 /**
  * @medium
  */
+#[\AllowDynamicProperties]
 class CalendarRootTest extends \PHPUnit\Framework\TestCase {
     protected $esndb;
     protected $sabredb;

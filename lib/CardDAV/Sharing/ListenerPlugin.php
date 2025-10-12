@@ -5,6 +5,7 @@ namespace ESN\CardDAV\Sharing;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
 
+#[\AllowDynamicProperties]
 class ListenerPlugin extends ServerPlugin {
 
     private $carddavBackend;

@@ -1,6 +1,7 @@
 <?php
 namespace ESN\Publisher;
 
+#[\AllowDynamicProperties]
 class RealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     protected $publisher;

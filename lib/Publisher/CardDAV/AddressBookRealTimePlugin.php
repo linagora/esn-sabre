@@ -6,6 +6,7 @@ use \Sabre\DAV\ServerPlugin;
 use Sabre\Uri;
 use Sabre\Event\EventEmitter;
 
+#[\AllowDynamicProperties]
 class AddressBookRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     protected $carddavBackend;

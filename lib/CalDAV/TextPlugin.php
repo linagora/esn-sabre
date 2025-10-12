@@ -5,6 +5,7 @@ use \Sabre\VObject;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 
+#[\AllowDynamicProperties]
 class TextPlugin extends \ESN\JSON\BasePlugin {
 
     /**

@@ -4,6 +4,7 @@ namespace ESN\DAVACL\PrincipalBackend;
 
 use \ESN\Utils\Utils as Utils;
 
+#[\AllowDynamicProperties]
 class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     protected $db;
     protected $collectionMap;

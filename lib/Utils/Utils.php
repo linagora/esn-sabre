@@ -2,6 +2,7 @@
 
 namespace ESN\Utils;
 
+#[\AllowDynamicProperties]
 class Utils {
 
     static function firstEmailAddress($user) {

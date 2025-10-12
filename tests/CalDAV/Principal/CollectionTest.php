@@ -4,6 +4,7 @@ namespace ESN\CalDAV\Principal;
 
 use \Sabre\DAVACL;
 
+#[\AllowDynamicProperties]
 class CollectionTest extends \PHPUnit\Framework\TestCase {
 
     function testGetChildForPrincipal() {

@@ -3,10 +3,10 @@
 #
 services:
   mongodb:
-    image: docker.io/library/mongo:3.6
+    image: docker.io/library/mongo:7
     hostname: mongodb
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5

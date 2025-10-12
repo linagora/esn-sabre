@@ -226,7 +226,7 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     function testItipDoSendMessageIfScheduleFail() {
         $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
-            ->setMethods(['publishMessages'])
+            ->onlyMethods(['publishMessages'])
             ->setConstructorArgs(['', new \ESN\CalDAV\CalDAVBackendMock()])
             ->getMock();
         $plugin->expects($this->never())->method('publishMessages');
@@ -239,7 +239,7 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     function testItipDelegateToScheduleAndPublishMessage() {
         $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
-            ->setMethods(['schedule', 'publishMessages'])
+            ->onlyMethods(['schedule', 'publishMessages'])
             ->setConstructorArgs(['', new \ESN\CalDAV\CalDAVBackendMock()])
             ->getMock();
         $plugin->expects($this->once())->method('schedule')->will($this->returnCallback(function($message) {
@@ -256,7 +256,7 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->prepare();
 
         $plugin = $this->getMockBuilder(EventRealTimePluginMock::class)
-            ->setMethods(['notifyInvites', 'createMessage'])
+            ->onlyMethods(['notifyInvites', 'createMessage'])
             ->setConstructorArgs([$this->server,  $this->caldavBackend])
             ->getMock();
 

@@ -11,7 +11,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $db = $mc->{ESN_MONGO_SABREDB};
         $db->drop();
 
-        $principalBackendMock = $this->getMockBuilder(\Sabre\DAVACL\PrincipalBackend\BackendInterface::class)->setMethods(['getPrincipalByPath', 'getPrincipalsByPrefix', 'updatePrincipal', 'searchPrincipals', 'findByUri', 'getGroupMemberSet', 'getGroupMembership', 'setGroupMemberSet'])->getMock();
+        $principalBackendMock = $this->getMockBuilder(\Sabre\DAVACL\PrincipalBackend\BackendInterface::class)->onlyMethods(['getPrincipalByPath', 'getPrincipalsByPrefix', 'updatePrincipal', 'searchPrincipals', 'findByUri', 'getGroupMemberSet', 'getGroupMembership', 'setGroupMemberSet'])->getMock();
         $principalBackendMock->expects($this->any())->method('getPrincipalByPath')->will($this->returnValue(['{DAV:}displayname' => 'resourceName']));
 
         return new Esn($db, $principalBackendMock);

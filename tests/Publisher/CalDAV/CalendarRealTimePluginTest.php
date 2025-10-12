@@ -34,7 +34,8 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
         $nodeMock = $this->getMockBuilder('\Sabre\CalDAV\Calendar')
             ->disableOriginalConstructor()
-            ->setMethods(array('getProperties', 'getSubscribers', 'getInvites', 'getCalendarId', 'getPublicRight'))
+            ->onlyMethods(array('getProperties'))
+            ->addMethods(array('getSubscribers', 'getInvites', 'getCalendarId', 'getPublicRight'))
             ->getMock();
         $nodeMock->expects($this->any())->method('getProperties')->willReturn(array());
         $nodeMock->expects($this->any())->method('getPublicRight')->willReturn('privilege');
@@ -123,14 +124,21 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
             ]
         ];
 
+        $expectedCalls = [
+            ['calendar:calendar:updated', json_encode($firstExpectedData)],
+            ['calendar:calendar:updated', json_encode($secondfirstExpectedData)],
+            ['calendar:calendar:updated', json_encode($thirdExpectedData)]
+        ];
+        $callIndex = 0;
+
         $this->publisher
             ->expects($this->exactly(3))
             ->method('publish')
-            ->withConsecutive(
-                ['calendar:calendar:updated', json_encode($firstExpectedData)],
-                ['calendar:calendar:updated', json_encode($secondfirstExpectedData)],
-                ['calendar:calendar:updated', json_encode($thirdExpectedData)]
-            );
+            ->willReturnCallback(function($topic, $data) use (&$expectedCalls, &$callIndex) {
+                $this->assertEquals($expectedCalls[$callIndex][0], $topic);
+                $this->assertEquals($expectedCalls[$callIndex][1], $data);
+                $callIndex++;
+            });
 
         $this->plugin->updatePublicRight('/' . self::PATH);
     }

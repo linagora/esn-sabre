@@ -11,6 +11,9 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
         'principals/domains'
     ];
 
+    protected $principalBackend;
+    protected $addrbookBackend;
+
     function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CardDAV\Backend\BackendInterface $addrbookBackend) {
         $this->principalBackend = $principalBackend;
         $this->addrbookBackend = $addrbookBackend;

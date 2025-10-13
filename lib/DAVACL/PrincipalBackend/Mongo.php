@@ -5,6 +5,9 @@ namespace ESN\DAVACL\PrincipalBackend;
 use \ESN\Utils\Utils as Utils;
 
 class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
+    protected $db;
+    protected $collectionMap;
+
     function __construct($db) {
         $this->db = $db;
         $this->collectionMap = [

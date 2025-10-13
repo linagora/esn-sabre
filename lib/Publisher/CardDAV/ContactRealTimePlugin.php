@@ -8,6 +8,8 @@ use ESN\Utils\Utils as Utils;
 
 class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
+    protected $moved;
+
     private $PUBSUB_TOPICS = [
         'CONTACT_CREATED' => 'sabre:contact:created',
         'CONTACT_UPDATED' => 'sabre:contact:updated',

@@ -6,6 +6,9 @@ use Sabre\DAV\MkCol;
 
 class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
 
+    protected $principal;
+    protected $sourcesOfSharedAddressBooks;
+
     /**
      * Constructor
      *

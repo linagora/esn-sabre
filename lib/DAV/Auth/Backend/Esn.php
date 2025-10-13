@@ -24,6 +24,9 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     protected $httpClient;
     protected $currentUserId;
     protected $apiroot;
+    protected $eventEmitter;
+    protected $principalBackend;
+    protected $server;
 
     protected $principalPrefix = 'principals/users/';
     protected $technicalPrincipal = 'principals/technicalUser';

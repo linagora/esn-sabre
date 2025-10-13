@@ -3,6 +3,8 @@ namespace ESN\Publisher;
 
 class AMQPPublisher {
 
+    protected $channel;
+
     function __construct($channel) {
         $this->channel = $channel;
 

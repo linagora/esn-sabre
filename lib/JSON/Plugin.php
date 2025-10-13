@@ -17,6 +17,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         'application/json'
     ];
 
+    protected $root;
+    protected $server;
+    protected $acceptHeader;
+    protected $currentUser;
+
     function __construct($root) {
         $this->root = $root;
     }

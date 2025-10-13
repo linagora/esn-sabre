@@ -13,6 +13,7 @@ abstract class RealTimePlugin extends ServerPlugin {
 
     protected $messages = array();
     protected $client;
+    protected $server;
 
     public function __construct($client) {
         $this->client = $client;

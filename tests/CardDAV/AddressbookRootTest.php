@@ -5,7 +5,7 @@ namespace ESN\CardDAV;
 /**
  * @medium
  */
-class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
+class AddressbookRootTest extends \PHPUnit\Framework\TestCase {
     protected $esndb;
     protected $sabredb;
     protected $principalBackend;
@@ -15,7 +15,7 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
     const USER_ID = '54313fcc398fef406b0041b6';
     const ADMINISTRATOR_ID = '54313fcc398fef406b0041b7';
 
-    function setUp() {
+    function setUp(): void {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
         $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
 
@@ -97,10 +97,8 @@ class AddressbookRootTest extends \PHPUnit_Framework_TestCase {
         ]);
     }
 
-    /**
-     * @expectedException \Sabre\DAV\Exception\NotFound
-     */
     function testGetChildNotFound() {
+        $this->expectException(\Sabre\DAV\Exception\NotFound::class);
         $this->root->getChild('000011110000111100001111');
     }
 }

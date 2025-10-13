@@ -4,7 +4,7 @@ namespace ESN\CalDAV\Principal;
 
 use Sabre\DAVACL;
 
-class PrincipalUserTest extends \PHPUnit_Framework_TestCase {
+class PrincipalUserTest extends \PHPUnit\Framework\TestCase {
 
     function getInstance() {
 

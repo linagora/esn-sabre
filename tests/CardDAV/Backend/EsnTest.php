@@ -5,7 +5,7 @@ namespace ESN\CardDAV\Backend;
 /**
  * @medium
  */
-class EsnTest extends \PHPUnit_Framework_TestCase {
+class EsnTest extends \PHPUnit\Framework\TestCase {
     protected function getBackend() {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $db = $mc->{ESN_MONGO_SABREDB};
@@ -29,7 +29,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             '{urn:ietf:params:xml:ns:carddav}addressbook-description' => ''
         );
 
-        $this->assertInternalType('array',$books);
+        $this->assertIsArray($books);
         $this->assertEquals(2, count($books));
 
         $this->checkAddressbook($collectedAddressBook, $books[0]);
@@ -61,7 +61,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
 
         $books = $backend->getAddressBooksForUser('principals/users/user2');
 
-        $this->assertInternalType('array',$books);
+        $this->assertIsArray($books);
         $this->assertEquals(3, count($books));
 
         $this->checkAddressbook($anotherAddressBook, $books[0]);

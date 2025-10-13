@@ -14,7 +14,7 @@ class BasePlugin extends ServerPlugin {
     function initialize(\Sabre\DAV\Server $server) {
         $this->server = $server;
 
-        $server->on('beforeMethod', [$this, 'beforeMethod'], 15); // 15 is after Auth and before ACL
+        $server->on('beforeMethod:*', [$this, 'beforeMethod'], 15); // 15 is after Auth and before ACL
     }
 
     function beforeMethod($request, $response) {

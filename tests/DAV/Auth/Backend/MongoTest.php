@@ -2,16 +2,16 @@
 
 namespace ESN\DAV\Auth\Backend;
 
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
+require_once ESN_TEST_BASE . '/Sabre/HTTP/ResponseMock.php';
 
-class MongoTest extends \PHPUnit_Framework_TestCase {
+class MongoTest extends \PHPUnit\Framework\TestCase {
 
     const PRINCIPAL_PREFIX = "principals/users";
 
     protected static $db;
     protected static $userPrincipal;
 
-    static function setUpBeforeClass() {
+    static function setUpBeforeClass(): void {
         $mc = new \MongoDB\Client(ESN_MONGO_ESNURI);
         self::$db = $mc->{ESN_MONGO_ESNDB};
 
@@ -29,7 +29,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         self::$userPrincipal = "principals/users/" . (string)$userId;
     }
 
-    static function tearDownAfterClass() {
+    static function tearDownAfterClass(): void {
         self::$db->drop();
         self::$db = null;
     }

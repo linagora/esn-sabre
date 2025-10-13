@@ -58,6 +58,7 @@ class ParticipationPlugin extends ServerPlugin {
         );
 
         if (empty($addresses)) {
+            $data = $data->serialize();
             return;
         }
 

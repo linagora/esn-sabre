@@ -95,8 +95,8 @@ class UtilsTest extends \ESN\DAV\ServerMock {
     function testSplitEventPathShouldReturnCalendarPathAndEventUriWhenEventPathIsValid() {
         list($calendarPath, $eventUri) = Utils::splitEventPath('/calendars/calendarHomeId-1/calendarId-1/eventUid-1.ics');
 
-        $this->assertEquals($calendarPath, 'calendars/calendarHomeId-1/calendarId-1');
-        $this->assertEquals($eventUri, 'eventUid-1.ics');
+        $this->assertEquals('calendars/calendarHomeId-1/calendarId-1', $calendarPath);
+        $this->assertEquals('eventUid-1.ics', $eventUri);
     }
 
     function testSplitEventPathShouldReturnAPairOfNullsWhenEventPathIsInvalid() {

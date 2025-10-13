@@ -7,6 +7,10 @@ class CalendarRoot extends \Sabre\DAV\Collection {
     const USER_PREFIX = 'principals/users';
     const RESOURCES_PREFIX = 'principals/resources';
 
+    protected $principalBackend;
+    protected $caldavBackend;
+    protected $db;
+
     function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CalDAV\Backend\BackendInterface $caldavBackend, \MongoDB\Database $db) {
         $this->principalBackend = $principalBackend;
         $this->caldavBackend = $caldavBackend;

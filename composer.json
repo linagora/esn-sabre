@@ -13,17 +13,11 @@
             "role" : "Initiator"
         }
     ],
-    "repositories": [
-        {
-            "type": "git",
-            "url": "https://github.com/bastien-roucaries/vobject"
-        }
-    ],
     "require": {
         "php-amqplib/php-amqplib": "^3.3",
         "php": ">=8.2",
         "sabre/dav": "4.2.3",
-        "sabre/vobject": "dev-waiting-merges-4.2.2 as 4.2.2",
+        "sabre/vobject": "^4.5.7",
         "mongodb/mongodb": "^1.15",
         "monolog/monolog": "^2.9",
         "firebase/php-jwt": "^6.0"

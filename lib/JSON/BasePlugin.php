@@ -11,6 +11,10 @@ class BasePlugin extends ServerPlugin {
         "/DAVx5*/"
     ];
 
+    protected $server;
+    protected $acceptHeader;
+    protected $currentUser;
+
     function initialize(\Sabre\DAV\Server $server) {
         $this->server = $server;
 

@@ -10,6 +10,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     SubscriptionSupport,
     SharingSupport {
 
+    protected $db;
     protected $eventEmitter;
 
     public $addressBooksTableName = 'addressbooks';

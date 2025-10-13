@@ -16,6 +16,8 @@ class ParticipationPlugin extends ServerPlugin {
      */
     const NS_CALDAV = 'urn:ietf:params:xml:ns:caldav';
 
+    protected $server;
+
     function initialize(Server $server) {
         $this->server = $server;
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent'], 1);

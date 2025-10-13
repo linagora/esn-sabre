@@ -8,7 +8,7 @@ namespace ESN\Log;
  */
 class EsnLoggerProcessor implements \Monolog\Processor\ProcessorInterface
 {
-    private $envFields;
+    protected $envFields;
 
     public function __construct(array $fields)
     {

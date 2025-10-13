@@ -8,6 +8,7 @@ use Sabre\DAV\ServerPlugin;
 class ListenerPlugin extends ServerPlugin {
 
     private $carddavBackend;
+    protected $server;
 
     function __construct($carddavBackend) {
         $this->carddavBackend = $carddavBackend;

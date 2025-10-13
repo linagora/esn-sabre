@@ -138,6 +138,19 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         return true;
     }
 
+    function getFirstChar($data) {
+        if (is_resource($data)) {
+            $char = fgetc($data);
+            rewind($data);
+            return $char === false ? null : $char;
+        }
+
+        if (is_string($data) && $data !== '') {
+            return $data[0];
+        }
+        return null;
+    }
+
     function addSharedUsers($action, $calendar, $calendarPathObject, $data, $old_event = null) {
         if ($calendar instanceof \ESN\CalDAV\SharedCalendar) {
             $calendarid = $calendar->getCalendarId();
@@ -146,7 +159,11 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $calendarUri = $pathExploded[2];
             $isImport = false;
 
-            $event = \Sabre\VObject\Reader::read($data);
+            if ($this->getFirstChar($data) === '[') {
+                $event = \Sabre\VObject\Reader::readJson($data);
+            } else {
+                $event = \Sabre\VObject\Reader::read($data);
+            }
 
             if (is_resource($data)) {
                 rewind($data);

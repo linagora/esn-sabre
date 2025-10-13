@@ -282,7 +282,7 @@ class Utils {
      *               If validation fails, an array with two 'null' elements will be returned instead.
      */
     static function splitEventPath($eventPath) {
-        if (!preg_match('~/calendars/[\w-]+/[\w-]+/[\w-]+.ics~', $eventPath)) {
+        if (!preg_match('~^/calendars/[\w-]+/[\w-]+/[\w.-]+\.ics$~', $eventPath)) {
             return [null, null];
         }
 

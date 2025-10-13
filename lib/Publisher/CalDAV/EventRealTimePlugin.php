@@ -56,6 +56,24 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $server->on('itip', [$this, 'itip']);
     }
 
+    function ensureRequiredFields($vobject) {
+        // Ensure PRODID is present in VCALENDAR (required by RFC 5545)
+        if (!isset($vobject->PRODID)) {
+            $vobject->PRODID = '-//Sabre//Sabre VObject ' . VObject\Version::VERSION . '//EN';
+        }
+
+        // Ensure DTSTAMP is present in all VEVENTs (required for iTIP)
+        if (isset($vobject->VEVENT)) {
+            foreach ($vobject->VEVENT as $vevent) {
+                if (!isset($vevent->DTSTAMP)) {
+                    $vevent->DTSTAMP = gmdate('Ymd\THis\Z');
+                }
+            }
+        }
+
+        return $vobject;
+    }
+
     function buildData($data) {
         if(isset( $data['eventSourcePath'])) {
             $path = '/' . $data['eventSourcePath'];
@@ -65,6 +83,11 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         if($this->server->tree->nodeExists($path)) {
             $data['etag'] = $this->server->tree->getNodeForPath($path)->getETag();
+        }
+
+        // Ensure required fields are present before publishing
+        if (isset($data['event']) && $data['event'] instanceof VObject\Component) {
+            $data['event'] = $this->ensureRequiredFields($data['event']);
         }
 
         return $data;

@@ -110,8 +110,8 @@ class UtilsTest extends \ESN\DAV\ServerMock {
 
         foreach ($invalidEventPaths as $invalidEventPath) {
             list($calendarPath, $eventUri) = Utils::splitEventPath($invalidEventPath);
-            $this->assertEquals($calendarPath, null);
-            $this->assertEquals($eventUri, null);
+            $this->assertEquals(null, $calendarPath);
+            $this->assertEquals(null, $eventUri);
         }
     }
 

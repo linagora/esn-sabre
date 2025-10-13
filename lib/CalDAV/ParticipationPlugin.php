@@ -56,7 +56,11 @@ class ParticipationPlugin extends ServerPlugin {
         $addresses = $this->getAddressesForPrincipal(
             $this->server->getPlugin('auth')->getCurrentPrincipal()
         );
-        
+
+        if (empty($addresses)) {
+            return;
+        }
+
         $newInstances = $this->getAllInstancePartstatForAttendee($data, $addresses[0]);
         $oldInstances = $this->getAllInstancePartstatForAttendee($oldCal, $addresses[0]);
 

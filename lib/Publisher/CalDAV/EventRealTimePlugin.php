@@ -182,6 +182,12 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $calendarUri = $pathExploded[2];
             $isImport = false;
 
+            // Validate that $data is a string or resource before parsing
+            if (!is_string($data) && !is_resource($data)) {
+                error_log('EventRealTimePlugin: Invalid data type in addSharedUsers, expected string or resource, got ' . gettype($data));
+                return;
+            }
+
             if ($this->getFirstChar($data) === '[') {
                 $event = \Sabre\VObject\Reader::readJson($data);
             } else {

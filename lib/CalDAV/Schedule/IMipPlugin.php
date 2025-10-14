@@ -551,16 +551,33 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                 $currentPropertyValue = isset($currentEvent->$changeProperty) ? $currentEvent->$changeProperty->getDateTime()->getTimeStamp() : null;
 
                 if ($previousPropertyValue !== $currentPropertyValue) {
-                    $changes[strtolower($changeProperty)] = [
-                        'previous' => isset($previousEvent) && isset($previousEvent->$changeProperty) ? $previousEvent->$changeProperty->getDateTime() : [],
-                        'current' => $currentEvent->$changeProperty->getDateTime(),
-                    ];
+                    $propertyKey = strtolower($changeProperty);
 
                     if (isset($previousEvent) && isset($previousEvent->$changeProperty)) {
-                        $changes[strtolower($changeProperty)]['previous']->isAllDay = !$previousEvent->$changeProperty->hasTime();
+                        $previousDateTime = $previousEvent->$changeProperty->getDateTime();
+                        // Convert DateTime to array to get its properties
+                        $previousData = json_decode(json_encode($previousDateTime), true);
+                        // Rebuild object with isAllDay first to match expected order
+                        $changes[$propertyKey]['previous'] = (object)[
+                            'isAllDay' => !$previousEvent->$changeProperty->hasTime(),
+                            'date' => $previousData['date'],
+                            'timezone_type' => $previousData['timezone_type'],
+                            'timezone' => $previousData['timezone']
+                        ];
+                    } else {
+                        $changes[$propertyKey]['previous'] = [];
                     }
 
-                    $changes[strtolower($changeProperty)]['current']->isAllDay = !$currentEvent->$changeProperty->hasTime();
+                    $currentDateTime = $currentEvent->$changeProperty->getDateTime();
+                    // Convert DateTime to array to get its properties
+                    $currentData = json_decode(json_encode($currentDateTime), true);
+                    // Rebuild object with isAllDay first to match expected order
+                    $changes[$propertyKey]['current'] = (object)[
+                        'isAllDay' => !$currentEvent->$changeProperty->hasTime(),
+                        'date' => $currentData['date'],
+                        'timezone_type' => $currentData['timezone_type'],
+                        'timezone' => $currentData['timezone']
+                    ];
                 }
 
                 continue;

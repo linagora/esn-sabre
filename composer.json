@@ -16,9 +16,14 @@
     "repositories": [
         {
             "type": "vcs",
-            "url": "https://github.com/linagora/sabre-vobject.git"
+            "url": "https://github.com/linagora/sabre-vobject.git",
+            "no-api": true
         }
     ],
+    "config": {
+        "preferred-install": "dist",
+        "github-protocols": ["https"]
+    },
     "require": {
         "php-amqplib/php-amqplib": "^3.3",
         "php": ">=8.2",

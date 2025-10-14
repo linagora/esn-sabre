@@ -25,6 +25,7 @@ use
  * Most of this code is copied from SabreDAV, therefore we opt to not cover it
  * @codeCoverageIgnore
  */
+#[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     private $logger;
@@ -40,7 +41,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         parent::initialize($server);
     }
 
-    private function scheduleReply(RequestInterface $request) {
+    protected function scheduleReply(RequestInterface $request) {
 
         $scheduleReply = $request->getHeader('Schedule-Reply');
         return $scheduleReply!=='F';

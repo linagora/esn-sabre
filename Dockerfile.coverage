@@ -1,10 +1,10 @@
 # Dockerfile for test coverage generation
 # Based on main Dockerfile with Xdebug added
 
-FROM debian:bullseye
+FROM debian:trixie
 LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
-ENV PHPVERSION=8.2
+ENV PHPVERSION=8.4
 
 ADD 20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
 ADD 05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini

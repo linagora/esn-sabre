@@ -13,7 +13,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $db->drop();
 
         $principalBackendMock = $this->getMockBuilder(\Sabre\DAVACL\PrincipalBackend\BackendInterface::class)->onlyMethods(['getPrincipalByPath', 'getPrincipalsByPrefix', 'updatePrincipal', 'searchPrincipals', 'findByUri', 'getGroupMemberSet', 'getGroupMembership', 'setGroupMemberSet'])->getMock();
-        $principalBackendMock->expects($this->any())->method('getPrincipalByPath')->will($this->returnValue(['{DAV:}displayname' => 'resourceName']));
+        $principalBackendMock->expects($this->any())->method('getPrincipalByPath')->willReturn(['{DAV:}displayname' => 'resourceName']);
 
         return new Esn($db, $principalBackendMock);
     }

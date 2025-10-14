@@ -13,11 +13,17 @@
             "role" : "Initiator"
         }
     ],
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/linagora/sabre-vobject.git"
+        }
+    ],
     "require": {
         "php-amqplib/php-amqplib": "^3.3",
         "php": ">=8.2",
         "sabre/dav": "4.7.0",
-        "sabre/vobject": "^4.5.7",
+        "sabre/vobject": "dev-linagora-keep-freebusy-utc-z as 4.5.7",
         "mongodb/mongodb": "^2.4",
         "monolog/monolog": "^2.9",
         "firebase/php-jwt": "^6.0"

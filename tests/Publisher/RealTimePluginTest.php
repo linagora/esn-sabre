@@ -9,7 +9,10 @@ class RealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     function setUp(): void {
         $this->publisher = $this->createMock(Publisher::class);
-        $this->plugin = $this->getMockForAbstractClass('\ESN\Publisher\RealTimePlugin', [$this->publisher]);
+        $this->plugin = $this->getMockBuilder('\ESN\Publisher\RealTimePlugin')
+            ->setConstructorArgs([$this->publisher])
+            ->onlyMethods(['buildData'])
+            ->getMock();
     }
 
     function testCreateMessage() {
@@ -19,7 +22,7 @@ class RealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->plugin->expects($this->any())
             ->method('buildData')
             ->with($data)
-            ->will($this->returnValue($data));
+            ->willReturn($data);
         $this->plugin->createMessage($topic, $data);
         $messages = $this->plugin->getMessages();
 

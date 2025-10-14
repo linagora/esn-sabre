@@ -204,7 +204,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     private function checkPreconditions(ITip\Message $iTipMessage, int $matched, $principalUri) {
         // Not sending any emails if the system considers the update
         // insignificant.
-        if (!$iTipMessage->significantChange && !$iTipMessage->hasChange) {
+        if (!$iTipMessage->significantChange) {
             if (!$iTipMessage->scheduleStatus) {
                 $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_PENDING;
             }

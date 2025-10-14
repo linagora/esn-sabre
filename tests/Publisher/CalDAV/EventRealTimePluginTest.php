@@ -4,15 +4,16 @@ use Sabre\DAV\ServerPlugin;
 use \Sabre\CalDAV\Schedule\IMipPlugin;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVACL/PrincipalBackend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CardDAV/Backend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVServerTest.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/HTTP/ResponseMock.php';
+require_once ESN_TEST_BASE . '/Sabre/HTTP/SapiMock.php';
+require_once ESN_TEST_BASE . '/Sabre/DAVACL/PrincipalBackend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/CalDAV/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/CardDAV/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/DAVServerTest.php';
+require_once ESN_TEST_BASE . '/Sabre/DAV/Auth/Backend/Mock.php';
 
-class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
+#[\AllowDynamicProperties]
+class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "calendars/456456/123123/uid.ics";
     const PARENT = 'calendars/456456/123123';
@@ -166,7 +167,7 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $nodeMock->expects($this->any())->method('getETag')->willReturn(self::ETAG);
 
         $server->tree->expects($this->any())->method('getNodeForPath')
-            ->will($this->returnValue($nodeMock));
+            ->willReturn($nodeMock);
     }
 
     function testCreateFileNonCalendarHome() {
@@ -226,7 +227,7 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
 
     function testItipDoSendMessageIfScheduleFail() {
         $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
-            ->setMethods(['publishMessages'])
+            ->onlyMethods(['publishMessages'])
             ->setConstructorArgs(['', new \ESN\CalDAV\CalDAVBackendMock()])
             ->getMock();
         $plugin->expects($this->never())->method('publishMessages');
@@ -235,31 +236,28 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $message->scheduleStatus = \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_TEMPORARY;
 
         $plugin->itip($message);
-
-        $this->verifyMockObjects();
     }
 
     function testItipDelegateToScheduleAndPublishMessage() {
         $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
-            ->setMethods(['schedule', 'publishMessages'])
+            ->onlyMethods(['schedule', 'publishMessages'])
             ->setConstructorArgs(['', new \ESN\CalDAV\CalDAVBackendMock()])
             ->getMock();
-        $plugin->expects($this->once())->method('schedule')->will($this->returnCallback(function($message) {
+        $plugin->expects($this->once())->method('schedule')->willReturnCallback(function($message) {
             $this->assertInstanceOf(\Sabre\VObject\ITip\Message::class, $message);
 
             return $message;
-        }));
+        });
         $plugin->expects($this->once())->method('publishMessages');
 
         $plugin->itip(new \Sabre\VObject\ITip\Message());
-        $this->verifyMockObjects();
     }
 
     function testNoResourceCreationMessageWhenNoSignificantChange() {
         $this->prepare();
 
         $plugin = $this->getMockBuilder(EventRealTimePluginMock::class)
-            ->setMethods(['notifyInvites', 'createMessage'])
+            ->onlyMethods(['notifyInvites', 'createMessage'])
             ->setConstructorArgs([$this->server,  $this->caldavBackend])
             ->getMock();
 
@@ -275,6 +273,7 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $message->method = 'REQUEST';
         $message->significantChange = false;
         $message->recipient = 'mailto:54b64eadf6d7d8e41d263e0e@example.com';
+        $message->sender = 'mailto:54b64eadf6d7d8e41d263e0e@example.com';
         $message->uid = "daab17fe-fac4-4946-9105-0f2cdb30f5ab";
 
         $plugin->itip($message);

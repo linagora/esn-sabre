@@ -5,14 +5,15 @@ namespace ESN\CalDAV\Backend;
 /**
  * @medium
  */
-class EsnTest extends \PHPUnit_Framework_TestCase {
+#[\AllowDynamicProperties]
+class EsnTest extends \PHPUnit\Framework\TestCase {
     protected function getBackend() {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $db = $mc->{ESN_MONGO_SABREDB};
         $db->drop();
 
-        $principalBackendMock = $this->getMockBuilder(\Sabre\DAVACL\PrincipalBackend\BackendInterface::class)->setMethods(['getPrincipalByPath', 'getPrincipalsByPrefix', 'updatePrincipal', 'searchPrincipals', 'findByUri', 'getGroupMemberSet', 'getGroupMembership', 'setGroupMemberSet'])->getMock();
-        $principalBackendMock->expects($this->any())->method('getPrincipalByPath')->will($this->returnValue(['{DAV:}displayname' => 'resourceName']));
+        $principalBackendMock = $this->getMockBuilder(\Sabre\DAVACL\PrincipalBackend\BackendInterface::class)->onlyMethods(['getPrincipalByPath', 'getPrincipalsByPrefix', 'updatePrincipal', 'searchPrincipals', 'findByUri', 'getGroupMemberSet', 'getGroupMembership', 'setGroupMemberSet'])->getMock();
+        $principalBackendMock->expects($this->any())->method('getPrincipalByPath')->willReturn(['{DAV:}displayname' => 'resourceName']);
 
         return new Esn($db, $principalBackendMock);
     }
@@ -28,7 +29,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
         );
 
-        $this->assertInternalType('array', $calendars);
+        $this->assertIsArray( $calendars);
         $this->assertEquals(1, count($calendars));
 
         foreach ($elementCheck as $name => $value) {
@@ -48,7 +49,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
         );
 
-        $this->assertInternalType('array', $calendars);
+        $this->assertIsArray( $calendars);
         $this->assertEquals(1, count($calendars));
 
         foreach ($elementCheck as $name => $value) {

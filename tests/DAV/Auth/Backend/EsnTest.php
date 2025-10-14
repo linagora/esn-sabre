@@ -17,7 +17,8 @@ function ldap_bind($conn, $dn = null, $pwd = null) {
 
 namespace ESN\DAV\Auth\Backend;
 
-class EsnTest extends \PHPUnit_Framework_TestCase {
+#[\AllowDynamicProperties]
+class EsnTest extends \PHPUnit\Framework\TestCase {
     const USER_ID = '54313fcc398fef406b0041b6';
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
 
@@ -86,6 +87,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
             'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
         ));
         $response = new \Sabre\HTTP\Response();
 
@@ -110,6 +113,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
             'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/foo/bar',
+            'REQUEST_METHOD' => 'GET',
         ));
         $response = new \Sabre\HTTP\Response();
 
@@ -136,6 +141,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
             'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/foo/bar',
+            'REQUEST_METHOD' => 'GET',
         ));
         $response = new \Sabre\HTTP\Response();
 
@@ -162,6 +169,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
             'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/foo/bar',
+            'REQUEST_METHOD' => 'GET',
         ));
         $response = new \Sabre\HTTP\Response();
 
@@ -338,6 +347,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'PHP_AUTH_USER' => 'wronguser',
             'PHP_AUTH_PW'   => 'wrongpass',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
         ]);
         $response = new \Sabre\HTTP\Response();
 
@@ -356,6 +367,8 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'PHP_AUTH_USER' => 'wronguser',
             'PHP_AUTH_PW'   => 'wrongpass',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
         ]);
         $response = new \Sabre\HTTP\Response();
 

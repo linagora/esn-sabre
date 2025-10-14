@@ -7,6 +7,7 @@ use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use Sabre\DAV\Exception;
 
+#[\AllowDynamicProperties]
 class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
     /**

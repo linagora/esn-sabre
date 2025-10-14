@@ -4,7 +4,8 @@ use Sabre\DAV\ServerPlugin;
 
 require_once ESN_TEST_BASE . '/CardDAV/MockUtils.php';
 
-class ContactRealTimePluginTest extends \PHPUnit_Framework_TestCase {
+#[\AllowDynamicProperties]
+class ContactRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const SHARED_ADDRESSBOOK = [[
         'id' => 'shared-one',
@@ -27,30 +28,30 @@ class ContactRealTimePluginTest extends \PHPUnit_Framework_TestCase {
             ->disableOriginalConstructor()
             ->getMock();
         $contactMock->method('getOwner')
-            ->will($this->returnValue(self::USER_PRINCIPAL));
+            ->willReturn(self::USER_PRINCIPAL);
         $addressbookMock = $this->getMockBuilder('\ESN\CardDAV\AddressBook')
             ->disableOriginalConstructor()
             ->getMock();
         $addressbookMock->method('getSubscribedAddressBooks')
-            ->will($this->returnValue(self::SHARED_ADDRESSBOOK));
+            ->willReturn(self::SHARED_ADDRESSBOOK);
 
         $principalMock = $this->getMockBuilder('\Sabre\DAVACL\Principal')
             ->disableOriginalConstructor()
             ->getMock();
         $principalMock->method('getGroupMemberSet')
-            ->will($this->returnValue([ self::USER_PRINCIPAL ]));
+            ->willReturn([ self::USER_PRINCIPAL ]);
         
         $groupAddressBookMock = $this->getMockBuilder('\ESN\CardDAV\AddressBook')
             ->disableOriginalConstructor()
             ->getMock();
         $groupAddressBookMock->method('getSubscribedAddressBooks')
-            ->will($this->returnValue([]));
+            ->willReturn([]);
         $groupContactMock = $this->getMockBuilder('\Sabre\CardDAV\Card')
             ->disableOriginalConstructor()
             ->getMock();
         
         $groupContactMock->method('getOwner')
-            ->will($this->returnValue(self::DOMAIN_PRINCIPAL));
+            ->willReturn(self::DOMAIN_PRINCIPAL);
 
         $map = [
             ['/addressbooks/bookId/bookName/contact.vcf', $contactMock],
@@ -67,7 +68,7 @@ class ContactRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $server->tree
             ->expects($this->any())
             ->method('getNodeForPath')
-            ->will($this->returnValueMap($map));
+            ->willReturnMap($map);
     }
 
     function testAfterBindEventShouldDoNothingWithNonCardPath() {
@@ -117,7 +118,7 @@ class ContactRealTimePluginTest extends \PHPUnit_Framework_TestCase {
             ->disableOriginalConstructor()
             ->getMock();
         $nodeMock->method('getOwner')
-            ->will($this->returnValue(self::USER_PRINCIPAL));
+            ->willReturn(self::USER_PRINCIPAL);
 
         $this->assertTrue($server->emit('afterWriteContent', ["addressbooks/bookId/bookName/contact.vcf", $nodeMock]));
         $this->assertNotNull($client->message);
@@ -132,7 +133,7 @@ class ContactRealTimePluginTest extends \PHPUnit_Framework_TestCase {
             ->disableOriginalConstructor()
             ->getMock();
         $nodeMock->method('getOwner')
-            ->will($this->returnValue(self::DOMAIN_PRINCIPAL));
+            ->willReturn(self::DOMAIN_PRINCIPAL);
 
         $this->assertTrue($server->emit('afterWriteContent', ['addressbooks/domainId/dab/gcontact.vcf', $nodeMock]));
         $this->assertNotNull($client->message);

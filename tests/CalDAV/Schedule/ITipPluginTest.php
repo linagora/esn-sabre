@@ -9,7 +9,8 @@ use Sabre\VObject\ITip\Message;
 /**
  * @medium
  */
-class ITipPluginTest extends \PHPUnit_Framework_TestCase
+#[\AllowDynamicProperties]
+class ITipPluginTest extends \PHPUnit\Framework\TestCase
 {
 
     use \Sabre\VObject\PHPUnitAssertions;
@@ -38,7 +39,7 @@ END:VEVENT
 END:VCALENDAR'
     ];
 
-    function setUp()
+    function setUp(): void
     {
         $this->iTipPlugin = new ITipPlugin();
         $this->calDavPlugin = new CalDavPluginMock();
@@ -178,6 +179,7 @@ END:VCALENDAR'
 
 }
 
+#[\AllowDynamicProperties]
 class CalDavPluginMock extends ServerPlugin
 {
     function getPluginName()

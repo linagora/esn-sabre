@@ -2,6 +2,7 @@
 
 namespace ESN\CardDAV;
 
+#[\AllowDynamicProperties]
 class GroupAddressBookHome extends AddressBookHome {
     /**
      * This method override the parent which:

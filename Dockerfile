@@ -8,10 +8,10 @@
 # docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre
 #
 
-FROM debian:bookworm
+FROM debian:trixie
 LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
-ENV PHPVERSION=8.2
+ENV PHPVERSION=8.4
 
 ADD 20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
 ADD 05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini

@@ -167,7 +167,7 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $nodeMock->expects($this->any())->method('getETag')->willReturn(self::ETAG);
 
         $server->tree->expects($this->any())->method('getNodeForPath')
-            ->will($this->returnValue($nodeMock));
+            ->willReturn($nodeMock);
     }
 
     function testCreateFileNonCalendarHome() {
@@ -243,11 +243,11 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
             ->onlyMethods(['schedule', 'publishMessages'])
             ->setConstructorArgs(['', new \ESN\CalDAV\CalDAVBackendMock()])
             ->getMock();
-        $plugin->expects($this->once())->method('schedule')->will($this->returnCallback(function($message) {
+        $plugin->expects($this->once())->method('schedule')->willReturnCallback(function($message) {
             $this->assertInstanceOf(\Sabre\VObject\ITip\Message::class, $message);
 
             return $message;
-        }));
+        });
         $plugin->expects($this->once())->method('publishMessages');
 
         $plugin->itip(new \Sabre\VObject\ITip\Message());

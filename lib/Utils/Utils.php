@@ -43,10 +43,16 @@ class Utils {
     }
 
     static function isResourceFromPrincipal($principal) {
+        if ($principal === null) {
+            return false;
+        }
         return strpos($principal, 'resources') !== false;
     }
 
     static function isUserPrincipal($principal) {
+        if ($principal === null) {
+            return false;
+        }
         return strpos($principal, '/users/') !== false;
     }
 

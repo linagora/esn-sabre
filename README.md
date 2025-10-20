@@ -161,24 +161,6 @@ extension=mbstring.so
 
     http://your.server.example.com/esn-sabre/esn.php
 
-### Enable the Caldav support in OpenPaaS ESN
-
-The caldav support in OpenPaaS ESN is enabled by telling the system where to find the caldav server. To do so, create a document in the configuration collection, having this structure:
-
-```json
-{
-        "_id" : "davserver",
-        "backend" : {
-                "url" : "http://192.168.7.6/esn-sabre/esn.php" // replace 192.168.7.6 by your localhost
-        },
-        "frontend" : {
-                "url" : "http://my-caldav-server.example.com/esn-sabre/esn.php"  // replace my-caldav-server.example.com by your localhost
-        }
-}
-```
-
-The backend url is used by the ESN SERVER to access the caldav server. The frontend url is used by the user's browser to access the caldav server.
-
 ## Unit tests and codestyle
 
 A simple Makefile exists to make it easier to run the tests and check code style. The following commands are available:

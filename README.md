@@ -234,32 +234,4 @@ This will launch the Sabre container, create its configuration, launch Sabre and
 
 ### Test
 
-You can run the unit test with Docker to avoid to install all the PHP tools and dependencies locally.
-Unit tests need a MongoDB container to run:
-
-```
-docker network create esn-sabre-net
-```
-Then using this network
-```
-docker run --hostname="sabre_mongo" --name sabre_mongo --network=esn-sabre-net -v  sabre_mongo:/data/db -d docker.io/library/mongo:3.4.0
-docker run --hostname="esn_mongo" --name esn_mongo --network=esn-sabre-net -v  esn_mongo:/data/db -d docker.io/library/mongo:3.4.0
-docker run --hostname="amqp_host" --name amqp_host --network esn-sabre-net -d docker.io/library/rabbitmq:3
-docker run --hostname="esn_host" --name esn_host -p 8001:80 -d -v ./:/var/www --network esn-sabre-net linagora/esn-sabre ./scripts/start.sh
-```
-
-You may use also docker-compose:
-```
-docker-compose -f ./compose-minimal.yml up -d
-```
-
-Once MongoDB container is started, you can run the unit test like this:
-
-```
-docker exec -it esn_host /bin/bash
-$ make
-```
-
-
-
-It will use the `linagora/esn-sabre` image, you may need to rebuid it in some cases, but the `make` command will update composer dependencies automatically.
+Please refer to [this document](doc/TESTING.md) for running project tests.

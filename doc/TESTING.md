@@ -4,6 +4,11 @@
 
 ### Quick test run
 
+Pre-requisite: 
+ - docker is installed
+ - Java 21 is installed
+ - mvn is available
+
 ```bash
 # Using the test script (recommended)
 ./run_test.sh

@@ -34,3 +34,41 @@ docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=19
 ```
 
 This will launch the Sabre container, create its configuration, launch Sabre and expose on port 8001 on your host.
+
+### Configure advanced logging
+
+Sabre can use [Monolog](https://github.com/Seldaek/monolog) to push log to standard file.
+
+To configure logger add the `"logger"` item in config file with each logger needed
+
+You can add ENV fields, these fields will add ENV variables values to each log entry in the `extras` field.
+ENV fields define a field name that contains ENV variable value.
+
+Full configuration is:
+```json
+{
+        "logger" : {
+                "fileLogger": {
+                        "path": "Path to the file (required)",
+                        "level": "debug level (default ERROR)"
+                },
+                "envFields": {
+                        "myFirstEnvFieldName": "MY_FIRST_ENV_VARIABLE_NAME",
+                        "mySecandEnvFieldName": "MY_SECOND_ENV_VARIABLE_NAME",
+                        ...
+                }
+        }
+}
+```
+
+Date format is specified by php date format [here](http://php.net/manual/fr/function.date.php)
+
+Log level can be :
+
+ * ALERT
+ * CRITICAL
+ * ERROR
+ * WARNING
+ * NOTICE
+ * INFO
+ * DEBUG

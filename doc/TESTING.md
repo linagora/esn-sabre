@@ -28,7 +28,12 @@ make test TARGET=tests/CalDAV/Backend/MongoTest.php
 
 # Run with code linting
 make check
+
+# Perform only linting
+make lint
 ```
+
+
 
 ## Test Coverage
 

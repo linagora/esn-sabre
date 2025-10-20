@@ -104,63 +104,6 @@ Log level can be :
  * INFO
  * DEBUG
 
-
-### System & Apache environment
-
-esn-sabre requires an Apache server to work.
-
--	Install PHP5 support into Apache
-
-```bash
-apt-get install libapache2-mod-php5
-```
-
-Ubuntu 16.04
-
-```bash
-apt install php5.6 php5.6-bcmath libapache2-mod-php5.6
-```
-
--	Install mongodb & curl support in PHP
-
-```bash
-apt-get install php5-mongo php5-curl
-```
-
-Ubuntu 16.04
-
-```bash
-apt-get install php5.6-mongo php5.6-curl
-```
-
-If **composer update** throws an error, you might want to use PECL
-
-```bash
-apt-get install php5-dev php-pear && pecl install mongo
-```
-Ubuntu 16.04
-
-```bash
-apt-get install php5.6-dev php-pear && pecl install mongo
-```
-
-Depending on your linux version you may need to add mongo extension in php.ini
-
-```bash
-extension=mongo.so
-extension=mbstring.so
-```
-
--	Restart Apache
-
-```bash
-/etc/init.d/apache2 restart
-```
-
--	Test your environment by pointing a browser to the "esn.php" file
-
-    http://your.server.example.com/esn-sabre/esn.php
-
 ## Unit tests and codestyle
 
 A simple Makefile exists to make it easier to run the tests and check code style. The following commands are available:

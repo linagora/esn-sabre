@@ -6,7 +6,7 @@
 
 This project is THE dav server behind Twake Calendar, where the magic take place.
 
-It builds on top of [sabre/dav](https://github.com/sabre-io/dav/) and adds [various modules]() in order to deliver an enterprise ready calendar server!
+It builds on top of [sabre/dav](https://github.com/sabre-io/dav/) and adds [various modules](doc/PLUGINS.md) in order to deliver an enterprise ready calendar server!
 
 Please note the following other components of the Twake Calendar product:
  - [Twake Calendar Side service](https://github.com/linagora/twake-calendar-side-service) augment the DAV serveur with mailing, search, users, domains, configuration...

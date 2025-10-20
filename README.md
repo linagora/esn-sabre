@@ -22,49 +22,9 @@ composer update
 
 This command can be repeated to update package versions.
 
-### create the configuration file
+## Configure
 
-The configuration file can be created from the example file.
-
-```bash
-cp config.json.default config.json
-```
-
-or by running the generation script:
-
-```bash
-sh ./scripts/generate_config.sh > config.json
-```
-
-You then have to modify the configuration to match your setup.
-
--	**webserver.baseUri**
-
-The local part of the url that bring the esn.php file.
-
-From apache, if you reach esn.php through http://YOUR_ESN_SABRE_IP/esn-sabre/esn.php then your baseUri is **/esn-sabre/esn.php**.
-
-By using Docker your baseUri is only **/**.
-
--	**webserver.allowOrigin**
-
-This setting is used to configure the headers returned by the CalDAV server. It's usefull to configure CORS. Either set the hostname of your ESN server, or leave "*".
-
--	**database.esn**
-
-This is the configuration to access the ESN datastore
-
--	**database.sabre**
-
-This is the configuration where the CalDAV server will store its data.
-
--	**esn.apiRoot**
-
-This is the URL the Caldav server will use to access the OpenPaaS ESN API.
-
--	**mail**
-
-This is the configuration the Caldav server will use to send emails.
+Refer to [this section](doc/CONFIGURE.md) for configuring the project.
 
 ## Run
 

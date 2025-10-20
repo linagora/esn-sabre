@@ -4,6 +4,11 @@
 
 ### Quick test run
 
+Pre-requisite: 
+ - docker is installed
+ - Java 21 is installed
+ - mvn is available
+
 ```bash
 # Using the test script (recommended)
 ./run_test.sh
@@ -23,7 +28,12 @@ make test TARGET=tests/CalDAV/Backend/MongoTest.php
 
 # Run with code linting
 make check
+
+# Perform only linting
+make lint
 ```
+
+
 
 ## Test Coverage
 

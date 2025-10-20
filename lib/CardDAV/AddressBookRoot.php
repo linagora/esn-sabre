@@ -4,12 +4,16 @@ namespace ESN\CardDAV;
 
 use ESN\Utils\Utils as Utils;
 
+#[\AllowDynamicProperties]
 class AddressBookRoot extends \Sabre\DAV\Collection {
 
     const PRINCIPAL_SUPPORTED_SET = [
         'principals/users',
         'principals/domains'
     ];
+
+    protected $principalBackend;
+    protected $addrbookBackend;
 
     function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CardDAV\Backend\BackendInterface $addrbookBackend) {
         $this->principalBackend = $principalBackend;

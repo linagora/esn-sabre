@@ -6,7 +6,10 @@ use \Sabre\DAV\ServerPlugin;
 use Sabre\Uri;
 use ESN\Utils\Utils as Utils;
 
+#[\AllowDynamicProperties]
 class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
+
+    protected $moved;
 
     private $PUBSUB_TOPICS = [
         'CONTACT_CREATED' => 'sabre:contact:created',

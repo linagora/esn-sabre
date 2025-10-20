@@ -4,6 +4,7 @@ namespace ESN\CalDAV;
 
 use ESN\DAV\Sharing\Plugin as SPlugin;
 
+#[\AllowDynamicProperties]
 class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     const PUBLIC_RIGHTS = [
         '{DAV:}all',

@@ -3,6 +3,8 @@ namespace ESN\Publisher;
 
 class AMQPPublisher {
 
+    protected $channel;
+
     function __construct($channel) {
         $this->channel = $channel;
 
@@ -13,7 +15,7 @@ class AMQPPublisher {
 
     function publish($topic, $message) {
         $this->channel->exchange_declare($topic, 'fanout', true, false, false); //this correspond to passive: true, durable: false, auto_delete: false
-        $msg = new \PhpAmqpLib\Message\AMQPMessage(utf8_encode($message));
+        $msg = new \PhpAmqpLib\Message\AMQPMessage($message);
 
         $this->channel->basic_publish($msg, $topic);
     }

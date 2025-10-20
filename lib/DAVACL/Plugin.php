@@ -4,6 +4,7 @@ namespace ESN\DAVACL;
 
 use Sabre\DAV;
 
+#[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
 
     function initialize(DAV\Server $server) {

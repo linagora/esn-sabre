@@ -15,7 +15,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
     use \Sabre\VObject\PHPUnitAssertions;
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $aclPlugin = new \Sabre\DAVACL\Plugin();

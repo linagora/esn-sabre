@@ -3,6 +3,7 @@ namespace ESN\JSON;
 
 use Sabre\DAV\ServerPlugin;
 
+#[\AllowDynamicProperties]
 class BasePlugin extends ServerPlugin {
 
     const USER_AGENT_REGEXP = [
@@ -11,10 +12,14 @@ class BasePlugin extends ServerPlugin {
         "/DAVx5*/"
     ];
 
+    protected $server;
+    protected $acceptHeader;
+    protected $currentUser;
+
     function initialize(\Sabre\DAV\Server $server) {
         $this->server = $server;
 
-        $server->on('beforeMethod', [$this, 'beforeMethod'], 15); // 15 is after Auth and before ACL
+        $server->on('beforeMethod:*', [$this, 'beforeMethod'], 15); // 15 is after Auth and before ACL
     }
 
     function beforeMethod($request, $response) {
@@ -24,7 +29,7 @@ class BasePlugin extends ServerPlugin {
             $request->setUrl($url);
         }
 
-        $this->acceptHeader = explode(', ', $request->getHeader('Accept'));
+        $this->acceptHeader = explode(', ', $request->getHeader('Accept') ?? '');
         $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
 
         return true;

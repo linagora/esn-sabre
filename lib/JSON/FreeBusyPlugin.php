@@ -7,6 +7,7 @@ use \Sabre\DAV\ServerPlugin;
 use DateTimeZone;
 use ESN\Utils\Utils;
 
+#[\AllowDynamicProperties]
 class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
 
     /**

@@ -6,6 +6,7 @@ use Sabre\DAV;
 use ESN\Utils\Utils as Utils;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 
+#[\AllowDynamicProperties]
 class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection, Sharing\ISharedAddressBook {
     function getChildACL() {
         return $this->getACL();

@@ -2,6 +2,7 @@
 
 namespace ESN\CardDAV\Backend;
 
+#[\AllowDynamicProperties]
 class Esn extends Mongo {
 
     const CONTACTS_URI = 'contacts';

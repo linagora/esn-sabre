@@ -57,8 +57,8 @@ class CharAPI {
       "y" => array("y","ⓨ","ｙ","ỳ","ý","ŷ","ỹ","ȳ","ẏ","ÿ","ỷ","ẙ","ỵ","ƴ","ɏ","ỿ"),
       "z" => array("z","ⓩ","ｚ","ź","ẑ","ż","ž","ẓ","ẕ","ƶ","ȥ","ɀ","ⱬ")
     );
-    protected $accentedArray = [];
-    protected $translatedArray = [];
+    protected $accentedArray;
+    protected $translatedArray;
     function __construct() {
         foreach($this->defaultDiacriticsMap as $key => $value) {
             foreach($value as $letter) {

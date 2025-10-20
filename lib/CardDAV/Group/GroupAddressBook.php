@@ -9,6 +9,7 @@ use ESN\DAV\Sharing\Plugin as SPlugin;
  *
  * This node represents a group address book.
  */
+#[\AllowDynamicProperties]
 class GroupAddressBook extends \ESN\CardDAV\AddressBook {
     function getACL() {
         $acl = [];

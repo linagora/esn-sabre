@@ -2,8 +2,10 @@
 
 namespace ESN\DAV\Auth\Backend;
 
+#[\AllowDynamicProperties]
 class Mongo extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
+    protected $db;
     protected $currentUserId;
 
     protected $principalPrefix = 'principals/users/';

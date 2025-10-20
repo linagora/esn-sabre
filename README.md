@@ -34,3 +34,7 @@ Refer to [this section](doc/RUN.md) for running the project.
 ### Test
 
 Please refer to [this document](doc/TESTING.md) for running project tests.
+
+### Interfaces
+
+`esn-sabre` exposes a convenience [JSON API](doc/JSON-API.md).

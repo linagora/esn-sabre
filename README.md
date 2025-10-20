@@ -104,29 +104,9 @@ Log level can be :
  * INFO
  * DEBUG
 
-## Unit tests and codestyle
-
-A simple Makefile exists to make it easier to run the tests and check code style. The following commands are available:
-
-```bash
-make test                        # Run all tests
-make test TARGET=tests/CalDAV/   # Run only certain tests
-make test-report                 # Run tests and create a coverage report
-
-# run tests with docker compose
-./run_test.sh
-
-make lint                        # Check code style for the whole project
-make lint TARGET=lib/            # Check only certain files for lint
-```
-
-The coverage report will be placed in the `tests/report` directory, a clickable link will be presented when done.
-
 ## Run
 
 Refer to [this section](doc/RUN.md) for running the project.
-
-
 
 ### Test
 

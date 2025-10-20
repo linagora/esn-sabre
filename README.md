@@ -13,6 +13,8 @@ Please note the following other components of the Twake Calendar product:
  - [Twake Calendar Integretion Tests](https://github.com/linagora/twake-calendar-integration-tests) acts as a quality assurance for the Twake Calendar project umbrella, including this project.
  - OpenPaaS single page applications: [calendar](https://github.com/linagora/esn-frontend-calendar) and [contacts](https://github.com/linagora/esn-frontend-contacts).
 
+ Read more about `esn-sabre` [architecture](doc/ARCHITECTURE.md).
+
 ## Roadmap
 
 We are planning to:

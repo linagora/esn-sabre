@@ -46,7 +46,7 @@ RUN pecl install mongodb-1.9.0 \
     && echo "extension=mongodb.so" >> /etc/php/7.0/cli/php.ini
 
 # Set up Sabre DAV
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --filename=composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
 # Set up Nginx
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf

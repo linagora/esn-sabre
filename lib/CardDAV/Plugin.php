@@ -83,7 +83,11 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $pathParts = explode('/', trim($path, '/'));
 
         // Path format: addressbooks/{domainId}/domain-members/{card.vcf}
-        if (count($pathParts) >= 3 && $pathParts[2] === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI) {
+        if (
+            count($pathParts) >= 3 &&
+            $pathParts[0] === 'addressbooks' &&
+            $pathParts[2] === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI
+        ) {
             // Only technical users can modify domain-members addressbook
             $authPlugin = $this->server->getPlugin('auth');
             if (!is_null($authPlugin)) {

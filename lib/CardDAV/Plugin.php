@@ -88,7 +88,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $authPlugin = $this->server->getPlugin('auth');
             if (!is_null($authPlugin)) {
                 $currentPrincipal = $authPlugin->getCurrentPrincipal();
-                list(, $type) = explode('/', $currentPrincipal);
+                $parts = explode('/', $currentPrincipal);
+                $type = isset($parts[1]) ? $parts[1] : null;
 
                 if ($type !== 'technicalUser') {
                     throw new Forbidden('Only technical users can modify domain-members addressbook');

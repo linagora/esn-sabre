@@ -527,7 +527,7 @@ class PluginTest extends PluginTestBase {
         // Create domain-members addressbook
         $domainMembersId = $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
 
-        // Try to create a card as regular user (should fail)
+        // Try to create a card as admin user (should fail)
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PUT',
             'HTTP_CONTENT_TYPE' => 'text/vcard',

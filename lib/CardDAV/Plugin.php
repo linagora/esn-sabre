@@ -12,6 +12,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
         parent::initialize($server);
 
         $server->on('beforeUnbind', [$this, 'beforeUnbind']);
+        $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
+        $server->on('beforeCreateFile', [$this, 'beforeCreateFile']);
         $server->on('method:GET', [$this, 'httpGet'], 80);
         $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
         $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
@@ -64,6 +66,33 @@ class Plugin extends \ESN\JSON\BasePlugin {
         if ($node instanceof \Sabre\CardDAV\AddressBook) {
             if (in_array($node->getName(), $protectedAddressBook)) {
                 throw new \Sabre\DAV\Exception\Forbidden('Forbidden: You can not delete '.$node->getName().' address book');
+            }
+        }
+    }
+
+    function beforeWriteContent($path, DAV\IFile $node, &$data, &$modified) {
+        $this->checkDomainMembersAccess($path);
+    }
+
+    function beforeCreateFile($path, &$data, DAV\ICollection $parentNode, &$modified) {
+        $this->checkDomainMembersAccess($path);
+    }
+
+    private function checkDomainMembersAccess($path) {
+        // Check if the path is within domain-members addressbook
+        $pathParts = explode('/', trim($path, '/'));
+
+        // Path format: addressbooks/{domainId}/domain-members/{card.vcf}
+        if (count($pathParts) >= 3 && $pathParts[2] === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI) {
+            // Only technical users can modify domain-members addressbook
+            $authPlugin = $this->server->getPlugin('auth');
+            if (!is_null($authPlugin)) {
+                $currentPrincipal = $authPlugin->getCurrentPrincipal();
+                list(, $type) = explode('/', $currentPrincipal);
+
+                if ($type !== 'technicalUser') {
+                    throw new Forbidden('Only technical users can modify domain-members addressbook');
+                }
             }
         }
     }

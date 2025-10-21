@@ -510,4 +510,71 @@ class PluginTest extends PluginTestBase {
         $response = $this->request($request);
         $this->assertEquals($response->status, 501);
     }
+
+    function testCreateCardInDomainMembersAsAdminShouldFail() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain with admin user
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        // Create domain-members addressbook
+        $domainMembersId = $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Try to create a card as regular user (should fail)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/vcard',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $request->setBody($vcard);
+        $response = $this->request($request);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testCreateCardInDomainMembersAsTechnicalUserShouldSucceed() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => []
+        ]);
+
+        // Create domain-members addressbook
+        $domainMembersId = $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Set principal to technical user
+        $this->authBackend->setPrincipal('principals/technicalUser');
+
+        // Try to create a card as technical user (should succeed)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/vcard',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $request->setBody($vcard);
+        $response = $this->request($request);
+
+        $this->assertEquals(201, $response->status);
+    }
 }

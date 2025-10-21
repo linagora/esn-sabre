@@ -252,7 +252,7 @@ $server->addPlugin($corsPlugin);
 
 // Rabbit publisher plugin
 $AMQPPublisher = null;
-$scheduleAsync = !empty($config['schedule']['async']) ? $config['schedule']['async'] : false;
+$scheduleAsync = !empty($config['schedule']['async']);
 
 if (!empty($config['amqp']['host'])) {
     $channel = $amqpConnection->channel();
@@ -285,6 +285,9 @@ $server->addPlugin(
 );
 
 $server->addPlugin(new ESN\CalDAV\Schedule\ITipPlugin());
+
+// IMIP callback endpoint for async processing
+$server->addPlugin(new ESN\CalDAV\Schedule\IMipCallbackPlugin());
 
 $server->addPlugin(new ESN\CalDAV\ParticipationPlugin());
 

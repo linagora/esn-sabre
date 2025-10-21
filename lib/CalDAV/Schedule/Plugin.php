@@ -25,6 +25,16 @@ use
  */
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
+    const ITIP_DELIVERY_TOPIC = 'calendar:itip:deliver';
+
+    protected $amqpPublisher;
+    protected $scheduleAsync;
+
+    function __construct($amqpPublisher = null, $scheduleAsync = false) {
+        $this->amqpPublisher = $amqpPublisher;
+        $this->scheduleAsync = $scheduleAsync;
+    }
+
     private function scheduleReply(RequestInterface $request) {
 
         $scheduleReply = $request->getHeader('Schedule-Reply');
@@ -44,7 +54,26 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $iTipMessage->message->VEVENT->SEQUENCE =0;
         }
 
-        parent::deliver($iTipMessage);
+        if ($this->scheduleAsync && $this->amqpPublisher) {
+            // Serialize the ITip message and publish to AMQP for asynchronous processing
+            $message = [
+                'sender' => $iTipMessage->sender,
+                'recipient' => $iTipMessage->recipient,
+                'message' => $iTipMessage->message->serialize(),
+                'method' => $iTipMessage->method,
+                'significantChange' => $iTipMessage->significantChange,
+                'hasChange' => $iTipMessage->hasChange ?? false,
+                'uid' => $iTipMessage->uid,
+                'component' => $iTipMessage->component
+            ];
+
+            $this->amqpPublisher->publish(self::ITIP_DELIVERY_TOPIC, json_encode($message));
+
+            // Mark as pending since we're processing asynchronously
+            $iTipMessage->scheduleStatus = '1.0'; // SCHEDSTAT_SUCCESS_PENDING
+        } else {
+            parent::deliver($iTipMessage);
+        }
     }
 
     /**

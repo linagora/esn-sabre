@@ -938,11 +938,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     // Convert dates to UTC to match expand() behavior
                     foreach ($vObject->VEVENT as $vevent) {
                         if (isset($vevent->DTSTART) && $vevent->DTSTART->hasTime()) {
-                            $vevent->DTSTART->setDateTime($vevent->DTSTART->getDateTime(), VObject\Property\ICalendar\DateTime::UTC);
+                            $dt = $vevent->DTSTART->getDateTime();
+                            $dt->setTimezone(new \DateTimeZone('UTC'));
+                            $vevent->DTSTART->setDateTime($dt);
                             unset($vevent->DTSTART['TZID']);
                         }
                         if (isset($vevent->DTEND) && $vevent->DTEND->hasTime()) {
-                            $vevent->DTEND->setDateTime($vevent->DTEND->getDateTime(), VObject\Property\ICalendar\DateTime::UTC);
+                            $dt = $vevent->DTEND->getDateTime();
+                            $dt->setTimezone(new \DateTimeZone('UTC'));
+                            $vevent->DTEND->setDateTime($dt);
                             unset($vevent->DTEND['TZID']);
                         }
                     }

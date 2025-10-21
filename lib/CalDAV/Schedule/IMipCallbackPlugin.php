@@ -70,23 +70,23 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             // Parse the serialized iCalendar message
             $iTipMessage->message = VObject\Reader::read($payload->message);
 
-            // Find the IMipPlugin and call its schedule method
-            // This will handle the actual IMIP message delivery
-            $imipPlugin = null;
+            // Find the Schedule\Plugin and call its deliverSync method
+            // This will call parent::deliver() to process the message synchronously
+            $schedulePlugin = null;
             foreach ($this->server->getPlugins() as $plugin) {
-                if ($plugin instanceof IMipPlugin) {
-                    $imipPlugin = $plugin;
+                if ($plugin instanceof Plugin) {
+                    $schedulePlugin = $plugin;
                     break;
                 }
             }
 
-            if (!$imipPlugin) {
-                error_log('IMipCallback: IMipPlugin not found');
-                return $this->send(500, ['error' => 'Server configuration error: IMipPlugin not found']);
+            if (!$schedulePlugin) {
+                error_log('IMipCallback: Schedule Plugin not found');
+                return $this->send(500, ['error' => 'Server configuration error: Schedule Plugin not found']);
             }
 
-            // Call the IMipPlugin's schedule method to process the message
-            $imipPlugin->schedule($iTipMessage);
+            // Call deliverSync to bypass async logic and deliver synchronously
+            $schedulePlugin->deliverSync($iTipMessage);
 
             return $this->send(204, null);
 

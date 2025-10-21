@@ -65,7 +65,7 @@ END:VCALENDAR'
         $this->server->httpResponse = $response;
 
         $this->schedulePlugin->expects($this->once())
-            ->method('scheduleLocalDelivery');
+            ->method('deliverSync');
 
         $this->plugin->imipCallback($request);
 
@@ -87,7 +87,7 @@ END:VCALENDAR'
         $this->server->httpResponse = $response;
 
         $this->schedulePlugin->expects($this->never())
-            ->method('scheduleLocalDelivery');
+            ->method('deliverSync');
 
         $this->plugin->imipCallback($request);
 
@@ -110,7 +110,7 @@ END:VCALENDAR'
         $this->server->httpResponse = $response;
 
         $this->schedulePlugin->expects($this->never())
-            ->method('scheduleLocalDelivery');
+            ->method('deliverSync');
 
         $this->plugin->imipCallback($request);
 

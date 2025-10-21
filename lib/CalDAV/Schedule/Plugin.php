@@ -70,7 +70,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 'recipient' => $iTipMessage->recipient,
                 'message' => $iTipMessage->message->serialize(),
                 'method' => $iTipMessage->method,
-                'significantChange' => $iTipMessage->significantChange,
+                'significantChange' => $iTipMessage->significantChange ?? false,
                 'hasChange' => $iTipMessage->hasChange ?? false,
                 'uid' => $iTipMessage->uid,
                 'component' => $iTipMessage->component

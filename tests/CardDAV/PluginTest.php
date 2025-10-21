@@ -510,4 +510,270 @@ class PluginTest extends PluginTestBase {
         $response = $this->request($request);
         $this->assertEquals($response->status, 501);
     }
+
+    function testCreateCardInDomainMembersAsAdminShouldFail() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain with admin user
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        // Create domain-members addressbook
+        $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Try to create a card as admin user (should fail)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/vcard',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $request->setBody($vcard);
+        $response = $this->request($request);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testCreateCardInDomainMembersAsTechnicalUserShouldSucceed() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => []
+        ]);
+
+        // Create domain-members addressbook
+        $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Set principal to technical user
+        $this->authBackend->setPrincipal('principals/technicalUser');
+
+        // Try to create a card as technical user (should succeed)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/vcard',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $request->setBody($vcard);
+        $response = $this->request($request);
+
+        $this->assertEquals(201, $response->status);
+    }
+
+    function testUpdateCardInDomainMembersAsAdminShouldFail() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain with admin user
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        // Create domain-members addressbook
+        $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Create a card as technical user first
+        $this->authBackend->setPrincipal('principals/technicalUser');
+
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $createRequest = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/vcard',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+        $createRequest->setBody($vcard);
+        $this->request($createRequest);
+
+        // Switch back to admin user
+        $this->authBackend->setPrincipal('principals/users/' . $this->userTestId1);
+
+        // Try to update the card as admin user (should fail)
+        $updatedVcard = "BEGIN:VCARD\r\n" .
+                        "VERSION:4.0\r\n" .
+                        "FN:Updated User\r\n" .
+                        "END:VCARD\r\n";
+
+        $updateRequest = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/vcard',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+        $updateRequest->setBody($updatedVcard);
+        $response = $this->request($updateRequest);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testDeleteCardInDomainMembersAsAdminShouldFail() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain with admin user
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        // Create domain-members addressbook
+        $addressBookId = $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Create a card directly in backend (bypass access control for setup)
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $this->carddavBackend->createCard($addressBookId, 'test.vcf', $vcard);
+
+        // Try to delete the card as admin user (should fail)
+        $deleteRequest = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+        $response = $this->request($deleteRequest);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testCreateCardInDomainMembersAsAdminViaJsonApiShouldFail() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain with admin user
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        // Create domain-members addressbook
+        $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Try to create a card as admin user via JSON API (should fail)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'application/vcard+json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $request->setBody($vcard);
+        $response = $this->request($request);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testUpdateCardInDomainMembersAsAdminViaJsonApiShouldFail() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain with admin user
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        // Create domain-members addressbook
+        $addressBookId = $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Create a card directly in backend
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $this->carddavBackend->createCard($addressBookId, 'test.vcf', $vcard);
+
+        // Try to update the card as admin user via JSON API (should fail)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'application/vcard+json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+
+        $updatedVcard = "BEGIN:VCARD\r\n" .
+                        "VERSION:4.0\r\n" .
+                        "FN:Updated User\r\n" .
+                        "END:VCARD\r\n";
+
+        $request->setBody($updatedVcard);
+        $response = $this->request($request);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testDeleteCardInDomainMembersAsAdminViaJsonApiShouldFail() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain with admin user
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        // Create domain-members addressbook
+        $addressBookId = $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Create a card directly in backend
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $this->carddavBackend->createCard($addressBookId, 'test.vcf', $vcard);
+
+        // Try to delete the card as admin user via JSON API (should fail)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+        $response = $this->request($request);
+
+        $this->assertEquals(403, $response->status);
+    }
 }

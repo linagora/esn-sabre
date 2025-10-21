@@ -6,6 +6,7 @@ class Esn extends Mongo {
 
     const CONTACTS_URI = 'contacts';
     const COLLECTED_URI = 'collected';
+    const DOMAIN_MEMBERS_URI = 'domain-members';
 
     function getAddressBooksFor($principalUri) {
         return parent::getAddressBooksForUser($principalUri);

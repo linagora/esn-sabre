@@ -3,6 +3,7 @@
 require_once 'vendor/autoload.php';
 
 use \PhpAmqpLib\Connection\AMQPStreamConnection;
+use \PhpAmqpLib\Connection\AMQPSSLConnection;
 
 define('CONFIG_PATH', 'config.json');
 
@@ -59,13 +60,36 @@ try {
     if(!empty($config['amqp']['host'])) {
         $amqpLogin = !empty($config['amqp']['login']) ? $config['amqp']['login'] : 'guest';
         $amqpPassword = !empty($config['amqp']['password']) ? $config['amqp']['password'] : 'guest';
+        $amqpVhost = !empty($config['amqp']['vhost']) ? $config['amqp']['vhost'] : '/';
+        $amqpSslEnabled = !empty($config['amqp']['sslEnabled']) ? $config['amqp']['sslEnabled'] : false;
+        $amqpSslTrustAll = !empty($config['amqp']['sslTrustAllCerts']) ? $config['amqp']['sslTrustAllCerts'] : false;
 
-        $amqpConnection = new AMQPStreamConnection(
-            $config['amqp']['host'],
-            $config['amqp']['port'],
-            $amqpLogin,
-            $amqpPassword
-        );
+        if ($amqpSslEnabled) {
+            $sslOptions = [];
+            if ($amqpSslTrustAll) {
+                $sslOptions = [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true
+                ];
+            }
+            $amqpConnection = new AMQPSSLConnection(
+                $config['amqp']['host'],
+                $config['amqp']['port'],
+                $amqpLogin,
+                $amqpPassword,
+                $amqpVhost,
+                $sslOptions
+            );
+        } else {
+            $amqpConnection = new AMQPStreamConnection(
+                $config['amqp']['host'],
+                $config['amqp']['port'],
+                $amqpLogin,
+                $amqpPassword,
+                $amqpVhost
+            );
+        }
     }
 } catch (Exception $e) {
     // Create a fake server that will abort with the exception right away. This

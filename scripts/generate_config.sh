@@ -12,6 +12,9 @@ amqp_host='amqp_host'
 amqp_port='5672'
 amqp_login='guest'
 amqp_password='guest'
+amqp_vhost='/'
+amqp_ssl_enabled='false'
+amqp_ssl_trust_all='false'
 mongo_timeout='10000'
 sabre_env='production'
 
@@ -28,6 +31,9 @@ sabre_env='production'
 [ -z "$AMQP_PORT" ] || amqp_port="$AMQP_PORT"
 [ -z "$AMQP_LOGIN" ] || amqp_login="$AMQP_LOGIN"
 [ -z "$AMQP_PASSWORD" ] || amqp_password="$AMQP_PASSWORD"
+[ -z "$AMQP_VHOST" ] || amqp_vhost="$AMQP_VHOST"
+[ -z "$AMQP_SSL_ENABLED" ] || amqp_ssl_enabled="$AMQP_SSL_ENABLED"
+[ -z "$AMQP_SSL_TRUST_ALL_CERTS" ] || amqp_ssl_trust_all="$AMQP_SSL_TRUST_ALL_CERTS"
 [ -z "$SABRE_ENV" ] || sabre_env="$SABRE_ENV"
 
 if [ ! -z "${ESN_MONGO_USER}" ]
@@ -54,7 +60,10 @@ config="{
     \"host\": \"${amqp_host}\",
     \"port\": \"${amqp_port}\",
     \"login\": \"${amqp_login}\",
-    \"password\": \"${amqp_password}\"
+    \"password\": \"${amqp_password}\",
+    \"vhost\": \"${amqp_vhost}\",
+    \"sslEnabled\": ${amqp_ssl_enabled},
+    \"sslTrustAllCerts\": ${amqp_ssl_trust_all}
   },
   \"database\": {
     \"esn\": {

@@ -68,6 +68,11 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 throw new \Sabre\DAV\Exception\Forbidden('Forbidden: You can not delete '.$node->getName().' address book');
             }
         }
+
+        // Check domain-members access for card deletion
+        if ($node instanceof \Sabre\CardDAV\Card) {
+            $this->checkDomainMembersAccess($path);
+        }
     }
 
     function beforeWriteContent($path, DAV\IFile $node, &$data, &$modified) {

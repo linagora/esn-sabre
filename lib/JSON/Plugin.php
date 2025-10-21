@@ -945,7 +945,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     } else {
                         $vObject = $expandedObject;
 
-                        if (isset($vevent->RRULE) && !isset($vevent->{'RECURRENCE-ID'})) {
+                        if ($vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
                             $recurid = clone $vevent->DTSTART;
                             $recurid->name = 'RECURRENCE-ID';
                             $vevent->add($recurid);
@@ -953,7 +953,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     }
                 }
 
-                $vevent = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+                $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
 
                 // Reconstruct objProps structure to match expected format
                 $objProps = [
@@ -1004,7 +1004,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     } else {
                         $vObject = $expandedObject;
 
-                        if (isset($vevent->RRULE) && !isset($vevent->{'RECURRENCE-ID'})) {
+                        if ($vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
                             $recurid = clone $vevent->DTSTART;
                             $recurid->name = 'RECURRENCE-ID';
                             $vevent->add($recurid);
@@ -1012,7 +1012,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     }
                 }
 
-                $vevent = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+                $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
                 $objProps[200][$props[0]] = $vObject->jsonSerialize();
 
                 $propertyList[] = $objProps;

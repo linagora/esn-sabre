@@ -206,6 +206,16 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false;
         }
 
+        // Parse oldObject if it's a string (raw iCalendar data)
+        if (is_string($oldObject)) {
+            $oldObject = \Sabre\VObject\Reader::read($oldObject);
+        }
+
+        // Ensure oldObject has VEVENT
+        if (!isset($oldObject->VEVENT) || !isset($newObject->VEVENT)) {
+            return false;
+        }
+
         // Get the organizer email
         $organizerEmail = null;
         if (isset($newObject->VEVENT->ORGANIZER)) {
@@ -243,7 +253,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * @param \Sabre\VObject\Component $newEvent
      * @return bool True if there are significant changes
      */
-    private function hasSignificantPropertyChanges($oldEvent, $newEvent): bool {
+    private function hasSignificantPropertyChanges(\Sabre\VObject\Component $oldEvent, \Sabre\VObject\Component $newEvent): bool {
         $significantProperties = [
             'DTSTART', 'DTEND', 'DURATION', 'SUMMARY', 'DESCRIPTION',
             'LOCATION', 'RRULE', 'EXDATE', 'RDATE', 'SEQUENCE'

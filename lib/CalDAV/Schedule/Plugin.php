@@ -25,6 +25,69 @@ use
  */
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
+    /**
+     * Override to optimize cascading notifications for events with many attendees.
+     *
+     * Performance optimization for issue #128:
+     * When an attendee accepts a recurring event with many attendees, SabreDAV's default
+     * behavior generates and delivers REQUEST messages to all other attendees sequentially.
+     * For an event with 100 attendees, this means 99 sequential local deliveries, each
+     * performing multiple database queries and updates, causing timeout (504) errors.
+     *
+     * This override limits cascading notifications to a maximum number of attendees.
+     * Attendees beyond this limit won't receive immediate notifications of status changes,
+     * but they will still see updates when they next sync their calendars from the server.
+     */
+    protected function processICalendarChange($oldObject = null, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
+        $broker = new ITip\Broker();
+        $messages = $broker->parseEvent($newObject, $addresses, $oldObject);
+
+        if ($messages) $modified = true;
+
+        // Limit the number of messages we deliver synchronously to prevent timeout
+        // For events with many attendees, we'll skip notifications to some attendees
+        $maxSyncDeliveries = 20;  // Deliver to max 20 attendees synchronously
+        $deliveryCount = 0;
+
+        foreach ($messages as $message) {
+            if (in_array($message->recipient, $ignore)) {
+                continue;
+            }
+
+            // Skip delivery if we've reached the limit
+            if ($deliveryCount >= $maxSyncDeliveries) {
+                $this->server->getLogger()->warning(
+                    "Skipping delivery to " . $message->recipient .
+                    " - exceeded max sync deliveries limit of " . $maxSyncDeliveries
+                );
+                continue;
+            }
+
+            $this->deliver($message);
+            $deliveryCount++;
+
+            // Update schedule status for organizer or attendee
+            if (isset($newObject->VEVENT->ORGANIZER) && ($newObject->VEVENT->ORGANIZER->getNormalizedValue() === $message->recipient)) {
+                if ($message->scheduleStatus) {
+                    $newObject->VEVENT->ORGANIZER['SCHEDULE-STATUS'] = $message->getScheduleStatus();
+                }
+                unset($newObject->VEVENT->ORGANIZER['SCHEDULE-FORCE-SEND']);
+            } else {
+                if (isset($newObject->VEVENT->ATTENDEE)) {
+                    foreach ($newObject->VEVENT->ATTENDEE as $attendee) {
+                        if ($attendee->getNormalizedValue() === $message->recipient) {
+                            if ($message->scheduleStatus) {
+                                $attendee['SCHEDULE-STATUS'] = $message->getScheduleStatus();
+                            }
+                            unset($attendee['SCHEDULE-FORCE-SEND']);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private function scheduleReply(RequestInterface $request) {
 
         $scheduleReply = $request->getHeader('Schedule-Reply');

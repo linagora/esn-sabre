@@ -944,6 +944,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                         $recurid->name = 'RECURRENCE-ID';
                         $vevent->add($recurid);
                     }
+                } else {
+                    // For non-recurring events, remove VTIMEZONE components to match expand() behavior
+                    unset($vObject->VTIMEZONE);
                 }
             }
 

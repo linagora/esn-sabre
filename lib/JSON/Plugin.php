@@ -908,43 +908,91 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
-        $paths = [];
-        foreach ($calendarObjectUris as $calendarObjectUri) {
-            $paths[] = $parentNodePath . '/' . $calendarObjectUri;
-        }
-
         $propertyList = [];
-        foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
-            $vObject = VObject\Reader::read($objProps[200][$props[0]]);
 
-            // If we have start and end date, we're getting an expanded list of occurrences between these dates
-            if ($start && $end) {
-                $vObject = $vObject->expand($start, $end);
+        // Use getMultipleCalendarObjects for batch fetching if available
+        if (method_exists($parentNode, 'getMultipleCalendarObjects')) {
+            $calendarObjects = $parentNode->getMultipleCalendarObjects($calendarObjectUris);
 
-                // Sabre's VObject doesn't return the RECURRENCE-ID in the first
-                // occurrence, we'll need to do this ourselves. We take advantage
-                // of the fact that the object getter for VEVENT will always return
-                // the first one.
-                $vevent = $vObject->VEVENT;
+            foreach ($calendarObjects as $calendarObject) {
+                $vObject = VObject\Reader::read($calendarObject['calendardata']);
 
-                // This hack is to fix the prod. We need to investigate more about this bug
-                if (!is_object($vevent)) {
-                    error_log('/!\ vevent is not an object');
+                // If we have start and end date, we're getting an expanded list of occurrences between these dates
+                if ($start && $end) {
+                    $vObject = $vObject->expand($start, $end);
 
-                    continue;
+                    // Sabre's VObject doesn't return the RECURRENCE-ID in the first
+                    // occurrence, we'll need to do this ourselves. We take advantage
+                    // of the fact that the object getter for VEVENT will always return
+                    // the first one.
+                    $vevent = $vObject->VEVENT;
+
+                    // This hack is to fix the prod. We need to investigate more about this bug
+                    if (!is_object($vevent)) {
+                        error_log('/!\ vevent is not an object');
+
+                        continue;
+                    }
+
+                    if (!!$vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
+                        $recurid = clone $vevent->DTSTART;
+                        $recurid->name = 'RECURRENCE-ID';
+                        $vevent->add($recurid);
+                    }
                 }
 
-                if (!!$vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
-                    $recurid = clone $vevent->DTSTART;
-                    $recurid->name = 'RECURRENCE-ID';
-                    $vevent->add($recurid);
-                }
+                $vevent = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+
+                // Reconstruct objProps structure to match expected format
+                $objProps = [
+                    200 => [
+                        $props[0] => $vObject->jsonSerialize(),
+                        $props[1] => $calendarObject['etag']
+                    ],
+                    'href' => $baseUri . $parentNodePath . '/' . $calendarObject['uri']
+                ];
+
+                $propertyList[] = $objProps;
+            }
+        } else {
+            // Fall back to sequential queries for nodes that don't support batch fetching
+            $paths = [];
+            foreach ($calendarObjectUris as $calendarObjectUri) {
+                $paths[] = $parentNodePath . '/' . $calendarObjectUri;
             }
 
-            $vevent = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
-            $objProps[200][$props[0]] = $vObject->jsonSerialize();
+            foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
+                $vObject = VObject\Reader::read($objProps[200][$props[0]]);
 
-            $propertyList[] = $objProps;
+                // If we have start and end date, we're getting an expanded list of occurrences between these dates
+                if ($start && $end) {
+                    $vObject = $vObject->expand($start, $end);
+
+                    // Sabre's VObject doesn't return the RECURRENCE-ID in the first
+                    // occurrence, we'll need to do this ourselves. We take advantage
+                    // of the fact that the object getter for VEVENT will always return
+                    // the first one.
+                    $vevent = $vObject->VEVENT;
+
+                    // This hack is to fix the prod. We need to investigate more about this bug
+                    if (!is_object($vevent)) {
+                        error_log('/!\ vevent is not an object');
+
+                        continue;
+                    }
+
+                    if (!!$vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
+                        $recurid = clone $vevent->DTSTART;
+                        $recurid->name = 'RECURRENCE-ID';
+                        $vevent->add($recurid);
+                    }
+                }
+
+                $vevent = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+                $objProps[200][$props[0]] = $vObject->jsonSerialize();
+
+                $propertyList[] = $objProps;
+            }
         }
 
         return [

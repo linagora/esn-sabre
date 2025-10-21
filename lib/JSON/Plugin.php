@@ -939,7 +939,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     // the first one.
                     $vevent = $vObject->VEVENT;
 
-                    if (!!$vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
+                    if (isset($vevent->RRULE) && !isset($vevent->{'RECURRENCE-ID'})) {
                         $recurid = clone $vevent->DTSTART;
                         $recurid->name = 'RECURRENCE-ID';
                         $vevent->add($recurid);

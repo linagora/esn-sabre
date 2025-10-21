@@ -157,6 +157,27 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $userCalendars[] = $userCalendar;
         }
 
+        // Extract principalId from principalUri (e.g., "principals/users/123" -> "123")
+        $principalUriParts = explode('/', $principalUri);
+        $principalId = end($principalUriParts);
+
+        // Reorder calendars to put the default calendar (calendarid == principalId) first
+        $defaultCalendar = null;
+        $otherCalendars = [];
+
+        foreach ($userCalendars as $calendar) {
+            if ($calendar['id'][0] === $principalId) {
+                $defaultCalendar = $calendar;
+            } else {
+                $otherCalendars[] = $calendar;
+            }
+        }
+
+        if ($defaultCalendar) {
+            array_unshift($otherCalendars, $defaultCalendar);
+            return $otherCalendars;
+        }
+
         return $userCalendars;
     }
 

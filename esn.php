@@ -233,6 +233,9 @@ $icsExportPlugin = new Sabre\CalDAV\ICSExportPlugin();
 $server->addPlugin($icsExportPlugin);
 
 // Rabbit publisher plugin
+$AMQPPublisher = null;
+$scheduleAsync = !empty($config['schedule']['async']) ? $config['schedule']['async'] : false;
+
 if (!empty($config['amqp']['host'])) {
     $channel = $amqpConnection->channel();
     $AMQPPublisher = new ESN\Publisher\AMQPPublisher($channel);
@@ -257,6 +260,11 @@ if (!empty($config['amqp']['host'])) {
     // iMip Plugin to handle sending emails
     $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));
 }
+
+// Calendar scheduling support (must be after AMQP initialization)
+$server->addPlugin(
+    new ESN\CalDAV\Schedule\Plugin($AMQPPublisher, $scheduleAsync)
+);
 
 $server->addPlugin(new ESN\CalDAV\Schedule\ITipPlugin());
 

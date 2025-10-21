@@ -98,6 +98,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 if ($type !== 'technicalUser') {
                     throw new Forbidden('Only technical users can modify domain-members addressbook');
                 }
+            } else {
+                throw new Forbidden('Authentication plugin not available');
             }
         }
     }

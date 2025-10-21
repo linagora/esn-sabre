@@ -8,7 +8,10 @@
     "host": "localhost",
     "port": "5672",
     "login": "guest",
-    "password": "guest"
+    "password": "guest",
+    "vhost": "/",
+    "sslEnabled": false,
+    "sslTrustAllCerts": false
   },
   "database": {
     "esn": {

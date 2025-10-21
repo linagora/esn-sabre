@@ -937,18 +937,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
                     // Convert dates to UTC to match expand() behavior
                     foreach ($vObject->VEVENT as $vevent) {
-                        if (isset($vevent->DTSTART) && $vevent->DTSTART->hasTime()) {
-                            $dt = $vevent->DTSTART->getDateTime();
-                            $dt->setTimezone(new \DateTimeZone('UTC'));
-                            $vevent->DTSTART->setDateTime($dt);
-                            unset($vevent->DTSTART['TZID']);
-                        }
-                        if (isset($vevent->DTEND) && $vevent->DTEND->hasTime()) {
-                            $dt = $vevent->DTEND->getDateTime();
-                            $dt->setTimezone(new \DateTimeZone('UTC'));
-                            $vevent->DTEND->setDateTime($dt);
-                            unset($vevent->DTEND['TZID']);
-                        }
+                        $this->convertDateTimeToUTC($vevent, 'DTSTART');
+                        $this->convertDateTimeToUTC($vevent, 'DTEND');
                     }
                     // Keep the original vObject instead of the empty expanded one
                 } else {
@@ -1124,5 +1114,20 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     private function getBooleanParameter($queryParams, $str) {
         return isset($queryParams[$str]) && $queryParams[$str] === 'true';
     }
-    
+
+    /**
+     * Converts a date/time property to UTC timezone and removes TZID parameter.
+     *
+     * @param \Sabre\VObject\Component $vevent The event component
+     * @param string $propertyName The property name (DTSTART or DTEND)
+     */
+    private function convertDateTimeToUTC($vevent, $propertyName) {
+        if (isset($vevent->$propertyName) && $vevent->$propertyName->hasTime()) {
+            $dt = $vevent->$propertyName->getDateTime();
+            $dt->setTimezone(new \DateTimeZone('UTC'));
+            $vevent->$propertyName->setDateTime($dt);
+            unset($vevent->$propertyName['TZID']);
+        }
+    }
+
 }

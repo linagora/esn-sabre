@@ -177,6 +177,99 @@ END:VCALENDAR
         $this->assertTrue(isset($vevents[0]->{'RECURRENCE-ID'}));
     }
 
+    function testTimeRangeQueryRecurExceptionOnlyWithTimezone() {
+        // Test for issue #138: event with RECURRENCE-ID and TZID should have dates converted to UTC
+        $calendars = $this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0f');
+        $calendarId = null;
+        foreach ($calendars as $calendar) {
+            if ($calendar['uri'] === 'calendar1') {
+                $calendarId = $calendar['id'];
+                break;
+            }
+        }
+
+        $ics = 'BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VTIMEZONE
+TZID:Europe/Paris
+BEGIN:STANDARD
+DTSTART:19701025T030000
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:19700329T020000
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:exception-with-timezone
+TRANSP:OPAQUE
+DTSTART;TZID=Europe/Paris:20150228T100000
+DTEND;TZID=Europe/Paris:20150228T110000
+CLASS:PUBLIC
+SUMMARY:Exception with Timezone
+RECURRENCE-ID;TZID=Europe/Paris:20150228T100000
+DTSTAMP:20151021T083253Z
+SEQUENCE:0
+END:VEVENT
+END:VCALENDAR
+';
+        $this->caldavBackend->createCalendarObject($calendarId, 'exception-timezone.ics', $ics);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $timeRangeData = [
+            'match' => [ 'start' => '20150227T000000Z', 'end' => '20150301T000000Z' ],
+            'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
+        ];
+
+        $request->setBody(json_encode($timeRangeData));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        // Find the exception-timezone.ics item
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $exceptionTimezoneItem = null;
+        foreach ($items as $item) {
+            if (strpos($item->{'_links'}->{'self'}->{'href'}, 'exception-timezone.ics') !== false) {
+                $exceptionTimezoneItem = $item;
+                break;
+            }
+        }
+
+        $this->assertNotNull($exceptionTimezoneItem, 'exception-timezone.ics should be in the results');
+
+        $vcalendar = \Sabre\VObject\Reader::readJson($exceptionTimezoneItem->{'data'});
+
+        // VTIMEZONE should be removed (to match expand() behavior)
+        $this->assertCount(0, $vcalendar->select('VTIMEZONE'), 'VTIMEZONE should be removed');
+
+        $vevents = $vcalendar->select('VEVENT');
+        $this->assertCount(1, $vevents);
+
+        $vevent = $vevents[0];
+
+        // Dates should have been processed
+        // TZID parameter should be removed
+        $this->assertFalse(isset($vevent->DTSTART['TZID']), 'DTSTART should not have TZID parameter');
+        $this->assertFalse(isset($vevent->DTEND['TZID']), 'DTEND should not have TZID parameter');
+
+        // The dates should be in UTC format (ending with Z)
+        $this->assertStringEndsWith('Z', (string)$vevent->DTSTART, 'DTSTART should end with Z (UTC format)');
+        $this->assertStringEndsWith('Z', (string)$vevent->DTEND, 'DTEND should end with Z (UTC format)');
+    }
+
     function testTimeRangeQueryMissingMatch() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

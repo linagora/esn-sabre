@@ -1,12 +1,12 @@
 <?php
 namespace ESN\Publisher;
 
-class RealTimePluginTest extends \PHPUnit_Framework_TestCase {
+class RealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     protected $publisher;
     protected $plugin;
 
-    function setUp() {
+    function setUp(): void {
         $this->publisher = $this->createMock(Publisher::class);
         $this->plugin = $this->getMockForAbstractClass('\ESN\Publisher\RealTimePlugin', [$this->publisher]);
     }

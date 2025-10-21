@@ -7,7 +7,7 @@ use \Sabre\DAV\Sharing\Plugin as SPlugin;
 /**
  * @medium
  */
-class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
+class AddressBookHomeTest extends \PHPUnit\Framework\TestCase {
     protected $sabredb;
     protected $carddavBackend;
 
@@ -15,7 +15,7 @@ class AddressBookHomeTest extends \PHPUnit_Framework_TestCase {
     const ADMINISTRATOR_ID = '54313fcc398fef406b0041b7';
     const DOMAIN_ID = '54313fcc398fef406b0041b8';
 
-    function setUp() {
+    function setUp(): void {
         $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
 

@@ -2,13 +2,13 @@
 
 namespace ESN\CalDAV;
 
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/CalDAV/Backend/MockSharing.php';
+require_once ESN_TEST_BASE . '/Sabre/CalDAV/Backend/Mock.php';
+require_once ESN_TEST_BASE . '/Sabre/CalDAV/Backend/MockSharing.php';
 
 /**
  * @medium
  */
-class SharedCalendarTest extends \PHPUnit_Framework_TestCase {
+class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
 
     protected function getBackend() {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);

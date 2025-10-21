@@ -2,7 +2,7 @@
 
 namespace ESN\CardDAV\Backend;
 
-abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
+abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
 
     protected $bookId;
 
@@ -17,7 +17,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
     protected $etienneCard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Etienne\r\nEND:VCARD\r\n";
     protected $accentedEtienneCard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ⓔtienne\r\nEND:VCARD\r\n";
 
-    public function setUp() {
+    public function setUp(): void {
         $this->backend = $this->getBackend();
         //$pdo->exec('INSERT INTO addressbooks (principaluri, displayname, uri,
         //description, synctoken) VALUES ("principals/user1", "book1", "book1",
@@ -167,10 +167,8 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals(array(), $this->backend->getAddressBooksForUser('principals/users/user1'));
     }
 
-    /**
-     * @expectedException Sabre\DAV\Exception\BadRequest
-     */
     public function testCreateAddressBookUnsupportedProp() {
+        $this->expectException(\Sabre\DAV\Exception\BadRequest::class);
         $this->backend->createAddressBook('principals/users/user1','book2', array(
             '{DAV:}foo' => 'bar',
         ));

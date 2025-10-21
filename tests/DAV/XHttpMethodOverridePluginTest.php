@@ -2,7 +2,7 @@
 
 namespace ESN\DAV;
 
-class XHttpMethodOverridePluginTest extends \PHPUnit_Framework_TestCase {
+class XHttpMethodOverridePluginTest extends \PHPUnit\Framework\TestCase {
 
     private function prepareServer() {
         $plugin = new XHttpMethodOverridePlugin();

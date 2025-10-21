@@ -56,6 +56,24 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $server->on('itip', [$this, 'itip']);
     }
 
+    function ensureRequiredFields($vobject) {
+        // Ensure PRODID is present in VCALENDAR (required by RFC 5545)
+        if (!isset($vobject->PRODID)) {
+            $vobject->PRODID = '-//Sabre//Sabre VObject ' . VObject\Version::VERSION . '//EN';
+        }
+
+        // Ensure DTSTAMP is present in all VEVENTs (required for iTIP)
+        if (isset($vobject->VEVENT)) {
+            foreach ($vobject->VEVENT as $vevent) {
+                if (!isset($vevent->DTSTAMP)) {
+                    $vevent->DTSTAMP = gmdate('Ymd\THis\Z');
+                }
+            }
+        }
+
+        return $vobject;
+    }
+
     function buildData($data) {
         if(isset( $data['eventSourcePath'])) {
             $path = '/' . $data['eventSourcePath'];
@@ -65,6 +83,11 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         if($this->server->tree->nodeExists($path)) {
             $data['etag'] = $this->server->tree->getNodeForPath($path)->getETag();
+        }
+
+        // Ensure required fields are present before publishing
+        if (isset($data['event']) && $data['event'] instanceof VObject\Component) {
+            $data['event'] = $this->ensureRequiredFields($data['event']);
         }
 
         return $data;
@@ -138,6 +161,19 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         return true;
     }
 
+    function getFirstChar($data) {
+        if (is_resource($data)) {
+            $char = fgetc($data);
+            rewind($data);
+            return $char === false ? null : $char;
+        }
+
+        if (is_string($data) && $data !== '') {
+            return $data[0];
+        }
+        return null;
+    }
+
     function addSharedUsers($action, $calendar, $calendarPathObject, $data, $old_event = null) {
         if ($calendar instanceof \ESN\CalDAV\SharedCalendar) {
             $calendarid = $calendar->getCalendarId();
@@ -146,7 +182,21 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $calendarUri = $pathExploded[2];
             $isImport = false;
 
-            $event = \Sabre\VObject\Reader::read($data);
+            // Validate that $data is a string or resource before parsing
+            if (!is_string($data) && !is_resource($data)) {
+                error_log('EventRealTimePlugin: Invalid data type in addSharedUsers, expected string or resource, got ' . gettype($data));
+                return;
+            }
+
+            if ($this->getFirstChar($data) === '[') {
+                $event = \Sabre\VObject\Reader::readJson($data);
+            } else {
+                $event = \Sabre\VObject\Reader::read($data);
+            }
+
+            if (is_resource($data)) {
+                rewind($data);
+            }
             $event->remove('method');
 
             if (array_key_exists('import', $this->server->httpRequest->getQueryParameters())) {

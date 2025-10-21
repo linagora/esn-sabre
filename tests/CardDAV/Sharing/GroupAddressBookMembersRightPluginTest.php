@@ -12,7 +12,7 @@ class GroupAddressBookMembersRightPluginTest extends \ESN\CardDAV\PluginTestBase
     const USER_ID = '54b64eadf6d7d8e41d263e8f';
     const ADMINISTRATOR_ID = '54b64eadf6d7d8e41d263e9f';
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $this->esndb->domains->insertOne([
@@ -73,7 +73,7 @@ class GroupAddressBookMembersRightPluginTest extends \ESN\CardDAV\PluginTestBase
         );
 
         $this->assertEquals(403, $response->status);
-        $this->assertContains('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
+        $this->assertStringContainsString('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
     }
 
     function testUpdateMembersRightWithEmptyPrivilegesResponds400() {

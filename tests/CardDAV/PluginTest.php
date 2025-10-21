@@ -663,4 +663,117 @@ class PluginTest extends PluginTestBase {
 
         $this->assertEquals(403, $response->status);
     }
+
+    function testCreateCardInDomainMembersAsAdminViaJsonApiShouldFail() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain with admin user
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        // Create domain-members addressbook
+        $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Try to create a card as admin user via JSON API (should fail)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'application/vcard+json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $request->setBody($vcard);
+        $response = $this->request($request);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testUpdateCardInDomainMembersAsAdminViaJsonApiShouldFail() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain with admin user
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        // Create domain-members addressbook
+        $addressBookId = $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Create a card directly in backend
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $this->carddavBackend->createCard($addressBookId, 'test.vcf', $vcard);
+
+        // Try to update the card as admin user via JSON API (should fail)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'application/vcard+json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+
+        $updatedVcard = "BEGIN:VCARD\r\n" .
+                        "VERSION:4.0\r\n" .
+                        "FN:Updated User\r\n" .
+                        "END:VCARD\r\n";
+
+        $request->setBody($updatedVcard);
+        $response = $this->request($request);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testDeleteCardInDomainMembersAsAdminViaJsonApiShouldFail() {
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+
+        // Create domain with admin user
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID),
+            'administrators' => [
+                [
+                    'user_id' => $this->userTestId1
+                ]
+            ]
+        ]);
+
+        // Create domain-members addressbook
+        $addressBookId = $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
+
+        // Create a card directly in backend
+        $vcard = "BEGIN:VCARD\r\n" .
+                 "VERSION:4.0\r\n" .
+                 "FN:Test User\r\n" .
+                 "END:VCARD\r\n";
+
+        $this->carddavBackend->createCard($addressBookId, 'test.vcf', $vcard);
+
+        // Try to delete the card as admin user via JSON API (should fail)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID . '/domain-members/test.vcf',
+        ));
+        $response = $this->request($request);
+
+        $this->assertEquals(403, $response->status);
+    }
 }

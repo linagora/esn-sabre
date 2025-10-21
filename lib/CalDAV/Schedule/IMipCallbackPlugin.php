@@ -104,12 +104,18 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
 
     /**
      * Check if the request has valid admin basic auth credentials.
+     * If SABRE_ADMIN_LOGIN is not configured, auth check is skipped (for backward compatibility).
      *
      * @param $request
      * @return bool
      */
     private function checkAdminAuth($request)
     {
+        // If admin credentials are not configured, skip auth check
+        if (empty(SABRE_ADMIN_LOGIN)) {
+            return true;
+        }
+
         $auth = $request->getHeader('Authorization');
         if (!$auth || strpos($auth, 'Basic ') !== 0) {
             return false;

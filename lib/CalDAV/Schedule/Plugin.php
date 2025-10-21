@@ -194,6 +194,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * 1. If there are no significant changes ($changes is empty) → skip
      * 2. If the recipient is an attendee and the change concerns another attendee's
      *    participation status → skip (only organizer needs this info)
+     * 3. If the recipient is a resource → never skip (resources need all notifications)
      *
      * @param ITip\Message $message The IMIP message to evaluate
      * @param VCalendar|null $oldObject The original calendar object
@@ -214,6 +215,12 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         // Ensure oldObject has VEVENT
         if (!isset($oldObject->VEVENT) || !isset($newObject->VEVENT)) {
             return false;
+        }
+
+        // Check if recipient is a resource - resources need all notifications
+        $recipientPrincipalUri = \ESN\Utils\Utils::getPrincipalByUri($message->recipient, $this->server);
+        if ($recipientPrincipalUri && \ESN\Utils\Utils::isResourceFromPrincipal($recipientPrincipalUri)) {
+            return false; // Never skip for resources
         }
 
         // Get the organizer email

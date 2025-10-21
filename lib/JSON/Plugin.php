@@ -919,25 +919,31 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
             // If we have start and end date, we're getting an expanded list of occurrences between these dates
             if ($start && $end) {
-                $vObject = $vObject->expand($start, $end);
-
-                // Sabre's VObject doesn't return the RECURRENCE-ID in the first
-                // occurrence, we'll need to do this ourselves. We take advantage
-                // of the fact that the object getter for VEVENT will always return
-                // the first one.
-                $vevent = $vObject->VEVENT;
-
-                // This hack is to fix the prod. We need to investigate more about this bug
-                if (!is_object($vevent)) {
-                    error_log('/!\ vevent is not an object');
-
-                    continue;
+                // Check if this event has any recurring rules before expanding
+                // Events with only RECURRENCE-ID (no master event with RRULE) should not be expanded
+                // as they represent a single occurrence that was modified
+                $hasRRule = false;
+                foreach ($vObject->VEVENT as $vevent) {
+                    if (isset($vevent->RRULE)) {
+                        $hasRRule = true;
+                        break;
+                    }
                 }
 
-                if (!!$vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
-                    $recurid = clone $vevent->DTSTART;
-                    $recurid->name = 'RECURRENCE-ID';
-                    $vevent->add($recurid);
+                if ($hasRRule) {
+                    $vObject = $vObject->expand($start, $end);
+
+                    // Sabre's VObject doesn't return the RECURRENCE-ID in the first
+                    // occurrence, we'll need to do this ourselves. We take advantage
+                    // of the fact that the object getter for VEVENT will always return
+                    // the first one.
+                    $vevent = $vObject->VEVENT;
+
+                    if (!!$vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
+                        $recurid = clone $vevent->DTSTART;
+                        $recurid->name = 'RECURRENCE-ID';
+                        $vevent->add($recurid);
+                    }
                 }
             }
 

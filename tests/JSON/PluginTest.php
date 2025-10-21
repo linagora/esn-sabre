@@ -101,8 +101,80 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         // All properties must contain a recurrence id
         foreach ($vevents as $vevent) {
-            $this->assertTrue(!!$vevent->{'RECURRENCE-ID'});
+            $this->assertTrue(isset($vevent->{'RECURRENCE-ID'}));
         }
+    }
+
+    function testTimeRangeQueryRecurExceptionOnly() {
+        // Test for issue #138: recurring event with only RECURRENCE-ID (no master event with RRULE)
+        // This happens when a user is invited to only one occurrence of a recurring event
+
+        // Create an event with only RECURRENCE-ID (no RRULE)
+        $calendars = $this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0f');
+        $calendarId = null;
+        foreach ($calendars as $calendar) {
+            if ($calendar['uri'] === 'calendar1') {
+                $calendarId = $calendar['id'];
+                break;
+            }
+        }
+
+        $ics = 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:exception-only-event
+TRANSP:OPAQUE
+DTSTART:20150228T073000Z
+DTEND:20150228T080000Z
+CLASS:PUBLIC
+SUMMARY:Exception Only
+RECURRENCE-ID:20150228T073000Z
+DTSTAMP:20151021T083253Z
+SEQUENCE:0
+END:VEVENT
+END:VCALENDAR
+';
+        $this->caldavBackend->createCalendarObject($calendarId, 'exception-only.ics', $ics);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'            => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $timeRangeData = [
+            'match' => [ 'start' => '20150227T000000Z', 'end' => '20150301T000000Z' ],
+            'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
+        ];
+
+        $request->setBody(json_encode($timeRangeData));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        // Should return 2 items: recur.ics (expanded) and exception-only.ics (not expanded)
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(2, $items);
+
+        // Find the exception-only.ics item
+        $exceptionOnlyItem = null;
+        foreach ($items as $item) {
+            if (strpos($item->{'_links'}->{'self'}->{'href'}, 'exception-only.ics') !== false) {
+                $exceptionOnlyItem = $item;
+                break;
+            }
+        }
+
+        $this->assertNotNull($exceptionOnlyItem, 'exception-only.ics should be in the results');
+
+        $vcalendar = \Sabre\VObject\Reader::readJson($exceptionOnlyItem->{'data'});
+        $vevents = $vcalendar->select('VEVENT');
+
+        // Event with only RECURRENCE-ID should be returned as-is (not expanded)
+        $this->assertCount(1, $vevents);
+        $this->assertEquals('Exception Only', (string)$vevents[0]->SUMMARY);
+        $this->assertTrue(isset($vevents[0]->{'RECURRENCE-ID'}));
     }
 
     function testTimeRangeQueryMissingMatch() {

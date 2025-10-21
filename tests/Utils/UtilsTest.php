@@ -209,8 +209,8 @@ ICS;
 
             // The timezone should be normalized to a valid IANA timezone
             // It should NOT be the raw Microsoft format
-            $this->assertNotContains('Chennai', $tzName, 'Timezone was not normalized from Microsoft format');
-            $this->assertNotContains('UTC+05:30', $tzName, 'Timezone was not normalized from Microsoft format');
+            $this->assertStringNotContainsString('Chennai', $tzName, 'Timezone was not normalized from Microsoft format');
+            $this->assertStringNotContainsString('UTC+05:30', $tzName, 'Timezone was not normalized from Microsoft format');
 
         } catch (\Exception $e) {
             $this->fail('Failed to convert DTSTART/DTEND to DateTime: ' . $e->getMessage());

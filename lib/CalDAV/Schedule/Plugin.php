@@ -26,6 +26,13 @@ use
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     /**
+     * Maximum number of synchronous notification deliveries to prevent server timeout.
+     * Attendees beyond this limit won't receive immediate notifications but will see
+     * updates when they sync their calendars.
+     */
+    const MAX_SYNC_DELIVERIES = 20;
+
+    /**
      * Override to optimize cascading notifications for events with many attendees.
      *
      * Performance optimization for issue #128:
@@ -44,29 +51,23 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         if ($messages) $modified = true;
 
-        // Limit the number of messages we deliver synchronously to prevent timeout
-        // For events with many attendees, we'll skip notifications to some attendees
-        $maxSyncDeliveries = 20;  // Deliver to max 20 attendees synchronously
         $deliveryCount = 0;
+        $skippedCount = 0;
 
         foreach ($messages as $message) {
             if (in_array($message->recipient, $ignore)) {
                 continue;
             }
 
-            // Skip delivery if we've reached the limit
-            if ($deliveryCount >= $maxSyncDeliveries) {
-                $this->server->getLogger()->warning(
-                    "Skipping delivery to " . $message->recipient .
-                    " - exceeded max sync deliveries limit of " . $maxSyncDeliveries
-                );
-                continue;
+            // Deliver message if under the limit
+            if ($deliveryCount < self::MAX_SYNC_DELIVERIES) {
+                $this->deliver($message);
+                $deliveryCount++;
+            } else {
+                $skippedCount++;
             }
 
-            $this->deliver($message);
-            $deliveryCount++;
-
-            // Update schedule status for organizer or attendee
+            // Update schedule status for organizer or attendee (even if delivery was skipped)
             if (isset($newObject->VEVENT->ORGANIZER) && ($newObject->VEVENT->ORGANIZER->getNormalizedValue() === $message->recipient)) {
                 if ($message->scheduleStatus) {
                     $newObject->VEVENT->ORGANIZER['SCHEDULE-STATUS'] = $message->getScheduleStatus();
@@ -85,6 +86,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                     }
                 }
             }
+        }
+
+        // Log a single summary message if deliveries were skipped
+        if ($skippedCount > 0) {
+            $this->server->getLogger()->warning(
+                "Skipped $skippedCount notification deliveries due to limit of " . self::MAX_SYNC_DELIVERIES .
+                " synchronous deliveries. Affected attendees will see updates on next sync."
+            );
         }
     }
 

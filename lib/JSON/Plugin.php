@@ -932,14 +932,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 // This happens when a user is invited to only one occurrence of a recurring event.
                 // In this case, we use the original unexpanded object and normalize it.
                 if (!is_object($vevent)) {
-                    // Remove VTIMEZONE to match expand() behavior
-                    unset($vObject->VTIMEZONE);
-
                     // Convert dates to UTC to match expand() behavior
+                    // IMPORTANT: Must be done BEFORE removing VTIMEZONE, as conversion needs timezone info
                     foreach ($vObject->VEVENT as $vevent) {
                         $this->convertDateTimeToUTC($vevent, 'DTSTART');
                         $this->convertDateTimeToUTC($vevent, 'DTEND');
                     }
+
+                    // Remove VTIMEZONE to match expand() behavior
+                    unset($vObject->VTIMEZONE);
                     // Keep the original vObject instead of the empty expanded one
                 } else {
                     $vObject = $expandedObject;
@@ -1125,7 +1126,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         if (isset($vevent->$propertyName) && $vevent->$propertyName->hasTime()) {
             $dt = $vevent->$propertyName->getDateTime();
             $dt->setTimezone(new \DateTimeZone('UTC'));
-            $vevent->$propertyName->setDateTime($dt);
+
+            // Recreate the property with UTC value
+            // setDateTime() alone doesn't properly convert, we need to set the raw value
+            $vevent->$propertyName->setValue($dt->format('Ymd\THis\Z'));
             unset($vevent->$propertyName['TZID']);
         }
     }

@@ -132,6 +132,72 @@ class Utils {
         return [$eventFullPath, $event->get()];
     }
 
+    /**
+     * Normalize non-standard timezone IDs to IANA standard timezone IDs.
+     *
+     * Microsoft Exchange and other systems sometimes use descriptive timezone names
+     * like "(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi" instead of IANA
+     * standard names like "Asia/Kolkata". This function detects and replaces
+     * non-standard timezone IDs with their IANA equivalents based on the UTC offset.
+     *
+     * Fixes #43
+     *
+     * @param \Sabre\VObject\Component\VCalendar $vObject
+     * @return bool True if modifications were made
+     */
+    static function normalizeTimezones(\Sabre\VObject\Component\VCalendar $vObject) {
+        $modified = false;
+
+        // Mapping of UTC offsets to IANA timezone IDs
+        // This focuses on timezones that don't observe DST
+        $offsetToIana = [
+            '+0530' => 'Asia/Kolkata',      // India Standard Time
+            '+0545' => 'Asia/Kathmandu',    // Nepal Time
+            '+0630' => 'Asia/Yangon',       // Myanmar Time
+            '+0800' => 'Asia/Singapore',    // Singapore/Malaysia/Philippines
+            '+0900' => 'Asia/Tokyo',        // Japan Standard Time
+            '+1000' => 'Australia/Brisbane',// Australian Eastern Standard Time (no DST)
+            '+1200' => 'Pacific/Auckland',  // New Zealand (with DST, but default)
+            '-0500' => 'America/New_York',  // Eastern Time
+            '-0600' => 'America/Chicago',   // Central Time
+            '-0700' => 'America/Denver',    // Mountain Time
+            '-0800' => 'America/Los_Angeles',// Pacific Time
+        ];
+
+        // Find all VTIMEZONE components
+        foreach ($vObject->select('VTIMEZONE') as $vtimezone) {
+            $tzid = (string)$vtimezone->TZID;
+
+            // Check if this is a non-standard Microsoft-style TZID
+            if (preg_match('/\(UTC([+-]\d{2}:\d{2})\)\s+(.+)/', $tzid, $matches)) {
+                $offset = str_replace(':', '', $matches[1]); // Convert +05:30 to +0530
+
+                if (isset($offsetToIana[$offset])) {
+                    $newTzid = $offsetToIana[$offset];
+
+                    // Remove the custom VTIMEZONE component as we'll use PHP's built-in timezone
+                    $vObject->remove($vtimezone);
+
+                    // Update all DTSTART/DTEND/etc that reference this TZID
+                    foreach ($vObject->select('VEVENT') as $vevent) {
+                        foreach (['DTSTART', 'DTEND', 'RECURRENCE-ID'] as $prop) {
+                            if (isset($vevent->$prop) && isset($vevent->$prop['TZID'])) {
+                                $propTzid = (string)$vevent->$prop['TZID'];
+                                // Handle both with and without quotes
+                                if ($propTzid === $tzid || $propTzid === '"' . $tzid . '"') {
+                                    $vevent->$prop['TZID'] = $newTzid;
+                                    $modified = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return $modified;
+    }
+
     static function formatIcal($data, $modified) {
         if (is_resource($data)) {
             $data = stream_get_contents($data);
@@ -146,6 +212,11 @@ class Utils {
                 $modified = true;
             } else {
                 $data = \Sabre\VObject\Reader::read($data);
+            }
+
+            // Normalize non-standard timezone IDs (e.g., from Microsoft Exchange)
+            if (self::normalizeTimezones($data)) {
+                $modified = true;
             }
         } catch (\Sabre\VObject\ParseException $e) {
             throw new \Sabre\DAV\Exception\UnsupportedMediaType('This resource only supports valid iCalendar 2.0 data. Parse error: ' . $e->getMessage());

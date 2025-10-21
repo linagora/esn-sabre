@@ -1081,6 +1081,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
      */
     protected function getDenormalizedData($calendarData) {
         $vObject = VObject\Reader::read($calendarData);
+
+        // Normalize non-standard timezone IDs (e.g., from Microsoft Exchange)
+        // Fixes #43
+        \ESN\Utils\Utils::normalizeTimezones($vObject);
+
         $componentType = null;
         $component = null;
         $firstOccurence = null;

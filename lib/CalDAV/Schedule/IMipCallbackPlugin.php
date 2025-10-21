@@ -15,6 +15,15 @@ use \Sabre\DAV;
 class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
 
     protected $server;
+    private $adminLogin;
+    private $adminPassword;
+
+    function __construct()
+    {
+        // Read admin credentials from environment variables
+        $this->adminLogin = getenv('SABRE_ADMIN_LOGIN');
+        $this->adminPassword = getenv('SABRE_ADMIN_PASSWORD');
+    }
 
     function initialize(DAV\Server $server)
     {
@@ -112,7 +121,7 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
     private function checkAdminAuth($request)
     {
         // If admin credentials are not configured, skip auth check
-        if (empty(SABRE_ADMIN_LOGIN)) {
+        if (empty($this->adminLogin)) {
             return true;
         }
 
@@ -124,7 +133,7 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
         $credentials = base64_decode(substr($auth, 6));
         list($username, $password) = explode(':', $credentials, 2);
 
-        return $username === SABRE_ADMIN_LOGIN && $password === SABRE_ADMIN_PASSWORD;
+        return $username === $this->adminLogin && $password === $this->adminPassword;
     }
 
     private function send($code, $body, $setContentType = true)

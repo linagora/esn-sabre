@@ -56,6 +56,9 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     function beforeUnbind($path) {
+        // Check domain-members access first (works for both cards and addressbooks)
+        $this->checkDomainMembersAccess($path);
+
         $protectedAddressBook = array(
             \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
             \ESN\CardDAV\Backend\Esn::COLLECTED_URI
@@ -67,11 +70,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
             if (in_array($node->getName(), $protectedAddressBook)) {
                 throw new \Sabre\DAV\Exception\Forbidden('Forbidden: You can not delete '.$node->getName().' address book');
             }
-        }
-
-        // Check domain-members access for card deletion
-        if ($node instanceof \Sabre\CardDAV\Card) {
-            $this->checkDomainMembersAccess($path);
         }
     }
 

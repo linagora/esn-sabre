@@ -149,7 +149,10 @@ class Utils {
         $modified = false;
 
         // Mapping of UTC offsets to IANA timezone IDs
-        // This focuses on timezones that don't observe DST
+        // WARNING: This is a best-effort mapping with known limitations.
+        // Multiple IANA timezones can share the same UTC offset (e.g., UTC+0800 could be
+        // Asia/Shanghai, Asia/Hong_Kong, Asia/Manila, etc.). This mapping selects one
+        // representative timezone per offset. This focuses on timezones that don't observe DST.
         $offsetToIana = [
             '+0530' => 'Asia/Kolkata',      // India Standard Time
             '+0545' => 'Asia/Kathmandu',    // Nepal Time
@@ -164,31 +167,41 @@ class Utils {
             '-0800' => 'America/Los_Angeles',// Pacific Time
         ];
 
+        // Collect VTIMEZONE components to remove (can't remove while iterating)
+        $timezonesToRemove = [];
+        $timezoneMapping = [];
+
         // Find all VTIMEZONE components
         foreach ($vObject->select('VTIMEZONE') as $vtimezone) {
             $tzid = (string)$vtimezone->TZID;
 
             // Check if this is a non-standard Microsoft-style TZID
-            if (preg_match('/\(UTC([+-]\d{2}:\d{2})\)\s+(.+)/', $tzid, $matches)) {
+            if (preg_match('/\(UTC([+-]\d{2}:\d{2})\)/', $tzid, $matches)) {
                 $offset = str_replace(':', '', $matches[1]); // Convert +05:30 to +0530
 
                 if (isset($offsetToIana[$offset])) {
                     $newTzid = $offsetToIana[$offset];
+                    $timezonesToRemove[] = $vtimezone;
+                    $timezoneMapping[$tzid] = $newTzid;
+                }
+            }
+        }
 
-                    // Remove the custom VTIMEZONE component as we'll use PHP's built-in timezone
-                    $vObject->remove($vtimezone);
+        // Remove custom VTIMEZONE components
+        foreach ($timezonesToRemove as $vtimezone) {
+            $vObject->remove($vtimezone);
+        }
 
-                    // Update all DTSTART/DTEND/etc that reference this TZID
-                    foreach ($vObject->select('VEVENT') as $vevent) {
-                        foreach (['DTSTART', 'DTEND', 'RECURRENCE-ID'] as $prop) {
-                            if (isset($vevent->$prop) && isset($vevent->$prop['TZID'])) {
-                                $propTzid = (string)$vevent->$prop['TZID'];
-                                // Handle both with and without quotes
-                                if ($propTzid === $tzid || $propTzid === '"' . $tzid . '"') {
-                                    $vevent->$prop['TZID'] = $newTzid;
-                                    $modified = true;
-                                }
-                            }
+        // Update all DTSTART/DTEND/etc that reference mapped TZIDs
+        foreach ($timezoneMapping as $oldTzid => $newTzid) {
+            foreach ($vObject->select('VEVENT') as $vevent) {
+                foreach (['DTSTART', 'DTEND', 'RECURRENCE-ID'] as $prop) {
+                    if (isset($vevent->$prop) && isset($vevent->$prop['TZID'])) {
+                        $propTzid = (string)$vevent->$prop['TZID'];
+                        // Handle both with and without quotes
+                        if ($propTzid === $oldTzid || $propTzid === '"' . $oldTzid . '"') {
+                            $vevent->$prop['TZID'] = $newTzid;
+                            $modified = true;
                         }
                     }
                 }

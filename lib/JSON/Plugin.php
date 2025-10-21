@@ -919,34 +919,42 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
             // If we have start and end date, we're getting an expanded list of occurrences between these dates
             if ($start && $end) {
-                // Check if this event has any recurring rules before expanding
-                // Events with only RECURRENCE-ID (no master event with RRULE) should not be expanded
-                // as they represent a single occurrence that was modified
-                $hasRRule = false;
-                foreach ($vObject->VEVENT as $vevent) {
-                    if (isset($vevent->RRULE)) {
-                        $hasRRule = true;
-                        break;
+                $expandedObject = $vObject->expand($start, $end);
+
+                // Sabre's VObject doesn't return the RECURRENCE-ID in the first
+                // occurrence, we'll need to do this ourselves. We take advantage
+                // of the fact that the object getter for VEVENT will always return
+                // the first one.
+                $vevent = $expandedObject->VEVENT;
+
+                // When an event has only RECURRENCE-ID exceptions without a master event (RRULE),
+                // the expand() method returns an empty VCALENDAR with no VEVENT.
+                // This happens when a user is invited to only one occurrence of a recurring event.
+                // In this case, we use the original unexpanded object and normalize it.
+                if (!is_object($vevent)) {
+                    // Remove VTIMEZONE to match expand() behavior
+                    unset($vObject->VTIMEZONE);
+
+                    // Convert dates to UTC to match expand() behavior
+                    foreach ($vObject->VEVENT as $vevent) {
+                        if (isset($vevent->DTSTART) && $vevent->DTSTART->hasTime()) {
+                            $vevent->DTSTART->setDateTime($vevent->DTSTART->getDateTime(), VObject\Property\ICalendar\DateTime::UTC);
+                            unset($vevent->DTSTART['TZID']);
+                        }
+                        if (isset($vevent->DTEND) && $vevent->DTEND->hasTime()) {
+                            $vevent->DTEND->setDateTime($vevent->DTEND->getDateTime(), VObject\Property\ICalendar\DateTime::UTC);
+                            unset($vevent->DTEND['TZID']);
+                        }
                     }
-                }
-
-                if ($hasRRule) {
-                    $vObject = $vObject->expand($start, $end);
-
-                    // Sabre's VObject doesn't return the RECURRENCE-ID in the first
-                    // occurrence, we'll need to do this ourselves. We take advantage
-                    // of the fact that the object getter for VEVENT will always return
-                    // the first one.
-                    $vevent = $vObject->VEVENT;
+                    // Keep the original vObject instead of the empty expanded one
+                } else {
+                    $vObject = $expandedObject;
 
                     if (isset($vevent->RRULE) && !isset($vevent->{'RECURRENCE-ID'})) {
                         $recurid = clone $vevent->DTSTART;
                         $recurid->name = 'RECURRENCE-ID';
                         $vevent->add($recurid);
                     }
-                } else {
-                    // For non-recurring events, remove VTIMEZONE components to match expand() behavior
-                    unset($vObject->VTIMEZONE);
                 }
             }
 

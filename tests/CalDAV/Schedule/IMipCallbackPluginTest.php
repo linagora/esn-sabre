@@ -59,6 +59,7 @@ END:VCALENDAR'
 
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody(json_encode($payload));
+        $request->setHeader('Authorization', 'Basic ' . base64_encode(SABRE_ADMIN_LOGIN . ':' . SABRE_ADMIN_PASSWORD));
 
         $response = new Response();
         $this->server->httpRequest = $request;
@@ -72,6 +73,29 @@ END:VCALENDAR'
         $this->assertEquals(204, $response->getStatus());
     }
 
+    function testImipCallbackWithoutAuth() {
+        $payload = [
+            'sender' => 'mailto:sender@example.com',
+            'recipient' => 'mailto:recipient@example.com',
+            'method' => 'REQUEST',
+            'message' => 'BEGIN:VCALENDAR\nVERSION:2.0\nEND:VCALENDAR'
+        ];
+
+        $request = new Request('IMIPCALLBACK', '/');
+        $request->setBody(json_encode($payload));
+
+        $response = new Response();
+        $this->server->httpRequest = $request;
+        $this->server->httpResponse = $response;
+
+        $this->schedulePlugin->expects($this->never())
+            ->method('deliverSync');
+
+        $this->plugin->imipCallback($request);
+
+        $this->assertEquals(401, $response->getStatus());
+    }
+
     function testImipCallbackWithMissingSender() {
         $payload = [
             'recipient' => 'mailto:recipient@example.com',
@@ -81,6 +105,7 @@ END:VCALENDAR'
 
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody(json_encode($payload));
+        $request->setHeader('Authorization', 'Basic ' . base64_encode(SABRE_ADMIN_LOGIN . ':' . SABRE_ADMIN_PASSWORD));
 
         $response = new Response();
         $this->server->httpRequest = $request;
@@ -104,6 +129,7 @@ END:VCALENDAR'
 
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody(json_encode($payload));
+        $request->setHeader('Authorization', 'Basic ' . base64_encode(SABRE_ADMIN_LOGIN . ':' . SABRE_ADMIN_PASSWORD));
 
         $response = new Response();
         $this->server->httpRequest = $request;

@@ -45,9 +45,15 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
     /**
      * This is the method called when the side service sends back a processed IMIP message.
      * The payload contains the serialized ITip\Message that was published to AMQP.
+     * Requires basic auth with admin credentials (SABRE_ADMIN_LOGIN/SABRE_ADMIN_PASSWORD).
      */
     function imipCallback($request)
     {
+        // Verify basic auth with admin credentials
+        if (!$this->checkAdminAuth($request)) {
+            return $this->send(401, ['error' => 'Unauthorized: Admin credentials required']);
+        }
+
         $payload = json_decode($request->getBodyAsString());
 
         // Validate required fields
@@ -94,6 +100,25 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             error_log('IMipCallback error: ' . $e->getMessage());
             return $this->send(500, ['error' => 'Failed to process IMIP message: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Check if the request has valid admin basic auth credentials.
+     *
+     * @param $request
+     * @return bool
+     */
+    private function checkAdminAuth($request)
+    {
+        $auth = $request->getHeader('Authorization');
+        if (!$auth || strpos($auth, 'Basic ') !== 0) {
+            return false;
+        }
+
+        $credentials = base64_decode(substr($auth, 6));
+        list($username, $password) = explode(':', $credentials, 2);
+
+        return $username === SABRE_ADMIN_LOGIN && $password === SABRE_ADMIN_PASSWORD;
     }
 
     private function send($code, $body, $setContentType = true)

@@ -305,17 +305,30 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
                 $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]))) {
 
-                // Check if recipient is attending this specific occurrence OR was attending before
-                // Skip notification only if recipient is not attending now AND was not attending before
-                // This prevents notifications to uninvited attendees (issue #152)
+                // Distinguish between new occurrence exceptions and modified existing occurrences
+                // This fixes issue #152: prevent notifications to uninvited attendees
                 // while still allowing invitations to specific occurrences
-                $previousVEvent = $previousEventVEvents[$recurrenceId] ?? $previousEventVEvents[self::MASTER_EVENT];
-                $wasAttendingBefore = isset($previousVEvent) && $this->isAttending($recipient, $previousVEvent);
-                $isAttendingNow = $this->isAttending($recipient, $currentEventVEvents[$recurrenceId]);
+                $wasAttendingBefore = false;
 
-                // Skip notification only if recipient is neither attending now nor was attending before
-                if (!$isAttendingNow && !$wasAttendingBefore) {
-                    continue;
+                if (!isset($previousEventVEvents[$recurrenceId])) {
+                    // NEW occurrence exception: Always send if recipient is in the attendee list
+                    // This allows inviting someone to a specific occurrence
+                    if (!$this->isAttending($recipient, $currentEventVEvents[$recurrenceId])) {
+                        continue;
+                    }
+                    // For new occurrences, check if recipient was in the series to determine if it's truly new
+                    $previousVEvent = $previousEventVEvents[self::MASTER_EVENT];
+                    $wasAttendingBefore = isset($previousVEvent) && $this->isAttending($recipient, $previousVEvent);
+                } else {
+                    // EXISTING occurrence modified: Check before and after to decide
+                    $previousVEvent = $previousEventVEvents[$recurrenceId];
+                    $wasAttendingBefore = $this->isAttending($recipient, $previousVEvent);
+                    $isAttendingNow = $this->isAttending($recipient, $currentEventVEvents[$recurrenceId]);
+
+                    // Skip only if recipient is neither attending now nor was attending before
+                    if (!$isAttendingNow && !$wasAttendingBefore) {
+                        continue;
+                    }
                 }
 
                 $currentMessage = clone ($scheduledEvent);
@@ -326,8 +339,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
                 $modifiedInstance['message'] = $currentMessage;
 
-                // Check if recipient was attending before
-                // If an exception was created, we check is recipient was attending whole series
+                // Mark as new event if recipient wasn't attending before
                 if (!$wasAttendingBefore) {
                     $modifiedInstance['newEvent'] = 1;
                 }

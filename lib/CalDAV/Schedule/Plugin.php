@@ -218,7 +218,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         // Fix for issue #154: For recurring events with occurrence exceptions,
-        // check if the number of occurrences changed (new exception added)
+        // check if the number of occurrences changed (exception added/removed)
         $oldEventCount = count($oldObject->VEVENT);
         $newEventCount = count($newObject->VEVENT);
         if ($oldEventCount !== $newEventCount) {

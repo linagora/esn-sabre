@@ -39,10 +39,6 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
         return $this->carddavBackend->getInvites($this->addressBookInfo['id']);
     }
 
-    function setMembersRight($privileges) {
-        return $this->carddavBackend->setMembersRight($this->addressBookInfo['id'], $privileges);
-    }
-
     function isDisabled() {
         return isset($this->addressBookInfo['{http://open-paas.org/contacts}state']) && $this->addressBookInfo['{http://open-paas.org/contacts}state'] === 'disabled';
     }
@@ -55,7 +51,7 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
         }
 
         foreach ($this->addressBookInfo['members'] as $member) {
-            
+
             // If a member is delegated, he does not have group members rights
             if (in_array($member, $shareePrincipals)) continue;
 

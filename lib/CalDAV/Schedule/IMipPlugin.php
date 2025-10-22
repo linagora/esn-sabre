@@ -304,6 +304,13 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             // Create message if instance have been created or modified
             if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
                 $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]))) {
+
+                // Check if recipient is attending this specific occurrence
+                // If not, skip sending notification (fix for issue #152)
+                if (!$this->isAttending($recipient, $currentEventVEvents[$recurrenceId])) {
+                    continue;
+                }
+
                 $currentMessage = clone ($scheduledEvent);
                 $modifiedInstance = [];
 

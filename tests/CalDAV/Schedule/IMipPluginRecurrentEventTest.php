@@ -1319,4 +1319,101 @@ class IMipPluginRecurrentEventTest extends IMipPluginTestBase {
         $plugin->schedule($itipMessage);
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);
     }
+
+    /**
+     * Test for issue #152 - complementary test
+     * When organizer modifies an occurrence to invite an attendee,
+     * that attendee SHOULD receive an iTIP notification
+     */
+    function testShouldSendRequestWhenOrganizerInvitesAttendeeToSpecificOccurrence()
+    {
+        $plugin = $this->getPlugin();
+
+        // Initial event: recurring event where user2 is NOT invited to any occurrence
+        $user1ExistingEvent = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'RRULE:FREQ=DAILY;COUNT=3',
+            'DTSTART:20501028T170000Z',
+            'DTEND:20501028T173000Z',
+            'SUMMARY:Test',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'DTSTAMP:20501025T145516Z',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]);
+
+        $plugin->setFormerEventICal($user1ExistingEvent);
+        $plugin->setNewEvent(false);
+
+        // Organizer modifies occurrence #2 to invite user2
+        $scheduledIcal = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'RRULE:FREQ=DAILY;COUNT=3',
+            'DTSTART:20501028T170000Z',
+            'DTEND:20501028T173000Z',
+            'SUMMARY:Test',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'DTSTAMP:20501025T145516Z',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:ab9e450a-3080-4274-affd-fdd0e9eefdcc',
+            'RECURRENCE-ID:20501029T170000Z',
+            'DTSTART:20501029T170000Z',
+            'DTEND:20501029T173000Z',
+            'SUMMARY:Test - Instance #2 (user2 NOW invited)',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'DTSTAMP:20501027T182723Z',
+            'SEQUENCE:1',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $itipMessage = new \Sabre\VObject\ITip\Message();
+        $itipMessage->uid = 'ab9e450a-3080-4274-affd-fdd0e9eefdcc';
+        $itipMessage->component = 'VEVENT';
+        $itipMessage->method = 'REQUEST';
+        $itipMessage->sequence = 1;
+        $itipMessage->sender = 'mailto:' . $this->user1Email;
+        $itipMessage->recipient = 'mailto:' . $this->user2Email;
+        $itipMessage->scheduleStatus = null;
+        $itipMessage->significantChange = true;
+        $itipMessage->hasChange = true;
+        $itipMessage->message = Reader::read($scheduledIcal);
+
+        // EXPECTED: user2 SHOULD receive an iTIP notification
+        // because the organizer is inviting user2 to occurrence #2
+        $this->amqpPublisher->expects($this->once())
+            ->method('publish')
+            ->with(
+                $this->equalTo('calendar:event:notificationEmail:send'),
+                $this->callback(function ($message) {
+                    $decoded = json_decode($message, true);
+                    return $decoded['recipientEmail'] === 'rudyvoller@om.com'
+                        && $decoded['method'] === 'REQUEST'
+                        && isset($decoded['isNewEvent'])
+                        && $decoded['isNewEvent'] === true;
+                })
+            );
+
+        $plugin->schedule($itipMessage);
+        $this->assertEquals('1.1', $itipMessage->scheduleStatus);
+    }
 }

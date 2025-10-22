@@ -305,9 +305,16 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
                 $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]))) {
 
-                // Check if recipient is attending this specific occurrence
-                // If not, skip sending notification (fix for issue #152)
-                if (!$this->isAttending($recipient, $currentEventVEvents[$recurrenceId])) {
+                // Check if recipient is attending this specific occurrence OR was attending before
+                // Skip notification only if recipient is not attending now AND was not attending before
+                // This prevents notifications to uninvited attendees (issue #152)
+                // while still allowing invitations to specific occurrences
+                $previousVEvent = $previousEventVEvents[$recurrenceId] ?? $previousEventVEvents[self::MASTER_EVENT];
+                $wasAttendingBefore = isset($previousVEvent) && $this->isAttending($recipient, $previousVEvent);
+                $isAttendingNow = $this->isAttending($recipient, $currentEventVEvents[$recurrenceId]);
+
+                // Skip notification only if recipient is neither attending now nor was attending before
+                if (!$isAttendingNow && !$wasAttendingBefore) {
                     continue;
                 }
 
@@ -321,8 +328,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
                 // Check if recipient was attending before
                 // If an exception was created, we check is recipient was attending whole series
-                $previousVEvent = $previousEventVEvents[$recurrenceId] ?? $previousEventVEvents[self::MASTER_EVENT];
-                if (!isset($previousVEvent) || !$this->isAttending($recipient, $previousVEvent)) {
+                if (!$wasAttendingBefore) {
                     $modifiedInstance['newEvent'] = 1;
                 }
 

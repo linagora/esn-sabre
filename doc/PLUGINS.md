@@ -6,6 +6,8 @@ This page aims at documenting plugins that are poart of esn-sabre as well as the
 
 Those plugin publishes RabbitMQ messages upon occurence of specific actions performed on top of the DAV server.
 
+Those plugins simply publishes events onto pre-existing exchanges. The side service provisions the exchanges upon start.
+
 ### ESN\Publisher\CalDAV\CalendarRealTimePlugin
 
 This publishes events upon `calendar` updates.
@@ -110,7 +112,18 @@ Free-busy API is  currently undocumented.
 
 ### ESN\DAV\Auth\Backend\Esn
 
-Implements auth either via impersonation or LDAP then resolves the principal id from the mail address by calling the side service.
+This plugin handle:
+
+ - Basic auth via impersonation using `SABRE_ADMIN_LOGIN` and `SABRE_ADMIN_PASSWORD` variables following the 
+ `{SABRE_ADMIN_LOGIN}&{username}:{SABRE_ADMIN_PASSWORD}` pattern.
+  Please note that the Side service leverage this impersonation to expose an OpenID connect authenticated endpoint that proxies requests to Sabre.
+ - Basic auth against a LDAP. The authentication result (mail address) is then consolidated agsainst the side service in order
+ to retieve the corresponding principalId.
+ - Authentication via JWT token, which is still relied upon by legacy OpenPaaS SPAs (deprecated). This token can be generated on the side
+ service by calling `/token` endpoint.
+ - Authentication via OpenPaaS `ESNToken`. Used by OpenPaaS to perform automated actions like consolidating `domain member address book`. (deprecated)
+ - Authentication via `TwakeCalendarToken`. Used by the side service to perform automated actions like consolidating `domain member address book`. 
+
 
 ### ESN\DAV\CorsPlugin
 
@@ -132,7 +145,7 @@ Simply holds method but plugs on no server-events.
 
 ### ESN\CalDAV\Backend\Esn
 
-Triggers calendar auto-provisionning upon first connection.
+Triggers calendar auto-provisionning of the default calendar upon first connection.
 
 ### ESN\CalDAV\Backend\Mongo
 
@@ -154,13 +167,12 @@ Deserializes JSON and triggers the similar ITIP event compared to regular sabre/
 
 ### ESN\CalDAV\Schedule\Plugin
 
-Relevant comment: class is copiedin order to work around a limitation: using currently
+Relevant comment: class is copied in order to work around a limitation: using currently
 authenticated user is not necessarily the owner when sharing.
 
 ### ESN\CalDAV\ImportPlugin
 
-Adds a `?import` query parameter to bypass scheduling and thus avoid sending duplicated
-IMIP when importing data.
+Adds a `?import` query parameter to overwrite pre-existing event if the URI is the same.
 
 ### ESN\CalDAV\MobileRequestPlugin
 
@@ -188,7 +200,7 @@ Implements a simpler method to get calendar en events for IOS.
 
 ### ESN\DAVACL\PrincipalBackend\Mongo
 
-Allows resolving principals against MongoDB.
+Allows resolving principals against MongoDB by reading the side service DB.
 
 ### ESN\DAVACL\Plugin
 
@@ -198,5 +210,45 @@ This is a bugfix to prevent displaying global addressbook twice.
 
 ## CardDAV
 
-Todo
+### ESN\CardDAV\Backend\Esn
 
+Preprovisionning for user default addressbook if missing.
+
+### ESN\CardDAV\Backend\Mongo
+
+MongoDB storage backend for CardDAV.
+
+### ESN\CardDAV\Sharing\ListenerPlugin
+
+If an adress book is shared, this plugin ensures that upon removal of the owner address book, that sharee subscriptions are deleted accordingly.
+
+### ESN\CardDAV\Sharing\Plugin
+
+Similar to `Sabre\CalDAV\SharingPlugin` but for CardDAV as this plugin do not exist (yet) in Sabre.
+
+This plugin implements HTTP requests and properties related to: draft-pot-webdav-resource-sharing
+
+### ESN\CardDAV\Subscriptions\Plugin
+
+Similar to `Sabre\CalDAV\Subscriptions\Plugin` but for CardDAV as this plugin do not exist (yet) in Sabre.
+
+This plugin adds addressbook-subscription support to your CardDAV server.
+
+Some clients support 'managed subscriptions' server-side. This is basically
+a list of subscription urls a user is using.
+
+Currently limited to the JSON API support.
+
+### ESN\CardDAV\MobileRequestPlugin
+
+DEPRECATED
+
+Modify shared calendar name in order to match owner.
+
+Buggy: it always set to the current user.
+
+### ESN\CardDAV\Plugin
+
+Alternative implementation to `Sabre\CardDAV\Plugin` which it replaces, supposedly adding subscription support.
+
+Likely buggy.

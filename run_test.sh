@@ -43,14 +43,12 @@ docker build -t esn_sabre_test .
 
 # Build PHP test command
 if [ -n "$FILTER" ]; then
-  PHP_CMD="bash -c \"sleep 5 && make lint && vendor/bin/phpunit -c tests/phpunit.xml --filter=$FILTER tests\""
   echo "Running PHP tests with filter: $FILTER"
+  docker compose -f docker-compose.test.yaml run --rm esn_test bash -c "sleep 5 && make lint && vendor/bin/phpunit -c tests/phpunit.xml --filter=$FILTER tests"
 else
-  PHP_CMD="bash -c \"sleep 5 && make lint && make test\""
   echo "Running all PHP tests"
+  docker compose -f docker-compose.test.yaml run --rm esn_test bash -c "sleep 5 && make lint && make test"
 fi
-
-docker compose -f docker-compose.test.yaml run --rm esn_test $PHP_CMD
 exit_code_1=$?
 
 if [ $exit_code_1 -ne 0 ]; then

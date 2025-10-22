@@ -307,6 +307,38 @@ class EventRealTimePluginTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($data['event'], 'event');
     }
 
+    /**
+     * Test for issue #155: Alarm messages should be emitted for regular calendars too,
+     * not just shared calendars
+     */
+    function testCreateFileEventInRegularCalendarEmitsAlarm() {
+        $calendarInfo = [
+            'uri' => 'calendars/456456/123123',
+            'id' => '123123',
+            'principaluri' => 'principals/users/456456'
+        ];
+
+        // Use regular Calendar, not SharedCalendar
+        $parent = new \Sabre\CalDAV\Calendar(new \ESN\CalDAV\CalDAVBackendMock(), $calendarInfo);
+
+        $server = new \Sabre\DAV\Server([
+            new \Sabre\DAV\SimpleCollection("calendars", [
+                $parent
+            ])
+        ]);
+
+        $plugin = $this->getPlugin($server);
+        $client = $plugin->getClient();
+
+        $modified = false;
+        $this->assertTrue($server->emit('beforeCreateFile', ["calendars/456456/123123/uid.ics", &$this->icalData, $parent, &$modified]));
+        $this->assertTrue($server->emit('afterCreateFile', ["/calendars/456456/123123/uid.ics", $parent]));
+
+        // Verify that alarm message was emitted for regular calendar
+        $this->assertNotNull($client->message, 'Alarm message should be emitted for regular calendar');
+        $this->assertEquals('calendar:event:alarm:created', $client->topic, 'Alarm topic should be calendar:event:alarm:created');
+    }
+
 }
 
 class ClientMock implements \ESN\Publisher\Publisher {

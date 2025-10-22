@@ -139,30 +139,36 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     function addSharedUsers($action, $calendar, $calendarPathObject, $data, $old_event = null) {
+        // Fix for issue #155: Emit alarm messages for all calendars, not just shared ones
+        // This ensures that ITIP requests from outside also trigger alarm messages
+        $pathExploded = explode('/', $calendarPathObject);
+        $objectUri = $pathExploded[3];
+        $calendarUri = $pathExploded[2];
+        $isImport = false;
+
+        $event = \Sabre\VObject\Reader::read($data);
+        $event->remove('method');
+
+        if (array_key_exists('import', $this->server->httpRequest->getQueryParameters())) {
+            $isImport = true;
+        }
+
+        $dataMessage = [
+            'eventPath' => '/' . $calendarPathObject,
+            'event' => $event,
+            'import' => $isImport
+        ];
+
+        if($old_event) {
+            $dataMessage['old_event'] = $old_event;
+        }
+
+        // Always emit alarm message for all calendar types
+        $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_'.$action], $dataMessage);
+
+        // Only notify subscribers and invites for shared calendars
         if ($calendar instanceof \ESN\CalDAV\SharedCalendar) {
             $calendarid = $calendar->getCalendarId();
-            $pathExploded = explode('/', $calendarPathObject);
-            $objectUri = $pathExploded[3];
-            $calendarUri = $pathExploded[2];
-            $isImport = false;
-
-            $event = \Sabre\VObject\Reader::read($data);
-            $event->remove('method');
-
-            if (array_key_exists('import', $this->server->httpRequest->getQueryParameters())) {
-                $isImport = true;
-            }
-
-
-            $dataMessage = [
-                'eventPath' => '/' . $calendarPathObject,
-                'event' => $event,
-                'import' => $isImport
-            ];
-
-            if($old_event) {
-                $dataMessage['old_event'] = $old_event;
-            }
 
             $options = [
                 'action' => $action,
@@ -172,7 +178,6 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 'calendarUri' => $calendarUri
             ];
 
-            $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_'.$action], $dataMessage);
             $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
             $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
         }

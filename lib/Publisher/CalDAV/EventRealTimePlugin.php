@@ -141,7 +141,14 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     function addSharedUsers($action, $calendar, $calendarPathObject, $data, $old_event = null) {
         // Fix for issue #155: Emit alarm messages for all calendars, not just shared ones
         // This ensures that ITIP requests from outside also trigger alarm messages
+
+        // Check if this is a valid calendar path (calendars/userId/calendarId/objectId.ics)
         $pathExploded = explode('/', $calendarPathObject);
+        if (count($pathExploded) < 4) {
+            // Not a valid calendar object path, skip
+            return;
+        }
+
         $objectUri = $pathExploded[3];
         $calendarUri = $pathExploded[2];
         $isImport = false;

@@ -292,8 +292,16 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $modifiedInstances = [];
         $cancelledEvents = [];
 
+        // DEBUG: Log the former event content
+        error_log("[#152 DEBUG] computeModifiedEventMessages for recipient: $recipient");
+        error_log("[#152 DEBUG] formerEvent content:\n" . $formerEvent->serialize());
+
         $previousEventVEvents = $this->getSequencePerVEvent($formerEvent);
         $currentEventVEvents = $this->getSequencePerVEvent($scheduledEvent);
+
+        // DEBUG: Log what occurrences were found
+        error_log("[#152 DEBUG] Previous occurrences: " . implode(", ", array_keys($previousEventVEvents)));
+        error_log("[#152 DEBUG] Current occurrences: " . implode(", ", array_keys($currentEventVEvents)));
 
         foreach ($currentEventVEvents as $recurrenceId => $sequence) {
             if ($recurrenceId == self::MASTER_EVENT && isset($currentEventVEvents[$recurrenceId]->RRULE)) {

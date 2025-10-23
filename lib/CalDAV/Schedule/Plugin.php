@@ -84,9 +84,19 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * @param VCalendar $newObject The new event
      * @return bool True if the message should be skipped
      */
-    protected function shouldSkipUnchangedOccurrence(ITip\Message $message, VCalendar $oldObject, VCalendar $newObject) {
+    protected function shouldSkipUnchangedOccurrence(ITip\Message $message, $oldObject, VCalendar $newObject) {
         // Only apply this filter to REQUEST messages for recurring events
         if ($message->method !== 'REQUEST') {
+            return false;
+        }
+
+        // Parse oldObject if it's a string (raw iCalendar data)
+        if (is_string($oldObject)) {
+            $oldObject = \Sabre\VObject\Reader::read($oldObject);
+        }
+
+        // Ensure oldObject has VEVENT
+        if (!isset($oldObject->VEVENT)) {
             return false;
         }
 

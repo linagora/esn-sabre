@@ -87,23 +87,18 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             $eventMessages = [['message' => $iTipMessage->message]];
         } else {
             if ($this->isNewEvent || $iTipMessage->method !== 'REQUEST') {
-                error_log("[IMipPlugin] Using splitItipMessageEvents (isNewEvent={$this->isNewEvent}, method={$iTipMessage->method})");
                 $eventMessages = $this->splitItipMessageEvents($iTipMessage->message, $this->isNewEvent);
             } else {
-                error_log("[IMipPlugin] Using computeModifiedEventMessages (method={$iTipMessage->method})");
                 $formerEvent = Reader::read($this->formerEventICal);
                 $eventMessages = $this->computeModifiedEventMessages($iTipMessage->message, $formerEvent, $iTipMessage->recipient);
             }
         }
-
-        error_log("[IMipPlugin] Got " . count($eventMessages) . " event messages to publish");
 
         $fullEventPath = $this->getEventFullPath($recipientPrincipalUri, $iTipMessage, $calendarPath);
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
         foreach ($eventMessages as $eventMessage) {
             if ($this->testIfEventIsExpired($eventMessage['message'])) {
-                error_log("[IMipPlugin] SKIP: Event is expired");
                 continue;
             }
 
@@ -131,7 +126,6 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                 $message['changes'] = $eventMessage['changes'];
             }
 
-            error_log("[IMipPlugin] PUBLISH AMQP: method={$message['method']}, recipient={$message['recipientEmail']}");
             $this->amqpPublisher->publish(self::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($message));
 
         }
@@ -426,21 +420,14 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             $previousExDatesFormatted = $this->formatExDates($previousExDates);
             $currentExDatesFormatted = $this->formatExDates($currentExDates);
 
-            error_log("[IMipPlugin] Previous EXDATE count: " . count($previousExDatesFormatted));
-            error_log("[IMipPlugin] Current EXDATE count: " . count($currentExDatesFormatted));
-
             $newExDates = array_diff(array_keys($currentExDatesFormatted), array_keys($previousExDatesFormatted));
-
-            error_log("[IMipPlugin] New EXDATE count: " . count($newExDates));
 
             foreach ($newExDates as $newExDate) {
 
                 if (isset($previousEventVEvents[$newExDate])) {
-                    error_log("[IMipPlugin] Creating CANCEL for existing occurrence exception: $newExDate");
                     $eventToCancel = clone $previousEventVEvents[$newExDate];
                     $eventToCancel->STATUS = 'CANCELLED';
                 } else {
-                    error_log("[IMipPlugin] Creating CANCEL for master occurrence: $newExDate");
                     $eventToCancel = clone $previousEventVEvents[self::MASTER_EVENT];
                     $eventToCancel->DTSTART = $currentExDatesFormatted[$newExDate]->getDateTime();
                     $eventToCancel->DTEND = clone $currentExDatesFormatted[$newExDate]->getDateTime();
@@ -459,7 +446,6 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                 $cancelledInstances[] = ['message' => $currentMessage];
             }
         }
-        error_log("[IMipPlugin] Created " . count($cancelledInstances) . " CANCEL messages");
         return [$cancelledInstances, $cancelledInstancesId];
     }
 

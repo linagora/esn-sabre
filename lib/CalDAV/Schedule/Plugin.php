@@ -36,14 +36,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * Override to optimize cascading notifications for events with many attendees.
      *
      * Performance optimization for issue #128:
-     * When an attendee accepts a recurring event with many attendees, SabreDAV's default
-     * behavior generates and delivers REQUEST messages to all other attendees sequentially.
-     * For an event with 100 attendees, this means 99 sequential local deliveries, each
-     * performing multiple database queries and updates, causing timeout (504) errors.
-     *
-     * This override limits cascading notifications to a maximum number of attendees.
-     * Attendees beyond this limit won't receive immediate notifications of status changes,
-     * but they will still see updates when they next sync their calendars from the server.
+     * 1. Filters out IMIP messages for partstat-only changes - attendees don't need to
+     *    be notified when another attendee's participation status changes.
+     * 2. Limits cascading notifications to prevent timeout errors for events with
+     *    many attendees (100+).
      */
     protected function processICalendarChange($oldObject = null, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
         $broker = new ITip\Broker();
@@ -56,6 +52,12 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         foreach ($messages as $message) {
             if (in_array($message->recipient, $ignore)) {
+                continue;
+            }
+
+            // Skip delivery if there are no significant changes
+            // This happens when only PARTSTAT changes for attendees
+            if ($this->hasNoSignificantChanges($message, $oldObject, $newObject)) {
                 continue;
             }
 
@@ -142,62 +144,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         $this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
-    }
-
-    /**
-     * Override to filter IMIP messages for partstat-only changes.
-     *
-     * Performance optimization for issue #128:
-     * When an attendee changes their PARTSTAT (accepts/declines), SabreDAV generates
-     * IMIP messages to notify all other attendees. However, attendees don't need to
-     * be notified when another attendee's participation status changes - only the
-     * organizer needs this information.
-     *
-     * This override filters out IMIP messages that:
-     * 1. Have no significant changes (empty $changes)
-     * 2. Are sent to attendees about another attendee's participation change
-     *
-     * As suggested by chibenwa in PR #142 review.
-     */
-    protected function processICalendarChange($oldObject = null, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
-        $broker = new ITip\Broker();
-        $messages = $broker->parseEvent($newObject, $addresses, $oldObject);
-
-        if ($messages) $modified = true;
-
-        foreach ($messages as $message) {
-            if (in_array($message->recipient, $ignore)) {
-                continue;
-            }
-
-            // Skip delivery if there are no significant changes
-            // This happens when only PARTSTAT changes for attendees
-            if ($this->hasNoSignificantChanges($message, $oldObject, $newObject)) {
-                continue;
-            }
-
-            $this->deliver($message);
-
-            // Update schedule status for organizer or attendee
-            if (isset($newObject->VEVENT->ORGANIZER) && ($newObject->VEVENT->ORGANIZER->getNormalizedValue() === $message->recipient)) {
-                if ($message->scheduleStatus) {
-                    $newObject->VEVENT->ORGANIZER['SCHEDULE-STATUS'] = $message->getScheduleStatus();
-                }
-                unset($newObject->VEVENT->ORGANIZER['SCHEDULE-FORCE-SEND']);
-            } else {
-                if (isset($newObject->VEVENT->ATTENDEE)) {
-                    foreach ($newObject->VEVENT->ATTENDEE as $attendee) {
-                        if ($attendee->getNormalizedValue() === $message->recipient) {
-                            if ($message->scheduleStatus) {
-                                $attendee['SCHEDULE-STATUS'] = $message->getScheduleStatus();
-                            }
-                            unset($attendee['SCHEDULE-FORCE-SEND']);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
     }
 
     /**

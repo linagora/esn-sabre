@@ -212,14 +212,26 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         if ($messages) $modified = true;
 
+        // DEBUG: Log all messages created by broker
+        error_log("[Plugin] Broker created " . count($messages) . " messages");
+        foreach ($messages as $idx => $msg) {
+            $recId = 'none';
+            if (isset($msg->message->VEVENT->{'RECURRENCE-ID'})) {
+                $recId = $msg->message->VEVENT->{'RECURRENCE-ID'}->getValue();
+            }
+            error_log("[Plugin] Message #$idx: method={$msg->method}, recipient={$msg->recipient}, recurrence-id=$recId");
+        }
+
         foreach ($messages as $message) {
             if (in_array($message->recipient, $ignore)) {
+                error_log("[Plugin] SKIP (ignored): recipient={$message->recipient}");
                 continue;
             }
 
             // Skip delivery if there are no significant changes
             // This happens when only PARTSTAT changes for attendees
             if ($this->hasNoSignificantChanges($message, $oldObject, $newObject)) {
+                error_log("[Plugin] SKIP (no significant changes): method={$message->method}, recipient={$message->recipient}");
                 continue;
             }
 
@@ -228,9 +240,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             // all occurrences including unchanged ones (e.g. exception #2). We need to skip
             // delivering messages for occurrences that haven't actually changed.
             if ($oldObject && $this->shouldSkipUnchangedOccurrence($message, $oldObject, $newObject)) {
+                error_log("[Plugin] SKIP (unchanged occurrence): method={$message->method}, recipient={$message->recipient}");
                 continue;
             }
 
+            error_log("[Plugin] DELIVER: method={$message->method}, recipient={$message->recipient}");
             $this->deliver($message);
 
             // Update schedule status for organizer or attendee

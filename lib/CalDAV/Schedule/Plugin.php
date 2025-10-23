@@ -217,6 +217,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false;
         }
 
+        // Fix for issue #154: For recurring events with occurrence exceptions,
+        // check if the number of occurrences changed (exception added/removed)
+        $oldEventCount = count($oldObject->VEVENT);
+        $newEventCount = count($newObject->VEVENT);
+        if ($oldEventCount !== $newEventCount) {
+            return false; // New occurrence exception added, always send notification
+        }
+
         // Check if recipient is a resource - resources need all notifications
         $recipientPrincipalUri = \ESN\Utils\Utils::getPrincipalByUri($message->recipient, $this->server);
         if ($recipientPrincipalUri && \ESN\Utils\Utils::isResourceFromPrincipal($recipientPrincipalUri)) {

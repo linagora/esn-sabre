@@ -310,9 +310,20 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                 $isAttendingNow = $this->isAttending($recipient, $currentEventVEvents[$recurrenceId]);
 
                 // Determine if recipient was attending before
-                // For new occurrence exceptions, check the master event
-                // For existing occurrences, check the previous version of this occurrence
-                $previousVEvent = $previousEventVEvents[$recurrenceId] ?? $previousEventVEvents[self::MASTER_EVENT] ?? null;
+                // IMPORTANT: Distinguish between new exceptions and modifications to existing exceptions
+                $isNewOccurrenceException = !isset($previousEventVEvents[$recurrenceId]);
+                $previousVEvent = null;
+
+                if ($isNewOccurrenceException) {
+                    // For new exceptions, check master event to detect removed attendees
+                    $previousVEvent = $previousEventVEvents[self::MASTER_EVENT] ?? null;
+                } else {
+                    // For existing exceptions, only check the previous version of THIS occurrence
+                    // Don't fallback to master - if someone wasn't invited to this specific occurrence before,
+                    // they shouldn't get notifications about changes to it
+                    $previousVEvent = $previousEventVEvents[$recurrenceId];
+                }
+
                 $wasAttendingBefore = isset($previousVEvent) && $this->isAttending($recipient, $previousVEvent);
 
                 // Skip notification only if recipient is neither attending now nor was attending before

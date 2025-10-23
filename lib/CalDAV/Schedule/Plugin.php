@@ -190,22 +190,38 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false;
         }
 
-        // Check if the number of occurrences (exceptions) has changed
-        // If exceptions were added or removed, don't skip even if individual occurrences unchanged
+        // Check if the number of occurrences (exceptions) the recipient is invited to has changed
+        // Only count exceptions where the recipient is an attendee
         $oldExceptionCount = 0;
         $newExceptionCount = 0;
         foreach ($oldObject->VEVENT as $vevent) {
             if (isset($vevent->{'RECURRENCE-ID'})) {
-                $oldExceptionCount++;
+                // Check if recipient is attending this occurrence
+                if (isset($vevent->ATTENDEE)) {
+                    foreach ($vevent->ATTENDEE as $attendee) {
+                        if ($attendee->getNormalizedValue() === $message->recipient) {
+                            $oldExceptionCount++;
+                            break;
+                        }
+                    }
+                }
             }
         }
         foreach ($newObject->VEVENT as $vevent) {
             if (isset($vevent->{'RECURRENCE-ID'})) {
-                $newExceptionCount++;
+                // Check if recipient is attending this occurrence
+                if (isset($vevent->ATTENDEE)) {
+                    foreach ($vevent->ATTENDEE as $attendee) {
+                        if ($attendee->getNormalizedValue() === $message->recipient) {
+                            $newExceptionCount++;
+                            break;
+                        }
+                    }
+                }
             }
         }
         if ($oldExceptionCount !== $newExceptionCount) {
-            return false; // Number of exceptions changed, don't skip
+            return false; // Number of exceptions recipient is invited to changed, don't skip
         }
 
         // Check if the occurrence has actually changed
@@ -231,6 +247,20 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         return true;
     }
 
+    /*
+     * Override to filter IMIP messages for partstat-only changes.
+     * Performance optimization for issue #128:
+     * When an attendee changes their PARTSTAT (accepts/declines), SabreDAV generates
+     * IMIP messages to notify all other attendees. However, attendees don't need to
+     * be notified when another attendee's participation status changes - only the
+     * organizer needs this information.
+     *
+     * This override filters out IMIP messages that:
+     * 1. Have no significant changes (empty $changes)
+     * 2. Are sent to attendees about another attendee's participation change
+     *
+     * As suggested by chibenwa in PR #142 review.
+     */
     protected function processICalendarChange($oldObject = null, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
         $broker = new ITip\Broker();
         $messages = $broker->parseEvent($newObject, $addresses, $oldObject);

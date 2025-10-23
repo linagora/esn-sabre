@@ -191,21 +191,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         return true;
     }
 
-    /**
-     * Override to filter IMIP messages for partstat-only changes.
-     *
-     * Performance optimization for issue #128:
-     * When an attendee changes their PARTSTAT (accepts/declines), SabreDAV generates
-     * IMIP messages to notify all other attendees. However, attendees don't need to
-     * be notified when another attendee's participation status changes - only the
-     * organizer needs this information.
-     *
-     * This override filters out IMIP messages that:
-     * 1. Have no significant changes (empty $changes)
-     * 2. Are sent to attendees about another attendee's participation change
-     *
-     * As suggested by chibenwa in PR #142 review.
-     */
     protected function processICalendarChange($oldObject = null, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
         $broker = new ITip\Broker();
         $messages = $broker->parseEvent($newObject, $addresses, $oldObject);
@@ -214,12 +199,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         foreach ($messages as $message) {
             if (in_array($message->recipient, $ignore)) {
-                continue;
-            }
-
-            // Skip delivery if there are no significant changes
-            // This happens when only PARTSTAT changes for attendees
-            if ($this->hasNoSignificantChanges($message, $oldObject, $newObject)) {
                 continue;
             }
 
@@ -253,151 +232,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 }
             }
         }
-    }
-
-    /**
-     * Determines if an IMIP message should be skipped due to lack of significant changes.
-     *
-     * @param ITip\Message $message The IMIP message to evaluate
-     * @param VCalendar|null $oldObject The original calendar object
-     * @param VCalendar $newObject The updated calendar object
-     * @return bool True if message should be skipped, false if it should be delivered
-     */
-    private function hasNoSignificantChanges(ITip\Message $message, $oldObject, VCalendar $newObject): bool {
-        // Never filter CANCEL messages - they are always significant
-        if ($message->method === 'CANCEL') {
-            return false;
-        }
-
-        // For new events, always send notifications
-        if ($oldObject === null) {
-            return false;
-        }
-
-        // Parse oldObject if it's a string (raw iCalendar data)
-        if (is_string($oldObject)) {
-            $oldObject = \Sabre\VObject\Reader::read($oldObject);
-        }
-
-        // Ensure oldObject has VEVENT
-        if (!isset($oldObject->VEVENT) || !isset($newObject->VEVENT)) {
-            return false;
-        }
-
-        // Fix for issue #154: For recurring events with occurrence exceptions,
-        // check if the number of occurrences changed (exception added/removed)
-        $oldEventCount = count($oldObject->VEVENT);
-        $newEventCount = count($newObject->VEVENT);
-        if ($oldEventCount !== $newEventCount) {
-            return false; // New occurrence exception added, always send notification
-        }
-
-        // Check if EXDATE changed (occurrence excluded)
-        // EXDATE can be a single value or an array, compare all values
-        $oldExdates = [];
-        $newExdates = [];
-
-        if (isset($oldObject->VEVENT->EXDATE)) {
-            foreach ($oldObject->VEVENT->EXDATE as $exdate) {
-                $oldExdates[] = (string)$exdate;
-            }
-        }
-
-        if (isset($newObject->VEVENT->EXDATE)) {
-            foreach ($newObject->VEVENT->EXDATE as $exdate) {
-                $newExdates[] = (string)$exdate;
-            }
-        }
-
-        sort($oldExdates);
-        sort($newExdates);
-
-        if ($oldExdates !== $newExdates) {
-            return false; // EXDATE changed, always send notification
-        }
-
-        // Check if recipient is a resource - resources need all notifications
-        $recipientPrincipalUri = \ESN\Utils\Utils::getPrincipalByUri($message->recipient, $this->server);
-        if ($recipientPrincipalUri && \ESN\Utils\Utils::isResourceFromPrincipal($recipientPrincipalUri)) {
-            return false; // Never skip for resources
-        }
-
-        // Get the organizer email
-        $organizerEmail = null;
-        if (isset($newObject->VEVENT->ORGANIZER)) {
-            $organizerEmail = $newObject->VEVENT->ORGANIZER->getNormalizedValue();
-        }
-
-        // Check if recipient is the organizer
-        $isOrganizer = ($organizerEmail === $message->recipient);
-
-        // Get significant property changes between old and new
-        $hasSignificantChanges = $this->hasSignificantPropertyChanges($oldObject->VEVENT, $newObject->VEVENT);
-
-        // Rule 1: If no significant changes, skip for everyone except organizer
-        // (Organizer should still receive PARTSTAT updates from attendees)
-        if (!$hasSignificantChanges && !$isOrganizer) {
-            return true; // Skip: attendee receiving notification about another attendee's PARTSTAT
-        }
-
-        // Rule 2: If there are significant changes, send to everyone
-        if ($hasSignificantChanges) {
-            return false; // Don't skip: significant changes need to be communicated
-        }
-
-        // Organizer receives all changes (including PARTSTAT)
-        return false;
-    }
-
-    /**
-     * Checks if there are significant property changes between old and new event.
-     *
-     * Significant changes are those that affect event details (time, location, etc.),
-     * not just participation status.
-     *
-     * @param \Sabre\VObject\Component $oldEvent
-     * @param \Sabre\VObject\Component $newEvent
-     * @return bool True if there are significant changes
-     */
-    private function hasSignificantPropertyChanges(\Sabre\VObject\Component $oldEvent, \Sabre\VObject\Component $newEvent): bool {
-        $significantProperties = [
-            'DTSTART', 'DTEND', 'DURATION', 'SUMMARY', 'DESCRIPTION',
-            'LOCATION', 'RRULE', 'EXDATE', 'RDATE', 'SEQUENCE'
-        ];
-
-        foreach ($significantProperties as $prop) {
-            $oldValue = isset($oldEvent->$prop) ? (string)$oldEvent->$prop : null;
-            $newValue = isset($newEvent->$prop) ? (string)$newEvent->$prop : null;
-
-            if ($oldValue !== $newValue) {
-                return true; // Found a significant change
-            }
-        }
-
-        // Check if attendee list changed (added or removed)
-        $oldAttendees = [];
-        $newAttendees = [];
-
-        if (isset($oldEvent->ATTENDEE)) {
-            foreach ($oldEvent->ATTENDEE as $attendee) {
-                $oldAttendees[] = $attendee->getNormalizedValue();
-            }
-        }
-
-        if (isset($newEvent->ATTENDEE)) {
-            foreach ($newEvent->ATTENDEE as $attendee) {
-                $newAttendees[] = $attendee->getNormalizedValue();
-            }
-        }
-
-        sort($oldAttendees);
-        sort($newAttendees);
-
-        if ($oldAttendees !== $newAttendees) {
-            return true; // Attendee list changed
-        }
-
-        return false; // No significant changes found
     }
 
     /**

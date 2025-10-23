@@ -264,6 +264,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * @return bool True if message should be skipped, false if it should be delivered
      */
     private function hasNoSignificantChanges(ITip\Message $message, $oldObject, VCalendar $newObject): bool {
+        // Never filter CANCEL messages - they are always significant
+        if ($message->method === 'CANCEL') {
+            return false;
+        }
+
         // For new events, always send notifications
         if ($oldObject === null) {
             return false;

@@ -287,6 +287,13 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false; // New occurrence exception added, always send notification
         }
 
+        // Check if EXDATE changed (occurrence excluded)
+        $oldExdate = isset($oldObject->VEVENT->EXDATE) ? (string)$oldObject->VEVENT->EXDATE : '';
+        $newExdate = isset($newObject->VEVENT->EXDATE) ? (string)$newObject->VEVENT->EXDATE : '';
+        if ($oldExdate !== $newExdate) {
+            return false; // EXDATE changed, always send notification
+        }
+
         // Check if recipient is a resource - resources need all notifications
         $recipientPrincipalUri = \ESN\Utils\Utils::getPrincipalByUri($message->recipient, $this->server);
         if ($recipientPrincipalUri && \ESN\Utils\Utils::isResourceFromPrincipal($recipientPrincipalUri)) {

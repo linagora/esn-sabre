@@ -326,10 +326,19 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
                 $wasAttendingBefore = isset($previousVEvent) && $this->isAttending($recipient, $previousVEvent);
 
+                // DEBUG logging
+                error_log("[#152 DEBUG] Processing occurrence for recipient: $recipient");
+                error_log("[#152 DEBUG]   recurrenceId: $recurrenceId");
+                error_log("[#152 DEBUG]   isNewOccurrenceException: " . ($isNewOccurrenceException ? 'true' : 'false'));
+                error_log("[#152 DEBUG]   isAttendingNow: " . ($isAttendingNow ? 'true' : 'false'));
+                error_log("[#152 DEBUG]   wasAttendingBefore: " . ($wasAttendingBefore ? 'true' : 'false'));
+
                 // Skip notification only if recipient is neither attending now nor was attending before
                 if (!$isAttendingNow && !$wasAttendingBefore) {
+                    error_log("[#152 DEBUG]   SKIPPING notification");
                     continue;
                 }
+                error_log("[#152 DEBUG]   SENDING notification");
 
                 $currentMessage = clone ($scheduledEvent);
                 $modifiedInstance = [];

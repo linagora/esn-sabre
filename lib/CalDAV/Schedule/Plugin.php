@@ -199,8 +199,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false; // Sequence changed, don't skip
         }
 
-        // Compare key properties
-        $properties = ['DTSTART', 'DTEND', 'SUMMARY', 'LOCATION', 'DESCRIPTION', 'STATUS'];
+        // Compare key properties (including EXDATE for occurrence exclusion detection)
+        $properties = ['DTSTART', 'DTEND', 'SUMMARY', 'LOCATION', 'DESCRIPTION', 'STATUS', 'EXDATE'];
         foreach ($properties as $prop) {
             $oldValue = isset($oldVEvent->$prop) ? (string)$oldVEvent->$prop : '';
             $newValue = isset($newVEvent->$prop) ? (string)$newVEvent->$prop : '';

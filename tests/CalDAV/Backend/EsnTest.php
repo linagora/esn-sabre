@@ -5,7 +5,7 @@ namespace ESN\CalDAV\Backend;
 /**
  * @medium
  */
-class EsnTest extends \PHPUnit_Framework_TestCase {
+class EsnTest extends \PHPUnit\Framework\TestCase {
     protected function getBackend() {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $db = $mc->{ESN_MONGO_SABREDB};
@@ -28,7 +28,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
         );
 
-        $this->assertInternalType('array', $calendars);
+        $this->assertIsArray( $calendars);
         $this->assertEquals(1, count($calendars));
 
         foreach ($elementCheck as $name => $value) {
@@ -48,7 +48,7 @@ class EsnTest extends \PHPUnit_Framework_TestCase {
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
         );
 
-        $this->assertInternalType('array', $calendars);
+        $this->assertIsArray( $calendars);
         $this->assertEquals(1, count($calendars));
 
         foreach ($elementCheck as $name => $value) {

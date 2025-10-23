@@ -6,10 +6,10 @@ use Sabre\DAV\Server;
 use Sabre\VObject\ITip\Message;
 use Sabre\VObject\Reader;
 
-class SchedulePluginTest extends \PHPUnit_Framework_TestCase {
+class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     private $plugin;
 
-    function setUp() {
+    function setUp(): void {
         $server = new Server();
 
         $this->plugin = new Plugin();

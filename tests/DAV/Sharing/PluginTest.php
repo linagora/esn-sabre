@@ -8,7 +8,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
     protected $aclMock;
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $this->sharePlugin = new Plugin();

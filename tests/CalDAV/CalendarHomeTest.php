@@ -5,7 +5,7 @@ namespace ESN\CalDAV;
 /**
  * @medium
  */
-class CalendarHomeTest extends \PHPUnit_Framework_TestCase {
+class CalendarHomeTest extends \PHPUnit\Framework\TestCase {
 
     protected function getBackend() {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);

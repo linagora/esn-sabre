@@ -23,7 +23,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function initialize(DAV\Server $server) {
         $this->server = $server;
-        $server->on('beforeMethod', [$this, 'beforeMethod'], 15); // 15 is after Auth and before ACL
+        $server->on('beforeMethod:*', [$this, 'beforeMethod'], 15); // 15 is after Auth and before ACL
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
         $server->on('beforeUnbind', [$this, 'beforeUnbind']);
         $server->on('method:REPORT', [$this, 'httpReport'], 80);

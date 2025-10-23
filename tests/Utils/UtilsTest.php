@@ -95,8 +95,8 @@ class UtilsTest extends \ESN\DAV\ServerMock {
     function testSplitEventPathShouldReturnCalendarPathAndEventUriWhenEventPathIsValid() {
         list($calendarPath, $eventUri) = Utils::splitEventPath('/calendars/calendarHomeId-1/calendarId-1/eventUid-1.ics');
 
-        $this->assertEquals($calendarPath, 'calendars/calendarHomeId-1/calendarId-1');
-        $this->assertEquals($eventUri, 'eventUid-1.ics');
+        $this->assertEquals('calendars/calendarHomeId-1/calendarId-1', $calendarPath);
+        $this->assertEquals('eventUid-1.ics', $eventUri);
     }
 
     function testSplitEventPathShouldReturnAPairOfNullsWhenEventPathIsInvalid() {
@@ -110,8 +110,8 @@ class UtilsTest extends \ESN\DAV\ServerMock {
 
         foreach ($invalidEventPaths as $invalidEventPath) {
             list($calendarPath, $eventUri) = Utils::splitEventPath($invalidEventPath);
-            $this->assertEquals($calendarPath, null);
-            $this->assertEquals($eventUri, null);
+            $this->assertEquals(null, $calendarPath);
+            $this->assertEquals(null, $eventUri);
         }
     }
 
@@ -163,7 +163,57 @@ ICS;
         $principal = 'principals/users/54b64eadf6d7d8e41d263e0f';
 
         $result = Utils::getPrincipalEmail($principal, $this->server);
-        
+
         $this->assertEquals($result, 'mailto:robertocarlos@realmadrid.com');
+    }
+
+    /**
+     * Test for issue #43 - Non-standard timezone IDs from Microsoft Exchange
+     *
+     * This test verifies that calendar events with non-standard timezone identifiers
+     * like "(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi" can be parsed correctly.
+     *
+     * According to chibenwa's comment, sabre-vobject 4.1.2+ should handle this
+     * automatically thanks to commit c8ad40c1d8571aff9b7b62d33d91a29e779b2c2f
+     */
+    function testMicrosoftExchangeTimezoneHandling() {
+        $icsPath = ESN_TEST_BASE . '/fixtures/bug2.ics';
+        $this->assertTrue(file_exists($icsPath), 'Test fixture bug2.ics not found');
+
+        $icsContent = file_get_contents($icsPath);
+
+        // Parse the ICS file
+        $vcalendar = \Sabre\VObject\Reader::read($icsContent);
+        $this->assertNotNull($vcalendar, 'Failed to parse bug2.ics');
+
+        $vevent = $vcalendar->VEVENT;
+        $this->assertNotNull($vevent, 'No VEVENT found in calendar');
+
+        // Verify event properties
+        $this->assertEquals('James Support - Linagora', (string)$vevent->SUMMARY);
+
+        // The key test: can we convert DTSTART/DTEND to DateTime objects?
+        // If timezone handling is broken, this will throw an exception
+        try {
+            $dtstart = $vevent->DTSTART->getDateTime();
+            $dtend = $vevent->DTEND->getDateTime();
+
+            // Verify the datetime values
+            $this->assertEquals('2025-09-10', $dtstart->format('Y-m-d'));
+            $this->assertEquals('14:00:00', $dtstart->format('H:i:s'));
+            $this->assertEquals('15:00:00', $dtend->format('H:i:s'));
+
+            // Verify timezone was properly handled
+            $tz = $dtstart->getTimezone();
+            $tzName = $tz->getName();
+
+            // The timezone should be normalized to a valid IANA timezone
+            // It should NOT be the raw Microsoft format
+            $this->assertStringNotContainsString('Chennai', $tzName, 'Timezone was not normalized from Microsoft format');
+            $this->assertStringNotContainsString('UTC+05:30', $tzName, 'Timezone was not normalized from Microsoft format');
+
+        } catch (\Exception $e) {
+            $this->fail('Failed to convert DTSTART/DTEND to DateTime: ' . $e->getMessage());
+        }
     }
 }

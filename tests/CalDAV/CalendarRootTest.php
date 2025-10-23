@@ -5,13 +5,13 @@ namespace ESN\CalDAV;
 /**
  * @medium
  */
-class CalendarRootTest extends \PHPUnit_Framework_TestCase {
+class CalendarRootTest extends \PHPUnit\Framework\TestCase {
     protected $esndb;
     protected $sabredb;
     protected $principalBackend;
     protected $caldavBackend;
 
-    function setUp() {
+    function setUp(): void {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
         $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
 
@@ -65,10 +65,8 @@ class CalendarRootTest extends \PHPUnit_Framework_TestCase {
         $this->assertNull($invalid);
     }
 
-    /**
-     * @expectedException \Sabre\DAV\Exception\NotFound
-     */
     function testGetChildNotFound() {
+        $this->expectException(\Sabre\DAV\Exception\NotFound::class);
         $this->root->getChild('54313fcc398fef406b0041b2');
     }
 }

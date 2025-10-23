@@ -10,7 +10,7 @@ require_once ESN_TEST_BASE. '/CardDAV/PluginTestBase.php';
 
 class PluginTest extends PluginTestBase {
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         // TODO: the plugin is added in tests/DAV/ServerMock.php hence we do not

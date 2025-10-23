@@ -90,6 +90,18 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false;
         }
 
+        // Only apply this filter to recurring events (must have RRULE or RECURRENCE-ID)
+        $hasRecurrence = false;
+        foreach ($oldObject->VEVENT as $vevent) {
+            if (isset($vevent->RRULE) || isset($vevent->{'RECURRENCE-ID'})) {
+                $hasRecurrence = true;
+                break;
+            }
+        }
+        if (!$hasRecurrence) {
+            return false;
+        }
+
         // Only filter messages with a single VEVENT (single occurrence)
         // Messages with multiple VEVENTs (bundled occurrences) should not be filtered
         // as they represent legitimate multi-occurrence invitations

@@ -288,9 +288,26 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         // Check if EXDATE changed (occurrence excluded)
-        $oldExdate = isset($oldObject->VEVENT->EXDATE) ? (string)$oldObject->VEVENT->EXDATE : '';
-        $newExdate = isset($newObject->VEVENT->EXDATE) ? (string)$newObject->VEVENT->EXDATE : '';
-        if ($oldExdate !== $newExdate) {
+        // EXDATE can be a single value or an array, compare all values
+        $oldExdates = [];
+        $newExdates = [];
+
+        if (isset($oldObject->VEVENT->EXDATE)) {
+            foreach ($oldObject->VEVENT->EXDATE as $exdate) {
+                $oldExdates[] = (string)$exdate;
+            }
+        }
+
+        if (isset($newObject->VEVENT->EXDATE)) {
+            foreach ($newObject->VEVENT->EXDATE as $exdate) {
+                $newExdates[] = (string)$exdate;
+            }
+        }
+
+        sort($oldExdates);
+        sort($newExdates);
+
+        if ($oldExdates !== $newExdates) {
             return false; // EXDATE changed, always send notification
         }
 

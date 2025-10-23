@@ -1423,8 +1423,8 @@ class IMipPluginRecurrentEventTest extends IMipPluginTestBase {
      * Scenario:
      * 1. Bob creates recurring event (3 days) with only himself
      * 2. Bob invites Cedric to occurrence #2 only
-     * 3. Bob modifies occurrence #3 (creates new exception with SEQUENCE:2)
-     * 4. Cedric should NOT receive notification for occurrence #3
+     * 3. Bob creates occurrence #3 (sends complete document with unchanged occurrence #2)
+     * 4. Cedric should NOT receive notification (not for unchanged #2, not for new #3)
      */
     function testShouldNotSendUpdateToUninvitedAttendeeWhenOrganizerModifiesOtherOccurrence()
     {
@@ -1463,7 +1463,8 @@ class IMipPluginRecurrentEventTest extends IMipPluginTestBase {
 
         $plugin->setFormerEventICal($formerEventIcal);
 
-        // STEP 2: Bob now creates/modifies occurrence #3 (without Cedric)
+        // STEP 2: Bob creates occurrence #3 (sends complete VCALENDAR with unchanged occurrence #2)
+        // This simulates a PUT with the complete event containing all occurrences
         $scheduledIcal = join("\r\n", [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -1517,8 +1518,9 @@ class IMipPluginRecurrentEventTest extends IMipPluginTestBase {
         $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
-        // EXPECTED: user2 (Cedric) should NOT receive notification for occurrence #3
-        // because he was never invited to that occurrence
+        // EXPECTED: user2 (Cedric) should NOT receive any notification because:
+        // - Occurrence #2: unchanged (same SEQUENCE, same properties) - SKIP
+        // - Occurrence #3: Cedric not invited - SKIP
         $this->amqpPublisher->expects($this->never())
             ->method('publish');
 

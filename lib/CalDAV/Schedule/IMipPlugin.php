@@ -292,16 +292,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $modifiedInstances = [];
         $cancelledEvents = [];
 
-        // DEBUG: Log the former event content
-        error_log("[#152 DEBUG] computeModifiedEventMessages for recipient: $recipient");
-        error_log("[#152 DEBUG] formerEvent content:\n" . $formerEvent->serialize());
-
         $previousEventVEvents = $this->getSequencePerVEvent($formerEvent);
         $currentEventVEvents = $this->getSequencePerVEvent($scheduledEvent);
-
-        // DEBUG: Log what occurrences were found
-        error_log("[#152 DEBUG] Previous occurrences: " . implode(", ", array_keys($previousEventVEvents)));
-        error_log("[#152 DEBUG] Current occurrences: " . implode(", ", array_keys($currentEventVEvents)));
 
         foreach ($currentEventVEvents as $recurrenceId => $sequence) {
             if ($recurrenceId == self::MASTER_EVENT && isset($currentEventVEvents[$recurrenceId]->RRULE)) {
@@ -313,12 +305,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
                 $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]))) {
 
-                // Fix for issue #152: Check if recipient should receive notification for this occurrence
-                // Determine if recipient is attending now
-                $isAttendingNow = $this->isAttending($recipient, $currentEventVEvents[$recurrenceId]);
-
-                // Determine if recipient was attending before
-                // IMPORTANT: Distinguish between new exceptions and modifications to existing exceptions
+                // Check if recipient was attending this occurrence before
                 $isNewOccurrenceException = !isset($previousEventVEvents[$recurrenceId]);
                 $previousVEvent = null;
 
@@ -326,38 +313,17 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                     // For new exceptions, check master event to detect removed attendees
                     $previousVEvent = $previousEventVEvents[self::MASTER_EVENT] ?? null;
                 } else {
-                    // For existing exceptions, only check the previous version of THIS occurrence
-                    // Don't fallback to master - if someone wasn't invited to this specific occurrence before,
-                    // they shouldn't get notifications about changes to it
+                    // For existing exceptions, check the previous version of this occurrence
                     $previousVEvent = $previousEventVEvents[$recurrenceId];
                 }
 
                 $wasAttendingBefore = isset($previousVEvent) && $this->isAttending($recipient, $previousVEvent);
+                $isAttendingNow = $this->isAttending($recipient, $currentEventVEvents[$recurrenceId]);
 
-                // DEBUG logging
-                error_log("[#152 DEBUG] Processing occurrence for recipient: $recipient");
-                error_log("[#152 DEBUG]   recurrenceId: $recurrenceId");
-                error_log("[#152 DEBUG]   isNewOccurrenceException: " . ($isNewOccurrenceException ? 'true' : 'false'));
-                error_log("[#152 DEBUG]   isAttendingNow: " . ($isAttendingNow ? 'true' : 'false'));
-                error_log("[#152 DEBUG]   wasAttendingBefore: " . ($wasAttendingBefore ? 'true' : 'false'));
-
-                // Skip notification if recipient is neither attending now nor was attending before
+                // Fix for issue #152: Skip AMQP notification if recipient is not and was not attending
                 if (!$isAttendingNow && !$wasAttendingBefore) {
-                    error_log("[#152 DEBUG]   SKIPPING notification (not attending)");
                     continue;
                 }
-
-                // Skip notification if recipient was and still is attending but occurrence hasn't changed significantly
-                // This prevents re-sending notifications when other occurrences in the same event are modified
-                if ($isAttendingNow && $wasAttendingBefore && !$isNewOccurrenceException) {
-                    // Check if occurrence has actually changed (SEQUENCE or properties)
-                    if (!$this->hasInstanceChanged($previousVEvent, $currentEventVEvents[$recurrenceId])) {
-                        error_log("[#152 DEBUG]   SKIPPING notification (no significant change)");
-                        continue;
-                    }
-                }
-
-                error_log("[#152 DEBUG]   SENDING notification");
 
                 $currentMessage = clone ($scheduledEvent);
                 $modifiedInstance = [];

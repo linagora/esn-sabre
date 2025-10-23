@@ -73,6 +73,181 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     /**
+     * Check if a message should be skipped for an unchanged occurrence
+     *
+     * When modifying one occurrence in a recurring event, SabreDAV's broker creates
+     * messages for ALL occurrences, even those that haven't changed. This method
+     * filters out messages for unchanged occurrences.
+     *
+     * @param ITip\Message $message The iTIP message to check
+     * @param VCalendar $oldObject The old event
+     * @param VCalendar $newObject The new event
+     * @return bool True if the message should be skipped
+     */
+    protected function shouldSkipUnchangedOccurrence(ITip\Message $message, VCalendar $oldObject, VCalendar $newObject) {
+        // Only apply this filter to REQUEST messages for recurring events
+        if ($message->method !== 'REQUEST') {
+            return false;
+        }
+
+        // Get the VEVENT from the message to identify which occurrence this is about
+        $messageEvent = $message->message->VEVENT;
+        if (!$messageEvent) {
+            return false;
+        }
+
+        // Determine the recurrence ID of this message
+        $recurrenceId = isset($messageEvent->{'RECURRENCE-ID'})
+            ? $messageEvent->{'RECURRENCE-ID'}->getValue()
+            : 'master';
+
+        // Find the corresponding VEVENTs in old and new objects
+        $oldVEvent = null;
+        $newVEvent = null;
+
+        foreach ($oldObject->VEVENT as $vevent) {
+            $oldRecurId = isset($vevent->{'RECURRENCE-ID'})
+                ? $vevent->{'RECURRENCE-ID'}->getValue()
+                : 'master';
+            if ($oldRecurId === $recurrenceId) {
+                $oldVEvent = $vevent;
+                break;
+            }
+        }
+
+        foreach ($newObject->VEVENT as $vevent) {
+            $newRecurId = isset($vevent->{'RECURRENCE-ID'})
+                ? $vevent->{'RECURRENCE-ID'}->getValue()
+                : 'master';
+            if ($newRecurId === $recurrenceId) {
+                $newVEvent = $vevent;
+                break;
+            }
+        }
+
+        // If this is a new occurrence (wasn't in oldObject), don't skip
+        if (!$oldVEvent || !$newVEvent) {
+            return false;
+        }
+
+        // Check if recipient was attending this occurrence before
+        $wasAttendingBefore = false;
+        if (isset($oldVEvent->ATTENDEE)) {
+            foreach ($oldVEvent->ATTENDEE as $attendee) {
+                if ($attendee->getNormalizedValue() === $message->recipient) {
+                    $wasAttendingBefore = true;
+                    break;
+                }
+            }
+        }
+
+        // Check if recipient is attending this occurrence now
+        $isAttendingNow = false;
+        if (isset($newVEvent->ATTENDEE)) {
+            foreach ($newVEvent->ATTENDEE as $attendee) {
+                if ($attendee->getNormalizedValue() === $message->recipient) {
+                    $isAttendingNow = true;
+                    break;
+                }
+            }
+        }
+
+        // If recipient wasn't and isn't attending, skip (already handled by broker)
+        // If recipient was attending but isn't now, don't skip (it's a removal)
+        // If recipient wasn't attending but is now, don't skip (it's an addition)
+        // Only skip if recipient was AND is still attending
+        if (!$wasAttendingBefore || !$isAttendingNow) {
+            return false;
+        }
+
+        // Check if the occurrence has actually changed
+        // Compare SEQUENCE, DTSTART, DTEND, SUMMARY, LOCATION, DESCRIPTION, etc.
+        $oldSequence = isset($oldVEvent->SEQUENCE) ? $oldVEvent->SEQUENCE->getValue() : 0;
+        $newSequence = isset($newVEvent->SEQUENCE) ? $newVEvent->SEQUENCE->getValue() : 0;
+
+        if ($oldSequence != $newSequence) {
+            return false; // Sequence changed, don't skip
+        }
+
+        // Compare key properties
+        $properties = ['DTSTART', 'DTEND', 'SUMMARY', 'LOCATION', 'DESCRIPTION', 'STATUS'];
+        foreach ($properties as $prop) {
+            $oldValue = isset($oldVEvent->$prop) ? (string)$oldVEvent->$prop : '';
+            $newValue = isset($newVEvent->$prop) ? (string)$newVEvent->$prop : '';
+            if ($oldValue !== $newValue) {
+                return false; // Property changed, don't skip
+            }
+        }
+
+        // Occurrence hasn't changed significantly, skip the message
+        return true;
+    }
+
+    /**
+     * Override to filter IMIP messages for partstat-only changes.
+     *
+     * Performance optimization for issue #128:
+     * When an attendee changes their PARTSTAT (accepts/declines), SabreDAV generates
+     * IMIP messages to notify all other attendees. However, attendees don't need to
+     * be notified when another attendee's participation status changes - only the
+     * organizer needs this information.
+     *
+     * This override filters out IMIP messages that:
+     * 1. Have no significant changes (empty $changes)
+     * 2. Are sent to attendees about another attendee's participation change
+     *
+     * As suggested by chibenwa in PR #142 review.
+     */
+    protected function processICalendarChange($oldObject = null, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
+        $broker = new ITip\Broker();
+        $messages = $broker->parseEvent($newObject, $addresses, $oldObject);
+
+        if ($messages) $modified = true;
+
+        foreach ($messages as $message) {
+            if (in_array($message->recipient, $ignore)) {
+                continue;
+            }
+
+            // Skip delivery if there are no significant changes
+            // This happens when only PARTSTAT changes for attendees
+            if ($this->hasNoSignificantChanges($message, $oldObject, $newObject)) {
+                continue;
+            }
+
+            // Fix for issue #152: Skip delivery for unchanged occurrences
+            // When modifying one occurrence (e.g. creating exception #3), SabreDAV re-processes
+            // all occurrences including unchanged ones (e.g. exception #2). We need to skip
+            // delivering messages for occurrences that haven't actually changed.
+            if ($oldObject && $this->shouldSkipUnchangedOccurrence($message, $oldObject, $newObject)) {
+                continue;
+            }
+
+            $this->deliver($message);
+
+            // Update schedule status for organizer or attendee
+            if (isset($newObject->VEVENT->ORGANIZER) && ($newObject->VEVENT->ORGANIZER->getNormalizedValue() === $message->recipient)) {
+                if ($message->scheduleStatus) {
+                    $newObject->VEVENT->ORGANIZER['SCHEDULE-STATUS'] = $message->getScheduleStatus();
+                }
+                unset($newObject->VEVENT->ORGANIZER['SCHEDULE-FORCE-SEND']);
+            } else {
+                if (isset($newObject->VEVENT->ATTENDEE)) {
+                    foreach ($newObject->VEVENT->ATTENDEE as $attendee) {
+                        if ($attendee->getNormalizedValue() === $message->recipient) {
+                            if ($message->scheduleStatus) {
+                                $attendee['SCHEDULE-STATUS'] = $message->getScheduleStatus();
+                            }
+                            unset($attendee['SCHEDULE-FORCE-SEND']);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      *
      * Override default method because:
      *  * user addresses must be the calendar owner ones to handle delegation

@@ -90,6 +90,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false;
         }
 
+        // Only filter messages with a single VEVENT (single occurrence)
+        // Messages with multiple VEVENTs (bundled occurrences) should not be filtered
+        // as they represent legitimate multi-occurrence invitations
+        $veventCount = count($message->message->VEVENT);
+        if ($veventCount !== 1) {
+            return false;
+        }
+
         // Get the VEVENT from the message to identify which occurrence this is about
         $messageEvent = $message->message->VEVENT;
         if (!$messageEvent) {

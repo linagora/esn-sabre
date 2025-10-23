@@ -190,6 +190,24 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false;
         }
 
+        // Check if the number of occurrences (exceptions) has changed
+        // If exceptions were added or removed, don't skip even if individual occurrences unchanged
+        $oldExceptionCount = 0;
+        $newExceptionCount = 0;
+        foreach ($oldObject->VEVENT as $vevent) {
+            if (isset($vevent->{'RECURRENCE-ID'})) {
+                $oldExceptionCount++;
+            }
+        }
+        foreach ($newObject->VEVENT as $vevent) {
+            if (isset($vevent->{'RECURRENCE-ID'})) {
+                $newExceptionCount++;
+            }
+        }
+        if ($oldExceptionCount !== $newExceptionCount) {
+            return false; // Number of exceptions changed, don't skip
+        }
+
         // Check if the occurrence has actually changed
         // Compare SEQUENCE, DTSTART, DTEND, SUMMARY, LOCATION, DESCRIPTION, etc.
         $oldSequence = isset($oldVEvent->SEQUENCE) ? $oldVEvent->SEQUENCE->getValue() : 0;

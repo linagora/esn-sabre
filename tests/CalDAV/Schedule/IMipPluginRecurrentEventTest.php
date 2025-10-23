@@ -1416,4 +1416,113 @@ class IMipPluginRecurrentEventTest extends IMipPluginTestBase {
         $plugin->schedule($itipMessage);
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);
     }
+
+    /**
+     * Test for issue #152: Organizer modifies an occurrence that attendee is not invited to
+     *
+     * Scenario:
+     * 1. Bob creates recurring event (3 days) with only himself
+     * 2. Bob invites Cedric to occurrence #2 only
+     * 3. Bob modifies occurrence #3 (creates new exception with SEQUENCE:2)
+     * 4. Cedric should NOT receive notification for occurrence #3
+     */
+    function testShouldNotSendUpdateToUninvitedAttendeeWhenOrganizerModifiesOtherOccurrence()
+    {
+        $plugin = $this->getPlugin();
+        $plugin->setNewEvent(false);
+
+        // STEP 1: Bob had previously invited Cedric to occurrence #2 only
+        $formerEventIcal = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'BEGIN:VEVENT',
+            'UID:test-event-152',
+            'DTSTART:20260322T090000Z',
+            'DTEND:20260322T100000Z',
+            'RRULE:FREQ=DAILY;COUNT=3',
+            'SUMMARY:Daily meeting',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:test-event-152',
+            'DTSTART:20260323T090000Z',
+            'DTEND:20260323T100000Z',
+            'RECURRENCE-ID:20260323T090000Z',
+            'SUMMARY:Daily meeting',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]);
+
+        $plugin->setFormerEventICal($formerEventIcal);
+
+        // STEP 2: Bob now creates/modifies occurrence #3 (without Cedric)
+        $scheduledIcal = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:test-event-152',
+            'DTSTART:20260322T090000Z',
+            'DTEND:20260322T100000Z',
+            'RRULE:FREQ=DAILY;COUNT=3',
+            'SUMMARY:Daily meeting',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:test-event-152',
+            'DTSTART:20260323T090000Z',
+            'DTEND:20260323T100000Z',
+            'RECURRENCE-ID:20260323T090000Z',
+            'SUMMARY:Daily meeting',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user2Email,
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:test-event-152',
+            'DTSTART:20260324T090000Z',
+            'DTEND:20260324T100000Z',
+            'RECURRENCE-ID:20260324T090000Z',
+            'SUMMARY:Updated instance (Day 3)',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE:mailto:' . $this->user1Email,
+            'SEQUENCE:2',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $itipMessage = new \Sabre\VObject\ITip\Message();
+        $itipMessage->uid = 'test-event-152';
+        $itipMessage->component = 'VEVENT';
+        $itipMessage->method = 'REQUEST';
+        $itipMessage->sequence = 2;
+        $itipMessage->sender = 'mailto:' . $this->user1Email;
+        $itipMessage->recipient = 'mailto:' . $this->user2Email;
+        $itipMessage->scheduleStatus = 'null';
+        $itipMessage->significantChange = true;
+        $itipMessage->hasChange = true;
+        $itipMessage->message = Reader::read($scheduledIcal);
+
+        // EXPECTED: user2 (Cedric) should NOT receive notification for occurrence #3
+        // because he was never invited to that occurrence
+        $this->amqpPublisher->expects($this->never())
+            ->method('publish');
+
+        $plugin->schedule($itipMessage);
+        $this->assertEquals('1.1', $itipMessage->scheduleStatus);
+    }
 }

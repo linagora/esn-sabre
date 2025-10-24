@@ -101,7 +101,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             if ($this->testIfEventIsExpired($eventMessage['message'])) {
                 continue;
             }
-             
+
             $message = [
                 'senderEmail' => substr($iTipMessage->sender, 7),
                 'recipientEmail' => substr($iTipMessage->recipient, 7),
@@ -304,6 +304,27 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             // Create message if instance have been created or modified
             if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
                 $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]))) {
+
+                // Check if recipient was attending this occurrence before
+                $isNewOccurrenceException = !isset($previousEventVEvents[$recurrenceId]);
+                $previousVEvent = null;
+
+                if ($isNewOccurrenceException) {
+                    // For new exceptions, check master event to detect removed attendees
+                    $previousVEvent = $previousEventVEvents[self::MASTER_EVENT] ?? null;
+                } else {
+                    // For existing exceptions, check the previous version of this occurrence
+                    $previousVEvent = $previousEventVEvents[$recurrenceId];
+                }
+
+                $wasAttendingBefore = isset($previousVEvent) && $this->isAttending($recipient, $previousVEvent);
+                $isAttendingNow = $this->isAttending($recipient, $currentEventVEvents[$recurrenceId]);
+
+                // Fix for issue #152: Skip AMQP notification if recipient is not and was not attending
+                if (!$isAttendingNow && !$wasAttendingBefore) {
+                    continue;
+                }
+
                 $currentMessage = clone ($scheduledEvent);
                 $modifiedInstance = [];
 
@@ -312,17 +333,18 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
                 $modifiedInstance['message'] = $currentMessage;
 
-                // Check if recipient was attending before
-                // If an exception was created, we check is recipient was attending whole series
-                $previousVEvent = $previousEventVEvents[$recurrenceId] ?? $previousEventVEvents[self::MASTER_EVENT];
-                if (!isset($previousVEvent) || !$this->isAttending($recipient, $previousVEvent)) {
+                // Mark as new event if recipient wasn't attending before
+                if (!$wasAttendingBefore) {
                     $modifiedInstance['newEvent'] = 1;
                 }
 
                 // Can't find the previous vEvent associated with the recurrence id,
                 // which means we're dealing with a newly added recurrence exception here.
                 if (!isset($previousEventVEvents[$recurrenceId])) {
-                    $previousVEvent = $this->getRecurrenceInstance($previousVEvent, $recurrenceId);
+                    $previousVEvent = $previousVEvent ?? $previousEventVEvents[self::MASTER_EVENT] ?? null;
+                    if ($previousVEvent) {
+                        $previousVEvent = $this->getRecurrenceInstance($previousVEvent, $recurrenceId);
+                    }
                 }
 
                 $modifiedInstance['changes'] = $this->getPropertyChanges($previousVEvent, $currentEventVEvents[$recurrenceId]);

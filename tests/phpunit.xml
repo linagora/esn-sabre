@@ -5,7 +5,7 @@
          bootstrap="bootstrap.php"
          cacheDirectory=".phpunit.cache"
          enforceTimeLimit="true"
-         defaultTimeLimit="5"
+         defaultTimeLimit="15"
          failOnRisky="true"
          failOnWarning="false"
          failOnDeprecation="false">

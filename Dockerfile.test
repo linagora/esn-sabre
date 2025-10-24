@@ -1,17 +1,9 @@
 #
-# Optimized Docker container for ESN Sabre frontend
-# Optimizations:
-# - Use debian:trixie-slim base image
-# - Remove build tools after compilation
-# - Install composer dependencies without dev packages
-# - Combine RUN commands to reduce layers
-# - Clean up caches and temporary files
+# Docker container for ESN Sabre testing
+# This includes dev dependencies (phpunit, phpcs, etc.)
 #
 # Build:
-# docker build -f Dockerfile -t linagora/esn-sabre:optimized .
-#
-# Run:
-# docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre:optimized
+# docker build -f Dockerfile.test -t esn_sabre_test .
 #
 
 FROM debian:trixie-slim
@@ -27,7 +19,7 @@ ADD 05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.ini
 # Fix for CI environments with clock skew issues
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
 
-# Install runtime packages + build tools, compile mongodb extension, then remove build tools
+# Install all packages including build tools (kept for tests)
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \
   DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends \
@@ -44,7 +36,7 @@ RUN apt-get update && \
     supervisor \
     nginx \
     ca-certificates \
-    # Build tools (temporary)
+    # Build tools (kept for tests)
     php-pear \
     php${PHPVERSION}-dev \
     make \
@@ -54,11 +46,9 @@ RUN apt-get update && \
   pecl install mongodb-2.1.4 && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini && \
-  # Remove build tools to reduce image size
-  apt-get purge -y php-pear php${PHPVERSION}-dev make pkg-config && \
-  apt-get autoremove -y && \
+  # Note: Build tools are kept for tests (no purge)
   apt-get clean && \
-  rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.pearrc
+  rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Configure PHP (combine all sed commands)
 RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fpm/php.ini && \
@@ -94,16 +84,12 @@ WORKDIR /var/www
 # Copy application code
 COPY . /var/www
 
-# Install dependencies without dev packages (using install to respect composer.lock)
+# Install ALL dependencies (including dev for tests)
 RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject' && \
     composer clearcache && \
-    composer install --no-dev --optimize-autoloader --no-interaction && \
-    # Clean up composer cache and remove git
-    rm -rf /root/.composer/cache && \
-    apt-get purge -y git && \
-    apt-get autoremove -y && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    composer update --optimize-autoloader --no-interaction && \
+    # Clean up composer cache (git kept for tests)
+    rm -rf /root/.composer/cache
 
 # Configure application
 RUN cp -v docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh && \

@@ -1,4 +1,41 @@
+# IDE
 .idea
 .vscode
+
+# Git
 .git
+.github
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+README*
+CHANGELOG*
+LICENSE*
+UPGRADE_NOTES.md
+
+# Tests (note: tests/ and phpunit.xml kept for Dockerfile.test, excluded by Dockerfile for production)
+.phpunit.cache/
+
+# Docker
+docker-compose*.yaml
+Dockerfile.ldap
+Dockerfile.coverage
+Dockerfile.test
+Dockerfile.optimized
+.dockerignore
+
+# CI/CD
 .gitlab-ci.yml
+.travis.yml
+
+# Development files
+run_test.sh
+
+# Temporary files
+tmp/
+*.log
+*.swp
+*.swo
+*~

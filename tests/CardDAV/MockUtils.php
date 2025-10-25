@@ -2,6 +2,7 @@
 
 namespace ESN\CardDAV;
 
+#[\AllowDynamicProperties]
 class CardDAVBackendMock extends \Sabre\CardDAV\Backend\AbstractBackend {
     function getAddressBooksForUser($principalUri) {
 

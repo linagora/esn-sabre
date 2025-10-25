@@ -3,6 +3,7 @@ namespace ESN\Publisher\CardDAV;
 
 require_once ESN_TEST_BASE . '/CardDAV/MockUtils.php';
 
+#[\AllowDynamicProperties]
 class CardDAVBackendMock extends \ESN\CardDAV\CardDAVBackendMock {
 
     protected $eventEmitter;

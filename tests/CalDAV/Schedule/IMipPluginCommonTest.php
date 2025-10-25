@@ -9,7 +9,7 @@ class IMipPluginCommonTest extends IMipPluginTestBase {
     private $iTipMessage;
     private $iTipMessageIcal;
     
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
@@ -32,8 +32,9 @@ class IMipPluginCommonTest extends IMipPluginTestBase {
 
     function testScheduleNotSignificant() {
         $plugin = $this->getPlugin();
+        $this->iTipMessage->sender = 'mailto:test@example.com';
+        $this->iTipMessage->recipient = 'mailto:johndoe@example.org';
         $this->iTipMessage->significantChange = false;
-        $this->iTipMessage->hasChange = false;
 
         $plugin->schedule($this->iTipMessage);
         $this->assertEquals($this->iTipMessage->scheduleStatus, '1.0');

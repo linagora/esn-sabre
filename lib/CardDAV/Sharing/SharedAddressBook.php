@@ -5,6 +5,7 @@ namespace ESN\CardDAV\Sharing;
 use \ESN\Utils\Utils as Utils;
 use \Sabre\DAV\Sharing\Plugin as SPlugin;
 
+#[\AllowDynamicProperties]
 class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection, ISharedAddressBook {
     function getACL() {
         $acl[] = [

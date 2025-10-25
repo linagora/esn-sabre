@@ -6,6 +6,7 @@ use \Sabre\VObject;
 use \Sabre\DAV\Exception\Forbidden;
 use \ESN\Utils\Utils as Utils;
 
+#[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
 
     function initialize(\Sabre\DAV\Server $server) {
@@ -18,6 +19,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
         $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
         $server->on('method:POST', [$this, 'httpPost'], 80);
+        $server->on('method:HEAD', [$this, 'httpHead'], 80);
     }
 
     /**
@@ -105,6 +107,25 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 throw new Forbidden('Authentication plugin not available');
             }
         }
+    }
+
+    function httpHead($request, $response) {
+        $path = $request->getPath();
+
+        try {
+            $node = $this->server->tree->getNodeForPath($path);
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            $response->setStatus(404);
+            return false;
+        }
+
+        if ($node instanceof \Sabre\CardDAV\Card) {
+            $response->setHeader('Content-Type', 'text/vcard; charset=utf-8');
+            $response->setStatus(200);
+            return false;
+        }
+
+        return true;
     }
 
     function httpGet($request, $response) {

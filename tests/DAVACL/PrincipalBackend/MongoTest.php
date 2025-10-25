@@ -2,7 +2,8 @@
 
 namespace ESN\DAVACL\PrincipalBackend;
 
-class MongoTest extends \PHPUnit_Framework_TestCase {
+#[\AllowDynamicProperties]
+class MongoTest extends \PHPUnit\Framework\TestCase {
     protected static $esndb;
     protected static $domainMembers;
 
@@ -18,7 +19,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
     const RESOURCE_ID = '82113fcc398fef406b0041b7';
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
 
-    static function setUpBeforeClass() {
+    static function setUpBeforeClass(): void {
         $mc = new \MongoDB\Client(ESN_MONGO_ESNURI);
         self::$esndb = $mc->{ESN_MONGO_ESNDB};
         self::$esndb->drop();
@@ -135,7 +136,7 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         ]);
     }
 
-    static function tearDownAfterClass() {
+    static function tearDownAfterClass(): void {
         self::$esndb->drop();
         self::$esndb = null;
     }
@@ -377,10 +378,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals($expected,$backend->getGroupMembership('principals/users/' . self::USER_ID));
     }
 
-    /**
-     * @expectedException \Sabre\DAV\Exception\MethodNotAllowed
-     */
     function testSetGroupMemberSetPRoject() {
+        $this->expectException(\Sabre\DAV\Exception\MethodNotAllowed::class);
         $backend = new Mongo(self::$esndb);
         $backend->setGroupMemberSet('principals/' . self::PROJECT_ID, array());
     }
@@ -413,10 +412,8 @@ class MongoTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals([], $result);
     }
 
-    /**
-     * @expectedException \Sabre\DAV\Exception\MethodNotAllowed
-     */
     function testUpdatePrincipal() {
+        $this->expectException(\Sabre\DAV\Exception\MethodNotAllowed::class);
         $backend = new Mongo(self::$esndb);
         $propPatch = new \Sabre\DAV\PropPatch([
             '{DAV:}displayname' => 'pietje',

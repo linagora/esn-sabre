@@ -7,11 +7,12 @@ use \Sabre\DAV\Sharing\Plugin as SPlugin;
 /**
  * @medium
  */
-class AddressBookTest extends \PHPUnit_Framework_TestCase {
+#[\AllowDynamicProperties]
+class AddressBookTest extends \PHPUnit\Framework\TestCase {
     protected $sabredb;
     protected $carddavBackend;
 
-    function setUp() {
+    function setUp(): void {
         $mcsabre = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $this->sabredb = $mcsabre->{ESN_MONGO_SABREDB};
 
@@ -90,14 +91,19 @@ class AddressBookTest extends \PHPUnit_Framework_TestCase {
     }
 
     function testGetSubscribedAddressBooks() {
+        $bookId = $this->carddavBackend->createAddressBook($this->principalUri, 'book1', [
+            '{DAV:}displayname' => 'Test Book',
+            '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'Test Description'
+        ]);
+
         $this->bookInfo = [
-            'id' => $this->bookId,
+            'id' => $bookId,
             'uri' => 'book1',
             'principaluri' => 'principals/users/user1'
         ];
         $this->book = new \ESN\CardDAV\AddressBook($this->carddavBackend, $this->bookInfo);
 
-        $this->carddavBackend->updateInvites($this->bookId, [
+        $this->carddavBackend->updateInvites($bookId, [
             new \Sabre\DAV\Xml\Element\Sharee([
                 'principal' => 'principals/users/user2',
                 'access' => SPlugin::ACCESS_READ,

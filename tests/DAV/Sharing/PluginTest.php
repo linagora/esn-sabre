@@ -8,7 +8,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
     protected $aclMock;
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $this->sharePlugin = new Plugin();
@@ -16,7 +16,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
 
         $this->aclMock = $this->getMockBuilder(\Sabre\DAVACL\Plugin::class)
-                       ->setMethods(['checkPrivileges'])
+                       ->onlyMethods(['checkPrivileges'])
                        ->getMock();
 
         $this->server->addPlugin($this->aclMock);

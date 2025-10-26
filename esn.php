@@ -20,6 +20,12 @@ define('SABRE_ENV', (!empty($config['environment']) && !empty($config['environme
 // settings
 date_default_timezone_set('UTC');
 
+// Configure max recurrences if specified
+$maxRecurrences = getenv('MAX_RECURRENCES');
+if ($maxRecurrences !== false) {
+    \Sabre\VObject\Settings::$maxRecurrences = (int)$maxRecurrences;
+}
+
 define('PRINCIPALS_COLLECTION', 'principals');
 define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');

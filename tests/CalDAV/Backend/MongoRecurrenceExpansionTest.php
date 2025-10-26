@@ -93,34 +93,29 @@ class MongoRecurrenceExpansionTest extends RecurrenceExpansionTestBase {
             $this->assertEquals(['within-limit.ics'], $result, 'Should find event with COUNT=40 when maxRecurrences=50');
 
             // Now test that exceeding the limit throws an exception
-            $exceptionThrown = false;
-            try {
-                // Create a daily event with 100 occurrences (exceeds limit)
-                $ical2 = join("\r\n", [
-                    'BEGIN:VCALENDAR',
-                    'VERSION:2.0',
-                    'PRODID:-//Test//Test//EN',
-                    'BEGIN:VEVENT',
-                    'UID:exceeds-limit-event',
-                    'DTSTART:20250101T100000Z',
-                    'DTEND:20250101T110000Z',
-                    'RRULE:FREQ=DAILY;COUNT=100',
-                    'SUMMARY:Event Exceeding Limit',
-                    'END:VEVENT',
-                    'END:VCALENDAR',
-                    ''
-                ]);
+            $this->expectException(\Sabre\VObject\Recur\MaxInstancesExceededException::class);
+            $this->expectExceptionMessageMatches('/50/');
 
-                $backend->createCalendarObject($id, "exceeds-limit.ics", $ical2);
+            // Create a daily event with 100 occurrences (exceeds limit)
+            $ical2 = join("\r\n", [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//Test//Test//EN',
+                'BEGIN:VEVENT',
+                'UID:exceeds-limit-event',
+                'DTSTART:20250101T100000Z',
+                'DTEND:20250101T110000Z',
+                'RRULE:FREQ=DAILY;COUNT=100',
+                'SUMMARY:Event Exceeding Limit',
+                'END:VEVENT',
+                'END:VCALENDAR',
+                ''
+            ]);
 
-                // Try to query - should fail during query processing
-                $backend->calendarQuery($id, $filters);
-            } catch (\Sabre\VObject\Recur\MaxInstancesExceededException $e) {
-                $exceptionThrown = true;
-                $this->assertStringContainsString('50', $e->getMessage(), 'Exception should mention the limit of 50');
-            }
+            $backend->createCalendarObject($id, "exceeds-limit.ics", $ical2);
 
-            $this->assertTrue($exceptionThrown, 'MaxInstancesExceededException should be thrown when maxRecurrences is exceeded');
+            // Try to query - should fail during query processing
+            $backend->calendarQuery($id, $filters);
 
         } finally {
             // Restore original maxRecurrences value

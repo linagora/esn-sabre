@@ -31,7 +31,8 @@
 	"sabre/vobject": "dev-linagora-waiting-merges-4.5#da71270578247927ee26c9a7d96ec3d48b6b8783 as 4.5.7",
         "mongodb/mongodb": "^2.4",
         "monolog/monolog": "^2.9",
-        "firebase/php-jwt": "^6.10"
+        "firebase/php-jwt": "^6.10",
+        "guzzlehttp/guzzle": "^7.0"
     },
     "require-dev" : {
         "phpunit/phpunit" : "^12.0",
@@ -46,7 +47,8 @@
             "ESN\\JSON\\"       : "lib/JSON/",
             "ESN\\Publisher\\"  : "lib/Publisher/",
             "ESN\\Utils\\"      : "lib/Utils/",
-            "ESN\\Log\\"        : "lib/Log/"
+            "ESN\\Log\\"        : "lib/Log/",
+            "ESN\\Security\\"   : "lib/Security/"
         }
     },
     "minimum-stability": "dev"

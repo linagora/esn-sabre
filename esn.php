@@ -276,6 +276,19 @@ $server->addPlugin(new ESN\CalDAV\ImportPlugin());
 
 $server->addPlugin(new ESN\DAV\XHttpMethodOverridePlugin());
 
+// CrowdSec security plugin (optional)
+if (!empty($config['crowdsec']['enabled']) && $config['crowdsec']['enabled'] === true) {
+    $crowdSecApiUrl = $config['crowdsec']['apiUrl'] ?? 'http://localhost:8080';
+    $crowdSecApiKey = $config['crowdsec']['apiKey'] ?? '';
+    $crowdSecBanHttpCode = $config['crowdsec']['banHttpCode'] ?? 403;
+
+    if (!empty($crowdSecApiKey)) {
+        $crowdSecClient = new ESN\Security\CrowdSecClient($crowdSecApiUrl, $crowdSecApiKey, $logger);
+        $crowdSecPlugin = new ESN\Security\CrowdSecPlugin($crowdSecClient, $logger, $crowdSecBanHttpCode);
+        $server->addPlugin($crowdSecPlugin);
+    }
+}
+
 // Logger request plugin
 if (SABRE_ENV === SABRE_ENV_DEV) {
     $requestLoggerPlugin = new  ESN\Log\RequestLoggerPlugin();

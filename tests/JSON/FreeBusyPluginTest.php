@@ -189,4 +189,55 @@ END:VCALENDAR
         $this->assertEquals($response->status, 200);
         $this->assertCount(0, $jsonResponse->users);
     }
+
+    /**
+     * Test for issue #172: Free/Busy should ignore DECLINED events
+     */
+    function testFreeBusyShouldIgnoreDeclinedEvent() {
+        $declinedEvent = 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20180313T142342Z
+UID:test-declined-event
+TRANSP:OPAQUE
+SUMMARY:Declined Meeting
+DTSTART:20180401T110000Z
+DTEND:20180401T120000Z
+DTSTAMP:20180313T142416Z
+SEQUENCE:1
+ORGANIZER;CN=Boss:mailto:boss@example.com
+ATTENDEE;PARTSTAT=DECLINED;RSVP=FALSE;CN=Roberto Carlos:mailto:robertocarlos@realmadrid.com
+END:VEVENT
+END:VCALENDAR
+';
+
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'declined.ics', $declinedEvent);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/freebusy',
+        ));
+
+        $freebusyData = [
+            'start' => '20180401T100000Z',
+            'end' => '20180401T130000Z',
+            'users' => ['54b64eadf6d7d8e41d263e0f']
+        ];
+
+        $request->setBody(json_encode($freebusyData));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $this->assertEquals($response->status, 200);
+
+        // The declined event should NOT appear in busy list
+        $busyEvents = $jsonResponse->users[0]->calendars[0]->busy;
+        foreach ($busyEvents as $event) {
+            $this->assertNotEquals('test-declined-event', $event->uid,
+                'Declined events should not appear in free/busy response');
+        }
+    }
 }

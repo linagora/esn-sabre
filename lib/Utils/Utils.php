@@ -292,6 +292,10 @@ class Utils {
      * @return Boolean          true if he is not attending the event, false otherwise.
      */
     static function isPrincipalNotAttendingEvent($vevent, $email) {
+        if (empty($email)) {
+            return true;
+        }
+
         $emailLower = strtolower($email);
         foreach ($vevent->ATTENDEE as $attendee) {
             if (strtolower($attendee->getValue()) === $emailLower) {

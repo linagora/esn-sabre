@@ -261,11 +261,22 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
         $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
 
+        // Emit alarm lifecycle events for iTip messages
+        // Map iTip methods to standard alarm topics so alarm service can unschedule alarms
         if($iTipMessage->method !== 'REPLY'){
-            $this->createMessage(
-                $this->EVENT_TOPICS['EVENT_ALARM_'.$iTipMessage->method],
-                $dataMessage
-            );
+            $alarmTopic = null;
+
+            if ($iTipMessage->method === 'REQUEST') {
+                // iTip REQUEST updates an event, emit alarm:updated
+                $alarmTopic = $this->EVENT_TOPICS['EVENT_ALARM_UPDATED'];
+            } elseif ($iTipMessage->method === 'CANCEL') {
+                // iTip CANCEL deletes an event, emit alarm:deleted
+                $alarmTopic = $this->EVENT_TOPICS['EVENT_ALARM_DELETED'];
+            }
+
+            if ($alarmTopic) {
+                $this->createMessage($alarmTopic, $dataMessage);
+            }
         }
 
         if($iTipMessage->method === 'REQUEST' && Utils::isResourceFromPrincipal($recipientPrincipalUri) && $iTipMessage->significantChange) {

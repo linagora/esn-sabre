@@ -60,7 +60,6 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipientName = 'John2 Doe2';
         $itipMessage->scheduleStatus = 'null';
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $this->amqpPublisher->expects($this->once())
@@ -146,7 +145,6 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipient = 'mailto:' . $this->user2Email;
         $itipMessage->scheduleStatus = null;
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $this->amqpPublisher->expects($this->once())
@@ -233,7 +231,6 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipient = 'mailto:' . $this->user2Email;
         $itipMessage->scheduleStatus = null;
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $this->amqpPublisher->expects($this->once())
@@ -320,7 +317,6 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipient = 'mailto:' . $this->user2Email;
         $itipMessage->scheduleStatus = null;
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $this->amqpPublisher->expects($this->once())
@@ -419,7 +415,6 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipient = 'mailto:' . $this->user2Email;
         $itipMessage->scheduleStatus = null;
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $expectedMessageEvent = join("\r\n", [
@@ -575,7 +570,6 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipient = 'mailto:' . $this->user2Email;
         $itipMessage->scheduleStatus = null;
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $expectedMessageEvent = join("\r\n", [
@@ -731,7 +725,6 @@ class IMipPluginRecurrentEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipient = 'mailto:' . $this->user2Email;
         $itipMessage->scheduleStatus = null;
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $expectedMessageEvent = join("\r\n", [

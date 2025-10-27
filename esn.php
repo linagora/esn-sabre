@@ -20,6 +20,12 @@ define('SABRE_ENV', (!empty($config['environment']) && !empty($config['environme
 // settings
 date_default_timezone_set('UTC');
 
+// Configure max recurrences if specified
+$maxRecurrences = getenv('MAX_RECURRENCES');
+if ($maxRecurrences !== false) {
+    \Sabre\VObject\Settings::$maxRecurrences = (int)$maxRecurrences;
+}
+
 define('PRINCIPALS_COLLECTION', 'principals');
 define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
@@ -103,8 +109,8 @@ try {
 
     $server->addPlugin($loggerPlugin);
 
-    $server->on('beforeMethod', function() use ($e) {
-        throw new Sabre\DAV\Exception\ServiceUnavailable($e->getMessage());
+    $server->on('beforeMethod:*', function() use ($e) {
+        throw new Sabre\DAV\Exception\ServiceUnavailable($e->getTraceAsString());
     }, 1);
     $server->exec();
     return;
@@ -231,29 +237,6 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 // Calendar Ics Export support
 $icsExportPlugin = new Sabre\CalDAV\ICSExportPlugin();
 $server->addPlugin($icsExportPlugin);
-
-// Support CORS
-$corsPlugin = new ESN\DAV\CorsPlugin();
-if (isset($config['webserver']['corsAllowMethods'])) {
-    $corsPlugin->allowMethods = $config['webserver']['corsAllowMethods'];
-}
-if (isset($config['webserver']['corsAllowHeaders'])) {
-    $corsPlugin->allowHeaders = $config['webserver']['corsAllowHeaders'];
-}
-if (isset($config['webserver']['corsAllowOrigin'])) {
-    $corsPlugin->allowOrigin = $config['webserver']['corsAllowOrigin'];
-}
-if (isset($config['webserver']['corsAllowCredentials'])) {
-    $corsPlugin->allowCredentials = $config['webserver']['corsAllowCredentials'];
-}
-if (isset($config['webserver']['corsExposeHeaders'])) {
-    $corsPlugin->exposeHeaders = $config['webserver']['corsExposeHeaders'];
-}
-
-// Regardless of the webserver settings, we need to support the ESNToken header
-$corsPlugin->allowHeaders[] = 'ESNToken';
-
-$server->addPlugin($corsPlugin);
 
 // Rabbit publisher plugin
 if (!empty($config['amqp']['host'])) {

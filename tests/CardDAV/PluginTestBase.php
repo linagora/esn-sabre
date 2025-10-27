@@ -19,7 +19,7 @@ class PluginTestBase extends \ESN\DAV\ServerMock {
     protected $user2Book1Id;
     protected $user3Book1Id;
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $this->user1Book1Id = $this->carddavAddressBook['id'];

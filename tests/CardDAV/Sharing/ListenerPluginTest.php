@@ -7,7 +7,7 @@ use \Sabre\DAV\Sharing\Plugin as SPlugin;
 require_once ESN_TEST_BASE. '/CardDAV/PluginTestBase.php';
 
 class ListenerPluginTest extends \ESN\CardDAV\PluginTestBase {
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $plugin = new ListenerPlugin($this->carddavBackend);

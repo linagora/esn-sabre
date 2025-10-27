@@ -19,7 +19,11 @@ The following ENV variables needs to be set:
  - AMQP_PASSWORD
  - SABRE_ENV
 
- Additionally LDAP setup is done solely by ENV variables:
+ Additionally the following optional ENV variables can be set:
+
+ - MAX_RECURRENCES (optional): Maximum number of recurring event instances to expand (default: 3500, set to -1 to disable limit)
+
+ LDAP setup is done solely by ENV variables:
 
  - LDAP_ADMIN_DN
  - LDAP_ADMIN_PASSWORD

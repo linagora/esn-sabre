@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+#[\AllowDynamicProperties]
 class CalendarHome extends \Sabre\CalDAV\CalendarHome {
 
     function getChild($name) {

@@ -39,7 +39,7 @@ trap cleanup EXIT  # finally: sera exécuté *quoi qu'il arrive*
 docker compose -f docker-compose.test.yaml down --volumes --remove-orphans || true
 
 docker build -t esn-sabre-ldap-test -f Dockerfile.ldap .
-docker build -t esn_sabre_test .
+docker build -t esn_sabre_test -f Dockerfile.test .
 
 # Build PHP test command
 if [ -n "$FILTER" ]; then
@@ -63,6 +63,7 @@ fi
 (
   git clone https://github.com/linagora/twake-calendar-integration-tests.git it-tests
   cd it-tests
+  git checkout fix-sabre-4.1.5-tests-with-vobject-upgrade
   bash pre-build.sh esn_sabre_test
   mvn clean install -Dtest=com.linagora.dav.sabrev4.**
 )

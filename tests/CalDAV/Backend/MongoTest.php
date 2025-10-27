@@ -2,12 +2,12 @@
 
 namespace ESN\CalDAV\Backend;
 
-require_once 'AbstractDatabaseTest.php';
+require_once 'AbstractDatabaseTestBase.php';
 
 /**
  * @medium
  */
-class MongoTest extends AbstractDatabaseTest {
+class MongoTest extends AbstractDatabaseTestBase {
     protected function generateId() {
         return [(string) new \MongoDB\BSON\ObjectId(), (string) new \MongoDB\BSON\ObjectId()];
     }

@@ -8,7 +8,7 @@ require_once ESN_TEST_BASE. '/DAV/ServerMock.php';
  */
 class ParticipationPluginTest extends \ESN\DAV\ServerMock {
 
-    function setUp() {
+    function setUp(): void {
         parent::setUp();
 
         $aclPlugin = new \Sabre\DAVACL\Plugin();

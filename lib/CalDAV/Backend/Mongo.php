@@ -166,7 +166,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $otherCalendars = [];
 
         foreach ($userCalendars as $calendar) {
-            if ($calendar['id'][0] === $principalId) {
+            $calendarUriParts = explode('/', $calendar['uri']);
+            $calendarId = end($calendarUriParts);
+
+            if ($calendarId === $principalId && $defaultCalendar === null) {
                 $defaultCalendar = $calendar;
             } else {
                 $otherCalendars[] = $calendar;

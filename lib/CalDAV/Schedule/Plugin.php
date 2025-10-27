@@ -2,6 +2,8 @@
 namespace ESN\CalDAV\Schedule;
 
 use ESN\Utils\Utils;
+use Monolog\Logger;
+use Monolog\Handler\StreamHandler;
 use Sabre\CalDAV\ICalendarObject;
 use Sabre\CalDAV\Schedule\ISchedulingObject;
 use
@@ -24,6 +26,13 @@ use
  * @codeCoverageIgnore
  */
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
+
+    private $logger;
+
+    public function __construct() {
+        $this->logger = new Logger('esn-sabre');
+        $this->logger->pushHandler(new StreamHandler('php://stderr', Logger::DEBUG));
+    }
 
     private function scheduleReply(RequestInterface $request) {
 
@@ -133,13 +142,30 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return [];
         }
 
+        // Check if owner is a resource - resources don't have calendar-user-address-set
+        // Resources have principals like: principals/resources/*
+        if (strpos($owner, 'principals/resources/') === 0) {
+            return [];
+        }
+
         try {
             $addresses = $this->getAddressesForPrincipal($owner);
             // getAddressesForPrincipal may return null, ensure we return an array
             return $addresses ?: [];
-        } catch (\Exception $e) {
-            // If we can't get addresses for the principal, return empty array
-            // This can happen when accessing shared calendars
+        } catch (\Sabre\DAV\Exception $e) {
+            // If we can't get addresses for the principal (e.g. NotFound), log and return empty array
+            $this->logger->warning('Failure getting address for principal (DAV Exception)', [
+                'principal' => $owner,
+                'exception' => get_class($e) . ': ' . $e->getMessage()
+            ]);
+            return [];
+        } catch (\Throwable $e) {
+            // Catch any other errors (TypeError, etc.) that might occur
+            // This can happen with resources or malformed data
+            $this->logger->warning('Failure getting address for principal (Throwable)', [
+                'principal' => $owner,
+                'exception' => get_class($e) . ': ' . $e->getMessage()
+            ]);
             return [];
         }
     }

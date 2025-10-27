@@ -177,6 +177,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $vevents = $message->select('VEVENT');
 
         foreach($vevents as $vevent) {
+            // Clone the calendar for each event
+            // Note: We need a separate clone per event since we modify it differently
             $currentMessage = Utils::safeCloneVObject($message);
 
             $currentMessage->remove('VEVENT');
@@ -417,6 +419,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                     $eventToCancel->remove('EXDATE');
                 }
 
+                // Clone the message for this cancelled instance
                 $currentMessage = Utils::safeCloneVObject($message);
                 $currentMessage->METHOD = 'CANCEL';
                 $currentMessage->remove('VEVENT');

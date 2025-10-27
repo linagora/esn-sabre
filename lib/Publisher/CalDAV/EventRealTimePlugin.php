@@ -222,18 +222,77 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_SUCCESS_PENDING:
             case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_TEMPORARY:
             case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_PERMANENT:
-
                 return false;
         }
 
         $recipientPrincipalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
+
+        // If getPrincipalByUri fails (external recipient), try to find principal by email
+        if (!$recipientPrincipalUri) {
+            $recipientEmail = $iTipMessage->recipient;
+            if (strpos($recipientEmail, 'mailto:') === 0) {
+                $recipientEmail = substr($recipientEmail, 7);
+            }
+
+            // Use PrincipalBackend from CalDAV backend to find user by email
+            if ($this->caldavBackend && method_exists($this->caldavBackend, 'getPrincipalBackend')) {
+                $principalBackend = $this->caldavBackend->getPrincipalBackend();
+                if ($principalBackend && method_exists($principalBackend, 'getPrincipalIdByEmail')) {
+                    $userId = $principalBackend->getPrincipalIdByEmail($recipientEmail);
+                    if ($userId) {
+                        $recipientPrincipalUri = 'principals/users/' . $userId;
+                    }
+                }
+            }
+        }
+
+        // If we still don't have a principal URI, we can't process this iTip message
         if (!$recipientPrincipalUri) {
             return true;
         }
 
+        // Get the event from recipient's calendar (should exist now, created by schedule plugin)
         list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+
+        // If event not found (e.g., CANCEL deleted it, or external REQUEST), construct path manually
         if (!$eventPath) {
-            return false;
+            $aclPlugin = $this->server->getPlugin('acl');
+            if (!$aclPlugin) {
+                return false;
+            }
+
+            $caldavNS = '{' . \Sabre\CalDAV\Schedule\Plugin::NS_CALDAV . '}';
+
+            // Get calendar properties
+            $this->server->removeListener('propFind', [$aclPlugin, 'propFind']);
+            $result = $this->server->getProperties(
+                $recipientPrincipalUri,
+                [
+                    $caldavNS . 'calendar-home-set',
+                    $caldavNS . 'schedule-default-calendar-URL',
+                ]
+            );
+            $this->server->on('propFind', [$aclPlugin, 'propFind'], 20);
+
+            if (!isset($result[$caldavNS . 'calendar-home-set']) ||
+                !isset($result[$caldavNS . 'schedule-default-calendar-URL'])) {
+                return false;
+            }
+
+            $homePath = $result[$caldavNS . 'calendar-home-set']->getHref();
+            $defaultCalendarPath = $result[$caldavNS . 'schedule-default-calendar-URL']->getHref();
+
+            // Extract calendar URI from the full path
+            // defaultCalendarPath is like: /calendars/54b64eadf6d7d8e41d263e0f/events
+            $calendarUri = basename($defaultCalendarPath);
+            $homeId = basename($homePath);
+
+            // Construct event path: calendars/homeId/calendarUri/uid.ics
+            $objectUri = $iTipMessage->uid . '.ics';
+            $eventPath = 'calendars/' . $homeId . '/' . $calendarUri . '/' . $objectUri;
+
+            // Use the iTip message as the event data
+            $upToDateEventIcs = $iTipMessage->message->serialize();
         }
 
         $dataMessage = [
@@ -261,11 +320,22 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
         $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
 
+        // Emit alarm lifecycle events for iTip messages
+        // Map iTip methods to standard alarm topics so alarm service can unschedule alarms
         if($iTipMessage->method !== 'REPLY'){
-            $this->createMessage(
-                $this->EVENT_TOPICS['EVENT_ALARM_'.$iTipMessage->method],
-                $dataMessage
-            );
+            $alarmTopic = null;
+
+            if ($iTipMessage->method === 'REQUEST') {
+                // iTip REQUEST updates an event, emit alarm:updated
+                $alarmTopic = $this->EVENT_TOPICS['EVENT_ALARM_UPDATED'];
+            } elseif ($iTipMessage->method === 'CANCEL') {
+                // iTip CANCEL deletes an event, emit alarm:deleted
+                $alarmTopic = $this->EVENT_TOPICS['EVENT_ALARM_DELETED'];
+            }
+
+            if ($alarmTopic) {
+                $this->createMessage($alarmTopic, $dataMessage);
+            }
         }
 
         if($iTipMessage->method === 'REQUEST' && Utils::isResourceFromPrincipal($recipientPrincipalUri) && $iTipMessage->significantChange) {
@@ -325,6 +395,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             }
         }
 
+        $this->publishMessages();
         return true;
     }
 

@@ -186,26 +186,26 @@ class Utils {
     }
 
     static function hidePrivateEventInfoForUser($vCalendar, $parentNode, $userPrincipal) {
-        $newEvents = array();
-        foreach ($vCalendar->VEVENT as $vevent) {
-            if (self::isHiddenPrivateEvent($vevent, $parentNode, $userPrincipal)) {
-                $newVevent = self::safeCloneVObject($vevent);
+        // Clone the entire VCalendar once to avoid multiple serializations
+        $clonedCalendar = self::safeCloneVObject($vCalendar);
 
-                $children = $newVevent->children();
-                foreach ($children as $child) {
-                    $newVevent->remove($child->name);
-                }
+        $newEvents = array();
+        foreach ($clonedCalendar->VEVENT as $vevent) {
+            if (self::isHiddenPrivateEvent($vevent, $parentNode, $userPrincipal)) {
+                // Create a new minimal event with only essential properties
+                $newVevent = $clonedCalendar->createComponent('VEVENT');
+
                 $newVevent->UID = $vevent->UID;
                 $newVevent->SUMMARY = 'Busy';
                 $newVevent->CLASS = 'PRIVATE';
                 $newVevent->ORGANIZER = $vevent->ORGANIZER;
                 $newVevent->DTSTART = $vevent->DTSTART;
 
-                if (!!$vevent->DTEND) {
+                if (isset($vevent->DTEND)) {
                     $newVevent->DTEND = $vevent->DTEND;
                 }
 
-                if (!!$vevent->DURATION) {
+                if (isset($vevent->DURATION)) {
                     $newVevent->DURATION = $vevent->DURATION;
                 }
 
@@ -213,11 +213,13 @@ class Utils {
             }
             $newEvents[] = $vevent;
         }
-        $vCalendar->remove('VEVENT');
+
+        $clonedCalendar->remove('VEVENT');
         foreach ($newEvents as $vevent) {
-            $vCalendar->add($vevent);
+            $clonedCalendar->add($vevent);
         }
-        return $vCalendar;
+
+        return $clonedCalendar;
     }
 
     static function isHiddenPrivateEvent($vevent, $node, $userPrincipal) {

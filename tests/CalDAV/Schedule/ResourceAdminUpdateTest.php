@@ -52,24 +52,23 @@ class ResourceAdminUpdateTest extends \PHPUnit_Framework_TestCase {
         ];
         $this->esndb->users->insertOne($adminUser);
 
-        // Create resource
+        // Create a domain for the resource
+        $domainId = '54b64eadf6d7d8e41d263e0b';
+        $domain = [
+            '_id' => new \MongoDB\BSON\ObjectId($domainId),
+            'name' => 'linagora.com'
+        ];
+        $this->esndb->domains->insertOne($domain);
+
+        // Create resource in the resources collection
         $this->resourceId = '68fef2e630c9f300553cf04a';
         $resource = [
             '_id' => new \MongoDB\BSON\ObjectId($this->resourceId),
-            'firstname' => 'Meeting',
-            'lastname' => 'Room A',
-            'accounts' => [
-                [
-                    'type' => 'email',
-                    'emails' => [
-                        'room-a@linagora.com'
-                    ]
-                ]
-            ],
-            'domains' => [],
-            'type' => 'resource'
+            'name' => 'Meeting Room A',
+            'type' => 'calendar',
+            'domain' => new \MongoDB\BSON\ObjectId($domainId)
         ];
-        $this->esndb->users->insertOne($resource);
+        $this->esndb->resources->insertOne($resource);
 
         // Initialize server
         list($this->caldavBackend, $authBackend) = $this->initServer();
@@ -80,7 +79,7 @@ class ResourceAdminUpdateTest extends \PHPUnit_Framework_TestCase {
         // Create resource calendar
         $this->resourceCalendar = [
             '{DAV:}displayname' => 'Resource Calendar',
-            'principaluri' => 'principals/users/' . $this->resourceId,
+            'principaluri' => 'principals/resources/' . $this->resourceId,
             'uri' => $this->resourceId
         ];
         $this->resourceCalendar['id'] = $this->caldavBackend->createCalendar(

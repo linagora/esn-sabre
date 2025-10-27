@@ -189,34 +189,47 @@ class Utils {
         // Clone the entire VCalendar once to avoid multiple serializations
         $clonedCalendar = self::safeCloneVObject($vCalendar);
 
-        $newEvents = array();
         foreach ($clonedCalendar->VEVENT as $vevent) {
             if (self::isHiddenPrivateEvent($vevent, $parentNode, $userPrincipal)) {
-                // Create a new minimal event with only essential properties
-                $newVevent = $clonedCalendar->createComponent('VEVENT');
+                // Save values we need to keep
+                $uid = isset($vevent->UID) ? $vevent->UID->getValue() : null;
+                $organizer = isset($vevent->ORGANIZER) ? $vevent->ORGANIZER->getValue() : null;
+                $dtstart = isset($vevent->DTSTART) ? clone $vevent->DTSTART : null;
+                $dtend = isset($vevent->DTEND) ? clone $vevent->DTEND : null;
+                $duration = isset($vevent->DURATION) ? clone $vevent->DURATION : null;
 
-                $newVevent->UID = $vevent->UID;
-                $newVevent->SUMMARY = 'Busy';
-                $newVevent->CLASS = 'PRIVATE';
-                $newVevent->ORGANIZER = $vevent->ORGANIZER;
-                $newVevent->DTSTART = $vevent->DTSTART;
-
-                if (isset($vevent->DTEND)) {
-                    $newVevent->DTEND = $vevent->DTEND;
+                // Get list of all properties to remove
+                $propertiesToRemove = [];
+                foreach ($vevent->children() as $child) {
+                    if ($child instanceof \Sabre\VObject\Property) {
+                        $propertiesToRemove[] = $child->name;
+                    }
                 }
 
-                if (isset($vevent->DURATION)) {
-                    $newVevent->DURATION = $vevent->DURATION;
+                // Remove all properties
+                foreach ($propertiesToRemove as $propName) {
+                    unset($vevent->{$propName});
                 }
 
-                $vevent = $newVevent;
+                // Re-add only essential properties
+                if ($uid) {
+                    $vevent->UID = $uid;
+                }
+                $vevent->SUMMARY = 'Busy';
+                $vevent->CLASS = 'PRIVATE';
+                if ($organizer) {
+                    $vevent->ORGANIZER = $organizer;
+                }
+                if ($dtstart) {
+                    $vevent->add($dtstart);
+                }
+                if ($dtend) {
+                    $vevent->add($dtend);
+                }
+                if ($duration) {
+                    $vevent->add($duration);
+                }
             }
-            $newEvents[] = $vevent;
-        }
-
-        $clonedCalendar->remove('VEVENT');
-        foreach ($newEvents as $vevent) {
-            $clonedCalendar->add($vevent);
         }
 
         return $clonedCalendar;
@@ -357,9 +370,19 @@ class Utils {
      * @return \Sabre\VObject\Component The cloned component
      */
     static function safeCloneVObject($component) {
-        // If it's a VCalendar, serialize and deserialize it directly
+        // If it's a VCalendar, clone manually to preserve property order and avoid infinite loops
         if ($component instanceof \Sabre\VObject\Component\VCalendar) {
-            return \Sabre\VObject\Reader::read($component->serialize());
+            // Create empty calendar without default properties
+            $clone = new \Sabre\VObject\Component\VCalendar([], false);
+
+            // Copy all children in original order
+            foreach ($component->children() as $child) {
+                // Use @ to suppress potential warnings from clone
+                $clonedChild = @clone $child;
+                $clone->add($clonedChild);
+            }
+
+            return $clone;
         }
 
         // For other components (VEVENT, etc.), serialize the parent VCalendar

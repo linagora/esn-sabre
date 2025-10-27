@@ -189,7 +189,7 @@ class Utils {
         $newEvents = array();
         foreach ($vCalendar->VEVENT as $vevent) {
             if (self::isHiddenPrivateEvent($vevent, $parentNode, $userPrincipal)) {
-                $newVevent = clone ($vevent);
+                $newVevent = self::safeCloneVObject($vevent);
 
                 $children = $newVevent->children();
                 foreach ($children as $child) {
@@ -341,7 +341,67 @@ class Utils {
         if (!isset($properties[$CUAS])) return;
 
         $addresses = $properties[$CUAS]->getHrefs();
-    
+
         return $addresses[0];
+    }
+
+    /**
+     * Safely clone a VObject component by serializing and deserializing
+     *
+     * This avoids infinite recursion issues that can occur with the clone operator
+     * when VObject properties have circular references through their parent pointers.
+     *
+     * @param \Sabre\VObject\Component $component The component to clone (VCalendar or VEVENT)
+     * @return \Sabre\VObject\Component The cloned component
+     */
+    static function safeCloneVObject($component) {
+        // If it's a VCalendar, serialize and deserialize it directly
+        if ($component instanceof \Sabre\VObject\Component\VCalendar) {
+            return \Sabre\VObject\Reader::read($component->serialize());
+        }
+
+        // For other components (VEVENT, etc.), serialize the parent VCalendar
+        $parent = $component->parent;
+        if ($parent instanceof \Sabre\VObject\Component\VCalendar) {
+            // Parse the entire parent calendar
+            $clonedCalendar = \Sabre\VObject\Reader::read($parent->serialize());
+
+            // Find the matching component by UID and optionally RECURRENCE-ID
+            $componentName = $component->name;
+            if (isset($component->UID)) {
+                $uid = $component->UID->getValue();
+                $recurrenceId = isset($component->{'RECURRENCE-ID'})
+                    ? $component->{'RECURRENCE-ID'}->getValue()
+                    : null;
+
+                foreach ($clonedCalendar->{$componentName} as $child) {
+                    if (!isset($child->UID) || $child->UID->getValue() !== $uid) {
+                        continue;
+                    }
+
+                    // For recurring events, also match RECURRENCE-ID
+                    if ($recurrenceId !== null) {
+                        if (isset($child->{'RECURRENCE-ID'})
+                            && $child->{'RECURRENCE-ID'}->getValue() === $recurrenceId) {
+                            return $child;
+                        }
+                    } else {
+                        // For non-recurring events or master events, return first match
+                        // that doesn't have a RECURRENCE-ID
+                        if (!isset($child->{'RECURRENCE-ID'})) {
+                            return $child;
+                        }
+                    }
+                }
+            }
+            // Fallback: return first component of same type
+            if (isset($clonedCalendar->{$componentName})) {
+                return $clonedCalendar->{$componentName};
+            }
+        }
+
+        // Last resort: try using PHP's clone with error suppression
+        // This shouldn't happen in practice
+        return @clone $component;
     }
 }

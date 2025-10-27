@@ -142,12 +142,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return [];
         }
 
-        // Check if owner is a resource - resources don't have calendar-user-address-set
-        // Resources have principals like: principals/resources/*
-        if (strpos($owner, 'principals/resources/') === 0) {
-            return [];
-        }
-
         try {
             $addresses = $this->getAddressesForPrincipal($owner);
             // getAddressesForPrincipal may return null, ensure we return an array

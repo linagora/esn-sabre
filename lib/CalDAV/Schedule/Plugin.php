@@ -128,6 +128,19 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return [];
         }
 
-        return $this->getAddressesForPrincipal($calendarNode->getOwner());
+        $owner = $calendarNode->getOwner();
+        if ($owner === null) {
+            return [];
+        }
+
+        try {
+            $addresses = $this->getAddressesForPrincipal($owner);
+            // getAddressesForPrincipal may return null, ensure we return an array
+            return $addresses ?: [];
+        } catch (\Exception $e) {
+            // If we can't get addresses for the principal, return empty array
+            // This can happen when accessing shared calendars
+            return [];
+        }
     }
 }

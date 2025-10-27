@@ -240,4 +240,55 @@ END:VCALENDAR
                 'Declined events should not appear in free/busy response');
         }
     }
+
+    /**
+     * Test for issue #172: Free/Busy should also ignore NEEDS-ACTION events
+     */
+    function testFreeBusyShouldIgnoreNeedsActionEvent() {
+        $needsActionEvent = 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20180313T142342Z
+UID:test-needs-action-event
+TRANSP:OPAQUE
+SUMMARY:Pending Meeting
+DTSTART:20180401T140000Z
+DTEND:20180401T150000Z
+DTSTAMP:20180313T142416Z
+SEQUENCE:1
+ORGANIZER;CN=Boss:mailto:boss@example.com
+ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Roberto Carlos:mailto:robertocarlos@realmadrid.com
+END:VEVENT
+END:VCALENDAR
+';
+
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'needs-action.ics', $needsActionEvent);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/freebusy',
+        ));
+
+        $freebusyData = [
+            'start' => '20180401T130000Z',
+            'end' => '20180401T160000Z',
+            'users' => ['54b64eadf6d7d8e41d263e0f']
+        ];
+
+        $request->setBody(json_encode($freebusyData));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $this->assertEquals($response->status, 200);
+
+        // The needs-action event should NOT appear in busy list
+        $busyEvents = $jsonResponse->users[0]->calendars[0]->busy;
+        foreach ($busyEvents as $event) {
+            $this->assertNotEquals('test-needs-action-event', $event->uid,
+                'NEEDS-ACTION events should not appear in free/busy response');
+        }
+    }
 }

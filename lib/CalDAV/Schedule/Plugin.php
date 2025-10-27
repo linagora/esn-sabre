@@ -25,6 +25,16 @@ use
  */
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
+    const ITIP_DELIVERY_TOPIC = 'calendar:itip:deliver';
+
+    protected $amqpPublisher;
+    protected $scheduleAsync;
+
+    function __construct($amqpPublisher = null, $scheduleAsync = false) {
+        $this->amqpPublisher = $amqpPublisher;
+        $this->scheduleAsync = $scheduleAsync;
+    }
+
     private function scheduleReply(RequestInterface $request) {
 
         $scheduleReply = $request->getHeader('Schedule-Reply');
@@ -44,7 +54,26 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $iTipMessage->message->VEVENT->SEQUENCE =0;
         }
 
-        parent::deliver($iTipMessage);
+        if ($this->scheduleAsync && $this->amqpPublisher) {
+            // Serialize the ITip message and publish to AMQP for asynchronous processing
+            $message = [
+                'sender' => $iTipMessage->sender,
+                'recipient' => $iTipMessage->recipient,
+                'message' => $iTipMessage->message->serialize(),
+                'method' => $iTipMessage->method,
+                'significantChange' => $iTipMessage->significantChange ?? false,
+                'hasChange' => $iTipMessage->hasChange ?? false,
+                'uid' => $iTipMessage->uid,
+                'component' => $iTipMessage->component
+            ];
+
+            $this->amqpPublisher->publish(self::ITIP_DELIVERY_TOPIC, json_encode($message));
+
+            // Mark as pending since we're processing asynchronously
+            $iTipMessage->scheduleStatus = '1.0'; // SCHEDSTAT_SUCCESS_PENDING
+        } else {
+            parent::deliver($iTipMessage);
+        }
     }
 
     /**
@@ -129,5 +158,137 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         return $this->getAddressesForPrincipal($calendarNode->getOwner());
+    }
+
+    /**
+     * Determines if an IMIP message should be skipped due to insignificant changes.
+     *
+     * This implements the filtering logic suggested by chibenwa for issue #128:
+     * 1. If there are no significant changes ($changes is empty) → skip
+     * 2. If the recipient is an attendee and the change concerns another attendee's
+     *    participation status → skip (only organizer needs this info)
+     * 3. If the recipient is a resource → never skip (resources need all notifications)
+     *
+     * @param ITip\Message $message The IMIP message to evaluate
+     * @param VCalendar|null $oldObject The original calendar object
+     * @param VCalendar $newObject The updated calendar object
+     * @return bool True if message should be skipped, false if it should be delivered
+     */
+    private function hasNoSignificantChanges(ITip\Message $message, $oldObject, VCalendar $newObject): bool {
+        // For new events, always send notifications
+        if ($oldObject === null) {
+            return false;
+        }
+
+        // Parse oldObject if it's a string (raw iCalendar data)
+        if (is_string($oldObject)) {
+            $oldObject = \Sabre\VObject\Reader::read($oldObject);
+        }
+
+        // Ensure oldObject has VEVENT
+        if (!isset($oldObject->VEVENT) || !isset($newObject->VEVENT)) {
+            return false;
+        }
+
+        // Fix for issue #154: For recurring events with occurrence exceptions,
+        // check if the number of occurrences changed (exception added/removed)
+        $oldEventCount = count($oldObject->VEVENT);
+        $newEventCount = count($newObject->VEVENT);
+        if ($oldEventCount !== $newEventCount) {
+            return false; // New occurrence exception added, always send notification
+        }
+
+        // Check if recipient is a resource - resources need all notifications
+        $recipientPrincipalUri = \ESN\Utils\Utils::getPrincipalByUri($message->recipient, $this->server);
+        if ($recipientPrincipalUri && \ESN\Utils\Utils::isResourceFromPrincipal($recipientPrincipalUri)) {
+            return false; // Never skip for resources
+        }
+
+        // Get the organizer email
+        $organizerEmail = null;
+        if (isset($newObject->VEVENT->ORGANIZER)) {
+            $organizerEmail = $newObject->VEVENT->ORGANIZER->getNormalizedValue();
+        }
+
+        // Check if recipient is the organizer
+        $isOrganizer = ($organizerEmail === $message->recipient);
+
+        // Get significant property changes between old and new
+        $hasSignificantChanges = $this->hasSignificantPropertyChanges($oldObject->VEVENT, $newObject->VEVENT);
+
+        // Rule 1: If no significant changes, skip for everyone except organizer
+        // (Organizer should still receive PARTSTAT updates from attendees)
+        if (!$hasSignificantChanges && !$isOrganizer) {
+            return true; // Skip: attendee receiving notification about another attendee's PARTSTAT
+        }
+
+        // Rule 2: If there are significant changes, send to everyone
+        if ($hasSignificantChanges) {
+            return false; // Don't skip: significant changes need to be communicated
+        }
+
+        // Organizer receives all changes (including PARTSTAT)
+        return false;
+    }
+
+    /**
+     * Checks if there are significant property changes between old and new event.
+     *
+     * Significant changes are those that affect event details (time, location, etc.),
+     * not just participation status.
+     *
+     * @param \Sabre\VObject\Component $oldEvent
+     * @param \Sabre\VObject\Component $newEvent
+     * @return bool True if there are significant changes
+     */
+    private function hasSignificantPropertyChanges(\Sabre\VObject\Component $oldEvent, \Sabre\VObject\Component $newEvent): bool {
+        $significantProperties = [
+            'DTSTART', 'DTEND', 'DURATION', 'SUMMARY', 'DESCRIPTION',
+            'LOCATION', 'RRULE', 'EXDATE', 'RDATE', 'SEQUENCE'
+        ];
+
+        foreach ($significantProperties as $prop) {
+            $oldValue = isset($oldEvent->$prop) ? (string)$oldEvent->$prop : null;
+            $newValue = isset($newEvent->$prop) ? (string)$newEvent->$prop : null;
+
+            if ($oldValue !== $newValue) {
+                return true; // Found a significant change
+            }
+        }
+
+        // Check if attendee list changed (added or removed)
+        $oldAttendees = [];
+        $newAttendees = [];
+
+        if (isset($oldEvent->ATTENDEE)) {
+            foreach ($oldEvent->ATTENDEE as $attendee) {
+                $oldAttendees[] = $attendee->getNormalizedValue();
+            }
+        }
+
+        if (isset($newEvent->ATTENDEE)) {
+            foreach ($newEvent->ATTENDEE as $attendee) {
+                $newAttendees[] = $attendee->getNormalizedValue();
+            }
+        }
+
+        sort($oldAttendees);
+        sort($newAttendees);
+
+        if ($oldAttendees !== $newAttendees) {
+            return true; // Attendee list changed
+        }
+
+        return false; // No significant changes found
+    }
+
+    /**
+     * Deliver iTIP message synchronously by calling parent implementation.
+     * This is used by the IMIP callback endpoint to process async messages.
+     *
+     * @param ITip\Message $iTipMessage
+     */
+    public function deliverSync(ITip\Message $iTipMessage) {
+        parent::deliver($iTipMessage);
     }
 }

@@ -292,12 +292,13 @@ class Utils {
      * @return Boolean          true if he is not attending the event, false otherwise.
      */
     static function isPrincipalNotAttendingEvent($vevent, $email) {
+        $emailLower = strtolower($email);
         foreach ($vevent->ATTENDEE as $attendee) {
-            if (strtolower($attendee->getValue()) === $email) {
+            if (strtolower($attendee->getValue()) === $emailLower) {
                 if (isset($attendee['PARTSTAT'])) {
-                    $partstat = $attendee['PARTSTAT']->getValue();
+                    $partstat = strtoupper(trim($attendee['PARTSTAT']->getValue()));
 
-                    return ($partstat == 'NEEDS-ACTION' || $partstat == 'DECLINED');
+                    return ($partstat === 'NEEDS-ACTION' || $partstat === 'DECLINED');
                 }
 
                 return true; // mainly to prevent looping on all the attendees (ie events with hundreds of attendees)

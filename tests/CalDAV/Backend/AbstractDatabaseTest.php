@@ -470,7 +470,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         );
 
         $result = $backend->calendarQuery($id, $filters);
-        $this->assertIsArray($result);
+        $this->assertTrue(is_array($result));
         $this->assertCount(2, $result);
         $this->assertTrue(in_array('event', $result));
         $this->assertTrue(in_array('todo', $result));
@@ -493,7 +493,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         );
 
         $result = $backend->calendarQuery($id, $filters);
-        $this->assertIsArray($result);
+        $this->assertTrue(is_array($result));
         $this->assertCount(1, $result);
         $this->assertTrue(in_array('event', $result));
 
@@ -515,7 +515,7 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         );
 
         $result = $backend->calendarQuery($id, $filters);
-        $this->assertIsArray($result);
+        $this->assertTrue(is_array($result));
         $this->assertCount(1, $result);
         $this->assertTrue(in_array('event', $result));
     }

@@ -119,14 +119,29 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     function getPrincipalIdByEmail($email) {
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return null;
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
 
-        $projection = ['_id' => 1];
+        $projection = ['_id' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1];
         $query = ['accounts.emails' => strtolower($email)];
 
         $user = $this->db->users->findOne($query, ['projection' => $projection]);
 
-        if (!$user) return null;
+        if (!$user) {
+            // Try alternative query patterns
+            $altQuery = ['preferredEmail' => strtolower($email)];
+            $user = $this->db->users->findOne($altQuery, ['projection' => $projection]);
+
+            if (!$user) {
+                $altQuery2 = ['emails' => strtolower($email)];
+                $user = $this->db->users->findOne($altQuery2, ['projection' => $projection]);
+
+                if (!$user) {
+                    return null;
+                }
+            }
+        }
 
         return $user['_id'];
     }

@@ -28,6 +28,16 @@ class Esn extends Mongo {
     }
 
     /**
+     * Get the principal backend
+     *
+     * @return BackendInterface
+     */
+    public function getPrincipalBackend()
+    {
+        return $this->principalBackend;
+    }
+
+    /**
      *
      * Get user calendars.
      *

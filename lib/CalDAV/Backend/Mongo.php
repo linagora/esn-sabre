@@ -517,25 +517,25 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $timeRange = null;
 
         // if no filters were specified, we don't need to filter after a query
-        if (!$filters['prop-filters'] && !$filters['comp-filters']) {
+        if (empty($filters['prop-filters']) && empty($filters['comp-filters'])) {
             $requirePostFilter = false;
         }
 
         // Figuring out if there's a component filter
-        if (count($filters['comp-filters']) > 0 && !$filters['comp-filters'][0]['is-not-defined']) {
+        if (!empty($filters['comp-filters']) && is_array($filters['comp-filters']) && !$filters['comp-filters'][0]['is-not-defined']) {
             $componentType = $filters['comp-filters'][0]['name'];
 
             // Checking if we need post-filters
-            if (!$filters['prop-filters'] && !$filters['comp-filters'][0]['comp-filters'] && !$filters['comp-filters'][0]['time-range'] && !$filters['comp-filters'][0]['prop-filters']) {
+            if (empty($filters['prop-filters']) && empty($filters['comp-filters'][0]['comp-filters']) && empty($filters['comp-filters'][0]['time-range']) && empty($filters['comp-filters'][0]['prop-filters'])) {
                 $requirePostFilter = false;
             }
             // There was a time-range filter
-            if ($componentType == 'VEVENT' && isset($filters['comp-filters'][0]['time-range'])) {
+            if ($componentType == 'VEVENT' && is_array($filters['comp-filters'][0]['time-range'])) {
                 $timeRange = $filters['comp-filters'][0]['time-range'];
 
                 // If start time OR the end time is not specified, we can do a
                 // 100% accurate mysql query.
-                if (!$filters['prop-filters'] && !$filters['comp-filters'][0]['comp-filters'] && !$filters['comp-filters'][0]['prop-filters'] && (!$timeRange['start'] || !$timeRange['end'])) {
+                if (empty($filters['prop-filters']) && empty($filters['comp-filters'][0]['comp-filters']) && empty($filters['comp-filters'][0]['prop-filters']) && (empty($timeRange['start']) || empty($timeRange['end']))) {
                     $requirePostFilter = false;
                 }
             }

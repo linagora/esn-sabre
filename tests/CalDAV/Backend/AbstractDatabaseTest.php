@@ -443,6 +443,83 @@ abstract class AbstractDatabaseTest extends \PHPUnit_Framework_TestCase {
         ), $backend->calendarQuery($id, $filters));
     }
 
+    /**
+     * Test calendarQuery with boolean filter values (issue #188)
+     *
+     * This test ensures that calendarQuery handles filters with boolean values
+     * instead of arrays without throwing "Trying to access array offset on
+     * value of type bool" errors.
+     *
+     * When XML parsing returns false for missing filter properties, the method
+     * should handle these gracefully rather than attempting to access them as arrays.
+     */
+    function testCalendarQueryWithBooleanFilters() {
+        $id = $this->generateId();
+
+        $backend = $this->getBackend();
+        $backend->createCalendarObject($id, "event", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $backend->createCalendarObject($id, "todo", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+
+        // Test case 1: Filters with boolean false values (simulating XML parsing behavior)
+        $filters = array(
+            'name' => 'VCALENDAR',
+            'comp-filters' => false,
+            'prop-filters' => false,
+            'is-not-defined' => false,
+            'time-range' => null,
+        );
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertTrue(is_array($result));
+        $this->assertCount(2, $result);
+        $this->assertTrue(in_array('event', $result));
+        $this->assertTrue(in_array('todo', $result));
+
+        // Test case 2: Filters with VEVENT comp-filter containing boolean sub-filters
+        $filters = array(
+            'name' => 'VCALENDAR',
+            'comp-filters' => array(
+                array(
+                    'name' => 'VEVENT',
+                    'comp-filters' => false,
+                    'prop-filters' => false,
+                    'is-not-defined' => false,
+                    'time-range' => false,
+                ),
+            ),
+            'prop-filters' => false,
+            'is-not-defined' => false,
+            'time-range' => null,
+        );
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertTrue(is_array($result));
+        $this->assertCount(1, $result);
+        $this->assertTrue(in_array('event', $result));
+
+        // Test case 3: Filters with empty arrays (normal case, should still work)
+        $filters = array(
+            'name' => 'VCALENDAR',
+            'comp-filters' => array(
+                array(
+                    'name' => 'VEVENT',
+                    'comp-filters' => array(),
+                    'prop-filters' => array(),
+                    'is-not-defined' => false,
+                    'time-range' => array(),
+                ),
+            ),
+            'prop-filters' => array(),
+            'is-not-defined' => false,
+            'time-range' => null,
+        );
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertTrue(is_array($result));
+        $this->assertCount(1, $result);
+        $this->assertTrue(in_array('event', $result));
+    }
+
     function testGetChanges() {
         $backend = $this->getBackend();
         $id = $backend->createCalendar(

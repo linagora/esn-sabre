@@ -176,12 +176,17 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
         $vevents = $message->select('VEVENT');
 
+        // Clone the calendar once before the loop for better performance
+        $clonedMessage = Utils::safeCloneVObject($message);
+
         foreach($vevents as $vevent) {
-            $currentMessage = clone $message;
+            // Clone the already-cloned message for each event
+            // Note: We need a separate clone per event since we modify it differently
+            $currentMessage = clone $clonedMessage;
 
             $currentMessage->remove('VEVENT');
             $currentMessage->add($vevent);
-            
+
             $messageToSend = ['message' => $currentMessage];
             if ($isNewEvent) {
                 $messageToSend['newEvent'] = 1;
@@ -295,6 +300,9 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $previousEventVEvents = $this->getSequencePerVEvent($formerEvent);
         $currentEventVEvents = $this->getSequencePerVEvent($scheduledEvent);
 
+        // Clone the scheduled event once before the loop for better performance
+        $clonedScheduledEvent = Utils::safeCloneVObject($scheduledEvent);
+
         foreach ($currentEventVEvents as $recurrenceId => $sequence) {
             if ($recurrenceId == self::MASTER_EVENT && isset($currentEventVEvents[$recurrenceId]->RRULE)) {
                 // TODO Add RRULE checking to avoid processing non-recurring event
@@ -304,7 +312,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             // Create message if instance have been created or modified
             if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
                 $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]))) {
-                $currentMessage = clone ($scheduledEvent);
+                // Clone the already-cloned message for this specific instance
+                $currentMessage = clone $clonedScheduledEvent;
                 $modifiedInstance = [];
 
                 $currentMessage->remove('VEVENT');
@@ -350,9 +359,11 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $duration = DateTime::computeVEventDuration($masterEvent);
         $timezone = $masterEvent->DTSTART->getDateTime()->getTimeZone();
         $recurrenceStart = (new \DateTime())->setTimestamp($recurrenceId)->setTimezone($timezone);
+        // Note: clone is safe for DateTime objects (no circular references)
         $recurrenceEnd = (clone $recurrenceStart)->modify('+'.$duration.' seconds');
 
-        $recurrenceInstance = clone $masterEvent;
+        // Clone the master event (this will serialize the VCALENDAR but only once per call)
+        $recurrenceInstance = Utils::safeCloneVObject($masterEvent);
         $recurrenceInstance->DTSTART->setValue($recurrenceStart);
         $recurrenceInstance->DTEND->setValue($recurrenceEnd);
 
@@ -400,14 +411,18 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
             $newExDates = array_diff(array_keys($currentExDatesFormatted), array_keys($previousExDatesFormatted));
 
+            // Clone the message once before the loop for better performance
+            $clonedMessage = Utils::safeCloneVObject($message);
+
             foreach ($newExDates as $newExDate) {
 
                 if (isset($previousEventVEvents[$newExDate])) {
-                    $eventToCancel = clone $previousEventVEvents[$newExDate];
+                    $eventToCancel = Utils::safeCloneVObject($previousEventVEvents[$newExDate]);
                     $eventToCancel->STATUS = 'CANCELLED';
                 } else {
-                    $eventToCancel = clone $previousEventVEvents[self::MASTER_EVENT];
+                    $eventToCancel = Utils::safeCloneVObject($previousEventVEvents[self::MASTER_EVENT]);
                     $eventToCancel->DTSTART = $currentExDatesFormatted[$newExDate]->getDateTime();
+                    // Note: clone is safe for DateTime objects (no circular references)
                     $eventToCancel->DTEND = clone $currentExDatesFormatted[$newExDate]->getDateTime();
                     $eventToCancel->{'RECURRENCE-ID'} = clone $currentExDatesFormatted[$newExDate]->getDateTime();
                     $eventToCancel->STATUS = 'CANCELLED';
@@ -415,7 +430,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                     $eventToCancel->remove('EXDATE');
                 }
 
-                $currentMessage = clone $message;
+                // Clone the already-cloned message for this specific instance
+                $currentMessage = clone $clonedMessage;
                 $currentMessage->METHOD = 'CANCEL';
                 $currentMessage->remove('VEVENT');
                 $currentMessage->add($eventToCancel);

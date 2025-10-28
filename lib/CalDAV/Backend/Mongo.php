@@ -522,7 +522,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         }
 
         // Figuring out if there's a component filter
-        if (!empty($filters['comp-filters']) && is_array($filters['comp-filters']) && count($filters['comp-filters']) > 0 && !$filters['comp-filters'][0]['is-not-defined']) {
+        if (!empty($filters['comp-filters']) && is_array($filters['comp-filters']) && !$filters['comp-filters'][0]['is-not-defined']) {
             $componentType = $filters['comp-filters'][0]['name'];
 
             // Checking if we need post-filters
@@ -530,7 +530,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 $requirePostFilter = false;
             }
             // There was a time-range filter
-            if ($componentType == 'VEVENT' && isset($filters['comp-filters'][0]['time-range']) && is_array($filters['comp-filters'][0]['time-range'])) {
+            if ($componentType == 'VEVENT' && is_array($filters['comp-filters'][0]['time-range'])) {
                 $timeRange = $filters['comp-filters'][0]['time-range'];
 
                 // If start time OR the end time is not specified, we can do a

@@ -2,10 +2,8 @@
 
 namespace ESN\CalDAV\Schedule;
 
-require_once 'Sabre/HTTP/ResponseMock.php';
-require_once 'Sabre/HTTP/SapiMock.php';
-require_once 'Sabre/DAVACL/PrincipalBackend/Mock.php';
-require_once 'Sabre/DAV/Auth/Backend/Mock.php';
+use Sabre\HTTP\Sapi;
+use Sabre\HTTP\Response;
 
 /**
  * Tests for issue #176: Resource administrator updating calendar events
@@ -23,7 +21,7 @@ class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
     private $adminEmail;
     private $resourceCalendar;
 
-    function setUp(): void 
+    function setUp(): void
     {
         parent::setUp();
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
@@ -154,7 +152,8 @@ class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
         );
 
         $this->server = new \Sabre\DAV\Server($tree);
-        $this->server->sapi = new \Sabre\HTTP\SapiMock();
+        $this->server->httpRequest = new \Sabre\HTTP\Request('GET', '/');
+        $this->server->httpResponse = new \Sabre\HTTP\Response();
         $this->server->debugExceptions = true;
 
         $caldavPlugin = new \ESN\CalDAV\Plugin();
@@ -167,7 +166,7 @@ class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
         $schedulePlugin = new \ESN\CalDAV\Schedule\Plugin();
         $this->server->addPlugin($schedulePlugin);
 
-        $authBackend = new \Sabre\DAV\Auth\Backend\Mock();
+        $authBackend = new \ESN\CalDAV\Schedule\TestAuthBackendMock();
         $authPlugin = new \Sabre\DAV\Auth\Plugin($authBackend);
         $this->server->addPlugin($authPlugin);
 
@@ -176,5 +175,24 @@ class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
         $this->server->addPlugin($aclPlugin);
 
         return [$caldavBackend, $authBackend];
+    }
+}
+
+/**
+ * Simple auth backend mock for testing
+ */
+class TestAuthBackendMock extends \Sabre\DAV\Auth\Backend\AbstractBasic {
+    protected $currentUser;
+
+    public function validateUserPass($username, $password) {
+        return true;
+    }
+
+    public function setPrincipal($principal) {
+        $this->currentUser = $principal;
+    }
+
+    public function getCurrentUser() {
+        return $this->currentUser;
     }
 }

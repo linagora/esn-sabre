@@ -2,17 +2,17 @@
 
 namespace ESN\CalDAV\Schedule;
 
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/ResponseMock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/HTTP/SapiMock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAVACL/PrincipalBackend/Mock.php';
-require_once ESN_TEST_VENDOR . '/sabre/dav/tests/Sabre/DAV/Auth/Backend/Mock.php';
+require_once 'Sabre/HTTP/ResponseMock.php';
+require_once 'Sabre/HTTP/SapiMock.php';
+require_once 'Sabre/DAVACL/PrincipalBackend/Mock.php';
+require_once 'Sabre/DAV/Auth/Backend/Mock.php';
 
 /**
  * Tests for issue #176: Resource administrator updating calendar events
  *
  * @medium
  */
-class ResourceAdminUpdateTest extends \PHPUnit_Framework_TestCase {
+class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
 
     private $server;
     private $caldavBackend;
@@ -23,7 +23,9 @@ class ResourceAdminUpdateTest extends \PHPUnit_Framework_TestCase {
     private $adminEmail;
     private $resourceCalendar;
 
-    function setUp() {
+    function setUp(): void 
+    {
+        parent::setUp();
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
         $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
 

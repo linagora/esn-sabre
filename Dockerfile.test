@@ -43,12 +43,7 @@ RUN apt-get update && \
   # Compile MongoDB extension
   pecl install mongodb-2.1.4 && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
-  echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini && \
-  # Remove build tools to reduce image size
-  apt-get purge -y php-pear php${PHPVERSION}-dev make pkg-config && \
-  apt-get autoremove -y && \
-  apt-get clean && \
-  rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.pearrc
+  echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini 
 
 # Configure PHP (combine all sed commands)
 RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fpm/php.ini && \

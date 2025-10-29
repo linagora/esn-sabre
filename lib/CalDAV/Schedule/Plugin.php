@@ -273,6 +273,12 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      */
     protected function processICalendarChange($oldObject = null, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
         $broker = new ITip\Broker();
+        // Add SUMMARY, LOCATION, DESCRIPTION to significant change properties
+        // These are important for email notifications even though they're not in RFC5546 list
+        $broker->significantChangeProperties = array_merge(
+            $broker->significantChangeProperties,
+            ['SUMMARY', 'LOCATION', 'DESCRIPTION']
+        );
         $messages = $broker->parseEvent($newObject, $addresses, $oldObject);
 
         if ($messages) $modified = true;
@@ -349,6 +355,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         $broker = new ITip\Broker();
+        // Add SUMMARY, LOCATION, DESCRIPTION to significant change properties
+        $broker->significantChangeProperties = array_merge(
+            $broker->significantChangeProperties,
+            ['SUMMARY', 'LOCATION', 'DESCRIPTION']
+        );
         $messages = $broker->parseEvent(null, $addresses, $node->get());
 
         foreach ($messages as $message) {

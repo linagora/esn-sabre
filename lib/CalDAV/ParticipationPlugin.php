@@ -9,12 +9,15 @@ use \Sabre\CalDAV\ICalendar;
 use \Sabre\Uri;
 use \Sabre\HTTP\RequestInterface;
 
+#[\AllowDynamicProperties]
 class ParticipationPlugin extends ServerPlugin {
 
     /**
      * This is the official CalDAV namespace
      */
     const NS_CALDAV = 'urn:ietf:params:xml:ns:caldav';
+
+    protected $server;
 
     function initialize(Server $server) {
         $this->server = $server;

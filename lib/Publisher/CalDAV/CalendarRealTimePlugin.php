@@ -4,6 +4,7 @@ namespace ESN\Publisher\CalDAV;
 use \Sabre\DAV\Server;
 use \ESN\Utils\Utils as Utils;
 
+#[\AllowDynamicProperties]
 class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     protected $caldavBackend;

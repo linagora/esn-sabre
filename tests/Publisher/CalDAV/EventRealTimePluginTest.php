@@ -12,6 +12,7 @@ require_once ESN_TEST_BASE . '/Sabre/CardDAV/Backend/Mock.php';
 require_once ESN_TEST_BASE . '/Sabre/DAVServerTest.php';
 require_once ESN_TEST_BASE . '/Sabre/DAV/Auth/Backend/Mock.php';
 
+#[\AllowDynamicProperties]
 class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "calendars/456456/123123/uid.ics";
@@ -166,7 +167,7 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $nodeMock->expects($this->any())->method('getETag')->willReturn(self::ETAG);
 
         $server->tree->expects($this->any())->method('getNodeForPath')
-            ->will($this->returnValue($nodeMock));
+            ->willReturn($nodeMock);
     }
 
     function testCreateFileNonCalendarHome() {
@@ -226,7 +227,7 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     function testItipDoSendMessageIfScheduleFail() {
         $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
-            ->setMethods(['publishMessages'])
+            ->onlyMethods(['publishMessages'])
             ->setConstructorArgs(['', new \ESN\CalDAV\CalDAVBackendMock()])
             ->getMock();
         $plugin->expects($this->never())->method('publishMessages');
@@ -239,14 +240,14 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     function testItipDelegateToScheduleAndPublishMessage() {
         $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
-            ->setMethods(['schedule', 'publishMessages'])
+            ->onlyMethods(['schedule', 'publishMessages'])
             ->setConstructorArgs(['', new \ESN\CalDAV\CalDAVBackendMock()])
             ->getMock();
-        $plugin->expects($this->once())->method('schedule')->will($this->returnCallback(function($message) {
+        $plugin->expects($this->once())->method('schedule')->willReturnCallback(function($message) {
             $this->assertInstanceOf(\Sabre\VObject\ITip\Message::class, $message);
 
             return $message;
-        }));
+        });
         $plugin->expects($this->once())->method('publishMessages');
 
         $plugin->itip(new \Sabre\VObject\ITip\Message());
@@ -256,7 +257,7 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->prepare();
 
         $plugin = $this->getMockBuilder(EventRealTimePluginMock::class)
-            ->setMethods(['notifyInvites', 'createMessage'])
+            ->onlyMethods(['notifyInvites', 'createMessage'])
             ->setConstructorArgs([$this->server,  $this->caldavBackend])
             ->getMock();
 

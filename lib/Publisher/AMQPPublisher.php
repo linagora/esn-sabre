@@ -3,6 +3,8 @@ namespace ESN\Publisher;
 
 class AMQPPublisher {
 
+    protected $channel;
+
     function __construct($channel) {
         $this->channel = $channel;
 
@@ -12,7 +14,7 @@ class AMQPPublisher {
     }
 
     function publish($topic, $message) {
-        $msg = new \PhpAmqpLib\Message\AMQPMessage(utf8_encode($message));
+        $msg = new \PhpAmqpLib\Message\AMQPMessage($message);
         $this->channel->basic_publish($msg, $topic);
     }
 }

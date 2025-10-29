@@ -14,8 +14,10 @@ use \Sabre\VObject\ITip;
 use \Sabre\VObject\Property;
 use \ESN\Utils\Utils as Utils;
 use ESN\Utils\DateTime;
+use ESN\Utils\DateTimeWithAllDay;
 use Sabre\VObject\Reader;
 
+#[\AllowDynamicProperties]
 class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     protected $server;
     protected $amqpPublisher;
@@ -194,6 +196,47 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     }
 
     /**
+     * Check if we have our own significant changes (SUMMARY, LOCATION, DESCRIPTION)
+     * This is needed because Sabre/DAV 4.x may not mark these as significantChange
+     *
+     * @param ITip\Message $iTipMessage
+     * @return bool
+     */
+    private function hasOwnSignificantChanges(ITip\Message $iTipMessage) {
+        // Only check for updates, not new events or cancellations
+        if ($this->isNewEvent || $iTipMessage->method !== 'REQUEST') {
+            return false;
+        }
+
+        // If we don't have the former event, we can't detect changes
+        if (!$this->formerEventICal) {
+            return false;
+        }
+
+        try {
+            $formerEvent = Reader::read($this->formerEventICal);
+            $currentEvent = $iTipMessage->message;
+
+            $previousEventVEvents = $this->getSequencePerVEvent($formerEvent);
+            $currentEventVEvents = $this->getSequencePerVEvent($currentEvent);
+
+            // Check each VEVENT for property changes
+            foreach ($currentEventVEvents as $recurrenceId => $currentVEvent) {
+                if (isset($previousEventVEvents[$recurrenceId])) {
+                    if ($this->hasPropertyChanges($previousEventVEvents[$recurrenceId], $currentVEvent)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        } catch (\Exception $e) {
+            // If we can't parse, assume no changes
+            return false;
+        }
+    }
+
+    /**
      * Check if IMip notification should be done
      *
      * @param ITip\Message $iTipMessage
@@ -203,8 +246,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
      */
     private function checkPreconditions(ITip\Message $iTipMessage, int $matched, $principalUri) {
         // Not sending any emails if the system considers the update
-        // insignificant.
-        if (!$iTipMessage->significantChange && !$iTipMessage->hasChange) {
+        // insignificant AND we don't detect any property changes
+        if (!$iTipMessage->significantChange && !$this->hasOwnSignificantChanges($iTipMessage)) {
             if (!$iTipMessage->scheduleStatus) {
                 $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_PENDING;
             }
@@ -551,16 +594,33 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                 $currentPropertyValue = isset($currentEvent->$changeProperty) ? $currentEvent->$changeProperty->getDateTime()->getTimeStamp() : null;
 
                 if ($previousPropertyValue !== $currentPropertyValue) {
-                    $changes[strtolower($changeProperty)] = [
-                        'previous' => isset($previousEvent) && isset($previousEvent->$changeProperty) ? $previousEvent->$changeProperty->getDateTime() : [],
-                        'current' => $currentEvent->$changeProperty->getDateTime(),
-                    ];
+                    $propertyKey = strtolower($changeProperty);
 
                     if (isset($previousEvent) && isset($previousEvent->$changeProperty)) {
-                        $changes[strtolower($changeProperty)]['previous']->isAllDay = !$previousEvent->$changeProperty->hasTime();
+                        $previousDateTime = $previousEvent->$changeProperty->getDateTime();
+                        // Convert DateTime to array to get its properties
+                        $previousData = json_decode(json_encode($previousDateTime), true);
+                        // Rebuild object with isAllDay first to match expected order
+                        $changes[$propertyKey]['previous'] = (object)[
+                            'isAllDay' => !$previousEvent->$changeProperty->hasTime(),
+                            'date' => $previousData['date'],
+                            'timezone_type' => $previousData['timezone_type'],
+                            'timezone' => $previousData['timezone']
+                        ];
+                    } else {
+                        $changes[$propertyKey]['previous'] = [];
                     }
 
-                    $changes[strtolower($changeProperty)]['current']->isAllDay = !$currentEvent->$changeProperty->hasTime();
+                    $currentDateTime = $currentEvent->$changeProperty->getDateTime();
+                    // Convert DateTime to array to get its properties
+                    $currentData = json_decode(json_encode($currentDateTime), true);
+                    // Rebuild object with isAllDay first to match expected order
+                    $changes[$propertyKey]['current'] = (object)[
+                        'isAllDay' => !$currentEvent->$changeProperty->hasTime(),
+                        'date' => $currentData['date'],
+                        'timezone_type' => $currentData['timezone_type'],
+                        'timezone' => $currentData['timezone']
+                    ];
                 }
 
                 continue;

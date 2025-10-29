@@ -3,6 +3,7 @@ namespace ESN\JSON;
 
 use Sabre\DAV\ServerPlugin;
 
+#[\AllowDynamicProperties]
 class BasePlugin extends ServerPlugin {
 
     const USER_AGENT_REGEXP = [
@@ -10,6 +11,10 @@ class BasePlugin extends ServerPlugin {
         "/Thunderbird.*/",
         "/DAVx5*/"
     ];
+
+    protected $server;
+    protected $acceptHeader;
+    protected $currentUser;
 
     function initialize(\Sabre\DAV\Server $server) {
         $this->server = $server;
@@ -24,7 +29,7 @@ class BasePlugin extends ServerPlugin {
             $request->setUrl($url);
         }
 
-        $this->acceptHeader = explode(', ', $request->getHeader('Accept'));
+        $this->acceptHeader = explode(', ', $request->getHeader('Accept') ?? '');
         $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
 
         return true;

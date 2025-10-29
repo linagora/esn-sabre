@@ -52,7 +52,6 @@ class IMipPluginStandardEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipientName = 'John2 Doe2';
         $itipMessage->scheduleStatus = 'null';
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $this->amqpPublisher->expects($this->once())
@@ -136,7 +135,6 @@ class IMipPluginStandardEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipient = 'mailto:' . $this->user2Email;
         $itipMessage->scheduleStatus = null;
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $requestCalled = false;
@@ -222,7 +220,6 @@ class IMipPluginStandardEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipient = 'mailto:' . $this->user2Email;
         $itipMessage->scheduleStatus = null;
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $message = $this->getMessageForPublisher($itipMessage, false);
@@ -338,7 +335,6 @@ class IMipPluginStandardEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipient = 'mailto:' . $this->user2Email;
         $itipMessage->scheduleStatus = null;
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $this->amqpPublisher->expects($this->once())
@@ -393,7 +389,6 @@ class IMipPluginStandardEventWithTZTest extends IMipPluginTestBase {
         $itipMessage->recipientName = 'John2 Doe2';
         $itipMessage->scheduleStatus = 'null';
         $itipMessage->significantChange = true;
-        $itipMessage->hasChange = true;
         $itipMessage->message = Reader::read($scheduledIcal);
 
         $this->amqpPublisher->expects($this->never())

@@ -8,6 +8,7 @@ use \Sabre\VObject,
     \Sabre\DAV;
 use Sabre\VObject\ITip\Message;
 
+#[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Plugin {
 
     const FREE_BUSY_QUERY = 'free-busy-query';
@@ -16,6 +17,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         'application/vcard+json',
         'application/json'
     ];
+
+    protected $root;
+    protected $server;
+    protected $acceptHeader;
+    protected $currentUser;
 
     function __construct($root) {
         $this->root = $root;
@@ -85,7 +91,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $request->setUrl($url);
         }
 
-        $this->acceptHeader = explode(', ', $request->getHeader('Accept'));
+        $this->acceptHeader = explode(', ', $request->getHeader('Accept') ?? '');
         $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
 
         if ($this->_isOldDefaultCalendarUriNotFound($request->getPath())) {

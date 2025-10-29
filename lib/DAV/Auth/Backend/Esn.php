@@ -6,6 +6,7 @@ use \Sabre\DAV;
 use \Sabre\HTTP;
 use Sabre\Event\EventEmitter;
 use \Firebase\JWT\JWT;
+use \Firebase\JWT\Key;
 
 define('ESN_PUBLIC_KEY', __DIR__ . '/../../../../config/esn.key.pub');
 
@@ -18,11 +19,15 @@ define('OPENPASS_BASIC_AUTH', getenv("OPENPASS_BASIC_AUTH"));
 define('SABRE_ADMIN_LOGIN', getenv("SABRE_ADMIN_LOGIN"));
 define('SABRE_ADMIN_PASSWORD', getenv("SABRE_ADMIN_PASSWORD"));
 
+#[\AllowDynamicProperties]
 class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     protected $httpClient;
     protected $currentUserId;
     protected $apiroot;
+    protected $eventEmitter;
+    protected $principalBackend;
+    protected $server;
 
     protected $principalPrefix = 'principals/users/';
     protected $technicalPrincipal = 'principals/technicalUser';
@@ -258,7 +263,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
             try {
                 // Try to decode the token with the public key
-                $user = JWT::decode($token, $key, array('RS256'));
+                $user = JWT::decode($token, new Key($key, 'RS256'));
 
                 // Get the user Id associated with the identifier of the token ( email in sub field )
                 $principleId = $this->principalBackend->getPrincipalIdByEmail($user->sub);

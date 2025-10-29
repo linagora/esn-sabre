@@ -3,6 +3,7 @@ namespace ESN\Publisher\CalDAV;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
+#[\AllowDynamicProperties]
 class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "calendars/123123/uid.ics";
@@ -32,31 +33,32 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->server->expects($this->any())->method('getPlugin')
             ->willReturn($this->createMock(\ESN\DAV\Sharing\Plugin::class));
 
-        $nodeMock = $this->getMockBuilder('\Sabre\CalDAV\Calendar')
-            ->disableOriginalConstructor()
-            ->setMethods(array('getProperties', 'getSubscribers', 'getInvites', 'getCalendarId', 'getPublicRight'))
-            ->getMock();
-        $nodeMock->expects($this->any())->method('getProperties')->willReturn(array());
-        $nodeMock->expects($this->any())->method('getPublicRight')->willReturn('privilege');
-        $nodeMock->expects($this->any())->method('getCalendarId')->willReturn('calID');
-        $nodeMock->expects($this->any())->method('getSubscribers')
-            ->willReturn([
-                [
-                    'principaluri' => 'principals/users/1',
-                    'uri' => 'uri1'
-                ], [
-                    'principaluri' => 'principals/users/2',
-                    'uri' => 'uri2'
-                ]
-            ]);
-        $nodeMock->expects($this->any())->method('getInvites')
-            ->willReturn([
-                new ShareeSimple('principal/users/3', 1, 2)
-            ]);
+        $nodeMock = new class extends \Sabre\CalDAV\Calendar {
+            public function __construct() {}
+            public function getProperties($properties) { return array(); }
+            public function getPublicRight() { return 'privilege'; }
+            public function getCalendarId() { return 'calID'; }
+            public function getSubscribers() {
+                return [
+                    [
+                        'principaluri' => 'principals/users/1',
+                        'uri' => 'uri1'
+                    ], [
+                        'principaluri' => 'principals/users/2',
+                        'uri' => 'uri2'
+                    ]
+                ];
+            }
+            public function getInvites() {
+                return [
+                    new ShareeSimple('principal/users/3', 1, 2)
+                ];
+            }
+        };
 
         $this->server->tree->expects($this->any())->method('getNodeForPath')
             ->with('/'.self::PATH)
-            ->will($this->returnValue($nodeMock));
+            ->willReturn($nodeMock);
     }
 
     function testGetCalendarProps() {
@@ -123,14 +125,21 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
             ]
         ];
 
+        $expectedCalls = [
+            ['calendar:calendar:updated', json_encode($firstExpectedData)],
+            ['calendar:calendar:updated', json_encode($secondfirstExpectedData)],
+            ['calendar:calendar:updated', json_encode($thirdExpectedData)]
+        ];
+        $callIndex = 0;
+
         $this->publisher
             ->expects($this->exactly(3))
             ->method('publish')
-            ->withConsecutive(
-                ['calendar:calendar:updated', json_encode($firstExpectedData)],
-                ['calendar:calendar:updated', json_encode($secondfirstExpectedData)],
-                ['calendar:calendar:updated', json_encode($thirdExpectedData)]
-            );
+            ->willReturnCallback(function($topic, $data) use (&$expectedCalls, &$callIndex) {
+                $this->assertEquals($expectedCalls[$callIndex][0], $topic);
+                $this->assertEquals($expectedCalls[$callIndex][1], $data);
+                $callIndex++;
+            });
 
         $this->plugin->updatePublicRight('/' . self::PATH);
     }
@@ -227,6 +236,7 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
     }
 }
 
+#[\AllowDynamicProperties]
 class ShareeSimple {
     public $principal;
     public $access;

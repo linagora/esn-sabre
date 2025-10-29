@@ -13,6 +13,7 @@ use \Sabre\DAV\Server;
  * headers and call the correct handlers accordingly
  *
  */
+#[\AllowDynamicProperties]
 class XHttpMethodOverridePlugin extends ServerPlugin {
     /**
      * reference to server class

@@ -196,6 +196,47 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     }
 
     /**
+     * Check if we have our own significant changes (SUMMARY, LOCATION, DESCRIPTION)
+     * This is needed because Sabre/DAV 4.x may not mark these as significantChange
+     *
+     * @param ITip\Message $iTipMessage
+     * @return bool
+     */
+    private function hasOwnSignificantChanges(ITip\Message $iTipMessage) {
+        // Only check for updates, not new events or cancellations
+        if ($this->isNewEvent || $iTipMessage->method !== 'REQUEST') {
+            return false;
+        }
+
+        // If we don't have the former event, we can't detect changes
+        if (!$this->formerEventICal) {
+            return false;
+        }
+
+        try {
+            $formerEvent = Reader::read($this->formerEventICal);
+            $currentEvent = $iTipMessage->message;
+
+            $previousEventVEvents = $this->getSequencePerVEvent($formerEvent);
+            $currentEventVEvents = $this->getSequencePerVEvent($currentEvent);
+
+            // Check each VEVENT for property changes
+            foreach ($currentEventVEvents as $recurrenceId => $currentVEvent) {
+                if (isset($previousEventVEvents[$recurrenceId])) {
+                    if ($this->hasPropertyChanges($previousEventVEvents[$recurrenceId], $currentVEvent)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        } catch (\Exception $e) {
+            // If we can't parse, assume no changes
+            return false;
+        }
+    }
+
+    /**
      * Check if IMip notification should be done
      *
      * @param ITip\Message $iTipMessage
@@ -205,8 +246,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
      */
     private function checkPreconditions(ITip\Message $iTipMessage, int $matched, $principalUri) {
         // Not sending any emails if the system considers the update
-        // insignificant.
-        if (!$iTipMessage->significantChange) {
+        // insignificant AND we don't detect any property changes
+        if (!$iTipMessage->significantChange && !$this->hasOwnSignificantChanges($iTipMessage)) {
             if (!$iTipMessage->scheduleStatus) {
                 $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_PENDING;
             }

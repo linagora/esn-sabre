@@ -74,11 +74,6 @@ RUN echo "daemon off;" >> /etc/nginx/nginx.conf && \
 # Set up Sabre DAV
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --filename=composer
 
-# Set up Nginx
-RUN echo "daemon off;" >> /etc/nginx/nginx.conf
-RUN ln -sf /dev/stderr /var/log/nginx/error.log
-RUN ln -sf /dev/stdout /var/log/nginx/access.log
-
 # Copy composer from official image
 COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
 

@@ -120,4 +120,6 @@ RUN cp -v docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh && \
 
 EXPOSE 80
 
+RUN cat /etc/nginx/nginx.conf
+
 CMD ["sh", "./scripts/start.sh"]

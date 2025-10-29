@@ -41,7 +41,7 @@ RUN apt-get update && \
     pkg-config \
     git && \
   # Compile MongoDB extension
-  pecl install mongodb-1.15.0 && \
+  pecl install mongodb-2.1.4 && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini && \
   # Remove build tools to reduce image size
@@ -75,10 +75,6 @@ RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fp
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf && \
     ln -sf /dev/stderr /var/log/nginx/error.log && \
     ln -sf /dev/stdout /var/log/nginx/access.log
-
-RUN pecl install mongodb-2.1.4 \
-    && echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini \
-    && echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini
 
 # Set up Sabre DAV
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --filename=composer

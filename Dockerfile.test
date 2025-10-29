@@ -90,13 +90,7 @@ COPY . /var/www
 # Install dependencies without dev packages (using install to respect composer.lock)
 RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject' && \
     composer clearcache && \
-    composer install --no-dev --optimize-autoloader --no-interaction && \
-    # Clean up composer cache and remove git
-    rm -rf /root/.composer/cache && \
-    apt-get purge -y git && \
-    apt-get autoremove -y && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    composer install --no-dev --optimize-autoloader --no-interaction
 
 # Configure application
 RUN cp -v docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh && \

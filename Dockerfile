@@ -82,18 +82,13 @@ RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fp
   sed -i "s/error_log = \/var\/log\/php${PHPVERSION}-fpm.log/error_log = \/proc\/self\/fd\/2/" /etc/php/${PHPVERSION}/fpm/php-fpm.conf && \
   sed -i "s/;catch_workers_output = yes/catch_workers_output = yes/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf
 
+# Set up Sabre DAV
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --filename=composer
+
 # Set up Nginx (combine RUN commands)
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf && \
     ln -sf /dev/stderr /var/log/nginx/error.log && \
     ln -sf /dev/stdout /var/log/nginx/access.log
-
-# Set up Sabre DAV
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --filename=composer
-
-# Set up Nginx
-RUN echo "daemon off;" >> /etc/nginx/nginx.conf
-RUN ln -sf /dev/stderr /var/log/nginx/error.log
-RUN ln -sf /dev/stdout /var/log/nginx/access.log
 
 # Copy composer from official image
 COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer

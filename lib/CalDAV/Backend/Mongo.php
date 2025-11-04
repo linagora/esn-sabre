@@ -818,7 +818,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
             }
 
-            $collection->updateMany($query, [ '$set' => $newValues ]);
+            $collection->updateOne($query, [ '$set' => $newValues ]);
 
             $this->eventEmitter->emit('esn:subscriptionUpdated', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
 

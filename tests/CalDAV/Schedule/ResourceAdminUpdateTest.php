@@ -233,7 +233,7 @@ ICS;
         // Create same event in resource calendar (as it would be delivered by iTIP)
         $this->caldavBackend->createCalendarObject($this->resourceCalendar['id'], $eventUid . '.ics', $eventData);
 
-        // Now, Bob (admin) updates the resource's PARTSTAT to ACCEPTED
+        // Now, the admin user updates the resource's PARTSTAT to ACCEPTED
         $updatedEventData = <<<ICS
 BEGIN:VCALENDAR
 VERSION:2.0
@@ -256,8 +256,6 @@ ICS;
         $this->server->httpRequest = new \Sabre\HTTP\Request('PUT', '/' . $path);
         $this->server->httpRequest->setBody($updatedEventData);
 
-        // Track iTIP messages by capturing deliver() calls
-        $deliveredMessages = [];
         $schedulePlugin = null;
         foreach ($this->server->getPlugins() as $plugin) {
             if ($plugin instanceof \ESN\CalDAV\Schedule\Plugin) {

@@ -37,9 +37,11 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 return null;
             }
 
-            if ($parts[1] == 'resources' && isset($obj['domain'])) {
-                $domain = $this->db->domains->findOne([ '_id' => $obj[ 'domain' ]]);
-                $obj['domain'] = $domain;
+            if ($parts[1] == 'resources') {
+                if (isset($obj['domain'])) {
+                    $domain = $this->db->domains->findOne([ '_id' => $obj[ 'domain' ]]);
+                    $obj['domain'] = $domain;
+                }
             } else if ($parts[1] == 'users' && !empty($obj[ 'domains' ])) {
                 $domainIds = array_column((array) $obj[ 'domains' ], 'domain_id');
 

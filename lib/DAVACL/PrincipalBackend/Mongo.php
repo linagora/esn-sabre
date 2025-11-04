@@ -5,6 +5,8 @@ namespace ESN\DAVACL\PrincipalBackend;
 use \ESN\Utils\Utils as Utils;
 
 class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
+    private $principalCache = [];
+
     function __construct($db) {
         $this->db = $db;
         $this->collectionMap = [
@@ -28,12 +30,19 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     function getPrincipalByPath($path) {
+        // Check cache first
+        if (isset($this->principalCache[$path])) {
+            return $this->principalCache[$path];
+        }
+
         $parts = explode('/', $path);
         if ($parts[0] == 'principals' && isset($this->collectionMap[$parts[1]]) && count($parts) == 3) {
             $collection = $this->collectionMap[$parts[1]];
             $obj = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($parts[2]) ]);
 
             if (!$obj) {
+                // Cache null result to avoid repeated lookups of non-existent principals
+                $this->principalCache[$path] = null;
                 return null;
             }
 
@@ -49,8 +58,12 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 $obj['domains'] = $domains;
             }
 
-            return $this->objectToPrincipal($obj, $parts[1]);
+            $principal = $this->objectToPrincipal($obj, $parts[1]);
+            $this->principalCache[$path] = $principal;
+            return $principal;
         } else {
+            // Cache null result for invalid paths
+            $this->principalCache[$path] = null;
             return null;
         }
     }

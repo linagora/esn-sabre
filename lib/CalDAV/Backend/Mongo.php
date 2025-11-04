@@ -133,7 +133,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
                 $calendar = $calendars[$calendarId];
                 $mergedData = array_merge($instance, [
-                    'id' => [new \MongoDB\BSON\ObjectId($calendarId), $instance['_id']],
+                    'id' => [$calendarId, (string) $instance['_id']],
                     'uri' => $instance['uri'],
                     'principaluri' => $principalUri
                 ]);
@@ -156,14 +156,32 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 $resultByPrincipal[$principalUri][] = $mergedData;
             }
 
-            // Sort by calendar order
+            // Sort by calendar order (same as getCalendarsForUser)
             usort($resultByPrincipal[$principalUri], function($a, $b) {
-                $orderA = isset($a['{http://calendarserver.org/ns/}getctag']) ?
-                    (int)$a['{http://calendarserver.org/ns/}getctag'] : 0;
-                $orderB = isset($b['{http://calendarserver.org/ns/}getctag']) ?
-                    (int)$b['{http://calendarserver.org/ns/}getctag'] : 0;
+                $orderA = isset($a['{http://apple.com/ns/ical/}calendar-order']) ?
+                    (int)$a['{http://apple.com/ns/ical/}calendar-order'] : 0;
+                $orderB = isset($b['{http://apple.com/ns/ical/}calendar-order']) ?
+                    (int)$b['{http://apple.com/ns/ical/}calendar-order'] : 0;
                 return $orderA - $orderB;
             });
+
+            // Reorder default calendar to be first (same logic as getCalendarsForUser)
+            $defaultCalendarIndex = null;
+            foreach ($resultByPrincipal[$principalUri] as $index => $calendar) {
+                $principalId = explode('/', $principalUri)[2] ?? null;
+                $calendarId = is_array($calendar['id']) ? $calendar['id'][0] : null;
+
+                if ($principalId && $calendarId && $principalId === $calendarId) {
+                    $defaultCalendarIndex = $index;
+                    break;
+                }
+            }
+
+            if ($defaultCalendarIndex !== null && $defaultCalendarIndex > 0) {
+                $defaultCalendar = $resultByPrincipal[$principalUri][$defaultCalendarIndex];
+                array_splice($resultByPrincipal[$principalUri], $defaultCalendarIndex, 1);
+                array_unshift($resultByPrincipal[$principalUri], $defaultCalendar);
+            }
         }
 
         return $resultByPrincipal;

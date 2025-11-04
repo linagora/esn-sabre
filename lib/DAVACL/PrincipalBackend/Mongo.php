@@ -30,8 +30,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     function getPrincipalByPath($path) {
-        // Check cache first
-        if (isset($this->principalCache[$path])) {
+        // Check cache first (use array_key_exists to properly handle cached null values)
+        if (array_key_exists($path, $this->principalCache)) {
             return $this->principalCache[$path];
         }
 

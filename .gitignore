@@ -5,3 +5,5 @@ composer.lock
 /config.json
 .idea
 .vscode
+CLAUDE.md
+UPGRADE_NOTES.md

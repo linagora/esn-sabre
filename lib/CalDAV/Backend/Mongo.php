@@ -55,6 +55,120 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return $this->eventEmitter;
     }
 
+    /**
+     * Get calendars for multiple users in a single batch query
+     * Returns array indexed by principalUri
+     *
+     * @param array $principalUris Array of principal URIs
+     * @return array Map of principalUri => calendars array
+     */
+    function getCalendarsForUsers(array $principalUris) {
+        if (empty($principalUris)) {
+            return [];
+        }
+
+        $fields = array_values($this->propertyMap);
+        $fields[] = 'calendarid';
+        $fields[] = 'uri';
+        $fields[] = 'synctoken';
+        $fields[] = 'components';
+        $fields[] = 'principaluri';
+        $fields[] = 'transparent';
+        $fields[] = 'access';
+        $fields[] = 'share_invitestatus';
+
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+
+        // Fetch all calendar instances for all principals in one query
+        $query = [ 'principaluri' => [ '$in' => $principalUris ] ];
+        $projection = array_fill_keys($fields, 1);
+        $options = [
+            'projection' => $projection,
+            'sort' => ['calendarorder' => 1]
+        ];
+
+        $res = $collection->find($query, $options);
+
+        $calendarInstancesByPrincipal = [];
+        $calendarIds = [];
+
+        foreach ($res as $row) {
+            $principalUri = $row['principaluri'];
+            $calendarId = (string) $row['calendarid'];
+
+            if (!isset($calendarInstancesByPrincipal[$principalUri])) {
+                $calendarInstancesByPrincipal[$principalUri] = [];
+            }
+
+            $calendarIds[] = new \MongoDB\BSON\ObjectId($calendarId);
+            // Convert MongoDB document to array
+            $calendarInstancesByPrincipal[$principalUri][$calendarId] = (array) $row;
+        }
+
+        // Fetch all calendar data in one query
+        $collection = $this->db->selectCollection($this->calendarTableName);
+        $query = [ '_id' => [ '$in' => $calendarIds ] ];
+        $projection = [
+            '_id' => 1,
+            'synctoken' => 1,
+            'components' => 1
+        ];
+        $result = $collection->find($query, [ 'projection' => $projection ]);
+
+        $calendars = [];
+        foreach ($result as $row) {
+            // Convert MongoDB document to array
+            $calendars[(string) $row['_id']] = (array) $row;
+        }
+
+        // Merge calendar instances with calendar data for each principal
+        $resultByPrincipal = [];
+        foreach ($calendarInstancesByPrincipal as $principalUri => $instances) {
+            $resultByPrincipal[$principalUri] = [];
+
+            foreach ($instances as $calendarId => $instance) {
+                if (!isset($calendars[$calendarId])) {
+                    continue;
+                }
+
+                $calendar = $calendars[$calendarId];
+                $mergedData = array_merge($instance, [
+                    'id' => [new \MongoDB\BSON\ObjectId($calendarId), $instance['_id']],
+                    'uri' => $instance['uri'],
+                    'principaluri' => $principalUri
+                ]);
+
+                // Merge properties from calendar
+                foreach ($this->propertyMap as $xmlName => $dbName) {
+                    if (isset($calendar[$dbName])) {
+                        $mergedData[$xmlName] = $calendar[$dbName];
+                    }
+                }
+
+                if (isset($calendar['synctoken'])) {
+                    $mergedData['{DAV:}sync-token'] = $calendar['synctoken'];
+                    $mergedData['{http://sabredav.org/ns}sync-token'] = $calendar['synctoken'];
+                }
+
+                $mergedData['{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set'] =
+                    new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet((array) $calendar['components']);
+
+                $resultByPrincipal[$principalUri][] = $mergedData;
+            }
+
+            // Sort by calendar order
+            usort($resultByPrincipal[$principalUri], function($a, $b) {
+                $orderA = isset($a['{http://calendarserver.org/ns/}getctag']) ?
+                    (int)$a['{http://calendarserver.org/ns/}getctag'] : 0;
+                $orderB = isset($b['{http://calendarserver.org/ns/}getctag']) ?
+                    (int)$b['{http://calendarserver.org/ns/}getctag'] : 0;
+                return $orderA - $orderB;
+            });
+        }
+
+        return $resultByPrincipal;
+    }
+
     function getCalendarsForUser($principalUri) {
         $fields = array_values($this->propertyMap);
         $fields[] = 'calendarid';

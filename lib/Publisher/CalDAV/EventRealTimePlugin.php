@@ -238,12 +238,29 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     private function notifyInvites($invites, $dataMessage, $options) {
+        // Collect all principal URIs for batch fetching
+        $principalUris = [];
+        $validInvites = [];
+
         foreach($invites as $user) {
             if($user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
                 continue;
             }
+            $principalUris[] = $user->principal;
+            $validInvites[] = $user;
+        }
 
-            $calendars = $this->caldavBackend->getCalendarsForUser($user->principal);
+        if (empty($validInvites)) {
+            return;
+        }
+
+        // Batch fetch calendars for all invited users in a single query
+        $calendarsByPrincipal = $this->caldavBackend->getCalendarsForUsers($principalUris);
+
+        foreach($validInvites as $user) {
+            $calendars = $calendarsByPrincipal[$user->principal] ?? [];
+            $calendarUri = null;
+            $eventCalendar = null;
 
             foreach($calendars as $calendarUser) {
                 if($calendarUser['id'][0] == $options['calendarid']) {
@@ -251,7 +268,12 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
                     list(,, $userId) = explode('/', $user->principal);
                     $eventCalendar = $this->server->tree->getNodeForPath('calendars/' . $userId . '/' . $calendarUri);
+                    break;
                 }
+            }
+
+            if ($calendarUri === null) {
+                continue;
             }
 
             $vCalendar = $dataMessage['event'];

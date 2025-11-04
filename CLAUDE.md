@@ -1,0 +1,1 @@
+- Les tests ne se lancent que avec "./run_test.sh --skip-java", éventuellement avec --filter=. C'est la CI qui fait passer les tests Java

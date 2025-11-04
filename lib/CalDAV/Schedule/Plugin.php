@@ -28,10 +28,16 @@ use
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     private $logger;
+    private $principalBackend;
 
-    public function __construct() {
+    public function __construct($principalBackend = null) {
         $this->logger = new Logger('esn-sabre');
         $this->logger->pushHandler(new StreamHandler('php://stderr', Logger::DEBUG));
+        $this->principalBackend = $principalBackend;
+    }
+
+    public function initialize(\Sabre\DAV\Server $server) {
+        parent::initialize($server);
     }
 
     private function scheduleReply(RequestInterface $request) {
@@ -372,6 +378,28 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $owner = $calendarNode->getOwner();
         if ($owner === null) {
             return [];
+        }
+
+        // For resource principals, get email address directly from principal properties
+        // to avoid issues with getAddressesForPrincipal() failing (issue #195)
+        if (strpos($owner, 'principals/resources/') === 0 && $this->principalBackend) {
+            if (method_exists($this->principalBackend, 'getPrincipalByPath')) {
+                try {
+                    $principalInfo = $this->principalBackend->getPrincipalByPath($owner);
+                    if ($principalInfo && isset($principalInfo['{http://sabredav.org/ns}email-address'])) {
+                        $email = $principalInfo['{http://sabredav.org/ns}email-address'];
+                        if (is_string($email) && !empty($email)) {
+                            return ['mailto:' . $email];
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // Log but continue to try standard method
+                    $this->logger->debug('Failed to get resource email from principal backend', [
+                        'principal' => $owner,
+                        'exception' => get_class($e) . ': ' . $e->getMessage()
+                    ]);
+                }
+            }
         }
 
         try {

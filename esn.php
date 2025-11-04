@@ -121,7 +121,7 @@ $calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend, $sche
 $tree = [
     new Sabre\DAV\SimpleCollection(PRINCIPALS_COLLECTION, [
       new ESN\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_USERS),
-      new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_RESOURCES),
+      new ESN\CalDAV\Principal\ResourceCollection($principalBackend, PRINCIPALS_RESOURCES),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_TECHNICAL_USER),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_DOMAINS)
     ]),
@@ -216,7 +216,7 @@ $server->addPlugin(new Sabre\CalDAV\SharingPlugin());
 
 // Calendar scheduling support
 $server->addPlugin(
-    new ESN\CalDAV\Schedule\Plugin()
+    new ESN\CalDAV\Schedule\Plugin($principalBackend)
 );
 
 // WebDAV-Sync plugin

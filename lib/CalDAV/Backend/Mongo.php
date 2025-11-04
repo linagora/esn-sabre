@@ -285,6 +285,20 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $supportedProperties[] = '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp';
 
         $propPatch->handle($supportedProperties, function($mutations) use ($calendarId, $instanceId) {
+            $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+            $query = [ '_id' => new \MongoDB\BSON\ObjectId($instanceId) ];
+            $projection = [
+                'uri' => 1,
+                'principaluri' => 1
+            ];
+
+            // Fetch data BEFORE update to avoid redundant query
+            $row = $collection->findOne($query, [ 'projection' => $projection ]);
+
+            if (!$row) {
+                return false;
+            }
+
             $newValues = [];
             foreach($mutations as $propertyName=>$propertyValue) {
 
@@ -301,18 +315,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
             }
 
-            $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-            $query = [ '_id' => new \MongoDB\BSON\ObjectId($instanceId) ];
             $collection->updateOne($query, [ '$set' => $newValues ]);
             $this->addChange($calendarId, "", 2);
-
-            $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-            $query = [ '_id' => new \MongoDB\BSON\ObjectId($instanceId) ];
-            $projection = [
-                'uri' => 1,
-                'principaluri' => 1
-            ];
-            $row = $collection->findOne($query, [ 'projection' => $projection ]);
 
             $this->eventEmitter->emit('esn:calendarUpdated', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
 
@@ -787,6 +791,20 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $supportedProperties[] = '{http://calendarserver.org/ns/}source';
 
         $propPatch->handle($supportedProperties, function($mutations) use ($subscriptionId) {
+            $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
+            $query = [ '_id' => new \MongoDB\BSON\ObjectId($subscriptionId) ];
+            $projection = [
+                'uri' => 1,
+                'principaluri' => 1
+            ];
+
+            // Fetch data BEFORE update to avoid redundant query
+            $row = $collection->findOne($query, [ 'projection' => $projection ]);
+
+            if (!$row) {
+                return false;
+            }
+
             $newValues = [];
             $newValues['lastmodified'] = time();
 
@@ -800,15 +818,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
             }
 
-            $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
-            $query = [ '_id' => new \MongoDB\BSON\ObjectId($subscriptionId) ];
-            $projection = [
-                'uri' => 1,
-                'principaluri' => 1
-            ];
             $collection->updateMany($query, [ '$set' => $newValues ]);
-
-            $row = $collection->findOne($query, [ 'projection' => $projection ]);
 
             $this->eventEmitter->emit('esn:subscriptionUpdated', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
 

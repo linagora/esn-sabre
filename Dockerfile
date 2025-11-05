@@ -20,9 +20,9 @@ LABEL maintainer="Linagora Folks <openpaas@linagora.com>"
 ENV PHPVERSION=7.4
 
 # Copy PHP configuration files first (these rarely change)
-ADD 20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
-#ADD 05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini
-#ADD 05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.ini
+ADD ./docker/config/20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
+#ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini
+#ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.ini
 
 # Fix for CI environments with clock skew issues
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
@@ -83,8 +83,7 @@ RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fp
   sed -i "s/;catch_workers_output = yes/catch_workers_output = yes/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf
 
 # Set up Nginx (combine RUN commands)
-RUN echo "daemon off;" >> /etc/nginx/nginx.conf && \
-    ln -sf /dev/stderr /var/log/nginx/error.log && \
+RUN ln -sf /dev/stderr /var/log/nginx/error.log && \
     ln -sf /dev/stdout /var/log/nginx/access.log
 
 # Copy composer from official image
@@ -108,7 +107,8 @@ RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject' && 
 
 # Configure application
 RUN cp -v docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh && \
-    cp -v docker/config/nginx.conf /etc/nginx/sites-available/default && \
+    cp -v docker/config/nginx.conf /etc/nginx/nginx.conf && \
+    cp -v docker/config/default.conf /etc/nginx/sites-available/default && \
     cp -v docker/supervisord.conf /etc/supervisor/conf.d/ && \
     rm -rf html && \
     chown -R www-data:www-data /var/www && \

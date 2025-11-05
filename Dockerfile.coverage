@@ -46,7 +46,7 @@ RUN pecl install mongodb-1.9.0 \
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --filename=composer
 
 # Setup shared volumes
-RUN ln -sf /dev/stdout /var/log/nginx/access.log  && \
+RUN ln -sf /dev/stdout /var/log/nginx/access.log && \
     ln -sf /dev/stderr /var/log/nginx/error.log
 
 COPY . /var/www

@@ -159,8 +159,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return null;
         }
 
-        // Fetch full user data to enable cross-caching with principalCache
-        $projection = ['_id' => 1, 'firstname' => 1, 'lastname' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1, 'domains' => 1];
+        $projection = ['_id' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1];
         $query = ['accounts.emails' => strtolower($email)];
 
         $user = $this->db->users->findOne($query, ['projection' => $projection]);
@@ -184,21 +183,6 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
 
         $userId = $user['_id'];
         $this->emailCache[$email] = $userId;
-
-        // Cross-cache: save principal to principalCache
-        $principalPath = 'principals/users/' . (string)$userId;
-        if (!array_key_exists($principalPath, $this->principalCache)) {
-            // Fetch full domain data like in getPrincipalByPath
-            if (!empty($user['domains'])) {
-                $domainIds = array_column((array) $user['domains'], 'domain_id');
-                $domains = $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]);
-                $user['domains'] = $domains;
-            }
-
-            $principal = $this->objectToPrincipal($user, 'users');
-            $this->principalCache[$principalPath] = $principal;
-        }
-
         return $userId;
     }
 

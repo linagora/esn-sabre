@@ -66,7 +66,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
     function testDefaultCalendarCreatedEvenWithDelegatedCalendar() {
         $backend = $this->getBackend();
         $userId = '54b64eadf6d7d8e41d263e0f';
-        $principalUri = 'principals/user/' . $userId;
+        $principalUri = 'principals/users/' . $userId;
 
         // Simulate a delegated calendar (e.g., from being a resource admin)
         // by manually creating a calendar with a different URI

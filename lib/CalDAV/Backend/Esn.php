@@ -57,6 +57,10 @@ class Esn extends Mongo {
 
         // Extract userId from principalUri (e.g., 'principals/users/123' -> '123')
         $principalExploded = explode('/', $principalUri);
+        if (count($principalExploded) < 3) {
+            // Invalid principalUri format - return calendars as-is
+            return $calendars;
+        }
         $userId = $principalExploded[2];
 
         // Check if default calendar exists

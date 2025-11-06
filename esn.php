@@ -214,11 +214,6 @@ $server->addPlugin(
 $server->addPlugin(new ESN\DAV\Sharing\Plugin());
 $server->addPlugin(new Sabre\CalDAV\SharingPlugin());
 
-// Calendar scheduling support
-$server->addPlugin(
-    new ESN\CalDAV\Schedule\Plugin($principalBackend)
-);
-
 // WebDAV-Sync plugin
 $server->addPlugin(new Sabre\DAV\Sync\Plugin());
 
@@ -262,9 +257,9 @@ if (!empty($config['amqp']['host'])) {
 }
 
 // Calendar scheduling support (must be after AMQP initialization)
-$server->addPlugin(
-    new ESN\CalDAV\Schedule\Plugin($AMQPPublisher, $scheduleAsync)
-);
+$schedulePlugin = new ESN\CalDAV\Schedule\Plugin($principalBackend, $AMQPPublisher, $scheduleAsync);
+$schedulePlugin->initialize($server);
+$server->addPlugin($schedulePlugin);
 
 $server->addPlugin(new ESN\CalDAV\Schedule\ITipPlugin());
 

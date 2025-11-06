@@ -6,12 +6,12 @@ use Sabre\DAV\Server;
 use Sabre\HTTP\Request;
 use Sabre\HTTP\Response;
 
-class IMipCallbackPluginTest extends \PHPUnit_Framework_TestCase {
+class IMipCallbackPluginTest extends \PHPUnit\Framework\TestCase {
     private $plugin;
     private $server;
     private $schedulePlugin;
 
-    function setUp() {
+    function setUp(): void {
         $this->server = new Server();
 
         // Mock the schedule plugin

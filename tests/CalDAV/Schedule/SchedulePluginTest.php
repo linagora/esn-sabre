@@ -11,7 +11,6 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
 
     function setUp(): void {
         $server = new Server();
-
         $this->plugin = new Plugin();
         $this->plugin->initialize($server);
     }
@@ -47,16 +46,32 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
 
         $publishedMessage = null;
         $publishedTopic = null;
+        $publishedProperties = null;
 
         $amqpPublisher->expects($this->once())
-            ->method('publish')
-            ->will($this->returnCallback(function($topic, $message) use (&$publishedTopic, &$publishedMessage) {
+            ->method('publishWithProperties')
+            ->will($this->returnCallback(function($topic, $message, $properties) use (&$publishedTopic, &$publishedMessage, &$publishedProperties) {
                 $publishedTopic = $topic;
                 $publishedMessage = $message;
+                $publishedProperties = $properties;
             }));
+        
+        $mockAuthPlugin = $this->createMock(\Sabre\DAV\Auth\Plugin::class);
+        $mockAuthPlugin->method('getCurrentPrincipal')
+            ->willReturn('principals/users/testuser');
 
-        $server = new Server();
-        $plugin = new Plugin($amqpPublisher, true);
+        $server = $this->createMock(\Sabre\DAV\Server::class);
+        $server->method('getPlugin')
+            ->with('auth')
+            ->willReturn($mockAuthPlugin);
+
+        $mockHref = new \Sabre\DAV\Xml\Property\Href(['mailto:test@example.com']);
+        $server->method('getProperties')
+            ->willReturn([
+                '{urn:ietf:params:xml:ns:caldav}calendar-user-address-set' => $mockHref
+            ]);
+        
+        $plugin = new Plugin(null, $amqpPublisher, true);
         $plugin->initialize($server);
 
         $message = $this->newItipMessage('1');
@@ -73,6 +88,11 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals('VEVENT', $decoded['component']);
         $this->assertNotNull($decoded['message']);
 
+        $this->assertArrayHasKey('application_headers', $publishedProperties);
+        $headers = $publishedProperties['application_headers']->getNativeData();
+        $this->assertArrayHasKey('connectedUser', $headers);
+        $this->assertEquals('test@example.com', $headers['connectedUser']);
+
         // Verify scheduleStatus is set to pending (1.0)
         $this->assertEquals('1.0', $message->scheduleStatus);
     }
@@ -83,24 +103,25 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
             ->getMock();
 
         $amqpPublisher->expects($this->never())
-            ->method('publish');
+            ->method('publishWithProperties');
 
         $server = new Server();
-        $plugin = new Plugin($amqpPublisher, false);
+        $plugin = new Plugin(null, $amqpPublisher, false);
         $plugin->initialize($server);
 
         $message = $this->newItipMessage('1');
         $plugin->deliver($message);
+        $this->assertNotEquals('1.0', $message->scheduleStatus);
     }
 
     function testDeliverAsyncWithoutPublisherDoesNotPublish() {
         $server = new Server();
-        $plugin = new Plugin(null, true);
+        $plugin = new Plugin(null, null, true);
         $plugin->initialize($server);
 
         $message = $this->newItipMessage('1');
-        // This should not throw an error even though async=true but publisher is null
         $plugin->deliver($message);
+        $this->assertNotEquals('1.0', $message->scheduleStatus);
     }
 
     private function newItipMessage($sequence) {

@@ -1,9 +1,11 @@
 <?php
 namespace ESN\CalDAV\Schedule;
 
+use \PhpAmqpLib\Message\AMQPMessage;
 use ESN\Utils\Utils;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
+use \Sabre\DAV;
 use Sabre\CalDAV\ICalendarObject;
 use Sabre\CalDAV\Schedule\ISchedulingObject;
 use
@@ -27,11 +29,13 @@ use
  */
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     const ITIP_DELIVERY_TOPIC = 'calendar:itip:deliver';
+    const NS_CALDAV = 'urn:ietf:params:xml:ns:caldav';
 
     private $logger;
     private $principalBackend;
     protected $amqpPublisher;
     protected $scheduleAsync;
+    protected $server;
 
     public function __construct($principalBackend = null, $amqpPublisher = null, $scheduleAsync = false) {
         $this->logger = new Logger('esn-sabre');
@@ -43,6 +47,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     public function initialize(\Sabre\DAV\Server $server) {
         parent::initialize($server);
+        $this->server = $server;
     }
 
     private function scheduleReply(RequestInterface $request) {
@@ -75,14 +80,54 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 'uid' => $iTipMessage->uid,
                 'component' => $iTipMessage->component
             ];
+            $messageBody = json_encode($message);
+            $addresses = $this->getAddressesForPrincipal(
+                $this->server->getPlugin('auth')->getCurrentPrincipal()
+    
+            );
+            if (empty($addresses)) {
+                // Fallback to synchronous delivery if we can't determine connectedUser
+                parent::deliver($iTipMessage);
+                return;
+            }
+            $connectedUser = preg_replace('/^mailto:/i', '', $addresses[0]);
+            $properties = [
+                'application_headers' => new \PhpAmqpLib\Wire\AMQPTable([
+                    'connectedUser' => $connectedUser
+                ])
+            ];
 
-            $this->amqpPublisher->publish(self::ITIP_DELIVERY_TOPIC, json_encode($message));
+            $this->amqpPublisher->publishWithProperties(self::ITIP_DELIVERY_TOPIC, $messageBody, $properties);
 
             // Mark as pending since we're processing asynchronously
             $iTipMessage->scheduleStatus = '1.0'; // SCHEDSTAT_SUCCESS_PENDING
         } else {
             parent::deliver($iTipMessage);
         }
+    }
+
+    /**
+     * Returns a list of addresses that are associated with a principal.
+     *
+     * @param string $principal
+     * @return array
+     */
+    function getAddressesForPrincipal($principal) {
+        $CUAS = '{' . self::NS_CALDAV . '}calendar-user-address-set';
+
+        $properties = $this->server->getProperties(
+            $principal,
+            [$CUAS]
+        );
+
+        // If we can't find this information, we'll stop processing
+        if (!isset($properties[$CUAS])) {
+            return;
+        }
+
+        $addresses = $properties[$CUAS]->getHrefs();
+    
+        return $addresses;
     }
 
     /**

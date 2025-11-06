@@ -15,14 +15,9 @@ use \Sabre\DAV;
 class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
 
     protected $server;
-    private $adminLogin;
-    private $adminPassword;
 
     function __construct()
     {
-        // Read admin credentials from environment variables
-        $this->adminLogin = getenv('SABRE_ADMIN_LOGIN');
-        $this->adminPassword = getenv('SABRE_ADMIN_PASSWORD');
     }
 
     function initialize(DAV\Server $server)
@@ -58,12 +53,11 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
      */
     function imipCallback($request)
     {
-        // Verify basic auth with admin credentials
-        if (!$this->checkAdminAuth($request)) {
-            return $this->send(401, ['error' => 'Unauthorized: Admin credentials required']);
-        }
-
         $payload = json_decode($request->getBodyAsString());
+
+        if ($payload === null) {
+            return $this->send(400, ['error' => 'Invalid JSON: ' . $request->getBodyAsString()]);
+        }
 
         // Validate required fields
         if (!isset($payload->sender) || !isset($payload->recipient) ||
@@ -109,31 +103,6 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             error_log('IMipCallback error: ' . $e->getMessage());
             return $this->send(500, ['error' => 'Failed to process IMIP message: ' . $e->getMessage()]);
         }
-    }
-
-    /**
-     * Check if the request has valid admin basic auth credentials.
-     * If SABRE_ADMIN_LOGIN is not configured, auth check is skipped (for backward compatibility).
-     *
-     * @param $request
-     * @return bool
-     */
-    private function checkAdminAuth($request)
-    {
-        // If admin credentials are not configured, skip auth check
-        if (empty($this->adminLogin)) {
-            return true;
-        }
-
-        $auth = $request->getHeader('Authorization');
-        if (!$auth || strpos($auth, 'Basic ') !== 0) {
-            return false;
-        }
-
-        $credentials = base64_decode(substr($auth, 6));
-        list($username, $password) = explode(':', $credentials, 2);
-
-        return $username === $this->adminLogin && $password === $this->adminPassword;
     }
 
     private function send($code, $body, $setContentType = true)

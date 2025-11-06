@@ -148,6 +148,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     function getPrincipalIdByEmail($email) {
+        // Normalize email to lowercase for consistent cache keys and DB queries
+        $email = strtolower($email);
+
         // Check cache first (use array_key_exists to properly handle cached null values)
         if (array_key_exists($email, $this->emailCache)) {
             return $this->emailCache[$email];
@@ -160,17 +163,17 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         $projection = ['_id' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1];
-        $query = ['accounts.emails' => strtolower($email)];
+        $query = ['accounts.emails' => $email];
 
         $user = $this->db->users->findOne($query, ['projection' => $projection]);
 
         if (!$user) {
             // Try alternative query patterns
-            $altQuery = ['preferredEmail' => strtolower($email)];
+            $altQuery = ['preferredEmail' => $email];
             $user = $this->db->users->findOne($altQuery, ['projection' => $projection]);
 
             if (!$user) {
-                $altQuery2 = ['emails' => strtolower($email)];
+                $altQuery2 = ['emails' => $email];
                 $user = $this->db->users->findOne($altQuery2, ['projection' => $projection]);
 
                 if (!$user) {

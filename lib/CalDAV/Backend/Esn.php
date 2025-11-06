@@ -64,9 +64,10 @@ class Esn extends Mongo {
         $userId = $principalExploded[2];
 
         // Check if default calendar exists
+        // Check for both EVENTS_URI (new behavior) and userId (legacy behavior)
         $hasDefaultCalendar = false;
         foreach ($calendars as $calendar) {
-            if ($calendar['uri'] === $userId || $calendar['uri'] === self::EVENTS_URI) {
+            if ($calendar['uri'] === self::EVENTS_URI || $calendar['uri'] === $userId) {
                 $hasDefaultCalendar = true;
                 break;
             }
@@ -80,7 +81,7 @@ class Esn extends Mongo {
                 $properties['{DAV:}displayname'] = $principal['{DAV:}displayname'];
             }
 
-            parent::createCalendar($principalUri, $userId, $properties);
+            parent::createCalendar($principalUri, self::EVENTS_URI, $properties);
             $calendars = parent::getCalendarsForUser($principalUri);
         }
 

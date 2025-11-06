@@ -22,7 +22,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $calendars = $backend->getCalendarsForUser('principals/user/54b64eadf6d7d8e41d263e0f');
 
         $elementCheck = array(
-            'uri'               => '54b64eadf6d7d8e41d263e0f',
+            'uri'               => Esn::EVENTS_URI,
             '{DAV:}displayname' => '#default',
             '{urn:ietf:params:xml:ns:caldav}calendar-description' => '',
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
@@ -42,7 +42,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $calendars = $backend->getCalendarsForUser('principals/resources/resourceId');
 
         $elementCheck = array(
-            'uri'               => 'resourceId',
+            'uri'               => Esn::EVENTS_URI,
             '{DAV:}displayname' => 'resourceName',
             '{urn:ietf:params:xml:ns:caldav}calendar-description' => '',
             '{urn:ietf:params:xml:ns:caldav}schedule-calendar-transp' => new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp('opaque'),
@@ -87,7 +87,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $delegatedCalendar = null;
 
         foreach ($calendars as $calendar) {
-            if ($calendar['uri'] === $userId || $calendar['uri'] === Esn::EVENTS_URI) {
+            if ($calendar['uri'] === Esn::EVENTS_URI) {
                 $defaultCalendar = $calendar;
             } elseif ($calendar['uri'] === 'delegated-resource-calendar') {
                 $delegatedCalendar = $calendar;
@@ -96,6 +96,6 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
 
         $this->assertNotNull($defaultCalendar, 'Default calendar should be created');
         $this->assertNotNull($delegatedCalendar, 'Delegated calendar should still exist');
-        $this->assertEquals($userId, $defaultCalendar['uri'], 'Default calendar URI should match userId');
+        $this->assertEquals(Esn::EVENTS_URI, $defaultCalendar['uri'], 'Default calendar URI should be EVENTS_URI');
     }
 }

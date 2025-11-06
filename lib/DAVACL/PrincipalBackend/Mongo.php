@@ -6,6 +6,7 @@ use \ESN\Utils\Utils as Utils;
 
 class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     private $principalCache = [];
+    private $emailCache = [];
 
     function __construct($db) {
         $this->db = $db;
@@ -138,7 +139,14 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     function getPrincipalIdByEmail($email) {
+        // Check cache first (use array_key_exists to properly handle cached null values)
+        if (array_key_exists($email, $this->emailCache)) {
+            return $this->emailCache[$email];
+        }
+
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            // Cache null result to avoid repeated validation of invalid emails
+            $this->emailCache[$email] = null;
             return null;
         }
 
@@ -157,12 +165,16 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 $user = $this->db->users->findOne($altQuery2, ['projection' => $projection]);
 
                 if (!$user) {
+                    // Cache null result to avoid repeated lookups of non-existent emails
+                    $this->emailCache[$email] = null;
                     return null;
                 }
             }
         }
 
-        return $user['_id'];
+        $userId = $user['_id'];
+        $this->emailCache[$email] = $userId;
+        return $userId;
     }
 
     private function objectToPrincipal($obj, $type) {

@@ -44,10 +44,6 @@ class Esn extends Mongo {
      * Ensures a default calendar always exists for the principal.
      * If principal is a resource, calendar name is set to resource name.
      *
-     * This method now checks for the existence of a default calendar (not just an empty calendar list)
-     * to handle cases where a user has delegated calendars but no personal default calendar yet.
-     * See issue #206.
-     *
      * @param $principalUri
      * @return array of user calendar
      * @throws \Sabre\DAV\Exception throwed by parent::createCalendar()
@@ -55,32 +51,16 @@ class Esn extends Mongo {
     function getCalendarsForUser($principalUri) {
         $calendars = parent::getCalendarsForUser($principalUri);
 
-        // Extract userId from principalUri (e.g., 'principals/users/123' -> '123')
-        $principalExploded = explode('/', $principalUri);
-        if (count($principalExploded) < 3) {
-            // Invalid principalUri format - return calendars as-is
-            return $calendars;
-        }
-        $userId = $principalExploded[2];
-
-        // Check if default calendar exists
-        $hasDefaultCalendar = false;
-        foreach ($calendars as $calendar) {
-            if ($calendar['uri'] === $userId) {
-                $hasDefaultCalendar = true;
-                break;
-            }
-        }
-
-        if (!$hasDefaultCalendar) {
-            // Create default calendar
+        if (count($calendars) == 0) {
             $properties = [];
+            $principalExploded = explode('/', $principalUri);
+
             if (Utils::isResourceFromPrincipal($principalUri)) {
                 $principal = $this->principalBackend->getPrincipalByPath($principalUri);
                 $properties['{DAV:}displayname'] = $principal['{DAV:}displayname'];
             }
 
-            parent::createCalendar($principalUri, $userId, $properties);
+            parent::createCalendar($principalUri, $principalExploded[2], $properties);
             $calendars = parent::getCalendarsForUser($principalUri);
         }
 

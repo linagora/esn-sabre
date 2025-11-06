@@ -28,8 +28,8 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
         $calendarSabre = new \Sabre\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
 
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
-        $sharedCalendarSabre =  $calendarSabre->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
+        $sharedCalendarSabre =  $calendarSabre->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $this->assertTrue($sharedCalendarESN->getACL() == $sharedCalendarSabre->getACL());
     }
@@ -210,8 +210,8 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
         $calendarSabre = new \Sabre\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
 
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
-        $sharedCalendarSabre =  $calendarSabre->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
+        $sharedCalendarSabre =  $calendarSabre->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $childACLOrig = $sharedCalendarSabre->getChildACL();
         array_push($childACLOrig, $this->getAuthentificated($sharedCalendarESN));
@@ -237,7 +237,7 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $childACLOrig = $sharedCalendarESN->getChildACL();
         $sharedCalendarESN->savePublicRight('{DAV:}write');
@@ -249,7 +249,7 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $privilege = 'privilege';
         $sharedCalendarESN->savePublicRight($privilege);
@@ -269,7 +269,7 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $privilege = 'privilege';
         $sharedCalendarESN->savePublicRight($privilege);
@@ -281,7 +281,7 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $privilege = '{DAV:}read';
         $sharedCalendarESN->savePublicRight($privilege);
@@ -293,7 +293,7 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $this->assertFalse($sharedCalendarESN->isPublic());
     }
@@ -302,7 +302,7 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $privilege = '';
         $sharedCalendarESN->savePublicRight($privilege);
@@ -314,7 +314,7 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $privilege = 'privilege';
         $sharedCalendarESN->savePublicRight($privilege);
@@ -346,7 +346,7 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $inviteStatus = 2;
         $this->assertEquals($sharedCalendarESN->getInviteStatus(), $inviteStatus);
@@ -356,13 +356,13 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $status = 5;
         $sharedCalendarESN->updateInviteStatus($status);
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $this->assertEquals($status, $sharedCalendarESN->getInviteStatus());
     }
@@ -371,7 +371,7 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $this->assertFalse($sharedCalendarESN->isSharedInstance());
     }
@@ -406,7 +406,7 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $backend = $this->getBackend();
 
         $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
-        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $sharedCalendarESN =  $calendarESN->getChild(\ESN\CalDAV\Backend\Esn::EVENTS_URI);
 
         $this->assertEquals($sharedCalendarESN->getOwner(), 'principals/user/54b64eadf6d7d8e41d263e0f');
     }

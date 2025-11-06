@@ -33,7 +33,12 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     function getPrincipalByPath($path) {
         // Check cache first (use array_key_exists to properly handle cached null values)
         if (array_key_exists($path, $this->principalCache)) {
-            return $this->principalCache[$path];
+            $cachedResult = $this->principalCache[$path];
+            // For cached objects, refresh domain data to avoid stale information
+            if ($cachedResult !== null && is_array($cachedResult)) {
+                return $this->refreshDomainData($cachedResult, $path);
+            }
+            return $cachedResult;
         }
 
         $parts = explode('/', $path);
@@ -367,5 +372,44 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         return $administrators;
+    }
+
+    private function refreshDomainData($principal, $path) {
+        $parts = explode('/', $path);
+
+        // Only refresh domain data for resources that have domain information
+        if ($parts[1] === 'resources' && isset($principal['{http://sabredav.org/ns}email-address'])) {
+            // Extract resource ID from path
+            $resourceId = $parts[2];
+            $resource = $this->db->resources->findOne(
+                [ '_id' => new \MongoDB\BSON\ObjectId($resourceId) ],
+                [ 'projection' => [ 'domain' => 1 ]]
+            );
+
+            if ($resource && isset($resource['domain'])) {
+                $domain = $this->db->domains->findOne(
+                    [ '_id' => $resource['domain'] ],
+                    [ 'projection' => [ 'name' => 1 ]]
+                );
+
+                if ($domain) {
+                    // Update the email address with fresh domain data
+                    $principal['{http://sabredav.org/ns}email-address'] = $resourceId . '@' . $domain['name'];
+                }
+            }
+        }
+        // For users, domain data in groupPrincipals is also refreshed
+        else if ($parts[1] === 'users' && !empty($principal['groupPrincipals'])) {
+            foreach ($principal['groupPrincipals'] as &$groupPrincipal) {
+                // Refresh administrators and members for domain groups
+                $groupParts = explode('/', $groupPrincipal['uri']);
+                if ($groupParts[1] === 'domains') {
+                    $groupPrincipal['administrators'] = $this->getAdministratorsForGroup($groupPrincipal['uri']);
+                    $groupPrincipal['members'] = $this->getGroupMemberSet($groupPrincipal['uri']);
+                }
+            }
+        }
+
+        return $principal;
     }
 }

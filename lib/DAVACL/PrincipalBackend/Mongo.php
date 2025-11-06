@@ -33,9 +33,15 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             $collection = $this->collectionMap[$parts[1]];
             $obj = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($parts[2]) ]);
 
+            if (!$obj) {
+                return null;
+            }
+
             if ($parts[1] == 'resources') {
-                $domain = $this->db->domains->findOne([ '_id' => $obj[ 'domain' ]]);
-                $obj['domain'] = $domain;
+                if (isset($obj['domain'])) {
+                    $domain = $this->db->domains->findOne([ '_id' => $obj[ 'domain' ]]);
+                    $obj['domain'] = $domain;
+                }
             } else if ($parts[1] == 'users' && !empty($obj[ 'domains' ])) {
                 $domainIds = array_column((array) $obj[ 'domains' ], 'domain_id');
 
@@ -43,7 +49,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 $obj['domains'] = $domains;
             }
 
-            return $obj ? $this->objectToPrincipal($obj, $parts[1]) : null;
+            return $this->objectToPrincipal($obj, $parts[1]);
         } else {
             return null;
         }

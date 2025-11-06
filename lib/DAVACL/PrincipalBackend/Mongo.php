@@ -61,6 +61,15 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
 
             $principal = $this->objectToPrincipal($obj, $parts[1]);
             $this->principalCache[$path] = $principal;
+
+            // Cross-cache: save email to emailCache for users
+            if ($parts[1] == 'users' && isset($principal['{http://sabredav.org/ns}email-address'])) {
+                $email = strtolower($principal['{http://sabredav.org/ns}email-address']);
+                if (!array_key_exists($email, $this->emailCache)) {
+                    $this->emailCache[$email] = $obj['_id'];
+                }
+            }
+
             return $principal;
         } else {
             // Cache null result for invalid paths
@@ -150,7 +159,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return null;
         }
 
-        $projection = ['_id' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1];
+        // Fetch full user data to enable cross-caching with principalCache
+        $projection = ['_id' => 1, 'firstname' => 1, 'lastname' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1, 'domains' => 1];
         $query = ['accounts.emails' => strtolower($email)];
 
         $user = $this->db->users->findOne($query, ['projection' => $projection]);
@@ -174,6 +184,21 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
 
         $userId = $user['_id'];
         $this->emailCache[$email] = $userId;
+
+        // Cross-cache: save principal to principalCache
+        $principalPath = 'principals/users/' . (string)$userId;
+        if (!array_key_exists($principalPath, $this->principalCache)) {
+            // Fetch full domain data like in getPrincipalByPath
+            if (!empty($user['domains'])) {
+                $domainIds = array_column((array) $user['domains'], 'domain_id');
+                $domains = $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]);
+                $user['domains'] = $domains;
+            }
+
+            $principal = $this->objectToPrincipal($user, 'users');
+            $this->principalCache[$principalPath] = $principal;
+        }
+
         return $userId;
     }
 

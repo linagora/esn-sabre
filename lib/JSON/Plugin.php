@@ -924,55 +924,115 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
-        $paths = [];
-        foreach ($calendarObjectUris as $calendarObjectUri) {
-            $paths[] = $parentNodePath . '/' . $calendarObjectUri;
-        }
-
         $propertyList = [];
-        foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
-            $vObject = VObject\Reader::read($objProps[200][$props[0]]);
 
-            // If we have start and end date, we're getting an expanded list of occurrences between these dates
-            if ($start && $end) {
-                $expandedObject = $vObject->expand($start, $end);
+        // Use getMultipleCalendarObjects for batch fetching if available
+        if (method_exists($parentNode, 'getMultipleCalendarObjects')) {
+            $calendarObjects = $parentNode->getMultipleCalendarObjects($calendarObjectUris);
 
-                // Sabre's VObject doesn't return the RECURRENCE-ID in the first
-                // occurrence, we'll need to do this ourselves. We take advantage
-                // of the fact that the object getter for VEVENT will always return
-                // the first one.
-                $vevent = $expandedObject->VEVENT;
+            foreach ($calendarObjects as $calendarObject) {
+                $vObject = VObject\Reader::read($calendarObject['calendardata']);
 
-                // When an event has only RECURRENCE-ID exceptions without a master event (RRULE),
-                // the expand() method returns an empty VCALENDAR with no VEVENT.
-                // This happens when a user is invited to only one occurrence of a recurring event.
-                // In this case, we use the original unexpanded object and normalize it.
-                if (!is_object($vevent)) {
-                    // Convert dates to UTC to match expand() behavior
-                    // IMPORTANT: Must be done BEFORE removing VTIMEZONE, as conversion needs timezone info
-                    foreach ($vObject->VEVENT as $vevent) {
-                        $this->convertDateTimeToUTC($vevent, 'DTSTART');
-                        $this->convertDateTimeToUTC($vevent, 'DTEND');
-                    }
+                // If we have start and end date, we're getting an expanded list of occurrences between these dates
+                if ($start && $end) {
+                    $expandedObject = $vObject->expand($start, $end);
 
-                    // Remove VTIMEZONE to match expand() behavior
-                    unset($vObject->VTIMEZONE);
-                    // Keep the original vObject instead of the empty expanded one
-                } else {
-                    $vObject = $expandedObject;
+                    // Sabre's VObject doesn't return the RECURRENCE-ID in the first
+                    // occurrence, we'll need to do this ourselves. We take advantage
+                    // of the fact that the object getter for VEVENT will always return
+                    // the first one.
+                    $vevent = $expandedObject->VEVENT;
 
-                    if (isset($vevent->RRULE) && !isset($vevent->{'RECURRENCE-ID'})) {
-                        $recurid = clone $vevent->DTSTART;
-                        $recurid->name = 'RECURRENCE-ID';
-                        $vevent->add($recurid);
+                    // When an event has only RECURRENCE-ID exceptions without a master event (RRULE),
+                    // the expand() method returns an empty VCALENDAR with no VEVENT.
+                    // This happens when a user is invited to only one occurrence of a recurring event.
+                    // In this case, we use the original unexpanded object and normalize it.
+                    if (!is_object($vevent)) {
+                        // Convert dates to UTC to match expand() behavior
+                        // IMPORTANT: Must be done BEFORE removing VTIMEZONE, as conversion needs timezone info
+                        foreach ($vObject->VEVENT as $vevent) {
+                            $this->convertDateTimeToUTC($vevent, 'DTSTART');
+                            $this->convertDateTimeToUTC($vevent, 'DTEND');
+                        }
+
+                        // Remove VTIMEZONE to match expand() behavior
+                        unset($vObject->VTIMEZONE);
+                        // Keep the original vObject instead of the empty expanded one
+                    } else {
+                        $vObject = $expandedObject;
+
+                        if ($vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
+                            $recurid = clone $vevent->DTSTART;
+                            $recurid->name = 'RECURRENCE-ID';
+                            $vevent->add($recurid);
+                        }
                     }
                 }
+
+                $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+
+                // Reconstruct objProps structure to match expected format
+                $objProps = [
+                    200 => [
+                        $props[0] => $vObject->jsonSerialize(),
+                        $props[1] => $calendarObject['etag']
+                    ],
+                    'href' => $baseUri . $parentNodePath . '/' . $calendarObject['uri']
+                ];
+
+                $propertyList[] = $objProps;
+            }
+        } else {
+            // Fall back to sequential queries for nodes that don't support batch fetching
+            $paths = [];
+            foreach ($calendarObjectUris as $calendarObjectUri) {
+                $paths[] = $parentNodePath . '/' . $calendarObjectUri;
             }
 
-            $vevent = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
-            $objProps[200][$props[0]] = $vObject->jsonSerialize();
+            foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
+                $vObject = VObject\Reader::read($objProps[200][$props[0]]);
 
-            $propertyList[] = $objProps;
+                // If we have start and end date, we're getting an expanded list of occurrences between these dates
+                if ($start && $end) {
+                    $expandedObject = $vObject->expand($start, $end);
+
+                    // Sabre's VObject doesn't return the RECURRENCE-ID in the first
+                    // occurrence, we'll need to do this ourselves. We take advantage
+                    // of the fact that the object getter for VEVENT will always return
+                    // the first one.
+                    $vevent = $expandedObject->VEVENT;
+
+                    // When an event has only RECURRENCE-ID exceptions without a master event (RRULE),
+                    // the expand() method returns an empty VCALENDAR with no VEVENT.
+                    // This happens when a user is invited to only one occurrence of a recurring event.
+                    // In this case, we use the original unexpanded object and normalize it.
+                    if (!is_object($vevent)) {
+                        // Convert dates to UTC to match expand() behavior
+                        // IMPORTANT: Must be done BEFORE removing VTIMEZONE, as conversion needs timezone info
+                        foreach ($vObject->VEVENT as $vevent) {
+                            $this->convertDateTimeToUTC($vevent, 'DTSTART');
+                            $this->convertDateTimeToUTC($vevent, 'DTEND');
+                        }
+
+                        // Remove VTIMEZONE to match expand() behavior
+                        unset($vObject->VTIMEZONE);
+                        // Keep the original vObject instead of the empty expanded one
+                    } else {
+                        $vObject = $expandedObject;
+
+                        if ($vevent->RRULE && !$vevent->{'RECURRENCE-ID'}) {
+                            $recurid = clone $vevent->DTSTART;
+                            $recurid->name = 'RECURRENCE-ID';
+                            $vevent->add($recurid);
+                        }
+                    }
+                }
+
+                $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+                $objProps[200][$props[0]] = $vObject->jsonSerialize();
+
+                $propertyList[] = $objProps;
+            }
         }
 
         return [

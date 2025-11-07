@@ -41,7 +41,7 @@ class Esn extends Mongo {
      *
      * Get user calendars.
      *
-     * If Principal doesn't have any calendar, a default one is created.
+     * Ensures a default calendar always exists for the principal.
      * If principal is a resource, calendar name is set to resource name.
      *
      * @param $principalUri
@@ -53,16 +53,14 @@ class Esn extends Mongo {
 
         if (count($calendars) == 0) {
             $properties = [];
+            $principalExploded = explode('/', $principalUri);
+
             if (Utils::isResourceFromPrincipal($principalUri)) {
                 $principal = $this->principalBackend->getPrincipalByPath($principalUri);
-
                 $properties['{DAV:}displayname'] = $principal['{DAV:}displayname'];
             }
 
-            // No calendars yet, inject our default calendars
-            $principalExploded = explode('/', $principalUri);
             parent::createCalendar($principalUri, $principalExploded[2], $properties);
-
             $calendars = parent::getCalendarsForUser($principalUri);
         }
 

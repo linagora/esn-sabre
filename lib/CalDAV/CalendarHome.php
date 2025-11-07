@@ -71,4 +71,8 @@ class CalendarHome extends \Sabre\CalDAV\CalendarHome {
     function getDuplicateCalendarObjectsByURI($uri) {
         return $this->caldavBackend->getDuplicateCalendarObjectsByURI($this->principalInfo['uri'], $uri);
     }
+
+    function getCalDAVBackend() {
+        return $this->caldavBackend;
+    }
 }

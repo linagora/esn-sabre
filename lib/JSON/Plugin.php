@@ -118,7 +118,23 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
         }
 
-        throw new DAV\Exception\NotFound('Unable to find user default calendar');
+        // No default calendar found - create it
+        // This handles the case where a user has delegated calendars but no personal default calendar yet (issue #206)
+        $backend = $node->getCalDAVBackend();
+        if ($backend instanceof \ESN\CalDAV\Backend\Esn) {
+            $properties = [];
+            if (Utils::isResourceFromPrincipal($user)) {
+                $principalBackend = $backend->getPrincipalBackend();
+                $principal = $principalBackend->getPrincipalByPath($user);
+                if ($principal) {
+                    $properties['{DAV:}displayname'] = $principal['{DAV:}displayname'];
+                }
+            }
+            $backend->createCalendar($user, $userId, $properties);
+            return $userId;
+        }
+
+        throw new DAV\Exception\NotFound('Unable to find or create user default calendar');
     }
 
     function beforeUnbind($path) {

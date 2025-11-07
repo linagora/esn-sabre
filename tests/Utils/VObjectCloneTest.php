@@ -2,12 +2,14 @@
 
 namespace ESN\Utils;
 
+use PHPUnit\Framework\TestCase;
+
 /**
  * Test for issue #178: Infinite loop when cloning VObject
  *
  * @medium
  */
-class VObjectCloneTest extends \PHPUnit_Framework_TestCase {
+class VObjectCloneTest extends TestCase {
 
     /**
      * Test that safeCloneVObject doesn't cause infinite recursion

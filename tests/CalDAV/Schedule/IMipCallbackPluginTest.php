@@ -11,9 +11,15 @@ class IMipCallbackPluginTest extends TestCase {
     private $plugin;
     private $server;
     private $schedulePlugin;
+    private $authBackend;
 
     function setUp(): void {
         $this->server = new Server();
+
+        // Mock the auth backend
+        $this->authBackend = $this->createMock(\Sabre\DAV\Auth\Backend\AbstractBasic::class);
+        $authPlugin = new \Sabre\DAV\Auth\Plugin($this->authBackend);
+        $this->server->addPlugin($authPlugin);
 
         // Mock the schedule plugin
         $this->schedulePlugin = $this->createMock(Plugin::class);
@@ -32,6 +38,36 @@ class IMipCallbackPluginTest extends TestCase {
         $this->assertContains('IMIPCALLBACK', $methods);
     }
 
+    function testImipCallbackRequiresAuthentication() {
+        $payload = [
+            'sender' => 'mailto:organizer@example.com',
+            'recipient' => 'mailto:attendee@example.com',
+            'method' => 'REQUEST',
+            'message' => $this->getValidICalendar()
+        ];
+
+        $request = new Request('IMIPCALLBACK', '/');
+        $request->setBody(json_encode($payload));
+
+        // Mock failed authentication
+        $this->authBackend->expects($this->once())
+            ->method('check')
+            ->willReturn([false, 'Unauthorized']);
+
+        $this->schedulePlugin->expects($this->never())
+            ->method('deliverSync');
+
+        $this->server->httpRequest = $request;
+        $this->server->httpResponse = new Response();
+
+        $this->plugin->imipCallback($request);
+
+        $this->assertEquals(401, $this->server->httpResponse->getStatus());
+        $body = json_decode($this->server->httpResponse->getBodyAsString(), true);
+        $this->assertStringContainsString('Authentication required', $body['error']);
+        $this->assertEquals('Basic realm="SabreDAV"', $this->server->httpResponse->getHeader('WWW-Authenticate'));
+    }
+
     function testImipCallbackWithValidPayload() {
         $payload = [
             'sender' => 'mailto:organizer@example.com',
@@ -44,6 +80,11 @@ class IMipCallbackPluginTest extends TestCase {
 
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody(json_encode($payload));
+
+        // Mock successful authentication
+        $this->authBackend->expects($this->once())
+            ->method('check')
+            ->willReturn([true, 'principals/users/test@example.com']);
 
         $this->schedulePlugin->expects($this->once())
             ->method('deliverSync')
@@ -65,6 +106,11 @@ class IMipCallbackPluginTest extends TestCase {
     function testImipCallbackWithInvalidJSON() {
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody('invalid json {');
+
+        // Mock successful authentication
+        $this->authBackend->expects($this->once())
+            ->method('check')
+            ->willReturn([true, 'principals/users/test@example.com']);
 
         $this->schedulePlugin->expects($this->never())
             ->method('deliverSync');
@@ -89,6 +135,11 @@ class IMipCallbackPluginTest extends TestCase {
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody(json_encode($payload));
 
+        // Mock successful authentication
+        $this->authBackend->expects($this->once())
+            ->method('check')
+            ->willReturn([true, 'principals/users/test@example.com']);
+
         $this->schedulePlugin->expects($this->never())
             ->method('deliverSync');
 
@@ -112,6 +163,11 @@ class IMipCallbackPluginTest extends TestCase {
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody(json_encode($payload));
 
+        // Mock successful authentication
+        $this->authBackend->expects($this->once())
+            ->method('check')
+            ->willReturn([true, 'principals/users/test@example.com']);
+
         $this->schedulePlugin->expects($this->never())
             ->method('deliverSync');
 
@@ -134,6 +190,11 @@ class IMipCallbackPluginTest extends TestCase {
 
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody(json_encode($payload));
+
+        // Mock successful authentication
+        $this->authBackend->expects($this->once())
+            ->method('check')
+            ->willReturn([true, 'principals/users/test@example.com']);
 
         $this->schedulePlugin->expects($this->never())
             ->method('deliverSync');
@@ -159,6 +220,11 @@ class IMipCallbackPluginTest extends TestCase {
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody(json_encode($payload));
 
+        // Mock successful authentication
+        $this->authBackend->expects($this->once())
+            ->method('check')
+            ->willReturn([true, 'principals/users/test@example.com']);
+
         $this->schedulePlugin->expects($this->never())
             ->method('deliverSync');
 
@@ -175,6 +241,12 @@ class IMipCallbackPluginTest extends TestCase {
     function testImipCallbackWhenSchedulePluginNotFound() {
         // Create a server without the schedule plugin
         $serverWithoutPlugin = new Server();
+
+        // Add auth backend
+        $authBackend = $this->createMock(\Sabre\DAV\Auth\Backend\AbstractBasic::class);
+        $authPlugin = new \Sabre\DAV\Auth\Plugin($authBackend);
+        $serverWithoutPlugin->addPlugin($authPlugin);
+
         $pluginWithoutSchedule = new IMipCallbackPlugin();
         $pluginWithoutSchedule->initialize($serverWithoutPlugin);
 
@@ -187,6 +259,11 @@ class IMipCallbackPluginTest extends TestCase {
 
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody(json_encode($payload));
+
+        // Mock successful authentication
+        $authBackend->expects($this->once())
+            ->method('check')
+            ->willReturn([true, 'principals/users/test@example.com']);
 
         $serverWithoutPlugin->httpRequest = $request;
         $serverWithoutPlugin->httpResponse = new Response();
@@ -212,6 +289,11 @@ class IMipCallbackPluginTest extends TestCase {
 
         $request = new Request('IMIPCALLBACK', '/');
         $request->setBody(json_encode($payload));
+
+        // Mock successful authentication
+        $this->authBackend->expects($this->once())
+            ->method('check')
+            ->willReturn([true, 'principals/users/test@example.com']);
 
         $this->schedulePlugin->expects($this->once())
             ->method('deliverSync')

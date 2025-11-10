@@ -15,6 +15,7 @@ use \Sabre\DAV;
 class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
 
     protected $server;
+    protected $authBackend;
 
     function __construct()
     {
@@ -23,6 +24,7 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
     function initialize(DAV\Server $server)
     {
         $this->server = $server;
+        $this->authBackend = $server->getPlugin('auth');
         $server->on('method:IMIPCALLBACK', [$this, 'imipCallback'], 80);
     }
 
@@ -49,10 +51,23 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
     /**
      * This is the method called when the side service sends back a processed IMIP message.
      * The payload contains the serialized ITip\Message that was published to AMQP.
-     * Requires basic auth with admin credentials (SABRE_ADMIN_LOGIN/SABRE_ADMIN_PASSWORD).
+     * Requires basic authentication - accepts requests from any users that exist in sabre.
      */
     function imipCallback($request)
     {
+        // Check authentication using the auth backend
+        if (!$this->authBackend) {
+            error_log('IMipCallback: Auth backend not found');
+            return $this->send(500, ['error' => 'Server configuration error: Auth backend not found']);
+        }
+
+        list($authenticated, $principal) = $this->authBackend->check($request, $this->server->httpResponse);
+
+        if (!$authenticated) {
+            $this->server->httpResponse->setHeader('WWW-Authenticate', 'Basic realm="SabreDAV"');
+            return $this->send(401, ['error' => 'Authentication required']);
+        }
+
         $payload = json_decode($request->getBodyAsString());
 
         if ($payload === null) {

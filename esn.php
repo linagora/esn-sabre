@@ -257,9 +257,9 @@ if (!empty($config['amqp']['host'])) {
 }
 
 // Calendar scheduling support (must be after AMQP initialization)
-$schedulePlugin = new ESN\CalDAV\Schedule\Plugin($principalBackend, $AMQPPublisher, $scheduleAsync);
-$schedulePlugin->initialize($server);
-$server->addPlugin($schedulePlugin);
+$server->addPlugin(
+    new ESN\CalDAV\Schedule\Plugin($principalBackend, $AMQPPublisher, $scheduleAsync)
+);
 
 $server->addPlugin(new ESN\CalDAV\Schedule\ITipPlugin());
 

@@ -83,7 +83,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $messageBody = json_encode($message);
             $addresses = $this->getAddressesForPrincipal(
                 $this->server->getPlugin('auth')->getCurrentPrincipal()
-    
             );
             if (empty($addresses)) {
                 // Fallback to synchronous delivery if we can't determine connectedUser

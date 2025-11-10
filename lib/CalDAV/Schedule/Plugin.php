@@ -1,11 +1,9 @@
 <?php
 namespace ESN\CalDAV\Schedule;
 
-use \PhpAmqpLib\Message\AMQPMessage;
 use ESN\Utils\Utils;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
-use \Sabre\DAV;
 use Sabre\CalDAV\ICalendarObject;
 use Sabre\CalDAV\Schedule\ISchedulingObject;
 use

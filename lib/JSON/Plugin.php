@@ -969,7 +969,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 }
             }
 
-            $vevent = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+            $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
             $objProps[200][$props[0]] = $vObject->jsonSerialize();
 
             $propertyList[] = $objProps;

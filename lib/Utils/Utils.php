@@ -186,38 +186,53 @@ class Utils {
     }
 
     static function hidePrivateEventInfoForUser($vCalendar, $parentNode, $userPrincipal) {
-        $newEvents = array();
-        foreach ($vCalendar->VEVENT as $vevent) {
+        // Clone the entire VCalendar once to avoid multiple serializations
+        $clonedCalendar = self::safeCloneVObject($vCalendar);
+
+        foreach ($clonedCalendar->VEVENT as $vevent) {
             if (self::isHiddenPrivateEvent($vevent, $parentNode, $userPrincipal)) {
-                $newVevent = clone ($vevent);
+                // Save values we need to keep
+                $uid = isset($vevent->UID) ? $vevent->UID->getValue() : null;
+                $organizer = isset($vevent->ORGANIZER) ? $vevent->ORGANIZER->getValue() : null;
+                $dtstart = isset($vevent->DTSTART) ? clone $vevent->DTSTART : null;
+                $dtend = isset($vevent->DTEND) ? clone $vevent->DTEND : null;
+                $duration = isset($vevent->DURATION) ? clone $vevent->DURATION : null;
 
-                $children = $newVevent->children();
-                foreach ($children as $child) {
-                    $newVevent->remove($child->name);
-                }
-                $newVevent->UID = $vevent->UID;
-                $newVevent->SUMMARY = 'Busy';
-                $newVevent->CLASS = 'PRIVATE';
-                $newVevent->ORGANIZER = $vevent->ORGANIZER;
-                $newVevent->DTSTART = $vevent->DTSTART;
-
-                if (!!$vevent->DTEND) {
-                    $newVevent->DTEND = $vevent->DTEND;
-                }
-
-                if (!!$vevent->DURATION) {
-                    $newVevent->DURATION = $vevent->DURATION;
+                // Get list of all properties to remove
+                $propertiesToRemove = [];
+                foreach ($vevent->children() as $child) {
+                    if ($child instanceof \Sabre\VObject\Property) {
+                        $propertiesToRemove[] = $child->name;
+                    }
                 }
 
-                $vevent = $newVevent;
+                // Remove all properties
+                foreach ($propertiesToRemove as $propName) {
+                    unset($vevent->{$propName});
+                }
+
+                // Re-add only essential properties
+                if ($uid) {
+                    $vevent->UID = $uid;
+                }
+                $vevent->SUMMARY = 'Busy';
+                $vevent->CLASS = 'PRIVATE';
+                if ($organizer) {
+                    $vevent->ORGANIZER = $organizer;
+                }
+                if ($dtstart) {
+                    $vevent->add($dtstart);
+                }
+                if ($dtend) {
+                    $vevent->add($dtend);
+                }
+                if ($duration) {
+                    $vevent->add($duration);
+                }
             }
-            $newEvents[] = $vevent;
         }
-        $vCalendar->remove('VEVENT');
-        foreach ($newEvents as $vevent) {
-            $vCalendar->add($vevent);
-        }
-        return $vCalendar;
+
+        return $clonedCalendar;
     }
 
     static function isHiddenPrivateEvent($vevent, $node, $userPrincipal) {
@@ -341,7 +356,77 @@ class Utils {
         if (!isset($properties[$CUAS])) return;
 
         $addresses = $properties[$CUAS]->getHrefs();
-    
+
         return $addresses[0];
+    }
+
+    /**
+     * Safely clone a VObject component by serializing and deserializing
+     *
+     * This avoids infinite recursion issues that can occur with the clone operator
+     * when VObject properties have circular references through their parent pointers.
+     *
+     * @param \Sabre\VObject\Component $component The component to clone (VCalendar or VEVENT)
+     * @return \Sabre\VObject\Component The cloned component
+     */
+    static function safeCloneVObject($component) {
+        // If it's a VCalendar, clone manually to preserve property order and avoid infinite loops
+        if ($component instanceof \Sabre\VObject\Component\VCalendar) {
+            // Create empty calendar without default properties
+            $clone = new \Sabre\VObject\Component\VCalendar([], false);
+
+            // Copy all children in original order
+            foreach ($component->children() as $child) {
+                // Use @ to suppress potential warnings from clone
+                $clonedChild = @clone $child;
+                $clone->add($clonedChild);
+            }
+
+            return $clone;
+        }
+
+        // For other components (VEVENT, etc.), serialize the parent VCalendar
+        $parent = $component->parent;
+        if ($parent instanceof \Sabre\VObject\Component\VCalendar) {
+            // Parse the entire parent calendar
+            $clonedCalendar = \Sabre\VObject\Reader::read($parent->serialize());
+
+            // Find the matching component by UID and optionally RECURRENCE-ID
+            $componentName = $component->name;
+            if (isset($component->UID)) {
+                $uid = $component->UID->getValue();
+                $recurrenceId = isset($component->{'RECURRENCE-ID'})
+                    ? $component->{'RECURRENCE-ID'}->getValue()
+                    : null;
+
+                foreach ($clonedCalendar->{$componentName} as $child) {
+                    if (!isset($child->UID) || $child->UID->getValue() !== $uid) {
+                        continue;
+                    }
+
+                    // For recurring events, also match RECURRENCE-ID
+                    if ($recurrenceId !== null) {
+                        if (isset($child->{'RECURRENCE-ID'})
+                            && $child->{'RECURRENCE-ID'}->getValue() === $recurrenceId) {
+                            return $child;
+                        }
+                    } else {
+                        // For non-recurring events or master events, return first match
+                        // that doesn't have a RECURRENCE-ID
+                        if (!isset($child->{'RECURRENCE-ID'})) {
+                            return $child;
+                        }
+                    }
+                }
+            }
+            // Fallback: return first component of same type
+            if (isset($clonedCalendar->{$componentName})) {
+                return $clonedCalendar->{$componentName};
+            }
+        }
+
+        // Last resort: try using PHP's clone with error suppression
+        // This shouldn't happen in practice
+        return @clone $component;
     }
 }

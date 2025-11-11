@@ -55,6 +55,9 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
      */
     function imipCallback($request)
     {
+        // Store body string first before any other operation that might consume the stream
+        $bodyString = $request->getBodyAsString();
+
         // Check authentication using the auth backend
         if (!$this->authBackend) {
             error_log('IMipCallback: Auth backend not found');
@@ -68,8 +71,7 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             return $this->send(401, ['error' => 'Authentication required']);
         }
 
-        // Store body string before decoding to avoid double stream consumption
-        $bodyString = $request->getBodyAsString();
+        // Decode the stored body string
         $payload = json_decode($bodyString);
 
         if ($payload === null && json_last_error() !== JSON_ERROR_NONE) {

@@ -87,7 +87,7 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             return $this->send(500, ['error' => 'Server configuration error: Auth backend not found']);
         }
 
-        list($authenticated, $principal) = $this->authBackend->check($request, $this->server->httpResponse);
+        list($authenticated, ) = $this->authBackend->check($request, $this->server->httpResponse);
 
         if (!$authenticated) {
             $this->server->httpResponse->setHeader('WWW-Authenticate', 'Basic realm="SabreDAV"');

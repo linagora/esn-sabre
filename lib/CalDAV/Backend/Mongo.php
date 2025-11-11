@@ -570,11 +570,18 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $result = [];
         foreach ($collection->find($query, [ 'projection' => $projection ]) as $row) {
             if ($requirePostFilter) {
+                // Ensure calendardata is a string, not a stream
+                $calendardata = $row['calendardata'];
+                if (is_resource($calendardata)) {
+                    error_log('WARNING: calendardata is a resource in calendarQuery for uri=' . $row['uri']);
+                    $calendardata = stream_get_contents($calendardata);
+                }
+
                 // Ensure calendardata is properly passed to avoid sequential DB reads
                 $object = [
                     'calendarid' => $calendarId,
                     'uri' => $row['uri'],
-                    'calendardata' => $row['calendardata']
+                    'calendardata' => $calendardata
                 ];
                 if (!$this->validateFilterForObject($object, $filters)) {
                     continue;
@@ -873,9 +880,16 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $row = $collection->findOne($query, [ 'projection' => $projection ]);
         if (!$row) return null;
 
+        // Ensure calendardata is a string, not a stream
+        $calendardata = $row['calendardata'];
+        if (is_resource($calendardata)) {
+            error_log('WARNING: calendardata is a resource in getSchedulingObject for uri=' . $row['uri']);
+            $calendardata = stream_get_contents($calendardata);
+        }
+
         return [
             'uri'          => $row['uri'],
-            'calendardata' => $row['calendardata'],
+            'calendardata' => $calendardata,
             'lastmodified' => $row['lastmodified'],
             'etag'         => '"' . $row['etag'] . '"',
             'size'         => (int) $row['size'],
@@ -895,8 +909,15 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $result = [];
         foreach($collection->find($query, [ 'projection' => $projection ]) as $row) {
+            // Ensure calendardata is a string, not a stream
+            $calendardata = $row['calendardata'];
+            if (is_resource($calendardata)) {
+                error_log('WARNING: calendardata is a resource in getSchedulingObjects for uri=' . $row['uri']);
+                $calendardata = stream_get_contents($calendardata);
+            }
+
             $result[] = [
-                'calendardata' => $row['calendardata'],
+                'calendardata' => $calendardata,
                 'uri'          => $row['uri'],
                 'lastmodified' => $row['lastmodified'],
                 'etag'         => '"' . $row['etag'] . '"',

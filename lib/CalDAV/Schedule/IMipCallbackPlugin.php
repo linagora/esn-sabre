@@ -51,8 +51,24 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
      */
     function imipCallback($request)
     {
-        // Store body string first before any other operation that might consume the stream
-        $bodyString = $request->getBodyAsString();
+        // Get the body stream without consuming it with getBodyAsString()
+        // which may call feof() on a null/closed stream
+        $body = $request->getBody();
+
+        if ($body && is_resource($body)) {
+            // Stream is valid, read from it
+            $bodyString = stream_get_contents($body);
+        } else {
+            // Stream is not available (already consumed or in test context),
+            // try php://input as fallback for production scenarios
+            $bodyString = file_get_contents('php://input');
+
+            // If php://input is empty (e.g., in test context), try getBodyAsString()
+            // This may trigger feof() but at least we tried the safe path first
+            if (empty($bodyString)) {
+                $bodyString = $request->getBodyAsString();
+            }
+        }
 
         // Check authentication using the auth backend
         if (!$this->authBackend) {

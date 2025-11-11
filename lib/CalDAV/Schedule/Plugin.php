@@ -143,11 +143,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         // If we can't find this information, we'll stop processing
         if (!isset($properties[$CUAS])) {
-            return;
+            return [];
         }
 
         $addresses = $properties[$CUAS]->getHrefs();
-    
+
         return $addresses;
     }
 

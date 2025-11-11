@@ -17,10 +17,6 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
     protected $server;
     protected $authBackend;
 
-    function __construct()
-    {
-    }
-
     function initialize(DAV\Server $server)
     {
         $this->server = $server;

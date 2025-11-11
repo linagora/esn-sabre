@@ -313,7 +313,7 @@ class IMipCallbackPluginTest extends TestCase {
     }
 
     private function getValidICalendar() {
-        $ical = join("\r\n", [
+        $ical = implode("\r\n", [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
             'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',

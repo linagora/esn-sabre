@@ -641,7 +641,12 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $result = [];
         foreach ($collection->find($query, [ 'projection' => $projection ]) as $row) {
+            $vObject = null;
+
             if ($requirePostFilter) {
+                // Parse VObject for filter validation
+                $vObject = VObject\Reader::read($row['calendardata']);
+
                 // Validate filter if needed
                 $object = [
                     'calendarid' => $calendarId,
@@ -656,7 +661,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $result[] = [
                 'uri' => $row['uri'],
                 'calendardata' => $row['calendardata'],
-                'etag' => '"' . $row['etag'] . '"'
+                'etag' => '"' . $row['etag'] . '"',
+                'vObject' => $vObject  // Parsed VObject if requirePostFilter was true, null otherwise
             ];
         }
 

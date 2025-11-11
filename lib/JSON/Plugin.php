@@ -1013,7 +1013,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $propertyList = [];
         foreach ($calendarObjects as $calendarObject) {
-            $vObject = VObject\Reader::read($calendarObject['calendardata']);
+            // Use pre-parsed VObject if available (from requirePostFilter), otherwise parse now
+            $vObject = $calendarObject['vObject'] ?? VObject\Reader::read($calendarObject['calendardata']);
 
             // If we have start and end date, we're getting an expanded list of occurrences between these dates
             if ($start && $end) {

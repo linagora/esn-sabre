@@ -430,13 +430,20 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $result = [];
         foreach ($collection->find($query, [ 'projection' => $projection ]) as $row) {
+            // Ensure calendardata is a string, not a stream
+            $calendardata = $row['calendardata'];
+            if (is_resource($calendardata)) {
+                error_log('WARNING: calendardata is a resource for uri=' . $row['uri']);
+                $calendardata = stream_get_contents($calendardata);
+            }
+
             $result[] = [
                 'id'           => (string) $row['_id'],
                 'uri'          => $row['uri'],
                 'lastmodified' => $row['lastmodified'],
                 'etag'         => '"' . $row['etag'] . '"',
                 'size'         => (int) $row['size'],
-                'calendardata' => $row['calendardata'],
+                'calendardata' => $calendardata,
                 'component'    => strtolower($row['componenttype']),
             ];
         }

@@ -16,25 +16,13 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
 
     protected $server;
     protected $authBackend;
-    protected $savedBody = null;
 
     function initialize(DAV\Server $server)
     {
         $this->server = $server;
         $this->authBackend = $server->getPlugin('auth');
-        // Capture body BEFORE any other plugin can consume it
-        $server->on('beforeMethod:IMIPCALLBACK', [$this, 'captureBody'], 10);
+        // Handle IMIPCALLBACK method
         $server->on('method:IMIPCALLBACK', [$this, 'imipCallback'], 80);
-    }
-
-    /**
-     * Capture the request body before it gets consumed by other plugins
-     */
-    function captureBody($request, $response)
-    {
-        // Read from php://input which is available once
-        $this->savedBody = @file_get_contents('php://input');
-        return true;
     }
 
     function getPluginName()
@@ -64,19 +52,21 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
      */
     function imipCallback($request)
     {
-        // Use the body captured in beforeMethod hook, or fallback to test body
-        $bodyString = $this->savedBody;
+        // Read body - try as string first (tests), then from php://input
+        $bodyString = null;
 
-        // Fallback for tests where body is set as string
-        if (empty($bodyString)) {
-            try {
-                $body = $request->getBody();
-                if (is_string($body) && !empty($body)) {
-                    $bodyString = $body;
-                }
-            } catch (\Throwable $e) {
-                // Ignore
+        try {
+            $body = $request->getBody();
+            if (is_string($body) && !empty($body)) {
+                $bodyString = $body;
             }
+        } catch (\Throwable $e) {
+            // Ignore - body might be a stream
+        }
+
+        // If not a string, read from php://input
+        if (empty($bodyString)) {
+            $bodyString = @file_get_contents('php://input');
         }
 
         if (empty($bodyString)) {

@@ -51,17 +51,26 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
      */
     function imipCallback($request)
     {
-        // Try to get body - handle both string and stream cases
-        $body = $request->getBody();
+        // Try to read body without triggering feof() errors
+        $bodyString = null;
 
-        if (is_string($body)) {
-            // Body was set as a string (e.g., in tests)
-            $bodyString = $body;
-        } elseif ($body && is_resource($body)) {
-            // Body is a stream resource, read from it
-            $bodyString = stream_get_contents($body);
-        } else {
-            // No valid body, try php://input as fallback for production
+        try {
+            $body = $request->getBody();
+
+            if (is_string($body)) {
+                // Body was set as a string (e.g., in tests)
+                $bodyString = $body;
+            } elseif ($body && is_resource($body)) {
+                // Body is a stream resource, read from it
+                $bodyString = stream_get_contents($body);
+            }
+        } catch (\Throwable $e) {
+            // Ignore errors from getBody() - will try fallback
+            error_log('IMipCallback: Error reading body: ' . $e->getMessage());
+        }
+
+        // If we couldn't read the body, try php://input
+        if (empty($bodyString)) {
             $bodyString = @file_get_contents('php://input');
 
             if (empty($bodyString)) {

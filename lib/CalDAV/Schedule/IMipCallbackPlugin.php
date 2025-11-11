@@ -122,7 +122,13 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             $iTipMessage->hasChange = $payload->hasChange ?? false;
 
             // Parse the serialized iCalendar message
-            $iTipMessage->message = VObject\Reader::read($payload->message);
+            try {
+                $iTipMessage->message = VObject\Reader::read($payload->message);
+                error_log('IMipCallback: VObject parsing succeeded for method=' . $payload->method);
+            } catch (\Exception $e) {
+                error_log('IMipCallback: VObject parsing failed: ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine());
+                throw $e;
+            }
 
             // Find the Schedule\Plugin and call its deliverSync method
             // This will call parent::deliver() to process the message synchronously
@@ -140,12 +146,19 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             }
 
             // Call deliverSync to bypass async logic and deliver synchronously
-            $schedulePlugin->deliverSync($iTipMessage);
+            try {
+                error_log('IMipCallback: Starting deliverSync for method=' . $payload->method . ' recipient=' . $payload->recipient);
+                $schedulePlugin->deliverSync($iTipMessage);
+                error_log('IMipCallback: deliverSync succeeded');
+            } catch (\Exception $e) {
+                error_log('IMipCallback: deliverSync failed: ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine());
+                throw $e;
+            }
 
             return $this->send(204, null);
 
         } catch (\Exception $e) {
-            error_log('IMipCallback error: ' . $e->getMessage());
+            error_log('IMipCallback error: ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine());
             return $this->send(500, ['error' => 'Failed to process IMIP message: ' . $e->getMessage()]);
         }
     }

@@ -59,14 +59,13 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             // Stream is valid, read from it
             $bodyString = stream_get_contents($body);
         } else {
-            // Stream is not available (already consumed or in test context),
-            // try php://input as fallback for production scenarios
+            // Stream is not available, try php://input as fallback
             $bodyString = file_get_contents('php://input');
 
-            // If php://input is empty (e.g., in test context), try getBodyAsString()
-            // This may trigger feof() but at least we tried the safe path first
+            // If php://input is also empty and we have no stream, we cannot proceed
             if (empty($bodyString)) {
-                $bodyString = $request->getBodyAsString();
+                error_log('IMipCallback: No request body available');
+                return $this->send(400, ['error' => 'No request body']);
             }
         }
 

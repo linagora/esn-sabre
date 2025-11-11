@@ -524,17 +524,29 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * This bypasses the problematic SabreDAV delivery chain that causes feof() errors.
      */
     public function deliverSync(ITip\Message $iTipMessage) {
-        // Get the caldav plugin and backend
-        $caldavPlugin = $this->server->getPlugin('caldav');
-        if (!$caldavPlugin) {
-            error_log('DeliverSync: CalDAV plugin not found - falling back to parent::deliver()');
+        // Get the caldav backend through the calendar home in the server tree
+        // Extract recipient to build the path to their calendar home
+        $recipient = preg_replace('/^mailto:/i', '', $iTipMessage->recipient);
+        $calendarHomePath = 'calendars/' . $recipient;
+
+        $caldavBackend = null;
+
+        try {
+            // Access the calendar home node to get the backend
+            $calendarHome = $this->server->tree->getNodeForPath($calendarHomePath);
+            if ($calendarHome && method_exists($calendarHome, 'getBackend')) {
+                $caldavBackend = $calendarHome->getBackend();
+            }
+        } catch (\Exception $e) {
+            error_log('DeliverSync: Could not access calendar home or backend: ' . $e->getMessage());
+        }
+
+        if (!$caldavBackend) {
+            error_log('DeliverSync: CalDAV backend not found - falling back to parent::deliver()');
             return parent::deliver($iTipMessage);
         }
 
-        $caldavBackend = $caldavPlugin->getBackend();
-
-        // Extract recipient principal from mailto: URI
-        $recipient = preg_replace('/^mailto:/i', '', $iTipMessage->recipient);
+        // Build recipient principal path
         $recipientPrincipal = 'principals/users/' . $recipient;
 
         error_log('DeliverSync: method=' . $iTipMessage->method . ' recipient=' . $recipient);

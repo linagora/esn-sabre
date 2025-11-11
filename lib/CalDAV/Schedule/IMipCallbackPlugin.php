@@ -75,9 +75,11 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
         }
 
         // After reading php://input, it's exhausted. Replace the request body
-        // with an empty stream to prevent feof() errors in downstream code
-        $emptyStream = fopen('php://memory', 'r+');
-        $request->setBody($emptyStream);
+        // with a dummy non-empty stream to prevent feof() errors in downstream code
+        $dummyStream = fopen('php://memory', 'r+');
+        fwrite($dummyStream, ' '); // Write a space to make it non-empty
+        rewind($dummyStream);
+        $request->setBody($dummyStream);
 
         // Check authentication using the auth backend
         if (!$this->authBackend) {

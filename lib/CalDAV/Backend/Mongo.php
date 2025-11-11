@@ -563,13 +563,13 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $result = [];
         foreach ($collection->find($query, [ 'projection' => $projection ]) as $row) {
             if ($requirePostFilter) {
-                // Ensure calendardata is properly passed to avoid sequential DB reads
-                $object = [
-                    'calendarid' => $calendarId,
-                    'uri' => $row['uri'],
-                    'calendardata' => $row['calendardata']
-                ];
-                if (!$this->validateFilterForObject($object, $filters)) {
+                // Parse VObject and validate filter (optimized to avoid double parsing)
+                $vObject = VObject\Reader::read($row['calendardata']);
+                $isValid = $this->validateFilterForObjectWithVObject($vObject, $filters);
+                // Destroy circular references so PHP will GC the object
+                $vObject->destroy();
+
+                if (!$isValid) {
                     continue;
                 }
             }

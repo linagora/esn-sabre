@@ -23,6 +23,9 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     protected $isNewEvent = false;
     protected $formerEventICal;
 
+    // Store new event state by UID to avoid instance state loss between event and delivery phases
+    private static $newEventsByUid = [];
+
     const HIGHER_PRIORITY_BEFORE_SCHEDULE = 90;
     const SCHEDSTAT_SUCCESS_PENDING = '1.0';
     const SCHEDSTAT_SUCCESS_UNKNOWN = '1.1';
@@ -56,6 +59,13 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
         $this->isNewEvent = $isNew;
 
+        // Store isNew state by UID to survive instance changes between event and delivery phases
+        // This solves the architectural issue where the delivery backend may be invoked on a different instance
+        if (isset($vCal->VEVENT) && isset($vCal->VEVENT->UID)) {
+            $uid = (string)$vCal->VEVENT->UID;
+            self::$newEventsByUid[$uid] = $isNew;
+        }
+
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
 
@@ -86,8 +96,15 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         if ($iTipMessage->method === 'COUNTER') {
             $eventMessages = [['message' => $iTipMessage->message]];
         } else {
-            if ($this->isNewEvent || $iTipMessage->method !== 'REQUEST') {
-                $eventMessages = $this->splitItipMessageEvents($iTipMessage->message, $this->isNewEvent);
+            // Retrieve isNewEvent state from static storage by UID to handle instance changes
+            // between calendarObjectChange and schedule phases (architectural workaround)
+            $isNewEvent = $this->isNewEvent;
+            if (isset($iTipMessage->uid) && isset(self::$newEventsByUid[$iTipMessage->uid])) {
+                $isNewEvent = self::$newEventsByUid[$iTipMessage->uid];
+            }
+
+            if ($isNewEvent || $iTipMessage->method !== 'REQUEST') {
+                $eventMessages = $this->splitItipMessageEvents($iTipMessage->message, $isNewEvent);
             } else {
                 $formerEvent = Reader::read($this->formerEventICal);
                 $eventMessages = $this->computeModifiedEventMessages($iTipMessage->message, $formerEvent, $iTipMessage->recipient);

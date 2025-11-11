@@ -1185,11 +1185,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         // Index for all calendar object queries (getCalendarObjects, calendarQuery, etc.)
         $calendarObjectCollection->createIndex(['calendarid' => 1]);
 
-        // Unique compound index for getMultipleCalendarObjects and getCalendarObject
-        $calendarObjectCollection->createIndex(
-            ['calendarid' => 1, 'uri' => 1],
-            ['unique' => true]
-        );
+        // Compound index for getMultipleCalendarObjects and getCalendarObject
+        // Note: Not enforcing uniqueness to avoid migration issues with existing duplicates
+        $calendarObjectCollection->createIndex(['calendarid' => 1, 'uri' => 1]);
 
         // Compound index for calendarQuery with time-range filters (most common query pattern)
         // This index dramatically improves performance for calendar-query REPORT requests

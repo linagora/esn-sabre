@@ -99,8 +99,9 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             // Retrieve isNewEvent state from static storage by UID to handle instance changes
             // between calendarObjectChange and schedule phases (architectural workaround)
             $isNewEvent = $this->isNewEvent;
-            if (isset($iTipMessage->uid) && isset(self::$newEventsByUid[$iTipMessage->uid])) {
+            if (isset($iTipMessage->uid) && array_key_exists($iTipMessage->uid, self::$newEventsByUid)) {
                 $isNewEvent = self::$newEventsByUid[$iTipMessage->uid];
+                unset(self::$newEventsByUid[$iTipMessage->uid]);
             }
 
             if ($isNewEvent || $iTipMessage->method !== 'REQUEST') {

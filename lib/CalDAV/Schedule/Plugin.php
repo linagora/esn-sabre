@@ -89,9 +89,21 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 'component' => $iTipMessage->component
             ];
             $messageBody = json_encode($message);
-            $addresses = $this->getAddressesForPrincipal(
-                $this->server->getPlugin('auth')->getCurrentPrincipal()
-            );
+
+            $authPlugin = $this->server->getPlugin('auth');
+            if (!$authPlugin) {
+                $this->logger->warning('Schedule async fallback: auth plugin missing');
+                parent::deliver($iTipMessage);
+                return;
+            }
+
+            $currentPrincipal = $authPlugin->getCurrentPrincipal();
+            if (!$currentPrincipal) {
+                parent::deliver($iTipMessage);
+                return;
+            }
+
+            $addresses = $this->getAddressesForPrincipal($currentPrincipal);
             if (empty($addresses)) {
                 // Fallback to synchronous delivery if we can't determine connectedUser
                 parent::deliver($iTipMessage);

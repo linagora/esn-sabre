@@ -48,6 +48,16 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $this->server = $server;
     }
 
+    /**
+     * Set the AMQP publisher after initialization.
+     * This is needed when Schedule plugin is registered before AMQP is initialized.
+     *
+     * @param $amqpPublisher
+     */
+    public function setAmqpPublisher($amqpPublisher) {
+        $this->amqpPublisher = $amqpPublisher;
+    }
+
     private function scheduleReply(RequestInterface $request) {
         $scheduleReply = $request->getHeader('Schedule-Reply');
         return $scheduleReply!=='F';

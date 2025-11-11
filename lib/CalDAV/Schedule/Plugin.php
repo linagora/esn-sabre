@@ -34,13 +34,15 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     protected $amqpPublisher;
     protected $scheduleAsync;
     protected $server;
+    protected $caldavBackend;
 
-    public function __construct($principalBackend = null, $amqpPublisher = null, $scheduleAsync = false) {
+    public function __construct($principalBackend = null, $amqpPublisher = null, $scheduleAsync = false, $caldavBackend = null) {
         $this->logger = new Logger('esn-sabre');
         $this->logger->pushHandler(new StreamHandler('php://stderr', Logger::DEBUG));
         $this->principalBackend = $principalBackend;
         $this->amqpPublisher = $amqpPublisher;
         $this->scheduleAsync = $scheduleAsync;
+        $this->caldavBackend = $caldavBackend;
     }
 
     public function initialize(\Sabre\DAV\Server $server) {
@@ -524,29 +526,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * This bypasses the problematic SabreDAV delivery chain that causes feof() errors.
      */
     public function deliverSync(ITip\Message $iTipMessage) {
-        // Get the caldav backend through the calendar home in the server tree
-        // Extract recipient to build the path to their calendar home
-        $recipient = preg_replace('/^mailto:/i', '', $iTipMessage->recipient);
-        $calendarHomePath = 'calendars/' . $recipient;
-
-        $caldavBackend = null;
-
-        try {
-            // Access the calendar home node to get the backend
-            $calendarHome = $this->server->tree->getNodeForPath($calendarHomePath);
-            if ($calendarHome && method_exists($calendarHome, 'getBackend')) {
-                $caldavBackend = $calendarHome->getBackend();
-            }
-        } catch (\Exception $e) {
-            error_log('DeliverSync: Could not access calendar home or backend: ' . $e->getMessage());
-        }
-
-        if (!$caldavBackend) {
-            error_log('DeliverSync: CalDAV backend not found - falling back to parent::deliver()');
+        // Use the caldav backend that was passed to the constructor
+        if (!$this->caldavBackend) {
+            error_log('DeliverSync: CalDAV backend not available - falling back to parent::deliver()');
             return parent::deliver($iTipMessage);
         }
 
-        // Build recipient principal path
+        // Extract recipient from mailto: URI
+        $recipient = preg_replace('/^mailto:/i', '', $iTipMessage->recipient);
         $recipientPrincipal = 'principals/users/' . $recipient;
 
         error_log('DeliverSync: method=' . $iTipMessage->method . ' recipient=' . $recipient);
@@ -558,7 +545,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             // For REQUEST method: create or update the event in recipient's calendar
             if ($iTipMessage->method === 'REQUEST') {
                 // Find the recipient's default calendar
-                $calendars = $caldavBackend->getCalendarsForUser($recipientPrincipal);
+                $calendars = $this->caldavBackend->getCalendarsForUser($recipientPrincipal);
 
                 if (empty($calendars)) {
                     error_log('DeliverSync: No calendars found for user ' . $recipient);
@@ -574,11 +561,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 $objectUri = $iTipMessage->uid . '.ics';
 
                 // Check if object already exists
-                $existingObject = $caldavBackend->getCalendarObject($calendarId, $objectUri);
+                $existingObject = $this->caldavBackend->getCalendarObject($calendarId, $objectUri);
 
                 if ($existingObject) {
                     // Update existing event
-                    $caldavBackend->updateCalendarObject(
+                    $this->caldavBackend->updateCalendarObject(
                         $calendarId,
                         $objectUri,
                         $iTipMessage->message->serialize()
@@ -586,7 +573,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                     error_log('DeliverSync: Updated event ' . $objectUri);
                 } else {
                     // Create new event
-                    $caldavBackend->createCalendarObject(
+                    $this->caldavBackend->createCalendarObject(
                         $calendarId,
                         $objectUri,
                         $iTipMessage->message->serialize()
@@ -598,7 +585,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
             } elseif ($iTipMessage->method === 'CANCEL') {
                 // For CANCEL method: delete the event from recipient's calendar
-                $calendars = $caldavBackend->getCalendarsForUser($recipientPrincipal);
+                $calendars = $this->caldavBackend->getCalendarsForUser($recipientPrincipal);
 
                 if (empty($calendars)) {
                     error_log('DeliverSync: No calendars found for user ' . $recipient);
@@ -611,10 +598,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 // Try to delete from all calendars (in case it exists in multiple)
                 foreach ($calendars as $calendar) {
                     $calendarId = $calendar['id'];
-                    $existingObject = $caldavBackend->getCalendarObject($calendarId, $objectUri);
+                    $existingObject = $this->caldavBackend->getCalendarObject($calendarId, $objectUri);
 
                     if ($existingObject) {
-                        $caldavBackend->deleteCalendarObject($calendarId, $objectUri);
+                        $this->caldavBackend->deleteCalendarObject($calendarId, $objectUri);
                         error_log('DeliverSync: Deleted event ' . $objectUri);
                     }
                 }

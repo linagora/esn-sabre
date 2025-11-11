@@ -66,7 +66,10 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
 
         // If not a string, read from php://input
         if (empty($bodyString)) {
-            $bodyString = @file_get_contents('php://input');
+            $bodyString = file_get_contents('php://input');
+            if ($bodyString === false) {
+                $bodyString = null;
+            }
         }
 
         if (empty($bodyString)) {

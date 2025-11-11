@@ -36,7 +36,14 @@ schedule_async='false'
 [ -z "$AMQP_SSL_ENABLED" ] || amqp_ssl_enabled="$AMQP_SSL_ENABLED"
 [ -z "$AMQP_SSL_TRUST_ALL_CERTS" ] || amqp_ssl_trust_all="$AMQP_SSL_TRUST_ALL_CERTS"
 [ -z "$SABRE_ENV" ] || sabre_env="$SABRE_ENV"
-[ -z "$SCHEDULE_ASYNC" ] || schedule_async="$SCHEDULE_ASYNC"
+# Convert SCHEDULE_ASYNC to proper JSON boolean
+if [ "$SCHEDULE_ASYNC" = "true" ] || [ "$SCHEDULE_ASYNC" = "1" ]; then
+  schedule_async="true"
+elif [ "$SCHEDULE_ASYNC" = "false" ] || [ "$SCHEDULE_ASYNC" = "0" ] || [ -z "$SCHEDULE_ASYNC" ]; then
+  schedule_async="false"
+else
+  schedule_async="$SCHEDULE_ASYNC"
+fi
 
 if [ ! -z "${ESN_MONGO_USER}" ]
 then

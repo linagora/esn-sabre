@@ -74,13 +74,6 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             return $this->send(400, ['error' => 'No request body']);
         }
 
-        // After reading php://input, it's exhausted. Replace the request body
-        // with a dummy non-empty stream to prevent feof() errors in downstream code
-        $dummyStream = fopen('php://memory', 'r+');
-        fwrite($dummyStream, ' '); // Write a space to make it non-empty
-        rewind($dummyStream);
-        $request->setBody($dummyStream);
-
         // Check authentication using the auth backend
         if (!$this->authBackend) {
             error_log('IMipCallback: Auth backend not found');
@@ -126,6 +119,13 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
                 error_log('IMipCallback: VObject parsing failed: ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine());
                 throw $e;
             }
+
+            // Replace the exhausted request body with the iCalendar message
+            // SabreDAV's parent::deliver() might try to read the request body
+            $icalStream = fopen('php://memory', 'r+');
+            fwrite($icalStream, $payload->message);
+            rewind($icalStream);
+            $request->setBody($icalStream);
 
             // Find the Schedule\Plugin and call its deliverSync method
             // This will call parent::deliver() to process the message synchronously

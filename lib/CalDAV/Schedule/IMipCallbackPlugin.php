@@ -16,12 +16,25 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
 
     protected $server;
     protected $authBackend;
+    protected $savedBody = null;
 
     function initialize(DAV\Server $server)
     {
         $this->server = $server;
         $this->authBackend = $server->getPlugin('auth');
+        // Capture body BEFORE any other plugin can consume it
+        $server->on('beforeMethod:IMIPCALLBACK', [$this, 'captureBody'], 10);
         $server->on('method:IMIPCALLBACK', [$this, 'imipCallback'], 80);
+    }
+
+    /**
+     * Capture the request body before it gets consumed by other plugins
+     */
+    function captureBody($request, $response)
+    {
+        // Read from php://input which is available once
+        $this->savedBody = @file_get_contents('php://input');
+        return true;
     }
 
     function getPluginName()
@@ -51,28 +64,24 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
      */
     function imipCallback($request)
     {
-        // Read body directly from php://input to avoid any stream/feof issues
-        // This works for production. For tests, we check if body was set as string.
-        $bodyString = null;
+        // Use the body captured in beforeMethod hook, or fallback to test body
+        $bodyString = $this->savedBody;
 
-        // First try: check if this is a test context where body is a simple string
-        try {
-            $body = @$request->getBody();
-            if (is_string($body) && !empty($body)) {
-                $bodyString = $body;
+        // Fallback for tests where body is set as string
+        if (empty($bodyString)) {
+            try {
+                $body = $request->getBody();
+                if (is_string($body) && !empty($body)) {
+                    $bodyString = $body;
+                }
+            } catch (\Throwable $e) {
+                // Ignore
             }
-        } catch (\Throwable $e) {
-            // Ignore - will use php://input fallback
         }
 
-        // If not a test string, read from php://input (production)
         if (empty($bodyString)) {
-            $bodyString = @file_get_contents('php://input');
-
-            if (empty($bodyString)) {
-                error_log('IMipCallback: No request body available');
-                return $this->send(400, ['error' => 'No request body']);
-            }
+            error_log('IMipCallback: No request body available');
+            return $this->send(400, ['error' => 'No request body']);
         }
 
         // Check authentication using the auth backend

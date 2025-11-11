@@ -1171,6 +1171,13 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     private function ensureIndex() {
+        // Skip index creation if disabled via environment variable
+        // Rational: calling createIndex on every request doesn't make sense in production
+        $shouldCreateIndex = getenv('SHOULD_CREATE_INDEX');
+        if ($shouldCreateIndex === false || $shouldCreateIndex === 'false' || $shouldCreateIndex === '0') {
+            return;
+        }
+
         // Calendar instances collection indexes
         // Create a unique compound index on 'principaluri' and 'uri' to avoid calendar instances duplication
         $calendarInstanceCollection = $this->db->selectCollection($this->calendarInstancesTableName);

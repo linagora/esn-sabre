@@ -68,10 +68,12 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             return $this->send(401, ['error' => 'Authentication required']);
         }
 
-        $payload = json_decode($request->getBodyAsString());
+        // Store body string before decoding to avoid double stream consumption
+        $bodyString = $request->getBodyAsString();
+        $payload = json_decode($bodyString);
 
-        if ($payload === null) {
-            return $this->send(400, ['error' => 'Invalid JSON: ' . $request->getBodyAsString()]);
+        if ($payload === null && json_last_error() !== JSON_ERROR_NONE) {
+            return $this->send(400, ['error' => 'Invalid JSON: ' . json_last_error_msg()]);
         }
 
         // Validate required fields

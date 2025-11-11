@@ -71,6 +71,10 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
                 '{urn:ietf:params:xml:ns:caldav}calendar-user-address-set' => $mockHref
             ]);
 
+        $mockHttpRequest = $this->createMock(\Sabre\HTTP\Request::class);
+        $mockHttpRequest->method('getPath')->willReturn('/calendars/a/b/e.ics');
+        $server->httpRequest = $mockHttpRequest;
+
         $plugin = new Plugin(null, $amqpPublisher, true);
         $plugin->initialize($server);
 
@@ -94,6 +98,8 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $headers = $publishedProperties['application_headers']->getNativeData();
         $this->assertArrayHasKey('connectedUser', $headers);
         $this->assertEquals('test@example.com', $headers['connectedUser']);
+        $this->assertArrayHasKey('requestURI', $headers);
+        $this->assertEquals('/calendars/a/b/e.ics', $headers['requestURI']);
 
         // Verify scheduleStatus is set to pending (1.0)
         $this->assertEquals('1.0', $message->scheduleStatus);

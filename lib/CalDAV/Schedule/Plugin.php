@@ -88,9 +88,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 return;
             }
             $connectedUser = preg_replace('/^mailto:/i', '', $addresses[0]);
+            $requestURI = $this->server->httpRequest->getPath();
             $properties = [
                 'application_headers' => new \PhpAmqpLib\Wire\AMQPTable([
-                    'connectedUser' => $connectedUser
+                    'connectedUser' => $connectedUser,
+                    'requestURI' => $requestURI
                 ])
             ];
 

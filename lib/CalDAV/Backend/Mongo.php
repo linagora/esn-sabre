@@ -644,16 +644,13 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $vObject = null;
 
             if ($requirePostFilter) {
-                // Parse VObject for filter validation
+                // Parse VObject once for both filter validation and later reuse
                 $vObject = VObject\Reader::read($row['calendardata']);
 
-                // Validate filter if needed
-                $object = [
-                    'calendarid' => $calendarId,
-                    'uri' => $row['uri'],
-                    'calendardata' => $row['calendardata']
-                ];
-                if (!$this->validateFilterForObject($object, $filters)) {
+                // Validate filter with pre-parsed VObject (avoids re-parsing)
+                if (!$this->validateFilterForObjectWithVObject($vObject, $filters)) {
+                    // Destroy circular references so PHP will GC the object
+                    $vObject->destroy();
                     continue;
                 }
             }
@@ -667,6 +664,19 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         }
 
         return $result;
+    }
+
+    /**
+     * Optimized version of validateFilterForObject that accepts a pre-parsed VObject.
+     * This avoids re-parsing the calendar data when the VObject is already available.
+     *
+     * @param VObject\Component\VCalendar $vObject
+     * @param array $filters
+     * @return bool
+     */
+    protected function validateFilterForObjectWithVObject($vObject, array $filters) {
+        $validator = new \Sabre\CalDAV\CalendarQueryValidator();
+        return $validator->validate($vObject, $filters);
     }
 
     function getCalendarObjectByUID($principalUri, $uid) {

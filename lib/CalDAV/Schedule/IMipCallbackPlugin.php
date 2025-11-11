@@ -74,6 +74,11 @@ class IMipCallbackPlugin extends \Sabre\DAV\ServerPlugin {
             return $this->send(400, ['error' => 'No request body']);
         }
 
+        // After reading php://input, it's exhausted. Replace the request body
+        // with an empty stream to prevent feof() errors in downstream code
+        $emptyStream = fopen('php://memory', 'r+');
+        $request->setBody($emptyStream);
+
         // Check authentication using the auth backend
         if (!$this->authBackend) {
             error_log('IMipCallback: Auth backend not found');

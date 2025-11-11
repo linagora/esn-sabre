@@ -430,11 +430,19 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $result = [];
         foreach ($collection->find($query, [ 'projection' => $projection ]) as $row) {
-            // Ensure calendardata is a string, not a stream
-            $calendardata = $row['calendardata'];
+            // Ensure calendardata is a string, not a stream or null
+            $calendardata = $row['calendardata'] ?? null;
+            if ($calendardata === null) {
+                error_log('WARNING: calendardata is null for uri=' . $row['uri']);
+                continue; // Skip this entry
+            }
             if (is_resource($calendardata)) {
                 error_log('WARNING: calendardata is a resource for uri=' . $row['uri']);
                 $calendardata = stream_get_contents($calendardata);
+                if ($calendardata === false || $calendardata === null) {
+                    error_log('WARNING: failed to read calendardata stream for uri=' . $row['uri']);
+                    continue; // Skip this entry
+                }
             }
 
             $result[] = [
@@ -570,11 +578,19 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $result = [];
         foreach ($collection->find($query, [ 'projection' => $projection ]) as $row) {
             if ($requirePostFilter) {
-                // Ensure calendardata is a string, not a stream
-                $calendardata = $row['calendardata'];
+                // Ensure calendardata is a string, not a stream or null
+                $calendardata = $row['calendardata'] ?? null;
+                if ($calendardata === null) {
+                    error_log('WARNING: calendardata is null in calendarQuery for uri=' . $row['uri']);
+                    continue; // Skip this entry
+                }
                 if (is_resource($calendardata)) {
                     error_log('WARNING: calendardata is a resource in calendarQuery for uri=' . $row['uri']);
                     $calendardata = stream_get_contents($calendardata);
+                    if ($calendardata === false || $calendardata === null) {
+                        error_log('WARNING: failed to read calendardata stream in calendarQuery for uri=' . $row['uri']);
+                        continue; // Skip this entry
+                    }
                 }
 
                 // Ensure calendardata is properly passed to avoid sequential DB reads
@@ -880,11 +896,19 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $row = $collection->findOne($query, [ 'projection' => $projection ]);
         if (!$row) return null;
 
-        // Ensure calendardata is a string, not a stream
-        $calendardata = $row['calendardata'];
+        // Ensure calendardata is a string, not a stream or null
+        $calendardata = $row['calendardata'] ?? null;
+        if ($calendardata === null) {
+            error_log('WARNING: calendardata is null in getSchedulingObject for uri=' . $row['uri']);
+            return null; // Return null if no valid data
+        }
         if (is_resource($calendardata)) {
             error_log('WARNING: calendardata is a resource in getSchedulingObject for uri=' . $row['uri']);
             $calendardata = stream_get_contents($calendardata);
+            if ($calendardata === false || $calendardata === null) {
+                error_log('WARNING: failed to read calendardata stream in getSchedulingObject for uri=' . $row['uri']);
+                return null; // Return null if stream read fails
+            }
         }
 
         return [
@@ -909,11 +933,19 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $result = [];
         foreach($collection->find($query, [ 'projection' => $projection ]) as $row) {
-            // Ensure calendardata is a string, not a stream
-            $calendardata = $row['calendardata'];
+            // Ensure calendardata is a string, not a stream or null
+            $calendardata = $row['calendardata'] ?? null;
+            if ($calendardata === null) {
+                error_log('WARNING: calendardata is null in getSchedulingObjects for uri=' . $row['uri']);
+                continue; // Skip this entry
+            }
             if (is_resource($calendardata)) {
                 error_log('WARNING: calendardata is a resource in getSchedulingObjects for uri=' . $row['uri']);
                 $calendardata = stream_get_contents($calendardata);
+                if ($calendardata === false || $calendardata === null) {
+                    error_log('WARNING: failed to read calendardata stream in getSchedulingObjects for uri=' . $row['uri']);
+                    continue; // Skip this entry
+                }
             }
 
             $result[] = [

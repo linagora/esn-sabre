@@ -1174,60 +1174,59 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         // Skip index creation if disabled via environment variable
         // Rational: calling createIndex on every request doesn't make sense in production
         $shouldCreateIndex = getenv('SHOULD_CREATE_INDEX');
-        if ($shouldCreateIndex === false || $shouldCreateIndex === 'false' || $shouldCreateIndex === '0') {
-            return;
-        }
-
-        // Calendar instances collection indexes
-        // Create a unique compound index on 'principaluri' and 'uri' to avoid calendar instances duplication
-        $calendarInstanceCollection = $this->db->selectCollection($this->calendarInstancesTableName);
-        $calendarInstanceCollection->createIndex(
-            ['principaluri' => 1, 'uri' => 1],
-            ['unique' => true]
-        );
-
-        // Calendar objects collection indexes - CRITICAL for performance
-        $calendarObjectCollection = $this->db->selectCollection($this->calendarObjectTableName);
-
-        // Index for all calendar object queries (getCalendarObjects, calendarQuery, etc.)
-        $calendarObjectCollection->createIndex(['calendarid' => 1]);
-
-        // Compound index for getMultipleCalendarObjects and getCalendarObject
-        // Note: Not enforcing uniqueness to avoid migration issues with existing duplicates
-        $calendarObjectCollection->createIndex(['calendarid' => 1, 'uri' => 1]);
-
-        // Compound index for calendarQuery with time-range filters (most common query pattern)
-        // This index dramatically improves performance for calendar-query REPORT requests
-        $calendarObjectCollection->createIndex([
-            'calendarid' => 1,
-            'componenttype' => 1,
-            'firstoccurence' => 1,
-            'lastoccurence' => 1
-        ]);
-
-        // Index for getCalendarObjectByUID and getDuplicateCalendarObjectsByURI
-        $calendarObjectCollection->createIndex(['uid' => 1]);
-
-        // Calendar changes collection index
-        $calendarChangesCollection = $this->db->selectCollection($this->calendarChangesTableName);
-        $calendarChangesCollection->createIndex([
-            'calendarid' => 1,
-            'synctoken' => 1
-        ]);
-
-        // Subscriptions collection indexes
-        $subscriptionsCollection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
-        $subscriptionsCollection->createIndex(['principaluri' => 1]);
-        $subscriptionsCollection->createIndex(['source' => 1]);
-
-        // Scheduling objects collection - TTL index
-        if (isset($this->schedulingObjectTTLInDays) && $this->schedulingObjectTTLInDays !== 0) {
-            // Create a TTL index that expires after a period of time on 'dateCreated' in the 'schedulingobjects' collection
-            $schedulingObjectCollection = $this->db->selectCollection($this->schedulingObjectTableName);
-            $schedulingObjectCollection->createIndex(
-                ['dateCreated' => 1],
-                ['expireAfterSeconds' => $this->schedulingObjectTTLInDays * 86400]
+        $isUndefined = $shouldCreateIndex === false;
+        if ($isUndefined || $shouldCreateIndex === 'true') {
+            // Calendar instances collection indexes
+            // Create a unique compound index on 'principaluri' and 'uri' to avoid calendar instances duplication
+            $calendarInstanceCollection = $this->db->selectCollection($this->calendarInstancesTableName);
+            $calendarInstanceCollection->createIndex(
+                ['principaluri' => 1, 'uri' => 1],
+                ['unique' => true]
             );
+
+            // Calendar objects collection indexes - CRITICAL for performance
+            $calendarObjectCollection = $this->db->selectCollection($this->calendarObjectTableName);
+
+            // Index for all calendar object queries (getCalendarObjects, calendarQuery, etc.)
+            $calendarObjectCollection->createIndex(['calendarid' => 1]);
+
+            // Compound index for getMultipleCalendarObjects and getCalendarObject
+            // Note: Not enforcing uniqueness to avoid migration issues with existing duplicates
+            $calendarObjectCollection->createIndex(['calendarid' => 1, 'uri' => 1]);
+
+            // Compound index for calendarQuery with time-range filters (most common query pattern)
+            // This index dramatically improves performance for calendar-query REPORT requests
+            $calendarObjectCollection->createIndex([
+               'calendarid' => 1,
+               'componenttype' => 1,
+               'firstoccurence' => 1,
+               'lastoccurence' => 1
+            ]);
+
+            // Index for getCalendarObjectByUID and getDuplicateCalendarObjectsByURI
+            $calendarObjectCollection->createIndex(['uid' => 1]);
+
+            // Calendar changes collection index
+            $calendarChangesCollection = $this->db->selectCollection($this->calendarChangesTableName);
+            $calendarChangesCollection->createIndex([
+                'calendarid' => 1,
+                'synctoken' => 1
+            ]);
+
+            // Subscriptions collection indexes
+            $subscriptionsCollection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
+            $subscriptionsCollection->createIndex(['principaluri' => 1]);
+            $subscriptionsCollection->createIndex(['source' => 1]);
+
+            // Scheduling objects collection - TTL index
+            if (isset($this->schedulingObjectTTLInDays) && $this->schedulingObjectTTLInDays !== 0) {
+                // Create a TTL index that expires after a period of time on 'dateCreated' in the 'schedulingobjects' collection
+                $schedulingObjectCollection = $this->db->selectCollection($this->schedulingObjectTableName);
+                $schedulingObjectCollection->createIndex(
+                    ['dateCreated' => 1],
+                    ['expireAfterSeconds' => $this->schedulingObjectTTLInDays * 86400]
+                );
+            }
         }
     }
 

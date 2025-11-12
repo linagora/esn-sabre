@@ -102,11 +102,11 @@ class VObjectCloneTest extends TestCase {
 
         $vCalendar = \Sabre\VObject\Reader::read($icalData);
 
-        // Mock a parent node
-        $parentNode = $this->getMockBuilder('stdClass')
-            ->setMethods(['getOwner'])
-            ->getMock();
-        $parentNode->method('getOwner')->willReturn('principals/users/boss');
+        $parentNode = new class('principals/users/s') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
 
         $userPrincipal = 'principals/users/employee';
 

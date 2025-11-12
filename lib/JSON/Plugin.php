@@ -991,6 +991,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
             $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
             $objProps[200][$props[0]] = $vObject->jsonSerialize();
+            $vObject->destroy();
 
             $propertyList[] = $objProps;
         }
@@ -1040,6 +1041,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 404 => [],  // Required by Utils::generateJSONMultiStatus
                 'href' => $parentNodePath . '/' . $calendarObject['uri']
             ];
+            $vObject->destroy();
 
             $propertyList[] = $objProps;
         }

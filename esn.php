@@ -233,7 +233,7 @@ $scheduleAsync = !empty($config['schedule']['async']);
 
 // Calendar scheduling support (must be before IMipPlugin)
 $server->addPlugin(
-    new ESN\CalDAV\Schedule\Plugin($principalBackend, $AMQPPublisher, $scheduleAsync, $calendarBackend)
+    new ESN\CalDAV\Schedule\Plugin($principalBackend, $AMQPPublisher, $scheduleAsync)
 );
 
 // Rabbit publisher plugin

@@ -920,7 +920,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         // Use optimized method if available (Mongo backend with SharedCalendar node)
         if ($node instanceof \ESN\CalDAV\SharedCalendar && $node->getBackend() instanceof \ESN\CalDAV\Backend\Mongo) {
             // getFullCalendarId returns the full calendar id array [calendarId, instanceId]
-            return [200, $this->getMultipleDAVItemsOptimized($nodePath, $node, $node->getBackend()->calendarQueryWithAllData($node->getFullCalendarId(), $filters), $start, $end)];
+            return [200, $this->getMultipleDAVItemsOptimized($nodePath, $node, $filters, $start, $end)];
         }
 
         // Fallback to standard method for other backends
@@ -1021,12 +1021,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
      * @param \DateTime|false $end
      * @return array
      */
-    private function getMultipleDAVItemsOptimized($parentNodePath, $parentNode, $calendarObjects, $start = false, $end = false) {
+    private function getMultipleDAVItemsOptimized($parentNodePath, $parentNode, $filters, $start = false, $end = false) {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
         $propertyList = [];
-        foreach ($calendarObjects as $calendarObject) {
+        $backend = $parentNode->getBackend();
+        $id = $parentNode->getFullCalendarId();
+        foreach ($backend->calendarQueryWithAllData($id, $filters) as $calendarObject) {
             // Use pre-parsed VObject if available (from requirePostFilter), otherwise parse now
             $vObject = $calendarObject['vObject'] ?? VObject\Reader::read($calendarObject['calendardata']);
             $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);

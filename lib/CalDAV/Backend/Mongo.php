@@ -639,7 +639,6 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $query['firstoccurence'] = [ '$lt' => $timeRange['end']->getTimeStamp() ];
         }
 
-        $result = [];
         foreach ($collection->find($query, [ 'projection' => $projection ]) as $row) {
             $vObject = null;
 
@@ -655,15 +654,13 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
                 }
             }
 
-            $result[] = [
+            yield [
                 'uri' => $row['uri'],
                 'calendardata' => $row['calendardata'],
                 'etag' => '"' . $row['etag'] . '"',
                 'vObject' => $vObject  // Parsed VObject if requirePostFilter was true, null otherwise
             ];
         }
-
-        return $result;
     }
 
     /**

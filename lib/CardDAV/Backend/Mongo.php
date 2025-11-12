@@ -1025,11 +1025,25 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     private function ensureIndex() {
-        // create a unique compound index on 'principaluri' and 'uri' for address book collection
-        $addressBookCollection = $this->db->selectCollection($this->addressBooksTableName);
-        $addressBookCollection->createIndex(
-            array('principaluri' => 1, 'uri' => 1),
-            array('unique' => true)
-        );
+        // Skip index creation if disabled via environment variable
+        // Rational: calling createIndex on every request doesn't make sense in production
+        $shouldCreateIndex = getenv('SHOULD_CREATE_INDEX');
+        $isUndefined = $shouldCreateIndex === false;
+        if ($isUndefined || $shouldCreateIndex === 'true') {
+            // create a unique compound index on 'principaluri' and 'uri' for address book collection
+            $addressBookCollection = $this->db->selectCollection($this->addressBooksTableName);
+            $addressBookCollection->createIndex(
+                array('principaluri' => 1, 'uri' => 1),
+                array('unique' => true)
+            );
+
+            // Fasten retrieval of changes in addressbooks
+            $addressBookChangeCollection = $this->db->selectCollection($this->addressBookChangesTableName);
+            $addressBookChangeCollection->createIndex(array('addressbookid' => 1, 'synctoken' => 1));
+
+            $cardsCollection = $this->db->selectCollection($this->cardsTableName);
+            $cardsCollection->createIndex(array('addressbookid' => 1));
+            $cardsCollection->createIndex(array('addressbookid' => 1, 'uri' => 1));
+        }
     }
 }

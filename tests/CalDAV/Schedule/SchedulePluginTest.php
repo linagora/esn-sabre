@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV\Schedule;
 
+use ESN\Publisher\AMQPPublisher;
 use Sabre\DAV\Server;
 use Sabre\VObject\ITip\Message;
 use Sabre\VObject\Reader;
@@ -37,6 +38,138 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
 
         $this->plugin->deliver($message);
 
+        $this->assertEquals('1', $message->message->VEVENT->SEQUENCE->getValue());
+    }
+
+    function testDeliverAsyncPublishesToAMQP() {
+        $amqpPublisher = $this->createMock(AMQPPublisher::class);
+
+        $publishedMessage = null;
+        $publishedTopic = null;
+        $publishedProperties = null;
+
+        $amqpPublisher->expects($this->once())
+            ->method('publishWithProperties')
+            ->will($this->returnCallback(function($topic, $message, $properties) use (&$publishedTopic, &$publishedMessage, &$publishedProperties) {
+                $publishedTopic = $topic;
+                $publishedMessage = $message;
+                $publishedProperties = $properties;
+            }));
+
+        $mockAuthPlugin = $this->createMock(\Sabre\DAV\Auth\Plugin::class);
+        $mockAuthPlugin->method('getCurrentPrincipal')
+            ->willReturn('principals/users/testuser');
+
+        $server = $this->createMock(\Sabre\DAV\Server::class);
+        $server->method('getPlugin')
+            ->with('auth')
+            ->willReturn($mockAuthPlugin);
+
+        $mockHref = new \Sabre\DAV\Xml\Property\Href(['mailto:test@example.com']);
+        $server->method('getProperties')
+            ->willReturn([
+                '{urn:ietf:params:xml:ns:caldav}calendar-user-address-set' => $mockHref
+            ]);
+
+        $mockHttpRequest = $this->createMock(\Sabre\HTTP\Request::class);
+        $mockHttpRequest->method('getPath')->willReturn('/calendars/a/b/e.ics');
+        $server->httpRequest = $mockHttpRequest;
+
+        $plugin = new Plugin(null, $amqpPublisher, true);
+        $plugin->initialize($server);
+
+        $message = $this->newItipMessage('1');
+        $plugin->deliver($message);
+
+        // Verify the message was published
+        $this->assertEquals('calendar:itip:deliver', $publishedTopic);
+        $this->assertNotNull($publishedMessage);
+
+        // Decode and verify message content
+        $decoded = json_decode($publishedMessage, true);
+        $this->assertEquals('mailto:a@a.com', $decoded['sender']);
+        $this->assertEquals('mailto:b@b.com', $decoded['recipient']);
+        $this->assertEquals('REQUEST', $decoded['method']);
+        $this->assertEquals('VEVENT', $decoded['component']);
+        $this->assertNotNull($decoded['message']);
+
+        // Verify AMQP properties contain connectedUser header
+        $this->assertArrayHasKey('application_headers', $publishedProperties);
+        $headers = $publishedProperties['application_headers']->getNativeData();
+        $this->assertArrayHasKey('connectedUser', $headers);
+        $this->assertEquals('test@example.com', $headers['connectedUser']);
+        $this->assertArrayHasKey('requestURI', $headers);
+        $this->assertEquals('/calendars/a/b/e.ics', $headers['requestURI']);
+
+        // Verify scheduleStatus is set to pending (1.0)
+        $this->assertEquals('1.0', $message->scheduleStatus);
+    }
+
+    function testDeliverSyncDoesNotPublishToAMQP() {
+        $amqpPublisher = $this->createMock(AMQPPublisher::class);
+
+        $amqpPublisher->expects($this->never())
+            ->method('publishWithProperties');
+
+        $server = new Server();
+        $plugin = new Plugin(null, $amqpPublisher, false);
+        $plugin->initialize($server);
+
+        $message = $this->newItipMessage('1');
+        $plugin->deliver($message);
+        $this->assertNotEquals('1.0', $message->scheduleStatus);
+    }
+
+    function testDeliverAsyncWithoutPublisherDoesNotPublish() {
+        $server = new Server();
+        $plugin = new Plugin(null, null, true);
+        $plugin->initialize($server);
+
+        $message = $this->newItipMessage('1');
+        $plugin->deliver($message);
+        $this->assertNotEquals('1.0', $message->scheduleStatus);
+    }
+
+    function testDeliverAsyncFallsBackToSyncWhenNoAddresses() {
+        $amqpPublisher = $this->createMock(AMQPPublisher::class);
+
+        $amqpPublisher->expects($this->never())
+            ->method('publishWithProperties');
+
+        $mockAuthPlugin = $this->createMock(\Sabre\DAV\Auth\Plugin::class);
+        $mockAuthPlugin->method('getCurrentPrincipal')
+            ->willReturn('principals/users/testuser');
+
+        $server = $this->createMock(\Sabre\DAV\Server::class);
+        $server->method('getPlugin')
+            ->with('auth')
+            ->willReturn($mockAuthPlugin);
+
+        // Return empty addresses
+        $server->method('getProperties')
+            ->willReturn([]);
+
+        $plugin = new Plugin(null, $amqpPublisher, true);
+        $plugin->initialize($server);
+
+        $message = $this->newItipMessage('1');
+        $plugin->deliver($message);
+
+        // Should fall back to sync delivery
+        $this->assertNotEquals('1.0', $message->scheduleStatus);
+    }
+
+    function testDeliverSyncCalledDirectly() {
+        $server = new Server();
+        $plugin = new Plugin();
+        $plugin->initialize($server);
+
+        $message = $this->newItipMessage('1');
+
+        // deliverSync should process synchronously without checking async flags
+        $plugin->deliverSync($message);
+
+        // Sequence should still be normalized
         $this->assertEquals('1', $message->message->VEVENT->SEQUENCE->getValue());
     }
 

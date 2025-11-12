@@ -15,4 +15,9 @@ class AMQPPublisher {
         $msg = new \PhpAmqpLib\Message\AMQPMessage(utf8_encode($message));
         $this->channel->basic_publish($msg, $topic);
     }
+
+    function publishWithProperties($topic, $message, $properties) {
+        $msg = new \PhpAmqpLib\Message\AMQPMessage(utf8_encode($message), $properties);
+        $this->channel->basic_publish($msg, $topic);
+    }
 }

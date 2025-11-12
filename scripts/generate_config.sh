@@ -17,6 +17,7 @@ amqp_ssl_enabled='false'
 amqp_ssl_trust_all='false'
 mongo_timeout='10000'
 sabre_env='production'
+schedule_async='false'
 
 [ -z "$SABRE_MONGO_HOST" ] || sabre_mongo_host="$SABRE_MONGO_HOST"
 [ -z "$SABRE_MONGO_PORT" ] || sabre_mongo_port="$SABRE_MONGO_PORT"
@@ -35,6 +36,14 @@ sabre_env='production'
 [ -z "$AMQP_SSL_ENABLED" ] || amqp_ssl_enabled="$AMQP_SSL_ENABLED"
 [ -z "$AMQP_SSL_TRUST_ALL_CERTS" ] || amqp_ssl_trust_all="$AMQP_SSL_TRUST_ALL_CERTS"
 [ -z "$SABRE_ENV" ] || sabre_env="$SABRE_ENV"
+# Convert SCHEDULE_ASYNC to proper JSON boolean
+if [ "$SCHEDULE_ASYNC" = "true" ] || [ "$SCHEDULE_ASYNC" = "1" ]; then
+  schedule_async="true"
+elif [ "$SCHEDULE_ASYNC" = "false" ] || [ "$SCHEDULE_ASYNC" = "0" ] || [ -z "$SCHEDULE_ASYNC" ]; then
+  schedule_async="false"
+else
+  schedule_async="$SCHEDULE_ASYNC"
+fi
 
 if [ ! -z "${ESN_MONGO_USER}" ]
 then
@@ -86,6 +95,9 @@ config="{
   \"esn\": {
     \"apiRoot\": \"http://${esn_host}:${esn_port}\",
     \"calendarRoot\": \"http://${esn_host}:${esn_port}/calendar/api\"
+  },
+  \"schedule\": {
+    \"async\": ${schedule_async}
   },
   \"environment\": {
     \"SABRE_ENV\": \"${sabre_env}\"

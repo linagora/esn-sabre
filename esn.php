@@ -214,11 +214,6 @@ $server->addPlugin(
 $server->addPlugin(new ESN\DAV\Sharing\Plugin());
 $server->addPlugin(new Sabre\CalDAV\SharingPlugin());
 
-// Calendar scheduling support
-$server->addPlugin(
-    new ESN\CalDAV\Schedule\Plugin($principalBackend)
-);
-
 // WebDAV-Sync plugin
 $server->addPlugin(new Sabre\DAV\Sync\Plugin());
 
@@ -231,6 +226,15 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 // Calendar Ics Export support
 $icsExportPlugin = new Sabre\CalDAV\ICSExportPlugin();
 $server->addPlugin($icsExportPlugin);
+
+// Initialize AMQP config before Schedule plugin
+$AMQPPublisher = null;
+$scheduleAsync = !empty($config['schedule']['async']);
+
+// Calendar scheduling support (must be before IMipPlugin)
+$server->addPlugin(
+    new ESN\CalDAV\Schedule\Plugin($principalBackend, $AMQPPublisher, $scheduleAsync)
+);
 
 // Rabbit publisher plugin
 if (!empty($config['amqp']['host'])) {
@@ -254,11 +258,23 @@ if (!empty($config['amqp']['host'])) {
     $subscriptionRealTimePlugin = new ESN\Publisher\CardDAV\SubscriptionRealTimePlugin($AMQPPublisher, $addressbookBackend);
     $server->addPlugin($subscriptionRealTimePlugin);
 
-    // iMip Plugin to handle sending emails
+    // iMip Plugin to handle sending emails (must be after Schedule plugin)
     $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));
+
+    // Update Schedule plugin with initialized AMQP publisher for async mode
+    // Since Schedule\Plugin is already added, we need to access it and update the publisher
+    foreach ($server->getPlugins() as $plugin) {
+        if ($plugin instanceof ESN\CalDAV\Schedule\Plugin) {
+            $plugin->setAmqpPublisher($AMQPPublisher);
+            break;
+        }
+    }
 }
 
 $server->addPlugin(new ESN\CalDAV\Schedule\ITipPlugin());
+
+// IMIP callback endpoint for async processing
+$server->addPlugin(new ESN\CalDAV\Schedule\IMipCallbackPlugin());
 
 $server->addPlugin(new ESN\CalDAV\ParticipationPlugin());
 

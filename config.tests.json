@@ -4,6 +4,9 @@
     "allowOrigin": "*",
     "realm": "ESN"
   },
+  "schedule": {
+    "async": false
+  },
   "amqp": {
     "host": "localhost",
     "port": "5672",

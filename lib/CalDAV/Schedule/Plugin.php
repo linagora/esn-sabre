@@ -521,94 +521,26 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      */
     /**
      * Synchronous delivery method called by IMipCallbackPlugin after async processing.
-     * This method directly updates the recipient's calendar without going through
-     * parent::deliver() to avoid feof() errors from reading existing MongoDB objects.
-     * Email has already been sent by the side-service, so we just need to update the calendar.
+     * Since the email has already been sent by the side-service, we temporarily disable
+     * async mode and call parent::deliver() to ensure all backend events (like alarm AMQP messages) are triggered.
      */
     public function deliverSync(ITip\Message $iTipMessage) {
-        $recipient = preg_replace('/^mailto:/i', '', $iTipMessage->recipient);
-        $recipientPrincipal = 'principals/users/' . $recipient;
+        error_log('DeliverSync: method=' . $iTipMessage->method . ' recipient=' . $iTipMessage->recipient);
 
-        error_log('DeliverSync: method=' . $iTipMessage->method . ' recipient=' . $recipient);
+        // Temporarily disable async mode to prevent re-publishing to AMQP
+        $originalAsyncValue = $this->scheduleAsync;
+        $this->scheduleAsync = false;
 
         try {
-            // Get caldav plugin to access the calendar backend
-            $caldavPlugin = $this->server->getPlugin('caldav');
-            if (!$caldavPlugin) {
-                error_log('DeliverSync: CalDAV plugin not found');
-                $iTipMessage->scheduleStatus = '5.2;Server configuration error';
-                return;
-            }
-
-            $caldavBackend = $caldavPlugin->getCalDAVBackend();
-            if (!$caldavBackend) {
-                error_log('DeliverSync: CalDAV backend not found');
-                $iTipMessage->scheduleStatus = '5.2;Server configuration error';
-                return;
-            }
-
-            // For REQUEST method: create or update the event in recipient's calendar
-            if ($iTipMessage->method === 'REQUEST') {
-                $calendars = $caldavBackend->getCalendarsForUser($recipientPrincipal);
-
-                if (empty($calendars)) {
-                    error_log('DeliverSync: No calendars found for user ' . $recipient);
-                    $iTipMessage->scheduleStatus = '5.2;No calendar found';
-                    return;
-                }
-
-                $calendar = $calendars[0];
-                $calendarId = $calendar['id'];
-                $objectUri = $iTipMessage->uid . '.ics';
-                $calendarData = $iTipMessage->message->serialize();
-
-                // Try to update first, if that fails (object doesn't exist), create it
-                try {
-                    $caldavBackend->updateCalendarObject($calendarId, $objectUri, $calendarData);
-                    error_log('DeliverSync: Updated event ' . $objectUri);
-                } catch (\Exception $e) {
-                    // If update fails, the object probably doesn't exist, so create it
-                    error_log('DeliverSync: Update failed, trying to create: ' . $e->getMessage());
-                    $caldavBackend->createCalendarObject($calendarId, $objectUri, $calendarData);
-                    error_log('DeliverSync: Created event ' . $objectUri);
-                }
-
-                $iTipMessage->scheduleStatus = '1.2;Success';
-
-            } elseif ($iTipMessage->method === 'CANCEL') {
-                // For CANCEL method: delete the event from recipient's calendar
-                $calendars = $caldavBackend->getCalendarsForUser($recipientPrincipal);
-
-                if (empty($calendars)) {
-                    error_log('DeliverSync: No calendars found for user ' . $recipient);
-                    $iTipMessage->scheduleStatus = '5.2;No calendar found';
-                    return;
-                }
-
-                $objectUri = $iTipMessage->uid . '.ics';
-
-                // Try to delete from all calendars (in case it exists in multiple)
-                foreach ($calendars as $calendar) {
-                    $calendarId = $calendar['id'];
-                    try {
-                        $caldavBackend->deleteCalendarObject($calendarId, $objectUri);
-                        error_log('DeliverSync: Deleted event ' . $objectUri . ' from calendar ' . $calendarId);
-                    } catch (\Exception $e) {
-                        // Object might not exist in this calendar, that's OK
-                        error_log('DeliverSync: Could not delete ' . $objectUri . ' from calendar ' . $calendarId . ': ' . $e->getMessage());
-                    }
-                }
-
-                $iTipMessage->scheduleStatus = '1.2;Success';
-
-            } else {
-                error_log('DeliverSync: Unsupported method ' . $iTipMessage->method);
-                $iTipMessage->scheduleStatus = '3.8;Unsupported method';
-            }
-
+            // Call parent's deliver() which will trigger all backend events including alarm AMQP messages
+            parent::deliver($iTipMessage);
+            error_log('DeliverSync: parent::deliver() succeeded with status=' . $iTipMessage->scheduleStatus);
         } catch (\Exception $e) {
             error_log('DeliverSync: Exception - ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine());
             $iTipMessage->scheduleStatus = '5.1;Delivery failed: ' . $e->getMessage();
+        } finally {
+            // Restore original async value
+            $this->scheduleAsync = $originalAsyncValue;
         }
     }
 }

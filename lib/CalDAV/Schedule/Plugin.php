@@ -526,8 +526,17 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     public function deliverSync(ITip\Message $iTipMessage) {
         // The iTipMessage has been reconstructed with a fresh VObject from the callback,
         // so we can safely call parent::deliver() without the feof() error.
-        // This ensures all hooks and AMQP messages are triggered properly.
-        error_log('DeliverSync: calling parent::deliver() for method=' . $iTipMessage->method . ' recipient=' . $iTipMessage->recipient);
-        return parent::deliver($iTipMessage);
+        // Temporarily disable async mode to force synchronous processing and trigger
+        // all hooks (IMipPlugin for email notifications, alarm plugins, etc.)
+        $wasAsync = $this->scheduleAsync;
+        $this->scheduleAsync = false;
+
+        error_log('DeliverSync: calling parent::deliver() synchronously for method=' . $iTipMessage->method . ' recipient=' . $iTipMessage->recipient);
+        $result = parent::deliver($iTipMessage);
+
+        // Restore async mode
+        $this->scheduleAsync = $wasAsync;
+
+        return $result;
     }
 }

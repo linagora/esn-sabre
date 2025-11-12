@@ -917,7 +917,63 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             'time-range' => null,
         ];
 
+        // Use optimized method if available (Mongo backend with SharedCalendar node)
+        if ($node instanceof \ESN\CalDAV\SharedCalendar && $node->getBackend() instanceof \ESN\CalDAV\Backend\Mongo) {
+            // getFullCalendarId returns the full calendar id array [calendarId, instanceId]
+            return [200, $this->getMultipleDAVItemsOptimized($nodePath, $node, $filters, $start, $end)];
+        }
+
+        // Fallback to standard method for other backends
         return [200, $this->getMultipleDAVItems($nodePath, $node, $node->calendarQuery($filters), $start, $end)];
+    }
+
+    /**
+     * Expands and normalizes a VObject for recurring events.
+     * Handles event expansion between dates, RECURRENCE-ID addition, and UTC conversion.
+     *
+     * @param VObject\Component\VCalendar $vObject The calendar object to process
+     * @param \DateTime|false $start Start date for expansion
+     * @param \DateTime|false $end End date for expansion
+     * @return VObject\Component\VCalendar The processed calendar object
+     */
+    private function expandAndNormalizeVObject($vObject, $start, $end) {
+        // If we have start and end date, we're getting an expanded list of occurrences between these dates
+        if ($start && $end) {
+            $expandedObject = $vObject->expand($start, $end);
+
+            // Sabre's VObject doesn't return the RECURRENCE-ID in the first
+            // occurrence, we'll need to do this ourselves. We take advantage
+            // of the fact that the object getter for VEVENT will always return
+            // the first one.
+            $vevent = $expandedObject->VEVENT;
+
+            // When an event has only RECURRENCE-ID exceptions without a master event (RRULE),
+            // the expand() method returns an empty VCALENDAR with no VEVENT.
+            // This happens when a user is invited to only one occurrence of a recurring event.
+            // In this case, we use the original unexpanded object and normalize it.
+            if (!is_object($vevent)) {
+                // Convert dates to UTC to match expand() behavior
+                // IMPORTANT: Must be done BEFORE removing VTIMEZONE, as conversion needs timezone info
+                foreach ($vObject->VEVENT as $vevent) {
+                    $this->convertDateTimeToUTC($vevent, 'DTSTART');
+                    $this->convertDateTimeToUTC($vevent, 'DTEND');
+                }
+
+                // Remove VTIMEZONE to match expand() behavior
+                unset($vObject->VTIMEZONE);
+                // Keep the original vObject instead of the empty expanded one
+            } else {
+                $vObject = $expandedObject;
+
+                if (isset($vevent->RRULE) && !isset($vevent->{'RECURRENCE-ID'})) {
+                    $recurid = clone $vevent->DTSTART;
+                    $recurid->name = 'RECURRENCE-ID';
+                    $vevent->add($recurid);
+                }
+            }
+        }
+
+        return $vObject;
     }
 
     private function getMultipleDAVItems($parentNodePath, $parentNode, $calendarObjectUris, $start = false, $end = false) {
@@ -932,45 +988,62 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $propertyList = [];
         foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
             $vObject = VObject\Reader::read($objProps[200][$props[0]]);
-
-            // If we have start and end date, we're getting an expanded list of occurrences between these dates
-            if ($start && $end) {
-                $expandedObject = $vObject->expand($start, $end);
-
-                // Sabre's VObject doesn't return the RECURRENCE-ID in the first
-                // occurrence, we'll need to do this ourselves. We take advantage
-                // of the fact that the object getter for VEVENT will always return
-                // the first one.
-                $vevent = $expandedObject->VEVENT;
-
-                // When an event has only RECURRENCE-ID exceptions without a master event (RRULE),
-                // the expand() method returns an empty VCALENDAR with no VEVENT.
-                // This happens when a user is invited to only one occurrence of a recurring event.
-                // In this case, we use the original unexpanded object and normalize it.
-                if (!is_object($vevent)) {
-                    // Convert dates to UTC to match expand() behavior
-                    // IMPORTANT: Must be done BEFORE removing VTIMEZONE, as conversion needs timezone info
-                    foreach ($vObject->VEVENT as $vevent) {
-                        $this->convertDateTimeToUTC($vevent, 'DTSTART');
-                        $this->convertDateTimeToUTC($vevent, 'DTEND');
-                    }
-
-                    // Remove VTIMEZONE to match expand() behavior
-                    unset($vObject->VTIMEZONE);
-                    // Keep the original vObject instead of the empty expanded one
-                } else {
-                    $vObject = $expandedObject;
-
-                    if (isset($vevent->RRULE) && !isset($vevent->{'RECURRENCE-ID'})) {
-                        $recurid = clone $vevent->DTSTART;
-                        $recurid->name = 'RECURRENCE-ID';
-                        $vevent->add($recurid);
-                    }
-                }
-            }
-
+            $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
             $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
             $objProps[200][$props[0]] = $vObject->jsonSerialize();
+            $vObject->destroy();
+
+            $propertyList[] = $objProps;
+        }
+
+        return [
+            '_links' => [
+                'self' => [ 'href' => $baseUri . $parentNodePath . '.json']
+            ],
+            '_embedded' => [
+                'dav:item' => Utils::generateJSONMultiStatus([
+                    'fileProperties' => $propertyList,
+                    'dataKey' => $props[0],
+                    'baseUri' => $baseUri
+                ])
+            ]
+        ];
+    }
+
+    /**
+     * Optimized version of getMultipleDAVItems that works with data already fetched from the database.
+     * This avoids the expensive getPropertiesForMultiplePaths call.
+     *
+     * @param string $parentNodePath
+     * @param mixed $parentNode
+     * @param array $calendarObjects Array of objects with 'uri', 'calendardata', and 'etag' keys
+     * @param \DateTime|false $start
+     * @param \DateTime|false $end
+     * @return array
+     */
+    private function getMultipleDAVItemsOptimized($parentNodePath, $parentNode, $filters, $start = false, $end = false) {
+        $baseUri = $this->server->getBaseUri();
+        $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
+
+        $propertyList = [];
+        $backend = $parentNode->getBackend();
+        $id = $parentNode->getFullCalendarId();
+        foreach ($backend->calendarQueryWithAllData($id, $filters) as $calendarObject) {
+            // Use pre-parsed VObject if available (from requirePostFilter), otherwise parse now
+            $vObject = $calendarObject['vObject'] ?? VObject\Reader::read($calendarObject['calendardata']);
+            $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
+            $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+
+            // Build the property list in the same format as getPropertiesForMultiplePaths would return
+            $objProps = [
+                200 => [
+                    $props[0] => $vObject->jsonSerialize(),
+                    $props[1] => $calendarObject['etag']
+                ],
+                404 => [],  // Required by Utils::generateJSONMultiStatus
+                'href' => $parentNodePath . '/' . $calendarObject['uri']
+            ];
+            $vObject->destroy();
 
             $propertyList[] = $objProps;
         }

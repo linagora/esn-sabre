@@ -208,6 +208,12 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
     }
 
+    function getFullCalendarId() {
+
+        return $this->calendarInfo['id'];
+
+    }
+
     function getSubscribers() {
         $principalUriExploded = explode('/', $this->calendarInfo['principaluri']);
         $source = 'calendars/' . $principalUriExploded[2] . '/' . $this->calendarInfo['uri'];
@@ -243,6 +249,10 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
                 return $sharee->principal;
             }
         }
+    }
+
+    function getBackend() {
+        return $this->caldavBackend;
     }
 
 }

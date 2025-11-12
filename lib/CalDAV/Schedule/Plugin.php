@@ -521,8 +521,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      */
     /**
      * Synchronous delivery method called by IMipCallbackPlugin after async processing.
-     * This method directly updates the recipient's calendar and manually triggers the schedule event
-     * to ensure alarm AMQP messages are published, while avoiding feof() errors from parent::deliver().
+     * This method directly updates the recipient's calendar and publishes alarm AMQP messages,
+     * while avoiding feof() errors from parent::deliver().
      */
     public function deliverSync(ITip\Message $iTipMessage) {
         $recipient = preg_replace('/^mailto:/i', '', $iTipMessage->recipient);
@@ -546,6 +546,15 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 return;
             }
 
+            // Get AMQPPublisher for alarm messages
+            $eventRealTimePlugin = null;
+            foreach ($this->server->getPlugins() as $plugin) {
+                if ($plugin instanceof \ESN\Publisher\CalDAV\EventRealTimePlugin) {
+                    $eventRealTimePlugin = $plugin;
+                    break;
+                }
+            }
+
             // For REQUEST method: create or update the event in recipient's calendar
             if ($iTipMessage->method === 'REQUEST') {
                 $calendars = $caldavBackend->getCalendarsForUser($recipientPrincipal);
@@ -558,6 +567,9 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
                 $calendar = $calendars[0];
                 $calendarId = $calendar['id'];
+                $calendarUri = $calendar['uri'];
+                // Extract homeId from principal (principals/users/xxx@domain.com -> xxx@domain.com)
+                $homeId = substr($recipientPrincipal, strrpos($recipientPrincipal, '/') + 1);
                 $objectUri = $iTipMessage->uid . '.ics';
                 $calendarData = $iTipMessage->message->serialize();
 
@@ -570,6 +582,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                     error_log('DeliverSync: Update failed, trying to create: ' . $e->getMessage());
                     $caldavBackend->createCalendarObject($calendarId, $objectUri, $calendarData);
                     error_log('DeliverSync: Created event ' . $objectUri);
+                }
+
+                // Manually publish alarm AMQP message if EventRealTimePlugin is available
+                if ($eventRealTimePlugin) {
+                    $this->publishAlarmMessage($eventRealTimePlugin, $iTipMessage, $homeId, $calendarUri, $objectUri);
                 }
 
                 $iTipMessage->scheduleStatus = '1.2;Success';
@@ -586,12 +603,22 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
                 $objectUri = $iTipMessage->uid . '.ics';
 
+                // Extract homeId from principal
+                $homeId = substr($recipientPrincipal, strrpos($recipientPrincipal, '/') + 1);
+
                 // Try to delete from all calendars (in case it exists in multiple)
                 foreach ($calendars as $calendar) {
                     $calendarId = $calendar['id'];
+                    $calendarUri = $calendar['uri'];
+
                     try {
                         $caldavBackend->deleteCalendarObject($calendarId, $objectUri);
                         error_log('DeliverSync: Deleted event ' . $objectUri . ' from calendar ' . $calendarId);
+
+                        // Manually publish alarm AMQP message for CANCEL
+                        if ($eventRealTimePlugin) {
+                            $this->publishAlarmMessage($eventRealTimePlugin, $iTipMessage, $homeId, $calendarUri, $objectUri);
+                        }
                     } catch (\Exception $e) {
                         // Object might not exist in this calendar, that's OK
                         error_log('DeliverSync: Could not delete ' . $objectUri . ' from calendar ' . $calendarId . ': ' . $e->getMessage());
@@ -605,14 +632,49 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 $iTipMessage->scheduleStatus = '3.8;Unsupported method';
             }
 
-            // Manually trigger the 'schedule' event to ensure alarm AMQP messages are published
-            // This is necessary because we're bypassing parent::deliver()
-            error_log('DeliverSync: Triggering schedule event for alarm AMQP messages');
-            $this->server->emit('schedule', [$iTipMessage]);
+            error_log('DeliverSync: Calendar operations completed successfully');
 
         } catch (\Exception $e) {
             error_log('DeliverSync: Exception - ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine());
             $iTipMessage->scheduleStatus = '5.1;Delivery failed: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Publish alarm AMQP message directly to EventRealTimePlugin
+     */
+    private function publishAlarmMessage($eventRealTimePlugin, $iTipMessage, $homeId, $calendarUri, $objectUri) {
+        try {
+            $eventPath = 'calendars/' . $homeId . '/' . $calendarUri . '/' . $objectUri;
+
+            $dataMessage = [
+                'eventPath' => '/' . $eventPath,
+                'event' => $iTipMessage->message
+            ];
+
+            // Get the topic from EventRealTimePlugin's EVENT_TOPICS
+            $reflection = new \ReflectionClass($eventRealTimePlugin);
+            $property = $reflection->getProperty('EVENT_TOPICS');
+            $property->setAccessible(true);
+            $topics = $property->getValue($eventRealTimePlugin);
+
+            $topicKey = 'EVENT_ALARM_' . $iTipMessage->method;
+            if (isset($topics[$topicKey])) {
+                // Call createMessage method via reflection
+                $method = $reflection->getMethod('createMessage');
+                $method->setAccessible(true);
+                $method->invoke($eventRealTimePlugin, $topics[$topicKey], $dataMessage);
+
+                // Call publishMessages to actually send the AMQP message
+                $publishMethod = $reflection->getMethod('publishMessages');
+                $publishMethod->setAccessible(true);
+                $publishMethod->invoke($eventRealTimePlugin);
+
+                error_log('DeliverSync: Published alarm AMQP message for ' . $iTipMessage->method);
+            }
+        } catch (\Exception $e) {
+            error_log('DeliverSync: Failed to publish alarm AMQP: ' . $e->getMessage());
+            // Non-fatal, don't throw
         }
     }
 }

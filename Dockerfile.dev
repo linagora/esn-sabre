@@ -1,13 +1,25 @@
+# Development Dockerfile for ESN Sabre
+# Adds Xdebug and dev dependencies on top of the base image.
 #
-# Docker container for ESN Sabre frontend development.
+# Usage:
+#   docker build -t esn-sabre-dev -f Dockerfile.dev .
+#   or specify a custom base image:
+#   docker build -t esn-sabre-dev -f Dockerfile.dev --build-arg BASE_IMAGE=linagora/esn-sabre:sabre-4_1_5-07-11-2025 .
 #
-# Build:
-# docker build -t linagora/esn-sabre-dev .
-#
+# This image enables PHP Xdebug for debugging with port 9003
 
-FROM linagora/esn-sabre
-LABEL maintainer Linagora Folks <openpaas@linagora.com>
+ARG BASE_IMAGE="linagora/esn-sabre:sabre-4_1_5-07-11-2025"
+FROM ${BASE_IMAGE}
 
-RUN pecl install xdebug-2.7.2
-
-CMD ["sh", "./scripts/start.sh"]
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    php-pear php7.4-dev make gcc g++ autoconf pkg-config \
+ && pecl install xdebug-3.1.6 \
+ && echo "zend_extension=$(find /usr/lib/php/ -name xdebug.so)" > /etc/php/7.4/mods-available/xdebug.ini \
+ && echo "xdebug.mode=debug" >> /etc/php/7.4/mods-available/xdebug.ini \
+ && echo "xdebug.start_with_request=yes" >> /etc/php/7.4/mods-available/xdebug.ini \
+ && echo "xdebug.client_host=host.docker.internal" >> /etc/php/7.4/mods-available/xdebug.ini \
+ && echo "xdebug.client_port=9003" >> /etc/php/7.4/mods-available/xdebug.ini \
+ && echo "xdebug.idekey=VSCODE" >> /etc/php/7.4/mods-available/xdebug.ini \
+ && ln -s /etc/php/7.4/mods-available/xdebug.ini /etc/php/7.4/fpm/conf.d/20-xdebug.ini \
+ && ln -s /etc/php/7.4/mods-available/xdebug.ini /etc/php/7.4/cli/conf.d/20-xdebug.ini \
+ && rm -rf /var/lib/apt/lists/*

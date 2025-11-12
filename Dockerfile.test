@@ -9,9 +9,9 @@ LABEL maintainer Linagora Folks <openpaas@linagora.com>
 ENV PHPVERSION=8.4
 
 # Copy PHP configuration files first (these rarely change)
-ADD ./docker/config/20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
-ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini
-ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.ini
+COPY ./docker/config/20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
+COPY ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini
+COPY ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.ini
 
 # Fix for CI environments with clock skew issues
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
@@ -43,7 +43,12 @@ RUN apt-get update && \
   # Compile MongoDB extension
   pecl install mongodb-2.1.4 && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
-  echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini 
+  echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini \
+  # Remove build tools to reduce image size
+  apt-get purge -y --auto-remove php-pear php${PHPVERSION}-dev make pkg-config && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists/*
+
 
 # Configure PHP (combine all sed commands)
 RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fpm/php.ini && \
@@ -71,13 +76,6 @@ RUN echo "daemon off;" >> /etc/nginx/nginx.conf && \
     ln -sf /dev/stderr /var/log/nginx/error.log && \
     ln -sf /dev/stdout /var/log/nginx/access.log
 
-# Set up Sabre DAV
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --filename=composer
-
-# Set up Nginx
-RUN ln -sf /dev/stderr /var/log/nginx/error.log \
-    && ln -sf /dev/stdout /var/log/nginx/access.log
-
 # Copy composer from official image
 COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
 
@@ -99,10 +97,6 @@ RUN cp -v docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh \
 RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject' && \
     composer clearcache && \
     composer install --no-dev --optimize-autoloader --no-interaction
-
-RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject'
-
-RUN composer clearcache && composer update --dev
 
 EXPOSE 80
 

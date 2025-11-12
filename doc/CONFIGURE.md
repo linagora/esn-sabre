@@ -34,7 +34,7 @@ Credentials for impersonation are also set by ENV variables:
  - SABRE_ADMIN_LOGIN
  - SABRE_ADMIN_PASSWORD
 
-Sabre being written in PHP, it supports per request mongoDB indexes provisionning (defaults to 'true'), this can be disabled by setting the SHOULD_CREATE_INDEX variable to `false` which is recommended in production (once indexes are provisionned).
+Sabre being written in PHP, it supports per-request MongoDB indexes provisioning (defaults to `true`), which can be disabled by setting the SHOULD_CREATE_INDEX environment variable to `false`. This is recommended in production once indexes are provisioned.
 
 ## create the configuration file
 

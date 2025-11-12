@@ -71,6 +71,7 @@ RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fp
   sed -i "s/;listen.owner = www-data/listen.owner = www-data/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
   sed -i "s/;listen.group = www-data/listen.group = www-data/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
   sed -i "s/;listen.mode = 0660/listen.mode = 0660/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
+  sed -i "s|^listen = .*|listen = /var/run/php/php-fpm.sock|" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
   sed -i "s/;listen.backlog = 511/listen.backlog = 4096/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
   sed -i "s/pm.max_children = 5/pm.max_children = 96/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
   sed -i "s/pm.start_servers = 2/pm.start_servers = 8/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \

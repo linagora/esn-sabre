@@ -35,7 +35,6 @@ class IMipPluginCommonTest extends IMipPluginTestBase {
         $this->iTipMessage->sender = 'mailto:test@example.com';
         $this->iTipMessage->recipient = 'mailto:johndoe@example.org';
         $this->iTipMessage->significantChange = false;
-        $this->iTipMessage->hasChange = false;
 
         $plugin->schedule($this->iTipMessage);
         $this->assertEquals($this->iTipMessage->scheduleStatus, '1.0');

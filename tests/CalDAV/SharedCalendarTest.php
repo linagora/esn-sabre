@@ -8,6 +8,7 @@ require_once ESN_TEST_BASE . '/Sabre/CalDAV/Backend/MockSharing.php';
 /**
  * @medium
  */
+#[\AllowDynamicProperties]
 class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
 
     protected function getBackend() {

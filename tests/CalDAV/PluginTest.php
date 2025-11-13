@@ -3,6 +3,7 @@
 namespace ESN\CalDAV;
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
+#[\AllowDynamicProperties]
 class PluginTest extends \PHPUnit\Framework\TestCase {
 
     function  testGetCalendarHomeForPrincipal() {

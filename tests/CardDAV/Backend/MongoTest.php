@@ -9,6 +9,7 @@ require_once 'AbstractDatabaseTest.php';
 /**
  * @medium
  */
+#[\AllowDynamicProperties]
 class MongoTest extends AbstractDatabaseTest {
 
     function setUp(): void {

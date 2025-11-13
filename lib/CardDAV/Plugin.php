@@ -6,6 +6,7 @@ use \Sabre\VObject;
 use \Sabre\DAV\Exception\Forbidden;
 use \ESN\Utils\Utils as Utils;
 
+#[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
 
     function initialize(\Sabre\DAV\Server $server) {

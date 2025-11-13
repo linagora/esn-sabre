@@ -5,14 +5,15 @@ namespace ESN\CalDAV\Backend;
 /**
  * @medium
  */
+#[\AllowDynamicProperties]
 class EsnTest extends \PHPUnit\Framework\TestCase {
     protected function getBackend() {
         $mc = new \MongoDB\Client(ESN_MONGO_SABREURI);
         $db = $mc->{ESN_MONGO_SABREDB};
         $db->drop();
 
-        $principalBackendMock = $this->getMockBuilder(\Sabre\DAVACL\PrincipalBackend\BackendInterface::class)->setMethods(['getPrincipalByPath', 'getPrincipalsByPrefix', 'updatePrincipal', 'searchPrincipals', 'findByUri', 'getGroupMemberSet', 'getGroupMembership', 'setGroupMemberSet'])->getMock();
-        $principalBackendMock->expects($this->any())->method('getPrincipalByPath')->will($this->returnValue(['{DAV:}displayname' => 'resourceName']));
+        $principalBackendMock = $this->getMockBuilder(\Sabre\DAVACL\PrincipalBackend\BackendInterface::class)->onlyMethods(['getPrincipalByPath', 'getPrincipalsByPrefix', 'updatePrincipal', 'searchPrincipals', 'findByUri', 'getGroupMemberSet', 'getGroupMembership', 'setGroupMemberSet'])->getMock();
+        $principalBackendMock->expects($this->any())->method('getPrincipalByPath')->willReturn(['{DAV:}displayname' => 'resourceName']);
 
         return new Esn($db, $principalBackendMock);
     }

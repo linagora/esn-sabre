@@ -14,15 +14,15 @@
 # docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre
 #
 
-FROM debian:bullseye-slim
-LABEL maintainer="Linagora Folks <openpaas@linagora.com>"
+FROM debian:trixie-slim
+LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
-ENV PHPVERSION=7.4
+ENV PHPVERSION=8.4
 
 # Copy PHP configuration files first (these rarely change)
 ADD ./docker/config/20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
-#ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini
-#ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.ini
+ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini
+ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.ini
 
 # Fix for CI environments with clock skew issues
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
@@ -52,7 +52,7 @@ RUN apt-get update && \
     pkg-config \
     git && \
   # Compile MongoDB extension
-  pecl install mongodb-1.15.0 && \
+  pecl install mongodb-2.1.4 && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini && \
   # Remove build tools to reduce image size
@@ -71,6 +71,7 @@ RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fp
   sed -i "s/;listen.owner = www-data/listen.owner = www-data/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
   sed -i "s/;listen.group = www-data/listen.group = www-data/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
   sed -i "s/;listen.mode = 0660/listen.mode = 0660/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
+  sed -i "s|^listen = .*|listen = /var/run/php/php-fpm.sock|" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
   sed -i "s/;listen.backlog = 511/listen.backlog = 4096/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
   sed -i "s/pm.max_children = 5/pm.max_children = 96/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
   sed -i "s/pm.start_servers = 2/pm.start_servers = 8/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf && \
@@ -80,6 +81,9 @@ RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fp
   # Logs configuration
   sed -i "s/error_log = \/var\/log\/php${PHPVERSION}-fpm.log/error_log = \/proc\/self\/fd\/2/" /etc/php/${PHPVERSION}/fpm/php-fpm.conf && \
   sed -i "s/;catch_workers_output = yes/catch_workers_output = yes/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf
+
+# Set up Sabre DAV
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --filename=composer
 
 # Set up Nginx (combine RUN commands)
 RUN ln -sf /dev/stderr /var/log/nginx/error.log && \

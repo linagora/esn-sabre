@@ -5,6 +5,9 @@ namespace ESN\DAVACL\PrincipalBackend;
 use \ESN\Utils\Utils as Utils;
 
 class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
+    private $principalCache = [];
+    private $emailCache = [];
+
     function __construct($db) {
         $this->db = $db;
         $this->collectionMap = [
@@ -28,12 +31,19 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     function getPrincipalByPath($path) {
+        // Check cache first (use array_key_exists to properly handle cached null values)
+        if (array_key_exists($path, $this->principalCache)) {
+            return $this->principalCache[$path];
+        }
+
         $parts = explode('/', $path);
         if ($parts[0] == 'principals' && isset($this->collectionMap[$parts[1]]) && count($parts) == 3) {
             $collection = $this->collectionMap[$parts[1]];
             $obj = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($parts[2]) ]);
 
             if (!$obj) {
+                // Cache null result to avoid repeated lookups of non-existent principals
+                $this->principalCache[$path] = null;
                 return null;
             }
 
@@ -49,8 +59,21 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 $obj['domains'] = $domains;
             }
 
-            return $this->objectToPrincipal($obj, $parts[1]);
+            $principal = $this->objectToPrincipal($obj, $parts[1]);
+            $this->principalCache[$path] = $principal;
+
+            // Cross-cache: save email to emailCache for users
+            if ($parts[1] == 'users' && isset($principal['{http://sabredav.org/ns}email-address'])) {
+                $email = strtolower($principal['{http://sabredav.org/ns}email-address']);
+                if (!array_key_exists($email, $this->emailCache)) {
+                    $this->emailCache[$email] = $obj['_id'];
+                }
+            }
+
+            return $principal;
         } else {
+            // Cache null result for invalid paths
+            $this->principalCache[$path] = null;
             return null;
         }
     }
@@ -125,31 +148,45 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     function getPrincipalIdByEmail($email) {
+        // Normalize email to lowercase for consistent cache keys and DB queries
+        $email = strtolower($email);
+
+        // Check cache first (use array_key_exists to properly handle cached null values)
+        if (array_key_exists($email, $this->emailCache)) {
+            return $this->emailCache[$email];
+        }
+
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            // Cache null result to avoid repeated validation of invalid emails
+            $this->emailCache[$email] = null;
             return null;
         }
 
         $projection = ['_id' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1];
-        $query = ['accounts.emails' => strtolower($email)];
+        $query = ['accounts.emails' => $email];
 
         $user = $this->db->users->findOne($query, ['projection' => $projection]);
 
         if (!$user) {
             // Try alternative query patterns
-            $altQuery = ['preferredEmail' => strtolower($email)];
+            $altQuery = ['preferredEmail' => $email];
             $user = $this->db->users->findOne($altQuery, ['projection' => $projection]);
 
             if (!$user) {
-                $altQuery2 = ['emails' => strtolower($email)];
+                $altQuery2 = ['emails' => $email];
                 $user = $this->db->users->findOne($altQuery2, ['projection' => $projection]);
 
                 if (!$user) {
+                    // Cache null result to avoid repeated lookups of non-existent emails
+                    $this->emailCache[$email] = null;
                     return null;
                 }
             }
         }
 
-        return $user['_id'];
+        $userId = $user['_id'];
+        $this->emailCache[$email] = $userId;
+        return $userId;
     }
 
     private function objectToPrincipal($obj, $type) {

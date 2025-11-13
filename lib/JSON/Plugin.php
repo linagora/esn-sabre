@@ -752,7 +752,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             if (count($pathParts) >= 3 && $pathParts[0] === 'calendars') {
                 $userId = $pathParts[1];
                 $calendarUri = $pathParts[2];
-                $principalUri = 'principals/users/' . $userId;
+
+                // Try different principal types (users, resources, technical, domains)
+                // instead of hardcoding 'users' which breaks subscriptions to resource calendars
+                $principalTypes = ['users', 'resources', 'technical', 'domains'];
+                $principalUri = null;
 
                 // Get the CalDAV backend via the CalDAV plugin
                 $caldavPlugin = $this->server->getPlugin('caldav-backend');
@@ -771,7 +775,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
                 // Use optimized method to get single calendar without listing all
                 if ($backend instanceof \ESN\CalDAV\Backend\Mongo) {
-                    $calendarData = $backend->getCalendarByUri($principalUri, $calendarUri);
+                    // Try each principal type until we find the calendar
+                    // This handles users, resources, technical users, etc.
+                    $calendarData = null;
+                    foreach ($principalTypes as $type) {
+                        $principalUri = 'principals/' . $type . '/' . $userId;
+                        $calendarData = $backend->getCalendarByUri($principalUri, $calendarUri);
+                        if ($calendarData) {
+                            break;  // Found it!
+                        }
+                    }
 
                     if (!$calendarData) {
                         return null;  // Source calendar no longer exists

@@ -200,6 +200,91 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return isset($calendar['_id']) ? [(string) $calendar['calendarid'], (string) $calendar['_id']] : false;
     }
 
+    /**
+     * Get a single calendar by its principalUri and calendarUri.
+     * Optimized version that queries only for the specific calendar instead of listing all.
+     *
+     * @param string $principalUri
+     * @param string $calendarUri
+     * @return array|null Calendar data in the same format as getCalendarsForUser, or null if not found
+     */
+    function getCalendarByUri($principalUri, $calendarUri) {
+        $fields = array_values($this->propertyMap);
+        $fields[] = 'calendarid';
+        $fields[] = 'uri';
+        $fields[] = 'synctoken';
+        $fields[] = 'components';
+        $fields[] = 'principaluri';
+        $fields[] = 'transparent';
+        $fields[] = 'access';
+        $fields[] = 'share_invitestatus';
+
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+
+        $query = [
+            'principaluri' => $principalUri,
+            'uri' => $calendarUri
+        ];
+        $projection = array_fill_keys($fields, 1);
+
+        $calendarInstance = $collection->findOne($query, [ 'projection' => $projection ]);
+
+        if (!$calendarInstance) {
+            return null;
+        }
+
+        $calendarId = (string) $calendarInstance['calendarid'];
+
+        // Fetch calendar data
+        $collection = $this->db->selectCollection($this->calendarTableName);
+        $query = [ '_id' => new \MongoDB\BSON\ObjectId($calendarId) ];
+        $projection = [
+            '_id' => 1,
+            'synctoken' => 1,
+            'components' => 1
+        ];
+        $calendar = $collection->findOne($query, [ 'projection' => $projection ]);
+
+        if (!$calendar) {
+            return null;
+        }
+
+        $components = (array) $calendar['components'];
+
+        $userCalendar = [
+            'id' => [ (string) $calendarInstance['calendarid'], (string) $calendarInstance['_id'] ],
+            'uri' => $calendarInstance['uri'],
+            'principaluri' => $calendarInstance['principaluri'],
+            '{' . \Sabre\CalDAV\Plugin::NS_CALENDARSERVER . '}getctag' =>
+                'http://sabre.io/ns/sync/' . ($calendar['synctoken'] ? $calendar['synctoken'] : '0'),
+            '{http://sabredav.org/ns}sync-token' =>
+                $calendar['synctoken'] ? $calendar['synctoken'] : '0',
+            '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' =>
+                new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet($components),
+            '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' =>
+                new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp($calendarInstance['transparent'] ? 'transparent' : 'opaque'),
+            'share-resource-uri' => '/ns/share/' . $calendarInstance['_id'],
+            'share-invitestatus' => $calendarInstance['share_invitestatus']
+        ];
+
+        // 1 = owner, 2 = readonly, 3 = readwrite
+        if ($calendarInstance['access'] > 1) {
+            $userCalendar['share-access'] = (int) $calendarInstance['access'];
+            // read-only is for backwards compatibility.
+            $userCalendar['read-only'] = (int) $calendarInstance['access'] === \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
+        }
+
+        if (!$calendarInstance['displayname'] ) {
+            $calendarInstance['displayname'] = '#default';
+        }
+
+        foreach($this->propertyMap as $xmlName=>$dbName) {
+            $userCalendar[$xmlName] = $calendarInstance[$dbName];
+        }
+
+        return $userCalendar;
+    }
+
     function createCalendar($principalUri, $calendarUri, array $properties) {
         $calendar = $this->checkIfCalendarInstanceExist($principalUri, $calendarUri);
 

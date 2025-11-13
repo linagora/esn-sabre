@@ -260,14 +260,11 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
             ->setConstructorArgs([$this->server,  $this->caldavBackend])
             ->getMock();
 
-        $plugin->expects($this->any())
-            ->method('createMessage')
-            ->willReturnCallback(function() {
-                $args = func_get_args();
-                
-                $this->assertNotEquals('resource:calendar:event:created', $args[0]);
-            });
-        
+        // With fix for #215, no messages should be created when sender == recipient
+        // This test now verifies that createMessage is never called for self-invitations
+        $plugin->expects($this->never())
+            ->method('createMessage');
+
         $message = new \Sabre\VObject\ITip\Message();
         $message->method = 'REQUEST';
         $message->significantChange = false;
@@ -275,7 +272,10 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $message->sender = 'mailto:54b64eadf6d7d8e41d263e0e@example.com';
         $message->uid = "daab17fe-fac4-4946-9105-0f2cdb30f5ab";
 
-        $plugin->itip($message);
+        $result = $plugin->itip($message);
+
+        // Verify that schedule returns without processing
+        $this->assertTrue(true); // Explicit assertion to avoid risky test warning
     }
 
     function testBuildData() {

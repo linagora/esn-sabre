@@ -301,6 +301,17 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             return true;
         }
 
+        // Get sender principal URI to check if recipient is the organizer themselves
+        $senderPrincipalUri = Utils::getPrincipalByUri($iTipMessage->sender, $this->server);
+
+        // Don't send REQUEST to organizer themselves (fixes #215)
+        // This happens when ATTENDEE doesn't have mailto: prefix and matches the organizer
+        if ($iTipMessage->method === 'REQUEST' &&
+            $senderPrincipalUri &&
+            $recipientPrincipalUri === $senderPrincipalUri) {
+            return true;
+        }
+
         // Get the event from recipient's calendar (should exist now, created by schedule plugin)
         list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
 
@@ -392,7 +403,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             );
         }
 
-        $senderPrincipalUri = Utils::getPrincipalByUri($iTipMessage->sender, $this->server);
+        // $senderPrincipalUri already retrieved earlier (line ~305) to check for self-invitation
 
         if($senderPrincipalUri && $iTipMessage->method === 'REPLY' && Utils::isResourceFromPrincipal($senderPrincipalUri)) {
             list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);

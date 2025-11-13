@@ -781,7 +781,13 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     }
 
                     if (!$calendarData) {
-                        return null;  // Source calendar no longer exists
+                        // Calendar not found via optimized method, fall back to old method
+                        if (!$this->server->tree->nodeExists($sourcePath)) {
+                            return null;
+                        }
+                        $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+                        $subscription['calendarserver:source'] = $this->calendarToJson($sourcePath, $sourceNode, $withRights);
+                        return $subscription;
                     }
 
                     // Build JSON directly from calendar data without creating nodes

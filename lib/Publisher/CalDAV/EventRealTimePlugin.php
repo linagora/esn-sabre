@@ -403,7 +403,6 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             );
         }
 
-        // $senderPrincipalUri already retrieved earlier (line ~305) to check for self-invitation
 
         if($senderPrincipalUri && $iTipMessage->method === 'REPLY' && Utils::isResourceFromPrincipal($senderPrincipalUri)) {
             list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);

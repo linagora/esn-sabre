@@ -787,10 +787,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                         }
                         $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
                         $subscription['calendarserver:source'] = $this->calendarToJson($sourcePath, $sourceNode, $withRights);
-                        return $subscription;
-                    }
-
-                    // Build JSON directly from calendar data without creating nodes
+                    } else {
+                        // Build JSON directly from calendar data without creating nodes
                     $sourceCalendar = [
                         '_links' => [
                             'self' => [ 'href' => $baseUri . $sourcePath . '.json' ],
@@ -834,7 +832,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                         }
                     }
 
-                    $subscription['calendarserver:source'] = $sourceCalendar;
+                        $subscription['calendarserver:source'] = $sourceCalendar;
+                    }
                 } else {
                     // Fallback to old method for non-Mongo backends
                     if (!$this->server->tree->nodeExists($sourcePath)) {

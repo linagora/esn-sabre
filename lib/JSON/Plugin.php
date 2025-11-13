@@ -758,19 +758,13 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 $principalTypes = ['users', 'resources', 'technical', 'domains'];
                 $principalUri = null;
 
-                // Get the CalDAV backend via the CalDAV plugin
-                $caldavPlugin = $this->server->getPlugin('caldav-backend');
-                if ($caldavPlugin && method_exists($caldavPlugin, 'getBackend')) {
-                    $backend = $caldavPlugin->getBackend();
+                // Get the CalDAV backend from the calendar root
+                $calendarRoot = $this->server->tree->getNodeForPath('calendars');
+                if (property_exists($calendarRoot, 'caldavBackend')) {
+                    $backend = $calendarRoot->caldavBackend;
                 } else {
-                    // Fallback: get backend from the calendar root
-                    $calendarRoot = $this->server->tree->getNodeForPath('calendars');
-                    if (method_exists($calendarRoot, 'caldavBackend')) {
-                        $backend = $calendarRoot->caldavBackend;
-                    } else {
-                        // Last resort: use old method
-                        $backend = null;
-                    }
+                    // Last resort: use old method
+                    $backend = null;
                 }
 
                 // Use optimized method to get single calendar without listing all
@@ -841,7 +835,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                         return null;
                     }
                     $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
-                    $subscription['calendarserver:source'] = $this->calendarToJson($sourcePath, $sourceNode, true);
+                    $subscription['calendarserver:source'] = $this->calendarToJson($sourcePath, $sourceNode, $withRights);
                 }
             }
         }

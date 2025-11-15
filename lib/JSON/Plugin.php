@@ -201,7 +201,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $node = $this->server->tree->getNodeForPath($path);
 
-        if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+        // Handle sync-token based requests
+        if (isset($jsonData->{'sync-token'})) {
+            if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+                list($code, $body) = $this->getCalendarObjectsBySyncToken($path, $node, $jsonData);
+            } else {
+                $code = 400;
+                $body = null;
+            }
+        } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
             list($code, $body) = $this->getCalendarObjectByUID($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
             list($code, $body) = $this->getCalendarObjects($path, $node, $jsonData);
@@ -925,6 +933,119 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         // Fallback to standard method for other backends
         return [200, $this->getMultipleDAVItems($nodePath, $node, $node->calendarQuery($filters), $start, $end)];
+    }
+
+    /**
+     * Get calendar objects based on sync-token.
+     * Returns changes (added, modified, deleted) since the last sync.
+     *
+     * @param string $nodePath Path to the calendar
+     * @param \Sabre\CalDAV\ICalendarObjectContainer $node Calendar node
+     * @param object $jsonData JSON request data containing sync-token
+     * @return array [statusCode, responseBody]
+     */
+    function getCalendarObjectsBySyncToken($nodePath, $node, $jsonData) {
+        $syncToken = isset($jsonData->{'sync-token'}) ? $jsonData->{'sync-token'} : null;
+
+        // Extract numeric sync token from URL format if needed
+        // Format can be: "http://example.com/sync/153" or just "153"
+        if ($syncToken && is_string($syncToken)) {
+            $parts = explode('/', $syncToken);
+            $syncToken = end($parts);
+        }
+
+        // Get calendar backend
+        $backend = method_exists($node, 'getBackend') ? $node->getBackend() : $node->getCalDAVBackend();
+
+        // Get calendar ID - use the same approach as getMultipleDAVItemsOptimized
+        if ($node instanceof \ESN\CalDAV\SharedCalendar) {
+            $calendarId = $node->getFullCalendarId();
+        } else {
+            // For standard Sabre calendars, get ID from backend
+            $principalUri = $node->getOwner();
+            $calendarUri = $node->getName();
+            $calendars = $backend->getCalendarsForUser($principalUri);
+            $calendarId = null;
+            foreach ($calendars as $calendar) {
+                if ($calendar['uri'] === $calendarUri) {
+                    $calendarId = $calendar['id'];
+                    break;
+                }
+            }
+            if ($calendarId === null) {
+                return [400, null];
+            }
+            // Ensure it's an array for getChangesForCalendar
+            if (!is_array($calendarId)) {
+                $calendarId = [$calendarId, null];
+            }
+        }
+
+        // Get changes from backend
+        $changes = $backend->getChangesForCalendar($calendarId, $syncToken, 1);
+
+        // If null is returned, the sync token is invalid
+        if ($changes === null) {
+            return [400, null];
+        }
+
+        $baseUri = $this->server->getBaseUri();
+        $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
+
+        $items = [];
+
+        // Process added and modified events
+        $paths = [];
+        foreach (array_merge($changes['added'], $changes['modified']) as $uri) {
+            $paths[] = $nodePath . '/' . $uri;
+        }
+
+        if (count($paths) > 0) {
+            foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
+                if (count((array)$objProps[404])) {
+                    continue;
+                }
+
+                $vObject = VObject\Reader::read($objProps[200][$props[0]]);
+                $vObject = Utils::hidePrivateEventInfoForUser($vObject, $node, $this->currentUser);
+
+                $items[] = [
+                    '_links' => [
+                        'self' => [ 'href' => $baseUri . $objProps['href'] ]
+                    ],
+                    'etag' => $objProps[200]['{DAV:}getetag'],
+                    'data' => $vObject->jsonSerialize(),
+                    'status' => 200
+                ];
+
+                $vObject->destroy();
+            }
+        }
+
+        // Process deleted events
+        foreach ($changes['deleted'] as $uri) {
+            $items[] = [
+                '_links' => [
+                    'self' => [ 'href' => $baseUri . $nodePath . '/' . $uri ]
+                ],
+                'status' => 404
+            ];
+        }
+
+        // Build sync-token URL
+        $newSyncToken = 'http://sabre.io/ns/sync/' . $changes['syncToken'];
+
+        $result = [
+            '_links' => [
+                'self' => [ 'href' => $baseUri . $nodePath . '.json' ]
+            ],
+            '_embedded' => [
+                'dav:item' => $items
+            ],
+            'sync-token' => $newSyncToken
+        ];
+
+        return [207, $result];
     }
 
     /**

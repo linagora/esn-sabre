@@ -1714,4 +1714,204 @@ END:VCALENDAR
 
         $this->assertEquals($response->status, 400);
     }
+
+    function testSyncTokenInitialSync() {
+        // Test initial sync (no sync-token provided = empty string)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode(['sync-token' => '']));
+        $response = $this->request($request);
+
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        // Should return all events
+        $this->assertTrue(isset($jsonResponse->_embedded->{'dav:item'}));
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertGreaterThan(0, count($items));
+
+        // All items should have status 200 (not deleted)
+        foreach ($items as $item) {
+            $this->assertEquals(200, $item->status);
+            $this->assertTrue(isset($item->etag));
+            $this->assertTrue(isset($item->data));
+        }
+
+        // Should return a new sync-token
+        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+        $this->assertStringContainsString('http://sabre.io/ns/sync/', $jsonResponse->{'sync-token'});
+    }
+
+    function testSyncTokenIncrementalSync() {
+        // First, get initial sync-token
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode(['sync-token' => '']));
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $syncToken = $jsonResponse->{'sync-token'};
+
+        // Add a new event
+        $calendars = $this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0f');
+        $calendarId = null;
+        foreach ($calendars as $calendar) {
+            if ($calendar['uri'] === 'calendar1') {
+                $calendarId = $calendar['id'];
+                break;
+            }
+        }
+
+        $newEvent = 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:sync-new-event
+DTSTART:20151201T100000Z
+DTEND:20151201T110000Z
+SUMMARY:New Event for Sync
+DTSTAMP:20151201T100000Z
+END:VEVENT
+END:VCALENDAR
+';
+        $this->caldavBackend->createCalendarObject($calendarId, 'sync-new.ics', $newEvent);
+
+        // Now do incremental sync
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode(['sync-token' => $syncToken]));
+        $response = $this->request($request);
+
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        // Should return only the new event
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(1, $items);
+        $this->assertEquals(200, $items[0]->status);
+        $this->assertStringContainsString('sync-new.ics', $items[0]->{'_links'}->{'self'}->{'href'});
+
+        // Should return a new sync-token
+        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+        $this->assertNotEquals($syncToken, $jsonResponse->{'sync-token'});
+    }
+
+    function testSyncTokenDeletedEvent() {
+        // Get initial sync-token
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode(['sync-token' => '']));
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $syncToken = $jsonResponse->{'sync-token'};
+
+        // Delete an event
+        $calendars = $this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0f');
+        $calendarId = null;
+        foreach ($calendars as $calendar) {
+            if ($calendar['uri'] === 'calendar1') {
+                $calendarId = $calendar['id'];
+                break;
+            }
+        }
+
+        // Delete event1.ics
+        $this->caldavBackend->deleteCalendarObject($calendarId, 'event1.ics');
+
+        // Do incremental sync
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode(['sync-token' => $syncToken]));
+        $response = $this->request($request);
+
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        // Should return the deleted event with status 404
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $deletedItem = null;
+        foreach ($items as $item) {
+            if (strpos($item->{'_links'}->{'self'}->{'href'}, 'event1.ics') !== false) {
+                $deletedItem = $item;
+                break;
+            }
+        }
+
+        $this->assertNotNull($deletedItem);
+        $this->assertEquals(404, $deletedItem->status);
+        $this->assertFalse(isset($deletedItem->etag));
+        $this->assertFalse(isset($deletedItem->data));
+    }
+
+    function testSyncTokenFutureToken() {
+        // Test with future sync-token (should return empty list, not error)
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        // Use a very high token number in the future
+        $request->setBody(json_encode(['sync-token' => 'http://sabre.io/ns/sync/999999999']));
+        $response = $this->request($request);
+
+        // Should return 207 with empty changes (future token is valid, just no changes yet)
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $items = $jsonResponse->_embedded->{'dav:item'};
+
+        // Should return empty list for future token
+        $this->assertCount(0, $items);
+
+        // Should still return a sync-token
+        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+    }
+
+    function testSyncTokenUrlFormat() {
+        // Test that sync-token can be provided in URL format
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        // Provide sync-token in URL format (should extract the numeric part)
+        $request->setBody(json_encode(['sync-token' => 'http://example.com/sync/1']));
+        $response = $this->request($request);
+
+        // Should succeed (not return 400)
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+    }
 }

@@ -992,12 +992,20 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $syncToken = end($parts);
         }
 
+        // Validate that sync token is numeric (empty string is valid for initial sync)
+        if ($syncToken !== '' && $syncToken !== null && !is_numeric($syncToken)) {
+            return [400, null];
+        }
+
         // Get calendar backend
         $backend = method_exists($node, 'getBackend') ? $node->getBackend() : $node->getCalDAVBackend();
 
         // Get calendar ID - use the same approach as getMultipleDAVItemsOptimized
         if ($node instanceof \ESN\CalDAV\SharedCalendar) {
             $calendarId = $node->getFullCalendarId();
+            if (!is_array($calendarId)) {
+                return [400, null];
+            }
         } else {
             // For standard Sabre calendars, get ID from backend
             $principalUri = $node->getOwner();
@@ -1020,6 +1028,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         // Get changes from backend
+        // syncLevel 1 = include calendar object changes (added, modified, deleted)
         $changes = $backend->getChangesForCalendar($calendarId, $syncToken, 1);
 
         // If null is returned, the sync token is invalid

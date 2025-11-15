@@ -1914,4 +1914,31 @@ END:VCALENDAR
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertTrue(isset($jsonResponse->{'sync-token'}));
     }
+
+    function testSyncTokenUrlFormatWithTrailingSlash() {
+        // Test that sync-token with trailing slash is handled correctly
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        // Provide sync-token with trailing slash (should still extract the numeric part)
+        $request->setBody(json_encode(['sync-token' => 'http://sabre.io/ns/sync/1/']));
+        $response = $this->request($request);
+
+        // Should succeed (not return 400)
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+
+        // Should not trigger initial sync (would have all items)
+        // With token 1, we should get changes since token 1
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        // The number of items depends on what changes happened since token 1
+        // Just verify we got a response structure, not necessarily empty
+        $this->assertTrue(is_array($items));
+    }
 }

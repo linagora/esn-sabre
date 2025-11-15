@@ -987,8 +987,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         // Extract numeric sync token from URL format if needed
         // Format can be: "http://example.com/sync/153" or just "153"
+        // Handle trailing slashes: "http://example.com/sync/153/" -> "153"
         if ($syncToken && is_string($syncToken)) {
-            $parts = explode('/', $syncToken);
+            $parts = explode('/', rtrim($syncToken, '/'));
             $syncToken = end($parts);
         }
 

@@ -936,13 +936,51 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     /**
-     * Get calendar objects based on sync-token.
-     * Returns changes (added, modified, deleted) since the last sync.
+     * Get calendar objects based on sync-token for incremental synchronization.
      *
-     * @param string $nodePath Path to the calendar
-     * @param \Sabre\CalDAV\ICalendarObjectContainer $node Calendar node
-     * @param object $jsonData JSON request data containing sync-token
-     * @return array [statusCode, responseBody]
+     * This method implements CalDAV sync-token based synchronization, allowing clients to
+     * retrieve only the calendar changes (added, modified, deleted) since a previous sync state.
+     *
+     * Workflow:
+     * 1. Extracts and normalizes the sync-token from the request (supports URL and numeric formats)
+     * 2. Retrieves the calendar backend and calendar ID
+     * 3. Calls backend's getChangesForCalendar() to get changes since the sync-token
+     * 4. Builds a multistatus response with:
+     *    - Added/modified events: status 200 with etag and calendar-data
+     *    - Deleted events: status 404 with only the URI
+     *    - New sync-token for the next synchronization
+     *
+     * Sync-token formats supported:
+     * - Empty string "": Initial sync, returns all calendar objects
+     * - Numeric: "123" - Sync since token 123
+     * - URL format: "http://sabre.io/ns/sync/123" - Extracts numeric token 123
+     *
+     * Response format:
+     * {
+     *   "_links": {"self": {"href": "/calendars/userId/calendarId.json"}},
+     *   "_embedded": {
+     *     "dav:item": [
+     *       {
+     *         "_links": {"self": {"href": "/calendars/.../event.ics"}},
+     *         "etag": "\"abc123\"",
+     *         "data": {...VCalendar JSON...},
+     *         "status": 200
+     *       },
+     *       {
+     *         "_links": {"self": {"href": "/calendars/.../deleted.ics"}},
+     *         "status": 404
+     *       }
+     *     ]
+     *   },
+     *   "sync-token": "http://sabre.io/ns/sync/124"
+     * }
+     *
+     * @param string $nodePath Path to the calendar resource (e.g., "/calendars/userId/calendarId")
+     * @param \Sabre\CalDAV\ICalendarObjectContainer $node Calendar node instance (Calendar or SharedCalendar)
+     * @param object $jsonData JSON request data containing the 'sync-token' property
+     * @return array Tuple of [int $statusCode, array|null $responseBody]
+     *               - [207, array] on success with multistatus response
+     *               - [400, null] if calendar not found or invalid request
      */
     function getCalendarObjectsBySyncToken($nodePath, $node, $jsonData) {
         $syncToken = isset($jsonData->{'sync-token'}) ? $jsonData->{'sync-token'} : null;

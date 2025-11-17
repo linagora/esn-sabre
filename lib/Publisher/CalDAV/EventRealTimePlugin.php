@@ -383,7 +383,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         // Only publish alarm events for REQUEST if it's a significant change
         // (e.g., new event, alarm modified, not just another attendee's PARTSTAT change)
-        if($iTipMessage->method === 'REQUEST' && $iTipMessage->significantChange){
+        if ($iTipMessage->method === 'REQUEST' && $iTipMessage->significantChange) {
             $this->createMessage(
                 $this->EVENT_TOPICS['EVENT_ALARM_REQUEST'],
                 $dataMessage

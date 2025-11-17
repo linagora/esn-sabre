@@ -381,9 +381,16 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
         $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
 
-        if($iTipMessage->method !== 'REPLY'){
+        // Only publish alarm events for REQUEST if it's a significant change
+        // (e.g., new event, alarm modified, not just another attendee's PARTSTAT change)
+        if ($iTipMessage->method === 'REQUEST' && $iTipMessage->significantChange) {
             $this->createMessage(
-                $this->EVENT_TOPICS['EVENT_ALARM_'.$iTipMessage->method],
+                $this->EVENT_TOPICS['EVENT_ALARM_REQUEST'],
+                $dataMessage
+            );
+        } elseif ($iTipMessage->method === 'CANCEL') {
+            $this->createMessage(
+                $this->EVENT_TOPICS['EVENT_ALARM_CANCEL'],
                 $dataMessage
             );
         }

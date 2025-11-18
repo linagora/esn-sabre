@@ -753,6 +753,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
             $sourcePath = $subprops['{http://calendarserver.org/ns/}source']->getHref();
 
+            error_log("Source path: $sourcePath");
             if (!$this->server->tree->nodeExists($sourcePath)) {
                 return null;
             }

@@ -207,6 +207,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $dataMessage = [
                 'eventPath' => '/' . $calendarPathObject,
                 'event' => $event,
+                'rawEvent' => $data,
                 'import' => $isImport
             ];
 

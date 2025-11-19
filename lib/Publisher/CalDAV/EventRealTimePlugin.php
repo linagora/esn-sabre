@@ -194,8 +194,13 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 $event = \Sabre\VObject\Reader::read($data);
             }
 
+            $dataAsString = $data;
             if (is_resource($data)) {
                 rewind($data);
+                $dataAsString = stream_get_contents($data);
+                rewind($data);
+            } else {
+                $dataAsString = $data;
             }
             $event->remove('method');
 
@@ -203,10 +208,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 $isImport = true;
             }
 
-
             $dataMessage = [
                 'eventPath' => '/' . $calendarPathObject,
                 'event' => $event,
+                'rawEvent' => $dataAsString,
                 'import' => $isImport
             ];
 

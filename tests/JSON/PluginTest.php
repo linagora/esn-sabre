@@ -1951,8 +1951,8 @@ END:VCALENDAR
 
         $timeRangeData = [
             'match' => [
-                'start' => '2013-03-01T00:00:00Z',
-                'end' => '2013-05-01T00:00:00Z'
+                'start' => '20130301T000000Z',
+                'end' => '20130501T000000Z'
             ]
         ];
 
@@ -1987,8 +1987,8 @@ END:VCALENDAR
         // Request a 3-day window for the recurring event
         $timeRangeData = [
             'match' => [
-                'start' => '2015-02-27T00:00:00Z',
-                'end' => '2015-03-02T00:00:00Z'
+                'start' => '20150227T000000Z',
+                'end' => '20150302T000000Z'
             ]
         ];
 
@@ -2040,7 +2040,7 @@ END:VCALENDAR
         // Only start, missing end
         $timeRangeData = [
             'match' => [
-                'start' => '2013-03-01T00:00:00Z'
+                'start' => '20130301T000000Z'
             ]
         ];
 
@@ -2063,8 +2063,8 @@ END:VCALENDAR
         // event2 is on 2013-04-01, request a time-range in 2012 (before the event)
         $timeRangeData = [
             'match' => [
-                'start' => '2012-01-01T00:00:00Z',
-                'end' => '2012-12-31T23:59:59Z'
+                'start' => '20120101T000000Z',
+                'end' => '20121231T235959Z'
             ]
         ];
 

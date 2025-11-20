@@ -1122,21 +1122,48 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $vObject = VObject\Reader::read($calendarData);
 
         // Get parent calendar node for permission checks
-        $parentPath = dirname($nodePath);
+        // Extract parent path by removing the last segment (event filename)
+        $pathParts = explode('/', trim($nodePath, '/'));
+        array_pop($pathParts); // Remove event filename
+        $parentPath = '/' . implode('/', $pathParts);
         $parentNode = $this->server->tree->getNodeForPath($parentPath);
 
         // Expand the event in the time range
         $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
 
-        // Hide private event info if necessary
-        $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+        // Post-filtering: Remove events outside the time range
+        $vevents = $vObject->select('VEVENT');
+        foreach ($vevents as $vevent) {
+            $eventStart = $vevent->DTSTART->getDateTime();
+
+            // Calculate event end: use DTEND if available, otherwise calculate from DURATION
+            if (isset($vevent->DTEND)) {
+                $eventEnd = $vevent->DTEND->getDateTime();
+            } elseif (isset($vevent->DURATION)) {
+                $eventEnd = clone $eventStart;
+                $eventEnd->add($vevent->DURATION->getDateInterval());
+            } else {
+                // No DTEND or DURATION: event is instantaneous or all-day
+                $eventEnd = $eventStart;
+            }
+
+            // If event is completely outside the time range, remove it
+            if ($eventEnd < $start || $eventStart > $end) {
+                $vObject->remove($vevent);
+            }
+        }
+
+        // Hide private event info if necessary (only if there are events)
+        $remainingEvents = $vObject->select('VEVENT');
+        if (count($remainingEvents) > 0) {
+            $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+        }
 
         // Get etag
         $etag = $node->getETag();
 
         // Format response
         $baseUri = $this->server->getBaseUri();
-        $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
         $result = [
             '_links' => [

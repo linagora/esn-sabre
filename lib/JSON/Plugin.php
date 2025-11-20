@@ -941,12 +941,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
      * This method implements CalDAV sync-token based synchronization, allowing clients to
      * retrieve only the calendar changes (added, modified, deleted) since a previous sync state.
      *
+     * PERFORMANCE: This optimized implementation only reads the calendarchanges table without
+     * reading or parsing individual calendar events, providing fast synchronization.
+     *
      * Workflow:
      * 1. Extracts and normalizes the sync-token from the request (supports URL and numeric formats)
      * 2. Retrieves the calendar backend and calendar ID
      * 3. Calls backend's getChangesForCalendar() to get changes since the sync-token
      * 4. Builds a multistatus response with:
-     *    - Added/modified events: status 200 with etag and calendar-data
+     *    - Added/modified events: status 200 with href only (no etag, no calendar-data)
      *    - Deleted events: status 404 with only the URI
      *    - New sync-token for the next synchronization
      *
@@ -962,8 +965,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
      *     "dav:item": [
      *       {
      *         "_links": {"self": {"href": "/calendars/.../event.ics"}},
-     *         "etag": "\"abc123\"",
-     *         "data": {...VCalendar JSON...},
      *         "status": 200
      *       },
      *       {
@@ -1038,36 +1039,17 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         $baseUri = $this->server->getBaseUri();
-        $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
-
         $items = [];
 
         // Process added and modified events
-        $paths = [];
+        // Optimized: build href directly from URI without reading or parsing each event
         foreach (array_merge($changes['added'], $changes['modified']) as $uri) {
-            $paths[] = $nodePath . '/' . $uri;
-        }
-
-        if (count($paths) > 0) {
-            foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
-                if (count((array)$objProps[404])) {
-                    continue;
-                }
-
-                $vObject = VObject\Reader::read($objProps[200][$props[0]]);
-                $vObject = Utils::hidePrivateEventInfoForUser($vObject, $node, $this->currentUser);
-
-                $items[] = [
-                    '_links' => [
-                        'self' => [ 'href' => $baseUri . $objProps['href'] ]
-                    ],
-                    'etag' => $objProps[200]['{DAV:}getetag'],
-                    'data' => $vObject->jsonSerialize(),
-                    'status' => 200
-                ];
-
-                $vObject->destroy();
-            }
+            $items[] = [
+                '_links' => [
+                    'self' => [ 'href' => $baseUri . $nodePath . '/' . $uri ]
+                ],
+                'status' => 200
+            ];
         }
 
         // Process deleted events

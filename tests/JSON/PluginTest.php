@@ -1739,8 +1739,6 @@ END:VCALENDAR
         // All items should have status 200 (not deleted)
         foreach ($items as $item) {
             $this->assertEquals(200, $item->status);
-            $this->assertTrue(isset($item->etag));
-            $this->assertTrue(isset($item->data));
         }
 
         // Should return a new sync-token

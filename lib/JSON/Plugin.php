@@ -982,7 +982,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         // Retrieve the syncToken from the calendar (only for ICalendarObjectContainer nodes)
         $syncToken = null;
-        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer && method_exists($parentNode, 'getProperties')) {
             $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
             $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
                 ? $calendarProps['{http://sabredav.org/ns}sync-token']
@@ -1043,7 +1043,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         // Retrieve the syncToken from the calendar (only for ICalendarObjectContainer nodes)
         $syncToken = null;
-        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer && method_exists($parentNode, 'getProperties')) {
             $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
             $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
                 ? $calendarProps['{http://sabredav.org/ns}sync-token']

@@ -980,11 +980,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
-        // Retrieve the syncToken from the calendar
-        $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
-        $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
-            ? $calendarProps['{http://sabredav.org/ns}sync-token']
-            : null;
+        // Retrieve the syncToken from the calendar (only for ICalendarObjectContainer nodes)
+        $syncToken = null;
+        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+            $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
+            $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
+                ? $calendarProps['{http://sabredav.org/ns}sync-token']
+                : null;
+        }
 
         $paths = [];
         foreach ($calendarObjectUris as $calendarObjectUri) {
@@ -1038,11 +1041,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
-        // Retrieve the syncToken from the calendar
-        $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
-        $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
-            ? $calendarProps['{http://sabredav.org/ns}sync-token']
-            : null;
+        // Retrieve the syncToken from the calendar (only for ICalendarObjectContainer nodes)
+        $syncToken = null;
+        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+            $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
+            $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
+                ? $calendarProps['{http://sabredav.org/ns}sync-token']
+                : null;
+        }
 
         $propertyList = [];
         $backend = $parentNode->getBackend();

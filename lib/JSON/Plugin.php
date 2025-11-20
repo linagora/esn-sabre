@@ -201,7 +201,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $node = $this->server->tree->getNodeForPath($path);
 
-        if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+        // Handle sync-token based requests
+        if (isset($jsonData->{'sync-token'})) {
+            if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+                list($code, $body) = $this->getCalendarObjectsBySyncToken($path, $node, $jsonData);
+            } else {
+                $code = 400;
+                $body = null;
+            }
+        } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
             list($code, $body) = $this->getCalendarObjectByUID($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
             list($code, $body) = $this->getCalendarObjects($path, $node, $jsonData);
@@ -925,6 +933,149 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         // Fallback to standard method for other backends
         return [200, $this->getMultipleDAVItems($nodePath, $node, $node->calendarQuery($filters), $start, $end)];
+    }
+
+    /**
+     * Get calendar objects based on sync-token for incremental synchronization.
+     *
+     * This method implements CalDAV sync-token based synchronization, allowing clients to
+     * retrieve only the calendar changes (added, modified, deleted) since a previous sync state.
+     *
+     * PERFORMANCE: This optimized implementation only reads the calendarchanges table without
+     * reading or parsing individual calendar events, providing fast synchronization.
+     *
+     * Workflow:
+     * 1. Extracts and normalizes the sync-token from the request (supports URL and numeric formats)
+     * 2. Retrieves the calendar backend and calendar ID
+     * 3. Calls backend's getChangesForCalendar() to get changes since the sync-token
+     * 4. Builds a multistatus response with:
+     *    - Added/modified events: status 200 with href only (no etag, no calendar-data)
+     *    - Deleted events: status 404 with only the URI
+     *    - New sync-token for the next synchronization
+     *
+     * Sync-token formats supported:
+     * - Empty string "": Initial sync, returns all calendar objects
+     * - Numeric: "123" - Sync since token 123
+     * - URL format: "http://sabre.io/ns/sync/123" - Extracts numeric token 123
+     *
+     * Response format:
+     * {
+     *   "_links": {"self": {"href": "/calendars/userId/calendarId.json"}},
+     *   "_embedded": {
+     *     "dav:item": [
+     *       {
+     *         "_links": {"self": {"href": "/calendars/.../event.ics"}},
+     *         "status": 200
+     *       },
+     *       {
+     *         "_links": {"self": {"href": "/calendars/.../deleted.ics"}},
+     *         "status": 404
+     *       }
+     *     ]
+     *   },
+     *   "sync-token": "http://sabre.io/ns/sync/124"
+     * }
+     *
+     * @param string $nodePath Path to the calendar resource (e.g., "/calendars/userId/calendarId")
+     * @param \Sabre\CalDAV\ICalendarObjectContainer $node Calendar node instance (Calendar or SharedCalendar)
+     * @param object $jsonData JSON request data containing the 'sync-token' property
+     * @return array Tuple of [int $statusCode, array|null $responseBody]
+     *               - [207, array] on success with multistatus response
+     *               - [400, null] if calendar not found or invalid request
+     */
+    function getCalendarObjectsBySyncToken($nodePath, $node, $jsonData) {
+        $syncToken = isset($jsonData->{'sync-token'}) ? $jsonData->{'sync-token'} : null;
+
+        // Extract numeric sync token from URL format if needed
+        // Format can be: "http://example.com/sync/153" or just "153"
+        // Handle trailing slashes: "http://example.com/sync/153/" -> "153"
+        if ($syncToken && is_string($syncToken)) {
+            $parts = explode('/', rtrim($syncToken, '/'));
+            $syncToken = end($parts);
+        }
+
+        // Validate that sync token is numeric (empty string is valid for initial sync)
+        if ($syncToken !== '' && $syncToken !== null && !is_numeric($syncToken)) {
+            return [400, null];
+        }
+
+        // Get calendar backend
+        $backend = method_exists($node, 'getBackend') ? $node->getBackend() : $node->getCalDAVBackend();
+
+        // Get calendar ID - use the same approach as getMultipleDAVItemsOptimized
+        if ($node instanceof \ESN\CalDAV\SharedCalendar) {
+            $calendarId = $node->getFullCalendarId();
+            if (!is_array($calendarId)) {
+                return [400, null];
+            }
+        } else {
+            // For standard Sabre calendars, get ID from backend
+            $principalUri = $node->getOwner();
+            $calendarUri = $node->getName();
+            $calendars = $backend->getCalendarsForUser($principalUri);
+            $calendarId = null;
+            foreach ($calendars as $calendar) {
+                if ($calendar['uri'] === $calendarUri) {
+                    $calendarId = $calendar['id'];
+                    break;
+                }
+            }
+            if ($calendarId === null) {
+                return [400, null];
+            }
+            // Ensure it's an array for getChangesForCalendar
+            if (!is_array($calendarId)) {
+                $calendarId = [$calendarId, null];
+            }
+        }
+
+        // Get changes from backend
+        // syncLevel 1 = include calendar object changes (added, modified, deleted)
+        $changes = $backend->getChangesForCalendar($calendarId, $syncToken, 1);
+
+        // If null is returned, the sync token is invalid
+        if ($changes === null) {
+            return [400, null];
+        }
+
+        $baseUri = $this->server->getBaseUri();
+        $items = [];
+
+        // Process added and modified events
+        // Optimized: build href directly from URI without reading or parsing each event
+        foreach (array_merge($changes['added'], $changes['modified']) as $uri) {
+            $items[] = [
+                '_links' => [
+                    'self' => [ 'href' => $baseUri . $nodePath . '/' . $uri ]
+                ],
+                'status' => 200
+            ];
+        }
+
+        // Process deleted events
+        foreach ($changes['deleted'] as $uri) {
+            $items[] = [
+                '_links' => [
+                    'self' => [ 'href' => $baseUri . $nodePath . '/' . $uri ]
+                ],
+                'status' => 404
+            ];
+        }
+
+        // Build sync-token URL
+        $newSyncToken = 'http://sabre.io/ns/sync/' . $changes['syncToken'];
+
+        $result = [
+            '_links' => [
+                'self' => [ 'href' => $baseUri . $nodePath . '.json' ]
+            ],
+            '_embedded' => [
+                'dav:item' => $items
+            ],
+            'sync-token' => $newSyncToken
+        ];
+
+        return [207, $result];
     }
 
     /**

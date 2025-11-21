@@ -1110,9 +1110,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
      */
     function expandEvent($nodePath, $node, $jsonData) {
         // Parse time-range parameters
-        if (!isset($jsonData->match) || !isset($jsonData->match->start) || !isset($jsonData->match->end)) {
-            return [400, null];
-        }
 
         $start = VObject\DateTimeParser::parseDateTime($jsonData->match->start);
         $end = VObject\DateTimeParser::parseDateTime($jsonData->match->end);

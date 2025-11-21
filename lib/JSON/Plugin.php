@@ -764,12 +764,102 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
             $sourcePath = $subprops['{http://calendarserver.org/ns/}source']->getHref();
 
-            if (!$this->server->tree->nodeExists($sourcePath)) {
-                return null;
-            }
+            // Parse sourcePath (format: calendars/userId/calendarUri) to get principalUri and calendarUri
+            $pathParts = explode('/', trim($sourcePath, '/'));
+            if (count($pathParts) >= 3 && $pathParts[0] === 'calendars') {
+                $userId = $pathParts[1];
+                $calendarUri = $pathParts[2];
 
-            $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
-            $subscription['calendarserver:source'] = $this->calendarToJson($sourcePath, $sourceNode, true);
+                // Try different principal types (users, resources, technical, domains)
+                // instead of hardcoding 'users' which breaks subscriptions to resource calendars
+                $principalTypes = ['users', 'resources', 'technical', 'domains'];
+                $principalUri = null;
+
+                // Get the CalDAV backend from the calendar root
+                $calendarRoot = $this->server->tree->getNodeForPath('calendars');
+                if (property_exists($calendarRoot, 'caldavBackend')) {
+                    $backend = $calendarRoot->caldavBackend;
+                } else {
+                    // Last resort: use old method
+                    $backend = null;
+                }
+
+                // Use optimized method to get single calendar without listing all
+                if ($backend instanceof \ESN\CalDAV\Backend\Mongo) {
+                    // Try each principal type until we find the calendar
+                    // This handles users, resources, technical users, etc.
+                    $calendarData = null;
+                    foreach ($principalTypes as $type) {
+                        $principalUri = 'principals/' . $type . '/' . $userId;
+                        $calendarData = $backend->getCalendarByUri($principalUri, $calendarUri);
+                        if ($calendarData) {
+                            break;  // Found it!
+                        }
+                    }
+
+                    if (!$calendarData) {
+                        // Calendar not found via optimized method, fall back to old method
+                        if (!$this->server->tree->nodeExists($sourcePath)) {
+                            return null;
+                        }
+                        $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+                        $subscription['calendarserver:source'] = $this->calendarToJson($sourcePath, $sourceNode, $withRights);
+                    } else {
+                        // Build JSON directly from calendar data without creating nodes
+                    $sourceCalendar = [
+                        '_links' => [
+                            'self' => [ 'href' => $baseUri . $sourcePath . '.json' ],
+                        ]
+                    ];
+
+                    if (isset($calendarData['{DAV:}displayname'])) {
+                        $sourceCalendar['dav:name'] = $calendarData['{DAV:}displayname'];
+                    }
+
+                    if (isset($calendarData['{urn:ietf:params:xml:ns:caldav}calendar-description'])) {
+                        $sourceCalendar['caldav:description'] = $calendarData['{urn:ietf:params:xml:ns:caldav}calendar-description'];
+                    }
+
+                    if (isset($calendarData['{http://calendarserver.org/ns/}getctag'])) {
+                        $sourceCalendar['calendarserver:ctag'] = $calendarData['{http://calendarserver.org/ns/}getctag'];
+                    }
+
+                    if (isset($calendarData['{http://apple.com/ns/ical/}calendar-color'])) {
+                        $sourceCalendar['apple:color'] = $calendarData['{http://apple.com/ns/ical/}calendar-color'];
+                    }
+
+                    if (isset($calendarData['{http://apple.com/ns/ical/}calendar-order'])) {
+                        $sourceCalendar['apple:order'] = $calendarData['{http://apple.com/ns/ical/}calendar-order'];
+                    }
+
+                    // If withRights was requested, we need to fetch the full node for ACL/invites
+                    // This is acceptable as it's only done when explicitly requested
+                    if ($withRights) {
+                        if (!$this->server->tree->nodeExists($sourcePath)) {
+                            return null;
+                        }
+                        $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+
+                        if ($sourceNode->getInvites()) {
+                            $sourceCalendar['invite'] = $sourceNode->getInvites();
+                        }
+
+                        if ($sourceNode->getACL()) {
+                            $sourceCalendar['acl'] = $sourceNode->getACL();
+                        }
+                    }
+
+                        $subscription['calendarserver:source'] = $sourceCalendar;
+                    }
+                } else {
+                    // Fallback to old method for non-Mongo backends
+                    if (!$this->server->tree->nodeExists($sourcePath)) {
+                        return null;
+                    }
+                    $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+                    $subscription['calendarserver:source'] = $this->calendarToJson($sourcePath, $sourceNode, $withRights);
+                }
+            }
         }
 
         if (isset($subprops['{http://apple.com/ns/ical/}calendar-color'])) {

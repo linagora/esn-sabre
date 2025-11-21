@@ -1228,6 +1228,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
+        // Retrieve the syncToken from the calendar (only for ICalendarObjectContainer nodes)
+        $syncToken = null;
+        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer && method_exists($parentNode, 'getProperties')) {
+            $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
+            $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
+                ? $calendarProps['{http://sabredav.org/ns}sync-token']
+                : null;
+        }
+
         $paths = [];
         foreach ($calendarObjectUris as $calendarObjectUri) {
             $paths[] = $parentNodePath . '/' . $calendarObjectUri;
@@ -1244,17 +1253,24 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $propertyList[] = $objProps;
         }
 
+        $embedded = [
+            'dav:item' => Utils::generateJSONMultiStatus([
+                'fileProperties' => $propertyList,
+                'dataKey' => $props[0],
+                'baseUri' => $baseUri
+            ])
+        ];
+
+        // Add the syncToken if it exists
+        if ($syncToken !== null) {
+            $embedded['sync-token'] = 'http://sabre.io/ns/sync/' . $syncToken;
+        }
+
         return [
             '_links' => [
                 'self' => [ 'href' => $baseUri . $parentNodePath . '.json']
             ],
-            '_embedded' => [
-                'dav:item' => Utils::generateJSONMultiStatus([
-                    'fileProperties' => $propertyList,
-                    'dataKey' => $props[0],
-                    'baseUri' => $baseUri
-                ])
-            ]
+            '_embedded' => $embedded
         ];
     }
 
@@ -1272,6 +1288,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     private function getMultipleDAVItemsOptimized($parentNodePath, $parentNode, $filters, $start = false, $end = false) {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
+
+        // Retrieve the syncToken from the calendar (only for ICalendarObjectContainer nodes)
+        $syncToken = null;
+        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer && method_exists($parentNode, 'getProperties')) {
+            $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
+            $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
+                ? $calendarProps['{http://sabredav.org/ns}sync-token']
+                : null;
+        }
 
         $propertyList = [];
         $backend = $parentNode->getBackend();
@@ -1296,17 +1321,24 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $propertyList[] = $objProps;
         }
 
+        $embedded = [
+            'dav:item' => Utils::generateJSONMultiStatus([
+                'fileProperties' => $propertyList,
+                'dataKey' => $props[0],
+                'baseUri' => $baseUri
+            ])
+        ];
+
+        // Add the syncToken if it exists
+        if ($syncToken !== null) {
+            $embedded['sync-token'] = 'http://sabre.io/ns/sync/' . $syncToken;
+        }
+
         return [
             '_links' => [
                 'self' => [ 'href' => $baseUri . $parentNodePath . '.json']
             ],
-            '_embedded' => [
-                'dav:item' => Utils::generateJSONMultiStatus([
-                    'fileProperties' => $propertyList,
-                    'dataKey' => $props[0],
-                    'baseUri' => $baseUri
-                ])
-            ]
+            '_embedded' => $embedded
         ];
     }
 

@@ -78,6 +78,28 @@ class PluginTest extends \ESN\DAV\ServerMock {
         }
     }
 
+    function testTimeRangeQueryShouldIncludeSyncToken() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeData));
+        $response = $this->request($request);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        // Verify that the response includes a sync-token in _embedded
+        $this->assertObjectHasProperty('_embedded', $jsonResponse);
+        $this->assertObjectHasProperty('sync-token', $jsonResponse->_embedded);
+
+        // Verify that the sync-token has the expected format (http://sabre.io/ns/sync/{number})
+        $this->assertIsString($jsonResponse->_embedded->{'sync-token'});
+        $this->assertStringStartsWith('http://sabre.io/ns/sync/', $jsonResponse->_embedded->{'sync-token'});
+    }
+
     function testTimeRangeQueryRecur() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

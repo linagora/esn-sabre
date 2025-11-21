@@ -1145,7 +1145,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
 
             // If event is completely outside the time range, remove it
-            if ($eventEnd < $start || $eventStart > $end) {
+            if ($eventEnd <= $start || $eventStart >= $end) {
                 $vObject->remove($vevent);
             }
         }

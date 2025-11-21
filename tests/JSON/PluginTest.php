@@ -1939,4 +1939,149 @@ END:VCALENDAR
         // Just verify we got a response structure, not necessarily empty
         $this->assertTrue(is_array($items));
     }
+
+    function testExpandEventWithTimeRange() {
+        // Test expanding a single event with time-range
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event2.ics',
+        ));
+
+        $timeRangeData = [
+            'match' => [
+                'start' => '20130301T000000Z',
+                'end' => '20130501T000000Z'
+            ]
+        ];
+
+        $request->setBody(json_encode($timeRangeData));
+        $response = $this->request($request);
+
+        $this->assertEquals(200, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        // Should have data field with the event
+        $this->assertTrue(isset($jsonResponse->data));
+        $this->assertTrue(isset($jsonResponse->etag));
+        $this->assertTrue(isset($jsonResponse->_links->self));
+
+        // Verify the event is present in the response
+        $vcalendar = \Sabre\VObject\Reader::readJson(json_encode($jsonResponse->data));
+        $vevents = $vcalendar->select('VEVENT');
+        $this->assertCount(1, $vevents);
+        $this->assertEquals('Event 2', (string)$vevents[0]->SUMMARY);
+    }
+
+    function testExpandEventRecurringWithTimeRange() {
+        // Test expanding a recurring event with time-range
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/recur.ics',
+        ));
+
+        // Request a 3-day window for the recurring event
+        $timeRangeData = [
+            'match' => [
+                'start' => '20150227T000000Z',
+                'end' => '20150302T000000Z'
+            ]
+        ];
+
+        $request->setBody(json_encode($timeRangeData));
+        $response = $this->request($request);
+
+        $this->assertEquals(200, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        // Should have data field with the expanded event
+        $this->assertTrue(isset($jsonResponse->data));
+        $this->assertTrue(isset($jsonResponse->etag));
+
+        // Verify the event is expanded (should have multiple occurrences)
+        $vcalendar = \Sabre\VObject\Reader::readJson(json_encode($jsonResponse->data));
+        $vevents = $vcalendar->select('VEVENT');
+
+        // Should have 3 occurrences for the 3-day window (Feb 27, 28, Mar 1)
+        $this->assertCount(3, $vevents);
+    }
+
+    function testExpandEventWithoutTimeRangeShouldReturn400() {
+        // Test that requesting an event without time-range returns 400
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event2.ics',
+        ));
+
+        // No time-range parameters
+        $request->setBody(json_encode([]));
+        $response = $this->request($request);
+
+        // Should return 400 Bad Request
+        $this->assertEquals(400, $response->status);
+    }
+
+    function testExpandEventWithPartialTimeRangeShouldReturn400() {
+        // Test that requesting an event with only start date returns 400
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event2.ics',
+        ));
+
+        // Only start, missing end
+        $timeRangeData = [
+            'match' => [
+                'start' => '20130301T000000Z'
+            ]
+        ];
+
+        $request->setBody(json_encode($timeRangeData));
+        $response = $this->request($request);
+
+        // Should return 400 Bad Request
+        $this->assertEquals(400, $response->status);
+    }
+
+    function testExpandEventOutsideTimeRangeShouldReturnEmpty() {
+        // Test that an event outside the time-range returns empty VEVENT array
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event2.ics',
+        ));
+
+        // event2 is on 2013-04-01, request a time-range in 2012 (before the event)
+        $timeRangeData = [
+            'match' => [
+                'start' => '20120101T000000Z',
+                'end' => '20121231T235959Z'
+            ]
+        ];
+
+        $request->setBody(json_encode($timeRangeData));
+        $response = $this->request($request);
+
+        $this->assertEquals(200, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        // Should have data field but no VEVENT (event is outside time-range)
+        $this->assertTrue(isset($jsonResponse->data));
+
+        $vcalendar = \Sabre\VObject\Reader::readJson(json_encode($jsonResponse->data));
+        $vevents = $vcalendar->select('VEVENT');
+
+        // Should have 0 events since event2 is outside the requested time-range
+        $this->assertCount(0, $vevents);
+    }
 }

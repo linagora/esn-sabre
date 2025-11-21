@@ -217,6 +217,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->getCalendarObjectsForSubscription($path, $node, $jsonData);
         } else if ($node instanceof \ESN\CalDAV\CalendarRoot) {
             list($code, $body) = $this->getMultipleCalendarObjectsFromPaths($path, $jsonData);
+        } else if ($node instanceof \Sabre\CalDAV\ICalendarObject) {
+            // Handle individual calendar object with time-range expansion
+            if (isset($jsonData->match) && isset($jsonData->match->start) && isset($jsonData->match->end)) {
+                list($code, $body) = $this->expandEvent($path, $node, $jsonData);
+            } else {
+                // Invalid request: calendar object requires time-range parameters
+                $code = 400;
+                $body = null;
+            }
         } else {
             $code = 200;
             $body = [];
@@ -1076,6 +1085,94 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         ];
 
         return [207, $result];
+    }
+
+    /**
+     * Expands a single calendar event within a time range.
+     *
+     * This method is used when the client needs to retrieve a specific event
+     * (identified by its URI) and expand it within a time window. This is typically
+     * used after a sync-token sync to get the full expanded data for changed events.
+     *
+     * Workflow:
+     * 1. Parse the time-range from the request (match.start and match.end)
+     * 2. Read the calendar event data from the node
+     * 3. Expand recurring events within the specified time range
+     * 4. Hide private event info if necessary
+     * 5. Return the expanded event in JSON format
+     *
+     * @param string $nodePath Path to the calendar object (e.g., "/calendars/userId/calendarId/event.ics")
+     * @param \Sabre\CalDAV\ICalendarObject $node Calendar object node instance
+     * @param object $jsonData JSON request data containing match.start and match.end
+     * @return array Tuple of [int $statusCode, array|null $responseBody]
+     *               - [200, array] on success with event data
+     *               - [400, null] if time-range parameters are invalid
+     */
+    function expandEvent($nodePath, $node, $jsonData) {
+        // Parse time-range parameters
+
+        $start = VObject\DateTimeParser::parseDateTime($jsonData->match->start);
+        $end = VObject\DateTimeParser::parseDateTime($jsonData->match->end);
+
+        // Read the calendar event data
+        $calendarData = $node->get();
+        $vObject = VObject\Reader::read($calendarData);
+
+        // Get parent calendar node for permission checks
+        // Extract parent path by removing the last segment (event filename)
+        $pathParts = explode('/', trim($nodePath, '/'));
+        array_pop($pathParts); // Remove event filename
+        $parentPath = '/' . implode('/', $pathParts);
+        $parentNode = $this->server->tree->getNodeForPath($parentPath);
+
+        // Expand the event in the time range
+        $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
+
+        // Post-filtering: Remove events outside the time range
+        $vevents = $vObject->select('VEVENT');
+        foreach ($vevents as $vevent) {
+            $eventStart = $vevent->DTSTART->getDateTime();
+
+            // Calculate event end: use DTEND if available, otherwise calculate from DURATION
+            if (isset($vevent->DTEND)) {
+                $eventEnd = $vevent->DTEND->getDateTime();
+            } elseif (isset($vevent->DURATION)) {
+                $eventEnd = clone $eventStart;
+                $eventEnd->add($vevent->DURATION->getDateInterval());
+            } else {
+                // No DTEND or DURATION: event is instantaneous or all-day
+                $eventEnd = $eventStart;
+            }
+
+            // If event is completely outside the time range, remove it
+            if ($eventEnd <= $start || $eventStart >= $end) {
+                $vObject->remove($vevent);
+            }
+        }
+
+        // Hide private event info if necessary (only if there are events)
+        $remainingEvents = $vObject->select('VEVENT');
+        if (count($remainingEvents) > 0) {
+            $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+        }
+
+        // Get etag
+        $etag = $node->getETag();
+
+        // Format response
+        $baseUri = $this->server->getBaseUri();
+
+        $result = [
+            '_links' => [
+                'self' => [ 'href' => $baseUri . $nodePath ]
+            ],
+            'data' => $vObject->jsonSerialize(),
+            'etag' => $etag
+        ];
+
+        $vObject->destroy();
+
+        return [200, $result];
     }
 
     /**

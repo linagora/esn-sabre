@@ -1350,4 +1350,31 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         return $calendarUris;
     }
+
+    /**
+     * Get calendar URI by ID and principal (optimized for shared calendars)
+     *
+     * This method performs a single MongoDB query to retrieve the URI of a calendar
+     * owned by a specific principal, avoiding the N+1 problem when resolving
+     * source calendars for shared instances.
+     *
+     * @param string $principalUri The principal URI of the calendar owner
+     * @param string $calendarId The calendar ID to look for
+     * @return string|null The calendar URI, or null if not found
+     */
+    public function getCalendarUriByIdAndPrincipal($principalUri, $calendarId) {
+        $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+
+        $query = [
+            'calendarid' => new \MongoDB\BSON\ObjectId($calendarId),
+            'principaluri' => $principalUri,
+            'access' => 1  // Owner access only
+        ];
+
+        $projection = ['uri' => 1];
+
+        $result = $collection->findOne($query, ['projection' => $projection]);
+
+        return $result ? (string) $result['uri'] : null;
+    }
 }

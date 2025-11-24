@@ -687,16 +687,26 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 if ($user->access == \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER) {
                     $uriExploded = explode('/', $user->principal);
                     $sourceCalendarOwner = $uriExploded[2];
-                    $ownerHomePath = '/calendars/' . $sourceCalendarOwner;
+                    $ownerPrincipal = $user->principal;
 
-                    $myNode = $this->server->tree->getNodeForPath($ownerHomePath);
-                    $ownerCalendars = $myNode->getChildren();
+                    // Optimized: Direct MongoDB query instead of loading all calendars
+                    $backend = $calendar->getBackend();
+                    if ($backend instanceof \ESN\CalDAV\Backend\Mongo) {
+                        $sourceCalendarUri = $backend->getCalendarUriByIdAndPrincipal($ownerPrincipal, $calendarid);
+                        if ($sourceCalendarUri) {
+                            break;
+                        }
+                    } else {
+                        // Fallback to old method for non-Mongo backends
+                        $ownerHomePath = '/calendars/' . $sourceCalendarOwner;
+                        $myNode = $this->server->tree->getNodeForPath($ownerHomePath);
+                        $ownerCalendars = $myNode->getChildren();
 
-                    foreach($ownerCalendars as $ownerCalendar) {
-                        if ($ownerCalendar instanceof \ESN\CalDAV\SharedCalendar && $ownerCalendar->getCalendarId() == $calendarid) {
-                            $sourceCalendarUri = $ownerCalendar->getName();
-
-                            break 2;
+                        foreach($ownerCalendars as $ownerCalendar) {
+                            if ($ownerCalendar instanceof \ESN\CalDAV\SharedCalendar && $ownerCalendar->getCalendarId() == $calendarid) {
+                                $sourceCalendarUri = $ownerCalendar->getName();
+                                break 2;
+                            }
                         }
                     }
                 }

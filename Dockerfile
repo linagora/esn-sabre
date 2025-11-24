@@ -100,7 +100,7 @@ COPY . /var/www
 # Install dependencies without dev packages (using install to respect composer.lock)
 RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject' && \
     composer clearcache && \
-    composer install --no-dev --optimize-autoloader --no-interaction && \
+    composer install --no-dev --optimize-autoloader --apcu-autoloader --no-interaction && \
     # Clean up composer cache and remove git
     rm -rf /root/.composer/cache && \
     apt-get purge -y git && \

@@ -2,15 +2,13 @@
 
 require_once 'vendor/autoload.php';
 
-use \PhpAmqpLib\Connection\AMQPStreamConnection;
-use \PhpAmqpLib\Connection\AMQPSSLConnection;
+use \Utils\ConnectionManager;
 
 define('CONFIG_PATH', 'config.json');
 
-$config = json_decode(file_get_contents(CONFIG_PATH), true);
-if (!$config) {
-    throw new Exception("Could not load config.json from " . realpath(CONFIG_PATH) . ", Error " . json_last_error());
-}
+// Use connection manager for persistent connections and cached config
+$connectionManager = ConnectionManager::getInstance();
+$config = $connectionManager->getConfig();
 $dbConfig = $config['database'];
 define('SABRE_ENV_PRODUCTION', 'production');
 define('SABRE_ENV_DEV', 'dev');
@@ -40,57 +38,9 @@ $logger = ESN\Log\EsnLoggerFactory::initLogger($loggerConfig);
 $loggerPlugin = new ESN\Log\ExceptionLoggerPlugin($logger);
 
 try {
-    $esnMongoConnectionString = $dbConfig['esn']['connectionString'];
-    $esnMongoClient = new \MongoDB\Client($esnMongoConnectionString, $dbConfig['esn']['connectionOptions']);
-    $sabreMongoConnectionString = $dbConfig['sabre']['connectionString'];
-    $sabreMongoClient = new \MongoDB\Client($sabreMongoConnectionString, $dbConfig['sabre']['connectionOptions']);
-
-    $esnMongoDbName = getDatabaseName("esn", $esnMongoConnectionString, $dbConfig);
-    if (!$esnMongoDbName) {
-        throw new Exception("Unable to get ESN database name from configuration");
-    }
-    $sabreMongoDbName = getDatabaseName("sabre", $sabreMongoConnectionString, $dbConfig);
-    if (!$sabreMongoDbName) {
-        throw new Exception("Unable to get SABRE database name from configuration");
-    }
-
-    $esnDb = $esnMongoClient->{$esnMongoDbName};
-    $sabreDb = $sabreMongoClient->{$sabreMongoDbName};
-
-    if(!empty($config['amqp']['host'])) {
-        $amqpLogin = !empty($config['amqp']['login']) ? $config['amqp']['login'] : 'guest';
-        $amqpPassword = !empty($config['amqp']['password']) ? $config['amqp']['password'] : 'guest';
-        $amqpVhost = !empty($config['amqp']['vhost']) ? $config['amqp']['vhost'] : '/';
-        $amqpSslEnabled = !empty($config['amqp']['sslEnabled']) ? $config['amqp']['sslEnabled'] : false;
-        $amqpSslTrustAll = !empty($config['amqp']['sslTrustAllCerts']) ? $config['amqp']['sslTrustAllCerts'] : false;
-
-        if ($amqpSslEnabled) {
-            $sslOptions = [];
-            if ($amqpSslTrustAll) {
-                $sslOptions = [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
-                    'allow_self_signed' => true
-                ];
-            }
-            $amqpConnection = new AMQPSSLConnection(
-                $config['amqp']['host'],
-                $config['amqp']['port'],
-                $amqpLogin,
-                $amqpPassword,
-                $amqpVhost,
-                $sslOptions
-            );
-        } else {
-            $amqpConnection = new AMQPStreamConnection(
-                $config['amqp']['host'],
-                $config['amqp']['port'],
-                $amqpLogin,
-                $amqpPassword,
-                $amqpVhost
-            );
-        }
-    }
+    // Use persistent MongoDB connections from connection manager
+    $esnDb = $connectionManager->getEsnDb();
+    $sabreDb = $connectionManager->getSabreDb();
 } catch (Exception $e) {
     // Create a fake server that will abort with the exception right away. This
     // allows us to use SabreDAV's exception handler and output.
@@ -232,9 +182,9 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 $icsExportPlugin = new Sabre\CalDAV\ICSExportPlugin();
 $server->addPlugin($icsExportPlugin);
 
-// Rabbit publisher plugin
-if (!empty($config['amqp']['host'])) {
-    $channel = $amqpConnection->channel();
+// Rabbit publisher plugin - use persistent connection with per-request channel
+if ($connectionManager->hasAmqp()) {
+    $channel = $connectionManager->createAmqpChannel();
     $AMQPPublisher = new ESN\Publisher\AMQPPublisher($channel);
     $eventRealTimePlugin = new ESN\Publisher\CalDAV\EventRealTimePlugin($AMQPPublisher, $calendarBackend);
     $server->addPlugin($eventRealTimePlugin);
@@ -278,16 +228,3 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 
 // And off we go!
 $server->exec();
-
-
-function getDatabaseName($dbKind, $connectionString, $dbConfig) {
-    $parsedUrl = parse_url($connectionString);
-    $pathSegments = explode("/", $parsedUrl['path']);
-    $lastSegment = array_pop($pathSegments);
-    if ($lastSegment) {
-        return $lastSegment;
-    } else {
-        // support old style database name
-        return $dbConfig[$dbKind]['db'];
-    }
-}

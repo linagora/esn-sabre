@@ -2,7 +2,7 @@
 
 require_once 'vendor/autoload.php';
 
-use \Utils\ConnectionManager;
+use \ESN\Utils\ConnectionManager;
 
 define('CONFIG_PATH', 'config.json');
 

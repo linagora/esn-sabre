@@ -806,12 +806,18 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
 
             if ($withRights) {
-                if (method_exists($sourceNode, 'getInvites') && $sourceNode->getInvites()) {
-                    $subscription['calendarserver:source']['invite'] = $sourceNode->getInvites();
+                if (method_exists($sourceNode, 'getInvites')) {
+                    $invites = $sourceNode->getInvites();
+                    if ($invites) {
+                        $subscription['calendarserver:source']['invite'] = $invites;
+                    }
                 }
 
-                if (method_exists($sourceNode, 'getACL') && $sourceNode->getACL()) {
-                    $subscription['calendarserver:source']['acl'] = $sourceNode->getACL();
+                if (method_exists($sourceNode, 'getACL')) {
+                    $acl = $sourceNode->getACL();
+                    if ($acl) {
+                        $subscription['calendarserver:source']['acl'] = $acl;
+                    }
                 }
             }
         }

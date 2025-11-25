@@ -27,6 +27,12 @@ ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.
 # Fix for CI environments with clock skew issues
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
 
+# Create preload.php stub to prevent errors during PHP installation
+# (will be replaced with real file when COPY . /var/www runs)
+RUN mkdir -p /var/www && \
+    echo '<?php /* Stub file - replaced during build */' > /var/www/preload.php && \
+    chown -R www-data:www-data /var/www
+
 # Install runtime packages + build tools, compile mongodb extension, then remove build tools
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \

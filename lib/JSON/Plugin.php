@@ -769,7 +769,51 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
 
             $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
-            $subscription['calendarserver:source'] = $this->calendarToJson($sourcePath, $sourceNode, true);
+            // Use the source href directly instead of fetching all owner calendars
+            $subscription['calendarserver:source'] = [
+                '_links' => [
+                    'self' => [ 'href' => $baseUri . $sourcePath . '.json' ]
+                ]
+            ];
+
+            // Add additional properties from the source calendar
+            $sourceProps = $sourceNode->getProperties([
+                '{DAV:}displayname',
+                '{urn:ietf:params:xml:ns:caldav}calendar-description',
+                '{http://calendarserver.org/ns/}getctag',
+                '{http://apple.com/ns/ical/}calendar-color',
+                '{http://apple.com/ns/ical/}calendar-order'
+            ]);
+
+            if (isset($sourceProps['{DAV:}displayname'])) {
+                $subscription['calendarserver:source']['dav:name'] = $sourceProps['{DAV:}displayname'];
+            }
+
+            if (isset($sourceProps['{urn:ietf:params:xml:ns:caldav}calendar-description'])) {
+                $subscription['calendarserver:source']['caldav:description'] = $sourceProps['{urn:ietf:params:xml:ns:caldav}calendar-description'];
+            }
+
+            if (isset($sourceProps['{http://calendarserver.org/ns/}getctag'])) {
+                $subscription['calendarserver:source']['calendarserver:ctag'] = $sourceProps['{http://calendarserver.org/ns/}getctag'];
+            }
+
+            if (isset($sourceProps['{http://apple.com/ns/ical/}calendar-color'])) {
+                $subscription['calendarserver:source']['apple:color'] = $sourceProps['{http://apple.com/ns/ical/}calendar-color'];
+            }
+
+            if (isset($sourceProps['{http://apple.com/ns/ical/}calendar-order'])) {
+                $subscription['calendarserver:source']['apple:order'] = $sourceProps['{http://apple.com/ns/ical/}calendar-order'];
+            }
+
+            if ($withRights) {
+                if (method_exists($sourceNode, 'getInvites') && $sourceNode->getInvites()) {
+                    $subscription['calendarserver:source']['invite'] = $sourceNode->getInvites();
+                }
+
+                if (method_exists($sourceNode, 'getACL') && $sourceNode->getACL()) {
+                    $subscription['calendarserver:source']['acl'] = $sourceNode->getACL();
+                }
+            }
         }
 
         if (isset($subprops['{http://apple.com/ns/ical/}calendar-color'])) {

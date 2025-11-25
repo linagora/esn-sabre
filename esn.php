@@ -2,9 +2,6 @@
 
 require_once 'vendor/autoload.php';
 
-use \PhpAmqpLib\Connection\AMQPStreamConnection;
-use \PhpAmqpLib\Connection\AMQPSSLConnection;
-
 define('CONFIG_PATH', 'config.json');
 
 $config = json_decode(file_get_contents(CONFIG_PATH), true);
@@ -56,41 +53,6 @@ try {
 
     $esnDb = $esnMongoClient->{$esnMongoDbName};
     $sabreDb = $sabreMongoClient->{$sabreMongoDbName};
-
-    if(!empty($config['amqp']['host'])) {
-        $amqpLogin = !empty($config['amqp']['login']) ? $config['amqp']['login'] : 'guest';
-        $amqpPassword = !empty($config['amqp']['password']) ? $config['amqp']['password'] : 'guest';
-        $amqpVhost = !empty($config['amqp']['vhost']) ? $config['amqp']['vhost'] : '/';
-        $amqpSslEnabled = !empty($config['amqp']['sslEnabled']) ? $config['amqp']['sslEnabled'] : false;
-        $amqpSslTrustAll = !empty($config['amqp']['sslTrustAllCerts']) ? $config['amqp']['sslTrustAllCerts'] : false;
-
-        if ($amqpSslEnabled) {
-            $sslOptions = [];
-            if ($amqpSslTrustAll) {
-                $sslOptions = [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
-                    'allow_self_signed' => true
-                ];
-            }
-            $amqpConnection = new AMQPSSLConnection(
-                $config['amqp']['host'],
-                $config['amqp']['port'],
-                $amqpLogin,
-                $amqpPassword,
-                $amqpVhost,
-                $sslOptions
-            );
-        } else {
-            $amqpConnection = new AMQPStreamConnection(
-                $config['amqp']['host'],
-                $config['amqp']['port'],
-                $amqpLogin,
-                $amqpPassword,
-                $amqpVhost
-            );
-        }
-    }
 } catch (Exception $e) {
     // Create a fake server that will abort with the exception right away. This
     // allows us to use SabreDAV's exception handler and output.
@@ -232,10 +194,10 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 $icsExportPlugin = new Sabre\CalDAV\ICSExportPlugin();
 $server->addPlugin($icsExportPlugin);
 
-// Rabbit publisher plugin
+// Rabbit publisher plugins - use lazy AMQP connection (only opens when publish() is called)
 if (!empty($config['amqp']['host'])) {
-    $channel = $amqpConnection->channel();
-    $AMQPPublisher = new ESN\Publisher\AMQPPublisher($channel);
+    // Pass config to AMQPPublisher - connection opens lazily on first publish()
+    $AMQPPublisher = new ESN\Publisher\AMQPPublisher($config['amqp']);
     $eventRealTimePlugin = new ESN\Publisher\CalDAV\EventRealTimePlugin($AMQPPublisher, $calendarBackend);
     $server->addPlugin($eventRealTimePlugin);
 

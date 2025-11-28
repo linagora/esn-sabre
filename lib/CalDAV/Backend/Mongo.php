@@ -286,6 +286,21 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $supportedProperties[] = '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp';
 
         $propPatch->handle($supportedProperties, function($mutations) use ($calendarId, $instanceId) {
+            $collection = $this->db->selectCollection($this->calendarInstancesTableName);
+            $query = [ '_id' => new \MongoDB\BSON\ObjectId($instanceId) ];
+
+            // Fetch calendar instance data before update to avoid redundant query
+            $projection = [
+                'uri' => 1,
+                'principaluri' => 1
+            ];
+            $row = $collection->findOne($query, [ 'projection' => $projection ]);
+
+            if (!$row) {
+                return false;
+            }
+
+            // Prepare update values
             $newValues = [];
             foreach($mutations as $propertyName=>$propertyValue) {
 
@@ -302,19 +317,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
             }
 
-            $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-            $query = [ '_id' => new \MongoDB\BSON\ObjectId($instanceId) ];
+            // Perform update
             $collection->updateOne($query, [ '$set' => $newValues ]);
             $this->addChange($calendarId, "", 2);
 
-            $collection = $this->db->selectCollection($this->calendarInstancesTableName);
-            $query = [ '_id' => new \MongoDB\BSON\ObjectId($instanceId) ];
-            $projection = [
-                'uri' => 1,
-                'principaluri' => 1
-            ];
-            $row = $collection->findOne($query, [ 'projection' => $projection ]);
-
+            // Emit event using data fetched before update
             $this->eventEmitter->emit('esn:calendarUpdated', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
 
             return true;

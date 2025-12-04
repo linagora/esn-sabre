@@ -648,6 +648,88 @@ abstract class RecurrenceExpansionTest extends \PHPUnit\Framework\TestCase {
     }
 
     /**
+     * Test yearly recurring event with BYMONTH and BYMONTHDAY where DTSTART month differs from BYMONTH
+     * This is the bug reported in issue #50
+     *
+     * DTSTART is April 11, but RRULE specifies BYMONTH=5 (May) and BYMONTHDAY=15
+     * First occurrence should be May 15, not April 15
+     *
+     * @see https://github.com/linagora/esn-sabre/issues/50
+     */
+    function testYearlyWithBYMONTHAndBYMONTHDAYDifferentFromDTSTART() {
+        $backend = $this->getBackend();
+        $id = $this->generateId();
+
+        // Event starting April 11, 2030 but recurring yearly on May 15
+        $ical = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//Test//EN',
+            'BEGIN:VTIMEZONE',
+            'TZID:Asia/Ho_Chi_Minh',
+            'BEGIN:STANDARD',
+            'TZOFFSETFROM:+0700',
+            'TZOFFSETTO:+0700',
+            'TZNAME:ICT',
+            'DTSTART:19700101T000000',
+            'END:STANDARD',
+            'END:VTIMEZONE',
+            'BEGIN:VEVENT',
+            'UID:yearly-bymonth-bymonthday-test',
+            'DTSTART;TZID=Asia/Ho_Chi_Minh:20300411T100000',
+            'DTEND;TZID=Asia/Ho_Chi_Minh:20300411T110000',
+            'RRULE:FREQ=YEARLY;BYMONTH=5;BYMONTHDAY=15',
+            'SUMMARY:Annual May 15 Event',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $backend->createCalendarObject($id, "yearly-bymonth-test.ics", $ical);
+
+        // Query April 2030 - should NOT find any occurrence (BYMONTH=5 means May only)
+        $filters = [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [
+                [
+                    'name' => 'VEVENT',
+                    'comp-filters' => [],
+                    'prop-filters' => [],
+                    'is-not-defined' => false,
+                    'time-range' => [
+                        'start' => new \DateTime('2030-04-01T00:00:00Z'),
+                        'end' => new \DateTime('2030-04-30T23:59:59Z'),
+                    ],
+                ],
+            ],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should NOT find event in April (BYMONTH=5 means May only)');
+
+        // Query May 2030 - SHOULD find the first occurrence on May 15
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2030-05-01T00:00:00Z'),
+            'end' => new \DateTime('2030-05-31T23:59:59Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals(['yearly-bymonth-test.ics'], $result, 'Should find event in May 2030 (first occurrence on May 15)');
+
+        // Query May 15 specifically
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2030-05-15T00:00:00Z'),
+            'end' => new \DateTime('2030-05-16T00:00:00Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals(['yearly-bymonth-test.ics'], $result, 'Should find event on May 15, 2030');
+    }
+
+    /**
      * Test yearly birthday event on January 14
      * Simple yearly recurrence on a specific date
      */

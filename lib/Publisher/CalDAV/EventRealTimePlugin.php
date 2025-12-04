@@ -385,6 +385,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         ];
 
         $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+        $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
 
         // Only publish alarm events for REQUEST if it's a significant change
         // (e.g., new event, alarm modified, not just another attendee's PARTSTAT change)

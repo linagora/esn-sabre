@@ -95,14 +95,10 @@ RUN cp -v docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh \
     && /root/set_nginx_htpasswd.sh \
     && mkdir -p /var/run/php
 
-# Install dependencies without dev packages (using install to respect composer.lock)
+# Install dependencies
 RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject' && \
     composer clearcache && \
-    composer install --no-dev --optimize-autoloader --no-interaction
-
-RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject'
-
-RUN composer clearcache && composer update --dev
+    composer update --optimize-autoloader --no-interaction
 
 EXPOSE 80
 

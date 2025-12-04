@@ -28,7 +28,7 @@
         "php-amqplib/php-amqplib": "^3.3",
         "php": ">=8.4",
         "sabre/dav": "4.7.0",
-	"sabre/vobject": "dev-linagora-waiting-merges-4.5#da71270578247927ee26c9a7d96ec3d48b6b8783 as 4.5.7",
+        "sabre/vobject": "dev-linagora-waiting-merges-4.5#df65b241c18c4c08cca31fb4dc71b82d231dfc06 as 4.5.7",
         "mongodb/mongodb": "^2.4",
         "monolog/monolog": "^2.9",
         "firebase/php-jwt": "^6.10"

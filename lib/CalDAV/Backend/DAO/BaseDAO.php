@@ -16,10 +16,12 @@ abstract class BaseDAO {
     }
 
     public function findOne(array $query, array $options = []) {
+        $options['typeMap'] = ['root' => 'array', 'document' => 'array', 'array' => 'array'];
         return $this->getCollection()->findOne($query, $options);
     }
 
     public function find(array $query, array $options = []) {
+        $options['typeMap'] = ['root' => 'array', 'document' => 'array', 'array' => 'array'];
         return $this->getCollection()->find($query, $options);
     }
 

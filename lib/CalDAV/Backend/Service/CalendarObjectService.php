@@ -40,6 +40,55 @@ class CalendarObjectService {
     }
 
     /**
+     * Transform MongoDB row to domain object
+     *
+     * @param array $row MongoDB document
+     * @param bool $includeCalendarData Whether to include calendar data
+     * @return array Domain object
+     */
+    private function asDomainObject($row, $includeCalendarData = false) {
+        $domainObject = [
+            'id'           => (string) $row['_id'],
+            'uri'          => $row['uri'],
+            'lastmodified' => $row['lastmodified'],
+            'etag'         => '"' . $row['etag'] . '"',
+            'size'         => (int) $row['size'],
+            'component'    => strtolower($row['componenttype']),
+        ];
+
+        if ($includeCalendarData && isset($row['calendardata'])) {
+            $domainObject['calendardata'] = $row['calendardata'];
+        }
+
+        return $domainObject;
+    }
+
+    /**
+     * Transform domain data to MongoDB document (for create/update)
+     *
+     * @param string $calendarId Calendar ID
+     * @param string $objectUri Object URI
+     * @param string $calendarData iCalendar data
+     * @return array MongoDB document
+     */
+    private function asDocument($calendarId, $objectUri, $calendarData) {
+        $extraData = $this->calendarDataNormalizer->getDenormalizedData($calendarData);
+
+        return [
+            'calendarid' => $calendarId,
+            'uri' => $objectUri,
+            'calendardata' => $calendarData,
+            'lastmodified' => time(),
+            'etag' => $extraData['etag'],
+            'size' => $extraData['size'],
+            'componenttype' => $extraData['componentType'],
+            'firstoccurence' => $extraData['firstOccurence'],
+            'lastoccurence' => $extraData['lastOccurence'],
+            'uid' => $extraData['uid']
+        ];
+    }
+
+    /**
      * Get all calendar objects for a calendar
      *
      * @param array $calendarId [calendarId, instanceId]
@@ -50,14 +99,7 @@ class CalendarObjectService {
 
         $result = [];
         foreach ($this->calendarObjectDAO->findByCalendarId($calendarId, self::LIGHT_PROJECTION) as $row) {
-            $result[] = [
-                'id'           => (string) $row['_id'],
-                'uri'          => $row['uri'],
-                'lastmodified' => $row['lastmodified'],
-                'etag'         => '"' . $row['etag'] . '"',
-                'size'         => (int) $row['size'],
-                'component'    => strtolower($row['componenttype']),
-            ];
+            $result[] = $this->asDomainObject($row, false);
         }
 
         return $result;
@@ -87,15 +129,7 @@ class CalendarObjectService {
 
         $result = [];
         foreach ($this->calendarObjectDAO->findByCalendarIdAndUris($calendarId, $uris, self::FULL_PROJECTION) as $row) {
-            $result[] = [
-                'id'           => (string) $row['_id'],
-                'uri'          => $row['uri'],
-                'lastmodified' => $row['lastmodified'],
-                'etag'         => '"' . $row['etag'] . '"',
-                'size'         => (int) $row['size'],
-                'calendardata' => $row['calendardata'],
-                'component'    => strtolower($row['componenttype']),
-            ];
+            $result[] = $this->asDomainObject($row, true);
         }
 
         return $result;
@@ -113,24 +147,11 @@ class CalendarObjectService {
     public function createCalendarObject($calendarId, $objectUri, $calendarData, $addChangeCallback) {
         $calendarId = $calendarId[0];
 
-        $extraData = $this->calendarDataNormalizer->getDenormalizedData($calendarData);
-
-        $obj = [
-            'calendarid' => $calendarId,
-            'uri' => $objectUri,
-            'calendardata' => $calendarData,
-            'lastmodified' => time(),
-            'etag' => $extraData['etag'],
-            'size' => $extraData['size'],
-            'componenttype' => $extraData['componentType'],
-            'firstoccurence' => $extraData['firstOccurence'],
-            'lastoccurence' => $extraData['lastOccurence'],
-            'uid' => $extraData['uid']
-        ];
-        $this->calendarObjectDAO->createCalendarObject($obj);
+        $document = $this->asDocument($calendarId, $objectUri, $calendarData);
+        $this->calendarObjectDAO->createCalendarObject($document);
         $addChangeCallback($calendarId, $objectUri, 1);
 
-        return '"' . $extraData['etag'] . '"';
+        return '"' . $document['etag'] . '"';
     }
 
     /**
@@ -145,23 +166,15 @@ class CalendarObjectService {
     public function updateCalendarObject($calendarId, $objectUri, $calendarData, $addChangeCallback) {
         $calendarId = $calendarId[0];
 
-        $extraData = $this->calendarDataNormalizer->getDenormalizedData($calendarData);
+        $document = $this->asDocument($calendarId, $objectUri, $calendarData);
 
-        $updateData = [
-            'calendardata' => $calendarData,
-            'lastmodified' => time(),
-            'etag' => $extraData['etag'],
-            'size' => $extraData['size'],
-            'componenttype' => $extraData['componentType'],
-            'firstoccurence' => $extraData['firstOccurence'],
-            'lastoccurence' => $extraData['lastOccurence'],
-            'uid' => $extraData['uid'],
-        ];
+        // For updates, we don't update calendarid and uri
+        unset($document['calendarid'], $document['uri']);
 
-        $this->calendarObjectDAO->updateCalendarObject($calendarId, $objectUri, $updateData);
+        $this->calendarObjectDAO->updateCalendarObject($calendarId, $objectUri, $document);
         $addChangeCallback($calendarId, $objectUri, 2);
 
-        return '"' . $extraData['etag'] . '"';
+        return '"' . $document['etag'] . '"';
     }
 
     /**

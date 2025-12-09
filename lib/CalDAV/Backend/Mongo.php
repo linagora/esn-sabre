@@ -10,6 +10,7 @@ use ESN\CalDAV\Backend\DAO\CalendarObjectDAO;
 use ESN\CalDAV\Backend\DAO\CalendarChangeDAO;
 use ESN\CalDAV\Backend\DAO\SchedulingObjectDAO;
 use ESN\CalDAV\Backend\DAO\CalendarSubscriptionDAO;
+use ESN\CalDAV\Backend\Service\CalendarSharingService;
 
 #[\AllowDynamicProperties]
 class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
@@ -28,6 +29,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     protected $calendarChangeDAO;
     protected $schedulingObjectDAO;
     protected $calendarSubscriptionDAO;
+    protected $calendarSharingService;
 
     public $propertyMap = [
         '{DAV:}displayname' => 'displayname',
@@ -62,6 +64,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $this->calendarChangeDAO = new CalendarChangeDAO($db);
         $this->schedulingObjectDAO = new SchedulingObjectDAO($db, $schedulingObjectTTLInDays);
         $this->calendarSubscriptionDAO = new CalendarSubscriptionDAO($db);
+
+        // Initialize Services
+        $this->calendarSharingService = new CalendarSharingService($this->calendarInstanceDAO, $this->eventEmitter);
 
         $this->ensureIndex();
     }
@@ -265,6 +270,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     private function getCalendarPath($principalUri, $calendarUri) {
         $uriExploded = explode('/', $principalUri);
 
+        return '/calendars/' . $uriExploded[2] . '/' . $calendarUri;
+    }
+
+    public function getCalendarPath($principalUri, $calendarUri) {
+        $uriExploded = explode('/', $principalUri);
         return '/calendars/' . $uriExploded[2] . '/' . $calendarUri;
     }
 
@@ -930,140 +940,42 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function updateInvites($calendarId, array $sharees) {
         $this->_assertIsArray($calendarId);
 
-        $calendarInstances = [];
-
-        $currentInvites = $this->getInvites($calendarId);
-        list($calendarId, $instanceId) = $calendarId;
-
-        $existingInstance = $this->calendarInstanceDAO->findInstanceById($instanceId, ['_id' => 0]);
-
-        foreach($sharees as $sharee) {
-            if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS) {
-                // TODO access === 2 || access === 3
-                $uri = $this->calendarInstanceDAO->findInstanceByCalendarIdAndShareHref($calendarId, $sharee->href);
-                $this->calendarInstanceDAO->deleteInstanceByCalendarIdAndShareHref($calendarId, $sharee->href);
-
-                if ($uri) {
-                    $calendarInstances[] = [
-                        'uri' => $uri['uri'],
-                        'type' => 'delete',
-                        'sharee' => $sharee
-                    ];
-                }
-
-                continue;
-            }
-
-            if (is_null($sharee->principal)) {
-                $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_INVALID;
-            } else {
-                $sharee->inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
-            }
-
-            foreach($currentInvites as $oldSharee) {
-                if ($oldSharee->href === $sharee->href) {
-                    $sharee->properties = array_merge($oldSharee->properties, $sharee->properties);
-                    $updateData = [
-                        'access' => $sharee->access,
-                        'share_displayname' => isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null,
-                        'share_invitestatus' => $sharee->inviteStatus ?: $oldSharee->inviteStatus
-                    ];
-                    $this->calendarInstanceDAO->updateShareeAccess($calendarId, $sharee->href, $updateData);
-
-                    $uri = $this->calendarInstanceDAO->findInstanceByCalendarIdAndShareHref($calendarId, $sharee->href);
-
-                    $calendarInstances[] = [
-                        'uri' => $uri['uri'],
-                        'type' => 'update',
-                        'sharee' => $sharee
-                    ];
-
-                    continue 2;
-                }
-            }
-
-            $existingInstance['calendarid'] = new \MongoDB\BSON\ObjectId($calendarId);
-            $existingInstance['principaluri'] = $sharee->principal;
-            $existingInstance['access'] = $sharee->access;
-            $existingInstance['uri'] = \Sabre\DAV\UUIDUtil::getUUID();
-            $existingInstance['share_href'] = $sharee->href;
-            $existingInstance['share_displayname'] = isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null;
-            $existingInstance['share_invitestatus'] = $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
-            $this->calendarInstanceDAO->createInstance($existingInstance);
-
-            $calendarInstances[] = [
-                'uri' => $existingInstance['uri'],
-                'type' => 'create',
-                'sharee' => $sharee
-            ];
-        }
-
-        $this->eventEmitter->emit('esn:updateSharees', [$calendarInstances]);
+        return $this->calendarSharingService->updateInvites($calendarId, $sharees);
     }
 
     function getInvites($calendarId) {
         $this->_assertIsArray($calendarId);
 
-        $calendarId = $calendarId[0];
-
-        $projection = [
-            'principaluri' => 1,
-            'access' => 1,
-            'share_href' => 1,
-            'share_invitestatus' => 1,
-            'share_displayname' => 1
-        ];
-        $res = $this->calendarInstanceDAO->findInvitesByCalendarId($calendarId, $projection);
-        $result = [];
-        foreach ($res as $row) {
-            if ($row['share_invitestatus'] === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
-                continue;
-            }
-
-            $result[] = new \Sabre\DAV\Xml\Element\Sharee([
-                'href' => isset($row['share_href']) ? $row['share_href'] : \Sabre\HTTP\encodePath($row['principaluri']),
-                'access' => (int) $row['access'],
-                'inviteStatus' => (int) $row['share_invitestatus'],
-                'properties' => !empty($row['share_displayname']) ? [ '{DAV:}displayname' => $row['share_displayname'] ] : [],
-                'principal' => $row['principaluri']
-            ]);
-        }
-
-        return $result;
+        return $this->calendarSharingService->getInvites($calendarId);
     }
 
     function prepareRequestForCalendarPublicRight($calendarId) {
         $this->_assertIsArray($calendarId);
-        return $calendarId[0];
+        return $this->calendarSharingService->prepareRequestForCalendarPublicRight($calendarId);
     }
 
     function saveCalendarPublicRight($calendarId, $privilege, $calendarInfo) {
-        $calendarId = $this->prepareRequestForCalendarPublicRight($calendarId);
+        $this->_assertIsArray($calendarId);
 
-        $this->calendarInstanceDAO->updatePublicRight($calendarId, $privilege);
-
-        if (!in_array($privilege, ['{DAV:}read', '{DAV:}write'])) {
-            $this->eventEmitter->emit('esn:updatePublicRight', [$this->getCalendarPath($calendarInfo['principaluri'], $calendarInfo['uri']), false]);
-            $this->deleteSubscribers($calendarInfo['principaluri'], $calendarInfo['uri']);
-        } else {
-            $this->eventEmitter->emit('esn:updatePublicRight', [$this->getCalendarPath($calendarInfo['principaluri'], $calendarInfo['uri'])]);
-        }
+        $this->calendarSharingService->saveCalendarPublicRight(
+            $calendarId,
+            $privilege,
+            $calendarInfo,
+            [$this, 'deleteSubscribers'],
+            [$this, 'getCalendarPath']
+        );
     }
 
     function saveCalendarInviteStatus($calendarId, $status) {
         $this->_assertIsArray($calendarId);
 
-        $instanceId = $calendarId[1];
-
-        $this->calendarInstanceDAO->updateInviteStatus($instanceId, $status);
+        $this->calendarSharingService->saveCalendarInviteStatus($calendarId, $status);
     }
 
     function getCalendarPublicRight($calendarId) {
-        $calendarId = $this->prepareRequestForCalendarPublicRight($calendarId);
+        $this->_assertIsArray($calendarId);
 
-        $mongoRes = $this->calendarInstanceDAO->getPublicRight($calendarId);
-
-        return isset($mongoRes['public_right']) ? $mongoRes['public_right'] : null;
+        return $this->calendarSharingService->getCalendarPublicRight($calendarId);
     }
 
     function setPublishStatus($calendarId, $value) {

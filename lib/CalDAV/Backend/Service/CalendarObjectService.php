@@ -106,6 +106,23 @@ class CalendarObjectService {
     }
 
     /**
+     * Get all URIs for a calendar (used for initial sync)
+     *
+     * @param array $calendarId [calendarId, instanceId]
+     * @return array Array of URIs
+     */
+    public function getAllUris($calendarId) {
+        $calendarId = $calendarId[0];
+
+        $uris = [];
+        foreach ($this->calendarObjectDAO->findByCalendarId($calendarId, ['uri' => 1]) as $row) {
+            $uris[] = $row['uri'];
+        }
+
+        return $uris;
+    }
+
+    /**
      * Get a single calendar object
      *
      * @param array $calendarId [calendarId, instanceId]

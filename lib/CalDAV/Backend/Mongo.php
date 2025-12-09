@@ -212,48 +212,62 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $currentToken = $row['synctoken'];
 
-        $result = [
+        if ($syncToken) {
+            return array_merge(
+                ['syncToken' => $currentToken],
+                $this->getChangesSince($calendarId, $syncToken, $currentToken, $limit)
+            );
+        }
+
+        return [
             'syncToken' => $currentToken,
-            'added'     => [],
-            'modified'  => [],
-            'deleted'   => [],
+            'added' => $this->calendarObjectService->getAllUris([$calendarId, null]),
+            'modified' => [],
+            'deleted' => []
+        ];
+    }
+
+    /**
+     * Get changes since a specific sync token
+     *
+     * @param string $calendarId
+     * @param int $syncToken
+     * @param int $currentToken
+     * @param int|null $limit
+     * @return array ['added' => [], 'modified' => [], 'deleted' => []]
+     */
+    private function getChangesSince($calendarId, $syncToken, $currentToken, $limit) {
+        $res = $this->calendarChangeDAO->findChangesBySyncToken($calendarId, $syncToken, $currentToken, $limit);
+
+        // Fetching all changes
+        $changes = [];
+
+        // This loop ensures that any duplicates are overwritten, only the
+        // last change on a node is relevant.
+        foreach ($res as $row) {
+            $changes[$row['uri']] = $row['operation'];
+        }
+
+        $result = [
+            'added' => [],
+            'modified' => [],
+            'deleted' => []
         ];
 
-        if ($syncToken) {
-            $res = $this->calendarChangeDAO->findChangesBySyncToken($calendarId, $syncToken, $currentToken, $limit);
-
-            // Fetching all changes
-            $changes = [];
-
-            // This loop ensures that any duplicates are overwritten, only the
-            // last change on a node is relevant.
-            foreach ($res as $row) {
-                $changes[$row['uri']] = $row['operation'];
+        foreach($changes as $uri => $operation) {
+            switch($operation) {
+                case 1 :
+                    $result['added'][] = $uri;
+                    break;
+                case 2 :
+                    $result['modified'][] = $uri;
+                    break;
+                case 3 :
+                    $result['deleted'][] = $uri;
+                    break;
             }
-
-            foreach($changes as $uri => $operation) {
-                switch($operation) {
-                    case 1 :
-                        $result['added'][] = $uri;
-                        break;
-                    case 2 :
-                        $result['modified'][] = $uri;
-                        break;
-                    case 3 :
-                        $result['deleted'][] = $uri;
-                        break;
-                }
-            }
-        } else {
-            // No synctoken supplied, this is the initial sync.
-            $projection = [ 'uri' => 1 ];
-
-            $added = [];
-            foreach ($this->calendarObjectDAO->findByCalendarId($calendarId, $projection) as $row) {
-                $added[] = $row['uri'];
-            }
-            $result['added'] = $added;
         }
+
         return $result;
     }
 

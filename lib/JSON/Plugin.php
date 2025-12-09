@@ -238,21 +238,27 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         $path = $request->getPath();
-        $jsonData = json_decode($request->getBodyAsString());
         $code = null;
         $body = null;
 
         if ($path == 'query') {
+            $jsonData = json_decode($request->getBodyAsString());
             list($code, $body) = $this->getCalendarObjectHandler()->queryCalendarObjects($path, null, $jsonData);
             return $this->send($code, $body);
         }
 
         $node = $this->server->tree->getNodeForPath($path);
 
+        // Only handle calendar nodes, let other plugins handle other nodes (like addressbooks)
         if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+            $jsonData = json_decode($request->getBodyAsString());
             list($code, $body) = $this->handleJsonRequest($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+            $jsonData = json_decode($request->getBodyAsString());
             list($code, $body) = $this->handleCalendarHomePost($path, $jsonData);
+        } else {
+            // Not a calendar node - let other plugins handle it
+            return true;
         }
 
         return $this->send($code, $body);
@@ -384,13 +390,14 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $path = $request->getPath();
         $node = $this->server->tree->getNodeForPath($path);
-        $jsonData = json_decode($request->getBodyAsString());
         $code = null;
         $body = null;
 
         if ($node instanceof \Sabre\CalDAV\Calendar) {
+            $jsonData = json_decode($request->getBodyAsString());
             list($code, $body) = $this->handleCalendarProppatch($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+            $jsonData = json_decode($request->getBodyAsString());
             list($code, $body) = $this->handleSubscriptionProppatch($path, $node, $jsonData);
         }
 
@@ -449,8 +456,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             return true;
         }
 
-        $calendarHandler = $this->getCalendarHandler();
-        $result = $calendarHandler->changePublicRights($request, $response);
+        // Try calendar handler
+        $result = $this->getCalendarHandler()->changePublicRights($request, $response);
 
         if ($result !== null) {
             $this->send($result[0], $result[1]);

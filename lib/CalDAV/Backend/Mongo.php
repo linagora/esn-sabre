@@ -14,6 +14,7 @@ use ESN\CalDAV\Backend\Service\CalendarSharingService;
 use ESN\CalDAV\Backend\Service\CalendarDataNormalizer;
 use ESN\CalDAV\Backend\Service\SubscriptionService;
 use ESN\CalDAV\Backend\Service\SchedulingService;
+use ESN\CalDAV\Backend\Service\CalendarService;
 
 #[\AllowDynamicProperties]
 class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
@@ -36,6 +37,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     protected $calendarDataNormalizer;
     protected $subscriptionService;
     protected $schedulingService;
+    protected $calendarService;
 
     public $propertyMap = [
         '{DAV:}displayname' => 'displayname',
@@ -76,6 +78,15 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $this->calendarDataNormalizer = new CalendarDataNormalizer();
         $this->subscriptionService = new SubscriptionService($this->calendarSubscriptionDAO, $this->eventEmitter, $this->subscriptionPropertyMap);
         $this->schedulingService = new SchedulingService($this->schedulingObjectDAO);
+        $this->calendarService = new CalendarService(
+            $this->calendarDAO,
+            $this->calendarInstanceDAO,
+            $this->calendarObjectDAO,
+            $this->calendarChangeDAO,
+            $this->eventEmitter,
+            $this->propertyMap,
+            $this->server ?? null
+        );
 
         $this->ensureIndex();
     }
@@ -85,259 +96,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getCalendarsForUser($principalUri) {
-        $instancesData = $this->fetchCalendarInstancesWithData($principalUri);
-        $userCalendars = $this->formatCalendarsForUser($instancesData);
-        return $this->sortCalendarsWithDefaultFirst($userCalendars, $principalUri);
-    }
-
-    /**
-     * Fetch calendar instances with their associated calendar data
-     *
-     * @param string $principalUri
-     * @return array ['instances' => array, 'calendars' => array]
-     */
-    private function fetchCalendarInstancesWithData($principalUri) {
-        $fields = array_merge(
-            array_values($this->propertyMap),
-            ['calendarid', 'uri', 'synctoken', 'components', 'principaluri', 'transparent', 'access', 'share_invitestatus']
-        );
-
-        $res = $this->calendarInstanceDAO->findByPrincipalUri($principalUri, $fields, ['calendarorder' => 1]);
-
-        $calendarInstances = [];
-        $calendarIds = [];
-
-        foreach ($res as $row) {
-            $calendarId = (string) $row['calendarid'];
-            $calendarIds[] = new \MongoDB\BSON\ObjectId($calendarId);
-
-            // Avoid duplication: a calendarInstance is linked with only one calendarId
-            $calendarInstances[$calendarId] = $row;
-        }
-
-        $projection = ['_id' => 1, 'synctoken' => 1, 'components' => 1];
-        $calendarsResult = $this->calendarDAO->findByIds($calendarIds, $projection);
-
-        $calendars = [];
-        foreach ($calendarsResult as $row) {
-            $calendars[(string) $row['_id']] = $row;
-        }
-
-        return ['instances' => $calendarInstances, 'calendars' => $calendars];
-    }
-
-    /**
-     * Format calendar instances with their data for user consumption
-     *
-     * @param array $data ['instances' => array, 'calendars' => array]
-     * @return array Array of formatted calendars
-     */
-    private function formatCalendarsForUser($data) {
-        $userCalendars = [];
-
-        foreach ($data['instances'] as $calendarInstance) {
-            $currentCalendarId = (string) $calendarInstance['calendarid'];
-
-            if (!isset($data['calendars'][$currentCalendarId])) {
-                $this->logMissingCalendar($currentCalendarId, $calendarInstance);
-                continue;
-            }
-
-            $calendar = $data['calendars'][$currentCalendarId];
-            $userCalendars[] = $this->formatSingleCalendar($calendarInstance, $calendar);
-        }
-
-        return $userCalendars;
-    }
-
-    /**
-     * Format a single calendar instance with its calendar data
-     *
-     * @param array $calendarInstance Instance data from calendarinstances collection
-     * @param array $calendar Calendar data from calendars collection
-     * @return array Formatted calendar array
-     */
-    private function formatSingleCalendar($calendarInstance, $calendar) {
-        $components = (array) $calendar['components'];
-
-        $userCalendar = [
-            'id' => [(string) $calendarInstance['calendarid'], (string) $calendarInstance['_id']],
-            'uri' => $calendarInstance['uri'],
-            'principaluri' => $calendarInstance['principaluri'],
-            '{' . \Sabre\CalDAV\Plugin::NS_CALENDARSERVER . '}getctag' =>
-                'http://sabre.io/ns/sync/' . ($calendar['synctoken'] ?: '0'),
-            '{http://sabredav.org/ns}sync-token' =>
-                $calendar['synctoken'] ?: '0',
-            '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' =>
-                new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet($components),
-            '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' =>
-                new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp($calendarInstance['transparent'] ? 'transparent' : 'opaque'),
-            'share-resource-uri' => '/ns/share/' . $calendarInstance['_id'],
-            'share-invitestatus' => $calendarInstance['share_invitestatus']
-        ];
-
-        // Add share access info for shared calendars (access > 1 means not owner)
-        if ($calendarInstance['access'] > 1) {
-            $userCalendar['share-access'] = (int) $calendarInstance['access'];
-            $userCalendar['read-only'] = (int) $calendarInstance['access'] === \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
-        }
-
-        // Set default displayname if empty
-        if (!$calendarInstance['displayname']) {
-            $calendarInstance['displayname'] = '#default';
-        }
-
-        // Map properties from propertyMap
-        foreach ($this->propertyMap as $xmlName => $dbName) {
-            $userCalendar[$xmlName] = $calendarInstance[$dbName];
-        }
-
-        return $userCalendar;
-    }
-
-    /**
-     * Sort calendars with default calendar first
-     *
-     * @param array $userCalendars
-     * @param string $principalUri
-     * @return array Sorted calendars
-     */
-    private function sortCalendarsWithDefaultFirst($userCalendars, $principalUri) {
-        $principalId = $this->extractPrincipalId($principalUri);
-
-        $defaultCalendar = null;
-        $otherCalendars = [];
-
-        foreach ($userCalendars as $calendar) {
-            $calendarId = $this->extractCalendarId($calendar['uri']);
-
-            if ($calendarId === $principalId && $defaultCalendar === null) {
-                $defaultCalendar = $calendar;
-            } else {
-                $otherCalendars[] = $calendar;
-            }
-        }
-
-        if ($defaultCalendar) {
-            array_unshift($otherCalendars, $defaultCalendar);
-            return $otherCalendars;
-        }
-
-        return $userCalendars;
-    }
-
-    /**
-     * Extract principal ID from principal URI
-     *
-     * @param string $principalUri e.g., "principals/users/123"
-     * @return string Principal ID e.g., "123"
-     */
-    private function extractPrincipalId($principalUri) {
-        $parts = explode('/', $principalUri);
-        return end($parts);
-    }
-
-    /**
-     * Extract calendar ID from calendar URI
-     *
-     * @param string $calendarUri e.g., "calendars/123/456"
-     * @return string Calendar ID e.g., "456"
-     */
-    private function extractCalendarId($calendarUri) {
-        $parts = explode('/', $calendarUri);
-        return end($parts);
-    }
-
-    /**
-     * Log error when calendar is not found for instance
-     *
-     * @param string $calendarId
-     * @param array $calendarInstance
-     */
-    private function logMissingCalendar($calendarId, $calendarInstance) {
-        $this->server->getLogger().error(
-            'No matching calendar found',
-            'Calendar ' . $calendarId . ' not found for calendar instance ' . (string) $calendarInstance['_id']
-        );
-    }
-
-    private function checkIfCalendarInstanceExist($principalUri, $calendarUri) {
-        $calendar = $this->calendarInstanceDAO->findInstanceByPrincipalUriAndUri($principalUri, $calendarUri, 1);
-
-        return isset($calendar['_id']) ? [(string) $calendar['calendarid'], (string) $calendar['_id']] : false;
+        return $this->calendarService->getCalendarsForUser($principalUri);
     }
 
     function createCalendar($principalUri, $calendarUri, array $properties) {
-        $calendar = $this->checkIfCalendarInstanceExist($principalUri, $calendarUri);
-
-        if ($calendar) {
-            return $calendar;
-        }
-        $sccs = '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set';
-
-        // Insert in calendars collection
-        $obj = [
-          'synctoken' => 1
-        ];
-        if (!isset($properties[$sccs])) {
-            // Default value
-            $obj['components'] = ['VEVENT', 'VTODO'];
-        } else {
-            if (!($properties[$sccs] instanceof \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet)) {
-                throw new \Sabre\DAV\Exception('The ' . $sccs . ' property must be of type: \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet');
-            }
-            $obj['components'] = $properties[$sccs]->getValue();
-        }
-
-        $calendarId = $this->calendarDAO->createCalendar($obj);
-
-        // Insert in calendarinstances collection
-        $obj = [
-            'principaluri' => $principalUri,
-            'uri' => $calendarUri,
-            'transparent' => 0,
-            'access' => 1,
-            'share_invitestatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
-            'calendarid' => new \MongoDB\BSON\ObjectId($calendarId)
-        ];
-
-        $transp = '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp';
-        if (isset($properties[$transp])) {
-            $obj['transparent'] = $properties[$transp]->getValue() === 'transparent';
-        }
-        foreach($this->propertyMap as $xmlName=>$dbName) {
-            if (isset($properties[$xmlName])) {
-                $obj[$dbName] = $properties[$xmlName];
-            } else {
-                $obj[$dbName] = null;
-            }
-        }
-
-        if ($this->isPrincipalResource($obj['principaluri'])) {
-            $obj['public_right'] = self::RESOURCE_CALENDAR_PUBLIC_PRIVILEGE;
-        }
-
-        $instanceId = $this->calendarInstanceDAO->createInstance($obj);
-
-        $this->eventEmitter->emit('esn:calendarCreated', [$this->getCalendarPath($principalUri, $calendarUri)]);
-
-        return [$calendarId, $instanceId];
-    }
-
-    private function isPrincipalResource($principalUri) {
-        if (!$principalUri) {
-            return false;
-        }
-
-        $uriExploded = explode('/', $principalUri);
-
-        return $uriExploded[1] === 'resources';
-    }
-
-    private function getCalendarPath($principalUri, $calendarUri) {
-        $uriExploded = explode('/', $principalUri);
-
-        return '/calendars/' . $uriExploded[2] . '/' . $calendarUri;
+        return $this->calendarService->createCalendar($principalUri, $calendarUri, $properties);
     }
 
     public function getCalendarPath($principalUri, $calendarUri) {
@@ -347,82 +110,42 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     function updateCalendar($calendarId, \Sabre\DAV\PropPatch $propPatch) {
         $this->_assertIsArray($calendarId);
-
-        list($calendarId, $instanceId) = $calendarId;
-
-        $supportedProperties = array_keys($this->propertyMap);
-        $supportedProperties[] = '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp';
-
-        $propPatch->handle($supportedProperties, function($mutations) use ($calendarId, $instanceId) {
-            $newValues = [];
-            foreach($mutations as $propertyName=>$propertyValue) {
-
-                switch($propertyName) {
-                    case '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' :
-                        $fieldName = 'transparent';
-                        $newValues[$fieldName] = $propertyValue->getValue()==='transparent';
-                        break;
-                    default :
-                        $fieldName = $this->propertyMap[$propertyName];
-                        $newValues[$fieldName] = $propertyValue;
-                        break;
-                }
-
-            }
-
-            $this->calendarInstanceDAO->updateInstanceById($instanceId, $newValues);
-            $this->addChange($calendarId, "", 2);
-
-            $projection = [
-                'uri' => 1,
-                'principaluri' => 1
-            ];
-            $row = $this->calendarInstanceDAO->findInstanceById($instanceId, $projection);
-
-            $this->eventEmitter->emit('esn:calendarUpdated', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
-
-            return true;
-
-        });
-
+        return $this->calendarService->updateCalendar($calendarId, $propPatch);
     }
 
     function deleteCalendar($calendarIdArray) {
         $this->_assertIsArray($calendarIdArray);
 
-        list($calendarId, $instanceId) = $calendarIdArray;
+        $deleteSubscribersCallback = function($principaluri, $uri) {
+            $this->deleteSubscribers($principaluri, $uri);
+        };
 
-        $row = $this->calendarInstanceDAO->findInstanceById($instanceId);
+        $updateInvitesCallback = function($calendarId, $invites) {
+            $this->updateInvites($calendarId, $invites);
+        };
 
-        if ((int) $row['access'] === \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER) {
-            $currentInvites = $this->getInvites($calendarIdArray);
+        $getInvitesCallback = function($calendarId) {
+            return $this->getInvites($calendarId);
+        };
 
-            foreach($currentInvites as $sharee) {
-                $sharee->access = \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS;
-            }
-
-            $this->updateInvites($calendarIdArray, $currentInvites);
-            $this->deleteSubscribers($row['principaluri'], $row['uri']);
-
-            $this->calendarObjectDAO->deleteAllObjectsByCalendarId($calendarId);
-            $this->calendarChangeDAO->deleteChangesByCalendarId($calendarId);
-            $this->calendarInstanceDAO->deleteInstancesByCalendarId($calendarId);
-            $this->calendarDAO->deleteById($calendarId);
-        } else {
-            $this->calendarInstanceDAO->deleteInstanceById($instanceId);
-        }
-
-        $this->eventEmitter->emit('esn:calendarDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
+        return $this->calendarService->deleteCalendar(
+            $calendarIdArray,
+            $deleteSubscribersCallback,
+            $updateInvitesCallback,
+            $getInvitesCallback
+        );
     }
 
     function deleteSubscribers($principaluri, $uri) {
-        $principalUriExploded = explode('/', $principaluri);
-        $source = 'calendars/' . $principalUriExploded[2] . '/' . $uri;
+        $getSubscribersCallback = function($source) {
+            return $this->getSubscribers($source);
+        };
 
-        $subscriptions = $this->getSubscribers($source);
-        foreach($subscriptions as $subscription) {
-            $this->deleteSubscription($subscription['_id']);
-        }
+        $deleteSubscriptionCallback = function($subscriptionId) {
+            $this->deleteSubscription($subscriptionId);
+        };
+
+        return $this->calendarService->deleteSubscribers($principaluri, $uri, $getSubscribersCallback, $deleteSubscriptionCallback);
     }
 
     function getCalendarObjects($calendarId) {
@@ -735,43 +458,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getCalendarObjectByUID($principalUri, $uid) {
-        $calendarUris = $this->getCalendarInstancesByPrincipalUri($principalUri);
-        if (empty($calendarUris)) return null;
-
-        $projection = [
-            'uri' => 1,
-            'calendarid' => 1
-        ];
-        $objrow = $this->calendarObjectDAO->findByUid(array_keys($calendarUris), $uid, $projection);
-        if (!$objrow) return null;
-
-        return $calendarUris[(string) $objrow['calendarid']] . '/' . $objrow['uri'];
+        return $this->calendarService->getCalendarObjectByUID($principalUri, $uid);
     }
 
     function getDuplicateCalendarObjectsByURI($principalUri, $uri) {
-        $calendarUris = $this->getCalendarInstancesByPrincipalUri($principalUri);
-
-        if (empty($calendarUris)) return null;
-
-        // find the uid of the event having the provided URI
-        $projection = ['uid' => 1];
-        $objrow = $this->calendarObjectDAO->findByUri(array_keys($calendarUris), $uri, $projection);
-
-        if (!$objrow) return [];
-
-        // find the events having the found uid.
-        $projection = [
-            'uri' => 1,
-            'calendarid' => 1
-        ];
-        $objrows = $this->calendarObjectDAO->findByUidMultiple(array_keys($calendarUris), $objrow['uid'], $projection);
-        $result = [];
-
-        foreach($objrows as $row) {
-            $result[] = $calendarUris[(string) $row['calendarid']] . '/' . $row['uri'];
-        }
-
-        return $result;
+        return $this->calendarService->getDuplicateCalendarObjectsByURI($principalUri, $uri);
     }
 
     function getChangesForCalendar($calendarId, $syncToken, $syncLevel, $limit = null) {
@@ -950,25 +641,4 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         }
     }
 
-    private function getCalendarInstancesByPrincipalUri($principalUri) {
-        $projection = [
-            'calendarid' => 1,
-            'uri' => 1,
-            'access' => 1
-        ];
-        $calendarInstances = $this->calendarInstanceDAO->findInstancesByPrincipalUriWithAccess($principalUri, $projection);
-        if (!$calendarInstances) return [];
-
-        $calendarUris = array();
-        foreach($calendarInstances as $calendarInstance) {
-            // Because we do not want retrieve event from delegation
-            // This check make sense only for event where I am attendee and also have a delegation
-            // So we are able to retrieve event from delegation and add new event in default calendar because I am attendee
-            if ($calendarInstance['access'] === 1) {
-                $calendarUris[(string) $calendarInstance['calendarid']] = (string) $calendarInstance['uri'];
-            }
-        }
-
-        return $calendarUris;
-    }
 }

@@ -14,6 +14,20 @@ use \Sabre\VObject;
  * - Validation and normalization
  */
 class CalendarObjectService {
+    const LIGHT_PROJECTION = [
+        '_id' => 1,
+        'uri' => 1,
+        'lastmodified' => 1,
+        'etag' => 1,
+        'calendarid' => 1,
+        'size' => 1,
+        'componenttype' => 1
+    ];
+
+    const FULL_PROJECTION = self::LIGHT_PROJECTION + [
+        'calendardata' => 1
+    ];
+
     private $calendarObjectDAO;
     private $calendarDataNormalizer;
 
@@ -34,18 +48,8 @@ class CalendarObjectService {
     public function getCalendarObjects($calendarId) {
         $calendarId = $calendarId[0];
 
-        $projection = [
-            '_id' => 1,
-            'uri' => 1,
-            'lastmodified' => 1,
-            'etag' => 1,
-            'calendarid' => 1,
-            'size' => 1,
-            'componenttype' => 1
-        ];
-
         $result = [];
-        foreach ($this->calendarObjectDAO->findByCalendarId($calendarId, $projection) as $row) {
+        foreach ($this->calendarObjectDAO->findByCalendarId($calendarId, self::LIGHT_PROJECTION) as $row) {
             $result[] = [
                 'id'           => (string) $row['_id'],
                 'uri'          => $row['uri'],
@@ -81,19 +85,8 @@ class CalendarObjectService {
     public function getMultipleCalendarObjects($calendarId, array $uris) {
         $calendarId = $calendarId[0];
 
-        $projection = [
-            '_id' => 1,
-            'uri' => 1,
-            'lastmodified' => 1,
-            'etag' => 1,
-            'calendarid' => 1,
-            'size' => 1,
-            'calendardata' => 1,
-            'componenttype' => 1
-        ];
-
         $result = [];
-        foreach ($this->calendarObjectDAO->findByCalendarIdAndUris($calendarId, $uris, $projection) as $row) {
+        foreach ($this->calendarObjectDAO->findByCalendarIdAndUris($calendarId, $uris, self::FULL_PROJECTION) as $row) {
             $result[] = [
                 'id'           => (string) $row['_id'],
                 'uri'          => $row['uri'],

@@ -195,36 +195,21 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $code = null;
         $body = null;
         $path = $request->getPath();
-
         $node = $this->server->tree->getNodeForPath($path);
-        $objectHandler = $this->getCalendarObjectHandler();
 
         // Handle sync-token based requests
         if (isset($jsonData->{'sync-token'})) {
-            if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
-                list($code, $body) = $objectHandler->getCalendarObjectsBySyncToken($path, $node, $jsonData);
-            } else {
-                $code = 400;
-                $body = null;
-            }
+            list($code, $body) = $this->handleSyncTokenReport($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
-            list($code, $body) = $objectHandler->getCalendarObjectByUID($path, $node, $jsonData);
+            list($code, $body) = $this->getCalendarObjectHandler()->getCalendarObjectByUID($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
-            list($code, $body) = $objectHandler->getCalendarObjects($path, $node, $jsonData);
+            list($code, $body) = $this->getCalendarObjectHandler()->getCalendarObjects($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
-            $subscriptionHandler = $this->getSubscriptionHandler();
-            list($code, $body) = $subscriptionHandler->getCalendarObjectsForSubscription($path, $node, $jsonData);
+            list($code, $body) = $this->getSubscriptionHandler()->getCalendarObjectsForSubscription($path, $node, $jsonData);
         } else if ($node instanceof \ESN\CalDAV\CalendarRoot) {
-            list($code, $body) = $objectHandler->getMultipleCalendarObjectsFromPaths($path, $jsonData);
+            list($code, $body) = $this->getCalendarObjectHandler()->getMultipleCalendarObjectsFromPaths($path, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObject) {
-            // Handle individual calendar object with time-range expansion
-            if (isset($jsonData->match) && isset($jsonData->match->start) && isset($jsonData->match->end)) {
-                list($code, $body) = $objectHandler->expandEvent($path, $node, $jsonData);
-            } else {
-                // Invalid request: calendar object requires time-range parameters
-                $code = 400;
-                $body = null;
-            }
+            list($code, $body) = $this->handleCalendarObjectReport($path, $node, $jsonData);
         } else {
             $code = 200;
             $body = [];
@@ -233,45 +218,51 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return $this->send($code, $body);
     }
 
+    private function handleSyncTokenReport($path, $node, $jsonData) {
+        if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+            return $this->getCalendarObjectHandler()->getCalendarObjectsBySyncToken($path, $node, $jsonData);
+        }
+        return [400, null];
+    }
+
+    private function handleCalendarObjectReport($path, $node, $jsonData) {
+        if (isset($jsonData->match) && isset($jsonData->match->start) && isset($jsonData->match->end)) {
+            return $this->getCalendarObjectHandler()->expandEvent($path, $node, $jsonData);
+        }
+        return [400, null];
+    }
+
     function post($request, $response) {
         if (!$this->acceptJson()) {
             return true;
         }
 
         $path = $request->getPath();
+        $jsonData = json_decode($request->getBodyAsString());
         $code = null;
         $body = null;
 
         if ($path == 'query') {
-            $objectHandler = $this->getCalendarObjectHandler();
-            list($code, $body) = $objectHandler->queryCalendarObjects(
-                $path,
-                null,
-                json_decode($request->getBodyAsString())
-            );
-        } else {
-            $node = $this->server->tree->getNodeForPath($path);
-            if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
-                list($code, $body) = $this->handleJsonRequest(
-                    $path,
-                    $node,
-                    json_decode($request->getBodyAsString())
-                );
-            } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
-                $jsonData = json_decode($request->getBodyAsString());
+            list($code, $body) = $this->getCalendarObjectHandler()->queryCalendarObjects($path, null, $jsonData);
+            return $this->send($code, $body);
+        }
 
-                $subscriptionHandler = $this->getSubscriptionHandler();
-                if ($subscriptionHandler->isBodyForSubscription($jsonData)) {
-                    list($code, $body) = $subscriptionHandler->createSubscription($path, $jsonData);
-                } else {
-                    $calendarHandler = $this->getCalendarHandler();
-                    list($code, $body) = $calendarHandler->createCalendar($path, $jsonData);
-                }
-            }
+        $node = $this->server->tree->getNodeForPath($path);
 
+        if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+            list($code, $body) = $this->handleJsonRequest($path, $node, $jsonData);
+        } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+            list($code, $body) = $this->handleCalendarHomePost($path, $jsonData);
         }
 
         return $this->send($code, $body);
+    }
+
+    private function handleCalendarHomePost($path, $jsonData) {
+        if ($this->getSubscriptionHandler()->isBodyForSubscription($jsonData)) {
+            return $this->getSubscriptionHandler()->createSubscription($path, $jsonData);
+        }
+        return $this->getCalendarHandler()->createCalendar($path, $jsonData);
     }
 
     function get($request, $response) {
@@ -393,29 +384,25 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $path = $request->getPath();
         $node = $this->server->tree->getNodeForPath($path);
-
+        $jsonData = json_decode($request->getBodyAsString());
         $code = null;
         $body = null;
 
         if ($node instanceof \Sabre\CalDAV\Calendar) {
-            $calendarHandler = $this->getCalendarHandler();
-            list($code, $body) = $calendarHandler->changeCalendarProperties(
-                $path,
-                $node,
-                json_decode($request->getBodyAsString())
-            );
-        }
-
-        if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
-            $subscriptionHandler = $this->getSubscriptionHandler();
-            list($code, $body) = $subscriptionHandler->changeSubscriptionProperties(
-                $path,
-                $node,
-                json_decode($request->getBodyAsString())
-            );
+            list($code, $body) = $this->handleCalendarProppatch($path, $node, $jsonData);
+        } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+            list($code, $body) = $this->handleSubscriptionProppatch($path, $node, $jsonData);
         }
 
         return $this->send($code, $body);
+    }
+
+    private function handleCalendarProppatch($path, $node, $jsonData) {
+        return $this->getCalendarHandler()->changeCalendarProperties($path, $node, $jsonData);
+    }
+
+    private function handleSubscriptionProppatch($path, $node, $jsonData) {
+        return $this->getSubscriptionHandler()->changeSubscriptionProperties($path, $node, $jsonData);
     }
 
     function findProperties($request) {

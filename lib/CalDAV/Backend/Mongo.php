@@ -122,23 +122,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function deleteCalendar($calendarIdArray) {
         $this->_assertIsArray($calendarIdArray);
 
-        $deleteSubscribersCallback = function($principaluri, $uri) {
-            $this->deleteSubscribers($principaluri, $uri);
-        };
-
-        $updateInvitesCallback = function($calendarId, $invites) {
-            $this->updateInvites($calendarId, $invites);
-        };
-
-        $getInvitesCallback = function($calendarId) {
-            return $this->getInvites($calendarId);
-        };
-
         return $this->calendarService->deleteCalendar(
             $calendarIdArray,
-            $deleteSubscribersCallback,
-            $updateInvitesCallback,
-            $getInvitesCallback
+            [$this, 'deleteSubscribers'],
+            [$this, 'updateInvites'],
+            [$this, 'getInvites']
         );
     }
 

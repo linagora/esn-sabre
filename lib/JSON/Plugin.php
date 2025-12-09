@@ -348,12 +348,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             }
         }
 
-        $calendarHandler = $this->getCalendarHandler();
         $calendarHomes = $node->getChildren();
-
         $items = [];
         foreach ($calendarHomes as $home) {
-            $items[$home->getName()] = $calendarHandler->listAllPersonalCalendars($home);
+            $items[$home->getName()] = $this->getCalendarHandler()->listAllPersonalCalendars($home);
         }
 
         return [200, $items];
@@ -365,8 +363,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $sharedPublic = $this->getBooleanParameter($queryParams, 'sharedPublic');
         $calendarFilterParameters = $this->getCalendarFilterParameters($queryParams);
 
-        $calendarHandler = $this->getCalendarHandler();
-        return $calendarHandler->listCalendars($path, $node, $withRights, $calendarFilterParameters, $sharedPublic, $withFreeBusy);
+        return $this->getCalendarHandler()->listCalendars($path, $node, $withRights, $calendarFilterParameters, $sharedPublic, $withFreeBusy);
     }
 
     private function getCalendar($path, $node, $queryParams) {
@@ -391,17 +388,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             ];
 
             return [200, $result];
-        } else {
-            $withRights = $this->getBooleanParameter($queryParams, 'withRights');
-            $calendarHandler = $this->getCalendarHandler();
-            return $calendarHandler->getCalendarInformation($path, $node, $withRights);
         }
+
+        $withRights = $this->getBooleanParameter($queryParams, 'withRights');
+        return $this->getCalendarHandler()->getCalendarInformation($path, $node, $withRights);
     }
 
     private function getSubscription($path, $node, $queryParams) {
         $withRights = $this->getBooleanParameter($queryParams, 'withRights');
-        $subscriptionHandler = $this->getSubscriptionHandler();
-        return $subscriptionHandler->getSubscriptionInformation($path, $node, $withRights);
+        return $this->getSubscriptionHandler()->getSubscriptionInformation($path, $node, $withRights);
     }
 
     private function getCalendarFilterParameters($queryParams) {

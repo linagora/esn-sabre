@@ -11,6 +11,7 @@ use ESN\CalDAV\Backend\DAO\CalendarChangeDAO;
 use ESN\CalDAV\Backend\DAO\SchedulingObjectDAO;
 use ESN\CalDAV\Backend\DAO\CalendarSubscriptionDAO;
 use ESN\CalDAV\Backend\Service\CalendarSharingService;
+use ESN\CalDAV\Backend\Service\CalendarDataNormalizer;
 
 #[\AllowDynamicProperties]
 class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
@@ -30,6 +31,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     protected $schedulingObjectDAO;
     protected $calendarSubscriptionDAO;
     protected $calendarSharingService;
+    protected $calendarDataNormalizer;
 
     public $propertyMap = [
         '{DAV:}displayname' => 'displayname',
@@ -67,6 +69,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         // Initialize Services
         $this->calendarSharingService = new CalendarSharingService($this->calendarInstanceDAO, $this->eventEmitter);
+        $this->calendarDataNormalizer = new CalendarDataNormalizer();
 
         $this->ensureIndex();
     }
@@ -992,66 +995,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
      * @codeCoverageIgnore      Copy/Paste from sabre/dav
      */
     protected function getDenormalizedData($calendarData) {
-        $vObject = VObject\Reader::read($calendarData);
-        $componentType = null;
-        $component = null;
-        $firstOccurence = null;
-        $lastOccurence = null;
-        $uid = null;
-        foreach($vObject->getComponents() as $component) {
-            if ($component->name!=='VTIMEZONE') {
-                $componentType = $component->name;
-                $uid = (string) $component->UID;
-                break;
-            }
-        }
-        if (!$componentType) {
-            throw new \Sabre\DAV\Exception\BadRequest('Calendar objects must have a VJOURNAL, VEVENT or VTODO component');
-        }
-        if ($componentType === 'VEVENT') {
-            $firstOccurence = $component->DTSTART->getDateTime()->getTimeStamp();
-            // Finding the last occurence is a bit harder
-            if (!isset($component->RRULE)) {
-                if (isset($component->DTEND)) {
-                    $lastOccurence = $component->DTEND->getDateTime()->getTimeStamp();
-                } elseif (isset($component->DURATION)) {
-                    $endDate = clone $component->DTSTART->getDateTime();
-                    $endDate->add(VObject\DateTimeParser::parse($component->DURATION->getValue()));
-                    $lastOccurence = $endDate->getTimeStamp();
-                } elseif (!$component->DTSTART->hasTime()) {
-                    $endDate = clone $component->DTSTART->getDateTime();
-                    $endDate->modify('+1 day');
-                    $lastOccurence = $endDate->getTimeStamp();
-                } else {
-                    $lastOccurence = $firstOccurence;
-                }
-            } else {
-                $it = new VObject\Recur\EventIterator($vObject, (string) $component->UID);
-                $maxDate = new \DateTime(self::MAX_DATE);
-                if ($it->isInfinite()) {
-                    $lastOccurence = $maxDate->getTimeStamp();
-                } else {
-                    $end = $it->getDtEnd();
-                    while($it->valid() && $end < $maxDate) {
-                        $end = $it->getDtEnd();
-                        $it->next();
-
-                    }
-                    $lastOccurence = $end->getTimeStamp();
-                }
-
-            }
-        }
-
-        return [
-            'etag' => md5($calendarData),
-            'size' => strlen($calendarData),
-            'componentType' => $componentType,
-            'firstOccurence' => $firstOccurence,
-            'lastOccurence'  => $lastOccurence,
-            'uid' => $uid,
-        ];
-
+        return $this->calendarDataNormalizer->getDenormalizedData($calendarData);
     }
 
     protected function addChange($calendarId, $objectUri, $operation) {

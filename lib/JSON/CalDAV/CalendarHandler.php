@@ -426,6 +426,45 @@ class CalendarHandler {
         return null;
     }
 
+    public function isOldDefaultCalendarUriNotFound($url) {
+        return strpos($url, \ESN\CalDAV\Backend\Esn::EVENTS_URI) && !$this->server->tree->nodeExists($url);
+    }
+
+    public function getDefaultCalendarUri($user, $path) {
+        list(,,$userId) = explode('/', $user);
+
+        $homePath = substr($path, 0, strpos($path, \ESN\CalDAV\Backend\Esn::EVENTS_URI));
+        $node = $this->server->tree->getNodeForPath($homePath);
+
+        $calendars = $node->getChildren();
+
+        foreach ($calendars as $calendar) {
+            $name = $calendar->getName();
+
+            if ($name === \ESN\CalDAV\Backend\Esn::EVENTS_URI || $name === $userId ) {
+                return $name;
+            }
+        }
+
+        // No default calendar found - create it
+        // This handles the case where a user has delegated calendars but no personal default calendar yet (issue #206)
+        $backend = $node->getCalDAVBackend();
+        if ($backend instanceof \ESN\CalDAV\Backend\Esn) {
+            $properties = [];
+            if (Utils::isResourceFromPrincipal($user)) {
+                $principalBackend = $backend->getPrincipalBackend();
+                $principal = $principalBackend->getPrincipalByPath($user);
+                if ($principal) {
+                    $properties['{DAV:}displayname'] = $principal['{DAV:}displayname'];
+                }
+            }
+            $backend->createCalendar($user, $userId, $properties);
+            return $userId;
+        }
+
+        throw new DAV\Exception\NotFound('Unable to find or create user default calendar');
+    }
+
     private function propertyOrDefault($jsonData) {
         return function($key, $default = null) use ($jsonData) {
             return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;

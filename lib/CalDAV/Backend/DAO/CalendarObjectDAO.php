@@ -24,13 +24,14 @@ class CalendarObjectDAO extends BaseDAO {
     }
 
     public function updateCalendarObject($calendarId, $objectUri, array $updateData) {
-        $query = ['calendarid' => $calendarId, 'uri' => $objectUri];
-        return $this->updateOne($query, ['$set' => $updateData]);
+        return $this->updateOne(
+            ['calendarid' => $calendarId, 'uri' => $objectUri],
+            ['$set' => $updateData]
+        );
     }
 
     public function deleteCalendarObject($calendarId, $objectUri) {
-        $query = ['calendarid' => $calendarId, 'uri' => $objectUri];
-        return $this->deleteOne($query);
+        return $this->deleteOne(['calendarid' => $calendarId, 'uri' => $objectUri]);
     }
 
     public function deleteAllObjectsByCalendarId($calendarId) {

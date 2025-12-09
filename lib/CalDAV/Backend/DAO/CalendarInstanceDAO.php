@@ -41,14 +41,15 @@ class CalendarInstanceDAO extends BaseDAO {
     }
 
     public function updateInstanceById($instanceId, array $newValues) {
-        $query = ['_id' => new \MongoDB\BSON\ObjectId($instanceId)];
-        return $this->updateOne($query, ['$set' => $newValues]);
+        return $this->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($instanceId)],
+            ['$set' => $newValues]
+        );
     }
 
     public function findInstanceById($instanceId, array $projection = []) {
-        $query = ['_id' => new \MongoDB\BSON\ObjectId($instanceId)];
         $options = empty($projection) ? [] : ['projection' => $projection];
-        return $this->findOne($query, $options);
+        return $this->findOne(['_id' => new \MongoDB\BSON\ObjectId($instanceId)], $options);
     }
 
     public function deleteInstanceById($instanceId) {
@@ -60,8 +61,10 @@ class CalendarInstanceDAO extends BaseDAO {
     }
 
     public function findInstanceByCalendarIdAndShareHref($calendarId, $shareHref) {
-        $query = ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId), 'share_href' => $shareHref];
-        return $this->findOne($query, ['projection' => ['uri' => 1]]);
+        return $this->findOne(
+            ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId), 'share_href' => $shareHref],
+            ['projection' => ['uri' => 1]]
+        );
     }
 
     public function deleteInstanceByCalendarIdAndShareHref($calendarId, $shareHref) {
@@ -69,35 +72,41 @@ class CalendarInstanceDAO extends BaseDAO {
     }
 
     public function updateShareeAccess($calendarId, $shareHref, array $updateData) {
-        $query = ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId), 'share_href' => $shareHref];
-        return $this->updateOne($query, ['$set' => $updateData]);
+        return $this->updateOne(
+            ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId), 'share_href' => $shareHref],
+            ['$set' => $updateData]
+        );
     }
 
     public function findInvitesByCalendarId($calendarId, array $projection = []) {
-        $query = ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId)];
         $options = empty($projection) ? [] : ['projection' => $projection];
-        return $this->find($query, $options);
+        return $this->find(['calendarid' => new \MongoDB\BSON\ObjectId($calendarId)], $options);
     }
 
     public function updatePublicRight($calendarId, $privilege) {
-        $query = ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId)];
-        return $this->updateMany($query, ['$set' => ['public_right' => $privilege]]);
+        return $this->updateMany(
+            ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId)],
+            ['$set' => ['public_right' => $privilege]]
+        );
     }
 
     public function getPublicRight($calendarId) {
-        $query = ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId)];
-        return $this->findOne($query, ['projection' => ['public_right' => 1]]);
+        return $this->findOne(
+            ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId)],
+            ['projection' => ['public_right' => 1]]
+        );
     }
 
     public function updateInviteStatus($instanceId, $status) {
-        $query = ['_id' => new \MongoDB\BSON\ObjectId($instanceId)];
-        return $this->updateOne($query, ['$set' => ['share_invitestatus' => $status]]);
+        return $this->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($instanceId)],
+            ['$set' => ['share_invitestatus' => $status]]
+        );
     }
 
     public function findInstancesByPrincipalUriWithAccess($principalUri, array $projection = []) {
-        $query = ['principaluri' => $principalUri];
         $options = empty($projection) ? [] : ['projection' => $projection];
-        return $this->find($query, $options);
+        return $this->find(['principaluri' => $principalUri], $options);
     }
 
     public function ensureIndexes() {

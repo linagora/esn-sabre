@@ -23,8 +23,7 @@ class SchedulingObjectDAO extends BaseDAO {
     }
 
     public function deleteSchedulingObject($principalUri, $objectUri) {
-        $query = ['principaluri' => $principalUri, 'uri' => $objectUri];
-        return $this->deleteOne($query);
+        return $this->deleteOne(['principaluri' => $principalUri, 'uri' => $objectUri]);
     }
 
     public function createSchedulingObject(array $objectData) {

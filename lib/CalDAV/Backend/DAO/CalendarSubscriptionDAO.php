@@ -28,14 +28,15 @@ class CalendarSubscriptionDAO extends BaseDAO {
     }
 
     public function updateSubscriptionById($subscriptionId, array $newValues) {
-        $query = ['_id' => new \MongoDB\BSON\ObjectId($subscriptionId)];
-        return $this->updateOne($query, ['$set' => $newValues]);
+        return $this->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($subscriptionId)],
+            ['$set' => $newValues]
+        );
     }
 
     public function findSubscriptionById($subscriptionId, array $projection = []) {
-        $query = ['_id' => new \MongoDB\BSON\ObjectId($subscriptionId)];
         $options = empty($projection) ? [] : ['projection' => $projection];
-        return $this->findOne($query, $options);
+        return $this->findOne(['_id' => new \MongoDB\BSON\ObjectId($subscriptionId)], $options);
     }
 
     public function deleteSubscriptionById($subscriptionId) {

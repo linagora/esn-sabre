@@ -23,15 +23,17 @@ class CalendarDAO extends BaseDAO {
     }
 
     public function getSyncToken($calendarId) {
-        $projection = ['synctoken' => 1];
-        $query = ['_id' => new \MongoDB\BSON\ObjectId($calendarId)];
-        return $this->findOne($query, ['projection' => $projection]);
+        return $this->findOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($calendarId)],
+            ['projection' => ['synctoken' => 1]]
+        );
     }
 
     public function incrementSyncToken($calendarId) {
-        $query = ['_id' => new \MongoDB\BSON\ObjectId($calendarId)];
-        $update = ['$inc' => ['synctoken' => 1]];
-        return $this->updateOne($query, $update);
+        return $this->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($calendarId)],
+            ['$inc' => ['synctoken' => 1]]
+        );
     }
 
     public function ensureIndexes() {

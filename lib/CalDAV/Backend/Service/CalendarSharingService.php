@@ -14,12 +14,45 @@ use Sabre\Event\EventEmitter;
  * - Invite status updates
  */
 class CalendarSharingService {
+    const INVITES_PROJECTION = [
+        'principaluri' => 1,
+        'access' => 1,
+        'share_href' => 1,
+        'share_invitestatus' => 1,
+        'share_displayname' => 1
+    ];
+
     private $calendarInstanceDAO;
     private $eventEmitter;
 
     public function __construct(CalendarInstanceDAO $calendarInstanceDAO, EventEmitter $eventEmitter) {
         $this->calendarInstanceDAO = $calendarInstanceDAO;
         $this->eventEmitter = $eventEmitter;
+    }
+
+    /**
+     * Transform MongoDB row to Sharee object
+     *
+     * @param array $row MongoDB document
+     * @return \Sabre\DAV\Xml\Element\Sharee|null Sharee object or null if invalid
+     */
+    private function asSharee($row) {
+        // Skip invalid invites
+        if ($row['share_invitestatus'] === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
+            return null;
+        }
+
+        return new \Sabre\DAV\Xml\Element\Sharee([
+            'href' => isset($row['share_href'])
+                ? $row['share_href']
+                : \Sabre\HTTP\encodePath($row['principaluri']),
+            'access' => (int) $row['access'],
+            'inviteStatus' => (int) $row['share_invitestatus'],
+            'properties' => !empty($row['share_displayname'])
+                ? [ '{DAV:}displayname' => $row['share_displayname'] ]
+                : [],
+            'principal' => $row['principaluri']
+        ]);
     }
 
     /**
@@ -179,33 +212,14 @@ class CalendarSharingService {
     public function getInvites($calendarId) {
         $calendarId = $calendarId[0];
 
-        $projection = [
-            'principaluri' => 1,
-            'access' => 1,
-            'share_href' => 1,
-            'share_invitestatus' => 1,
-            'share_displayname' => 1
-        ];
-
-        $res = $this->calendarInstanceDAO->findInvitesByCalendarId($calendarId, $projection);
+        $res = $this->calendarInstanceDAO->findInvitesByCalendarId($calendarId, self::INVITES_PROJECTION);
 
         $result = [];
         foreach ($res as $row) {
-            if ($row['share_invitestatus'] === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
-                continue;
+            $sharee = $this->asSharee($row);
+            if ($sharee !== null) {
+                $result[] = $sharee;
             }
-
-            $result[] = new \Sabre\DAV\Xml\Element\Sharee([
-                'href' => isset($row['share_href'])
-                    ? $row['share_href']
-                    : \Sabre\HTTP\encodePath($row['principaluri']),
-                'access' => (int) $row['access'],
-                'inviteStatus' => (int) $row['share_invitestatus'],
-                'properties' => !empty($row['share_displayname'])
-                    ? [ '{DAV:}displayname' => $row['share_displayname'] ]
-                    : [],
-                'principal' => $row['principaluri']
-            ]);
         }
 
         return $result;

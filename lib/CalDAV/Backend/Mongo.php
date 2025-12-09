@@ -343,8 +343,25 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $source = 'calendars/' . $principalUriExploded[2] . '/' . $uri;
 
         $subscriptions = $this->getSubscribers($source);
+
+        if (empty($subscriptions)) {
+            return;
+        }
+
+        // Delete all subscriptions in a single query
+        $collection = $this->db->selectCollection($this->calendarSubscriptionsTableName);
+        $subscriptionIds = array_map(function($sub) {
+            return $sub['_id'];
+        }, $subscriptions);
+
+        $collection->deleteMany([ '_id' => [ '$in' => $subscriptionIds ] ]);
+
+        // Emit events for each deleted subscription
         foreach($subscriptions as $subscription) {
-            $this->deleteSubscription($subscription['_id']);
+            $this->eventEmitter->emit('esn:subscriptionDeleted', [
+                $this->getCalendarPath($subscription['principaluri'], $subscription['uri']),
+                '/' . $source
+            ]);
         }
     }
 

@@ -12,6 +12,8 @@ use ESN\CalDAV\Backend\DAO\SchedulingObjectDAO;
 use ESN\CalDAV\Backend\DAO\CalendarSubscriptionDAO;
 use ESN\CalDAV\Backend\Service\CalendarSharingService;
 use ESN\CalDAV\Backend\Service\CalendarDataNormalizer;
+use ESN\CalDAV\Backend\Service\SubscriptionService;
+use ESN\CalDAV\Backend\Service\SchedulingService;
 
 #[\AllowDynamicProperties]
 class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
@@ -32,6 +34,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     protected $calendarSubscriptionDAO;
     protected $calendarSharingService;
     protected $calendarDataNormalizer;
+    protected $subscriptionService;
+    protected $schedulingService;
 
     public $propertyMap = [
         '{DAV:}displayname' => 'displayname',
@@ -70,6 +74,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         // Initialize Services
         $this->calendarSharingService = new CalendarSharingService($this->calendarInstanceDAO, $this->eventEmitter);
         $this->calendarDataNormalizer = new CalendarDataNormalizer();
+        $this->subscriptionService = new SubscriptionService($this->calendarSubscriptionDAO, $this->eventEmitter, $this->subscriptionPropertyMap);
+        $this->schedulingService = new SchedulingService($this->schedulingObjectDAO);
 
         $this->ensureIndex();
     }
@@ -825,193 +831,39 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getSubscriptionsForUser($principalUri) {
-        $fields = array_values($this->subscriptionPropertyMap);
-        $fields[] = '_id';
-        $fields[] = 'uri';
-        $fields[] = 'source';
-        $fields[] = 'principaluri';
-        $fields[] = 'lastmodified';
-
-        $sort = ['calendarorder' => 1];
-        $res = $this->calendarSubscriptionDAO->findByPrincipalUri($principalUri, $fields, $sort);
-
-        $subscriptions = [];
-        foreach ($res as $row) {
-            $subscription = [
-                'id'           => (string) $row['_id'],
-                'uri'          => $row['uri'],
-                'principaluri' => $row['principaluri'],
-                'source'       => $row['source'],
-                'lastmodified' => $row['lastmodified'],
-
-                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' =>
-                    new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(['VTODO', 'VEVENT']),
-            ];
-
-            foreach($this->subscriptionPropertyMap as $xmlName=>$dbName) {
-                if (!is_null($row[$dbName])) {
-                    $subscription[$xmlName] = $row[$dbName];
-                }
-            }
-
-            $subscriptions[] = $subscription;
-
-        }
-
-        return $subscriptions;
-
+        return $this->subscriptionService->getSubscriptionsForUser($principalUri);
     }
 
     function createSubscription($principalUri, $uri, array $properties) {
-        if (!isset($properties['{http://calendarserver.org/ns/}source'])) {
-            throw new \Sabre\DAV\Exception\Forbidden('The {http://calendarserver.org/ns/}source property is required when creating subscriptions');
-        }
-
-        $obj = [
-            'principaluri' => $principalUri,
-            'uri'          => $uri,
-            'source'       => $properties['{http://calendarserver.org/ns/}source']->getHref(),
-            'lastmodified' => time(),
-        ];
-
-        foreach($this->subscriptionPropertyMap as $xmlName=>$dbName) {
-            if (isset($properties[$xmlName])) {
-                $obj[$dbName] = $properties[$xmlName];
-            } else {
-                $obj[$dbName] = null;
-            }
-        }
-
-        $subscriptionId = $this->calendarSubscriptionDAO->createSubscription($obj);
-
-        $this->eventEmitter->emit('esn:subscriptionCreated', [$this->getCalendarPath($principalUri, $uri)]);
-
-        return $subscriptionId;
+        return $this->subscriptionService->createSubscription($principalUri, $uri, $properties, [$this, 'getCalendarPath']);
     }
 
     function updateSubscription($subscriptionId, \Sabre\DAV\PropPatch $propPatch) {
-        $supportedProperties = array_keys($this->subscriptionPropertyMap);
-        $supportedProperties[] = '{http://calendarserver.org/ns/}source';
-
-        $propPatch->handle($supportedProperties, function($mutations) use ($subscriptionId) {
-            $newValues = [];
-            $newValues['lastmodified'] = time();
-
-            foreach($mutations as $propertyName=>$propertyValue) {
-                if ($propertyName === '{http://calendarserver.org/ns/}source') {
-                    $newValues['source'] = $propertyValue->getHref();
-                } else {
-                    $fieldName = $this->subscriptionPropertyMap[$propertyName];
-                    $newValues[$fieldName] = $propertyValue;
-                }
-
-            }
-
-            $this->calendarSubscriptionDAO->updateSubscriptionById($subscriptionId, $newValues);
-
-            $projection = [
-                'uri' => 1,
-                'principaluri' => 1
-            ];
-            $row = $this->calendarSubscriptionDAO->findSubscriptionById($subscriptionId, $projection);
-
-            $this->eventEmitter->emit('esn:subscriptionUpdated', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);
-
-            return true;
-        });
+        $this->subscriptionService->updateSubscription($subscriptionId, $propPatch, [$this, 'getCalendarPath']);
     }
 
     function deleteSubscription($subscriptionId) {
-        $projection = [
-            'uri' => 1,
-            'principaluri' => 1,
-            'source' => 1
-        ];
-        $row = $this->calendarSubscriptionDAO->findSubscriptionById($subscriptionId, $projection);
-        $this->calendarSubscriptionDAO->deleteSubscriptionById($subscriptionId);
-
-        $this->eventEmitter->emit('esn:subscriptionDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri']), '/' . $row['source']]);
-
+        $this->subscriptionService->deleteSubscription($subscriptionId, [$this, 'getCalendarPath']);
     }
 
     function getSubscribers($source) {
-        $projection = [
-            '_id' => 1,
-            'principaluri' => 1,
-            'uri' => 1
-        ];
-        $res = $this->calendarSubscriptionDAO->findSubscribersBySource($source, $projection);
-
-        $result = [];
-        foreach ($res as $row) {
-            $result[] = [
-                '_id' => $row['_id'],
-                'principaluri' => $row['principaluri'],
-                'uri' => $row['uri']
-            ];
-        }
-
-        return $result;
+        return $this->subscriptionService->getSubscribers($source);
     }
 
     function getSchedulingObject($principalUri, $objectUri) {
-        $projection = [
-            'uri' => 1,
-            'calendardata' => 1,
-            'lastmodified' => 1,
-            'etag' => 1,
-            'size' => 1
-        ];
-        $row = $this->schedulingObjectDAO->findByPrincipalUriAndUri($principalUri, $objectUri, $projection);
-        if (!$row) return null;
-
-        return [
-            'uri'          => $row['uri'],
-            'calendardata' => $row['calendardata'],
-            'lastmodified' => $row['lastmodified'],
-            'etag'         => '"' . $row['etag'] . '"',
-            'size'         => (int) $row['size'],
-        ];
+        return $this->schedulingService->getSchedulingObject($principalUri, $objectUri);
     }
 
     function getSchedulingObjects($principalUri) {
-        $projection = [
-            'uri' => 1,
-            'calendardata' => 1,
-            'lastmodified' => 1,
-            'etag' => 1,
-            'size' => 1
-        ];
-
-        $result = [];
-        foreach($this->schedulingObjectDAO->findByPrincipalUri($principalUri, $projection) as $row) {
-            $result[] = [
-                'calendardata' => $row['calendardata'],
-                'uri'          => $row['uri'],
-                'lastmodified' => $row['lastmodified'],
-                'etag'         => '"' . $row['etag'] . '"',
-                'size'         => (int) $row['size'],
-            ];
-        }
-
-        return $result;
+        return $this->schedulingService->getSchedulingObjects($principalUri);
     }
 
     function deleteSchedulingObject($principalUri, $objectUri) {
-        $this->schedulingObjectDAO->deleteSchedulingObject($principalUri, $objectUri);
+        $this->schedulingService->deleteSchedulingObject($principalUri, $objectUri);
     }
 
     function createSchedulingObject($principalUri, $objectUri, $objectData) {
-        $obj = [
-            'principaluri' => $principalUri,
-            'calendardata' => $objectData,
-            'uri' => $objectUri,
-            'lastmodified' => time(),
-            'etag' => md5($objectData),
-            'size' => strlen($objectData),
-            'dateCreated' => new \MongoDB\BSON\UTCDateTime(time() * 1000)
-        ];
-        $this->schedulingObjectDAO->createSchedulingObject($obj);
+        $this->schedulingService->createSchedulingObject($principalUri, $objectUri, $objectData);
     }
 
     function updateInvites($calendarId, array $sharees) {

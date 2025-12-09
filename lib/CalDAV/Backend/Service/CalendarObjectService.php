@@ -307,19 +307,26 @@ class CalendarObjectService {
 
         // Figuring out if there's a component filter
         if (!empty($filters['comp-filters']) && is_array($filters['comp-filters']) && !$filters['comp-filters'][0]['is-not-defined']) {
-            $componentType = $filters['comp-filters'][0]['name'];
+            $compFilter = $filters['comp-filters'][0];
+            $componentType = $compFilter['name'];
 
-            // Checking if we need post-filters
-            if (empty($filters['prop-filters']) && empty($filters['comp-filters'][0]['comp-filters']) && empty($filters['comp-filters'][0]['time-range']) && empty($filters['comp-filters'][0]['prop-filters'])) {
+            $hasNoPropFilters = empty($filters['prop-filters']);
+            $hasNoOtherSubFilters = empty($compFilter['comp-filters']) && empty($compFilter['prop-filters']);
+
+            // Checking if we need post-filters (no filters at all)
+            if ($hasNoPropFilters && $hasNoOtherSubFilters && empty($compFilter['time-range'])) {
                 $requirePostFilter = false;
             }
 
             // There was a time-range filter
-            if ($componentType == 'VEVENT' && is_array($filters['comp-filters'][0]['time-range'])) {
-                $timeRange = $filters['comp-filters'][0]['time-range'];
+            $hasTimeRange = $componentType == 'VEVENT' && is_array($compFilter['time-range']);
+            if ($hasTimeRange) {
+                $timeRange = $compFilter['time-range'];
+
+                $canOptimizeTimeRange = empty($timeRange['start']) || empty($timeRange['end']);
 
                 // If start time OR the end time is not specified, we can do a 100% accurate query
-                if (empty($filters['prop-filters']) && empty($filters['comp-filters'][0]['comp-filters']) && empty($filters['comp-filters'][0]['prop-filters']) && (empty($timeRange['start']) || empty($timeRange['end']))) {
+                if ($hasNoPropFilters && $hasNoOtherSubFilters && $canOptimizeTimeRange) {
                     $requirePostFilter = false;
                 }
             }

@@ -488,74 +488,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function calendarQuery($calendarId, array $filters) {
-        $this->_assertIsArray($calendarId);
-
-        $calendarId = $calendarId[0];
-
-        $componentType = null;
-        $requirePostFilter = true;
-        $timeRange = null;
-
-        // if no filters were specified, we don't need to filter after a query
-        if (empty($filters['prop-filters']) && empty($filters['comp-filters'])) {
-            $requirePostFilter = false;
-        }
-
-        // Figuring out if there's a component filter
-        if (!empty($filters['comp-filters']) && is_array($filters['comp-filters']) && !$filters['comp-filters'][0]['is-not-defined']) {
-            $componentType = $filters['comp-filters'][0]['name'];
-
-            // Checking if we need post-filters
-            if (empty($filters['prop-filters']) && empty($filters['comp-filters'][0]['comp-filters']) && empty($filters['comp-filters'][0]['time-range']) && empty($filters['comp-filters'][0]['prop-filters'])) {
-                $requirePostFilter = false;
-            }
-            // There was a time-range filter
-            if ($componentType == 'VEVENT' && is_array($filters['comp-filters'][0]['time-range'])) {
-                $timeRange = $filters['comp-filters'][0]['time-range'];
-
-                // If start time OR the end time is not specified, we can do a
-                // 100% accurate mysql query.
-                if (empty($filters['prop-filters']) && empty($filters['comp-filters'][0]['comp-filters']) && empty($filters['comp-filters'][0]['prop-filters']) && (empty($timeRange['start']) || empty($timeRange['end']))) {
-                    $requirePostFilter = false;
-                }
-            }
-        }
-
-        if ($requirePostFilter) {
-            $projection = [ 'uri' => 1 , 'calendardata' => 1 ];
-        } else {
-            $projection = [ 'uri' => 1 ];
-        }
-        $query = [ 'calendarid' => $calendarId ];
-
-        if ($componentType) {
-            $query['componenttype'] = $componentType;
-        }
-
-        if ($timeRange && $timeRange['start']) {
-            $query['lastoccurence'] = [ '$gte' =>  $timeRange['start']->getTimeStamp() ];
-        }
-        if ($timeRange && $timeRange['end']) {
-            $query['firstoccurence'] = [ '$lt' => $timeRange['end']->getTimeStamp() ];
-        }
-
         $result = [];
-        foreach ($this->calendarObjectDAO->findWithQuery($query, $projection) as $row) {
-            if ($requirePostFilter) {
-                // Parse VObject and validate filter (optimized to avoid double parsing)
-                $vObject = VObject\Reader::read($row['calendardata']);
-                $isValid = $this->validateFilterForObjectWithVObject($vObject, $filters);
-                // Destroy circular references so PHP will GC the object
-                $vObject->destroy();
-
-                if (!$isValid) {
-                    continue;
-                }
-            }
-            $result[] = $row['uri'];
-
+        foreach ($this->executeCalendarQuery($calendarId, $filters, false) as $item) {
+            $result[] = $item['uri'];
         }
-
         return $result;
     }
 
@@ -568,18 +504,79 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
      * @return array Array of objects with 'uri', 'calendardata', and 'etag' keys
      */
     function calendarQueryWithAllData($calendarId, array $filters) {
-        $this->_assertIsArray($calendarId);
+        return $this->executeCalendarQuery($calendarId, $filters, true);
+    }
 
+    /**
+     * Execute calendar query with optional full data return
+     *
+     * @param mixed $calendarId [calendarId, instanceId]
+     * @param array $filters CalDAV filters
+     * @param bool $returnFullData If true, yields full data; if false, yields uri only
+     * @return \Generator Yields calendar objects
+     */
+    private function executeCalendarQuery($calendarId, array $filters, $returnFullData) {
+        $this->_assertIsArray($calendarId);
         $calendarId = $calendarId[0];
 
-        $componentType = null;
+        list($query, $projection, $requirePostFilter) =
+            $this->buildQueryFromFilters($calendarId, $filters, $returnFullData);
+
+        foreach ($this->calendarObjectDAO->findWithQuery($query, $projection) as $row) {
+            $result = $this->processQueryResult($row, $filters, $requirePostFilter, $returnFullData);
+
+            if ($result !== null) {
+                yield $result;
+            }
+        }
+    }
+
+    /**
+     * Build MongoDB query and projection from CalDAV filters
+     *
+     * @param string $calendarId
+     * @param array $filters
+     * @param bool $returnFullData
+     * @return array [query, projection, requirePostFilter]
+     */
+    private function buildQueryFromFilters($calendarId, array $filters, $returnFullData) {
+        $query = ['calendarid' => $calendarId];
         $requirePostFilter = true;
-        $timeRange = null;
 
         // if no filters were specified, we don't need to filter after a query
         if (empty($filters['prop-filters']) && empty($filters['comp-filters'])) {
             $requirePostFilter = false;
         }
+
+        list($componentType, $timeRange, $requirePostFilter) =
+            $this->extractComponentFilters($filters, $requirePostFilter);
+
+        if ($componentType) {
+            $query['componenttype'] = $componentType;
+        }
+
+        if ($timeRange && $timeRange['start']) {
+            $query['lastoccurence'] = ['$gte' => $timeRange['start']->getTimeStamp()];
+        }
+        if ($timeRange && $timeRange['end']) {
+            $query['firstoccurence'] = ['$lt' => $timeRange['end']->getTimeStamp()];
+        }
+
+        $projection = $this->buildProjection($requirePostFilter, $returnFullData);
+
+        return [$query, $projection, $requirePostFilter];
+    }
+
+    /**
+     * Extract component type and time range from filters
+     *
+     * @param array $filters
+     * @param bool $requirePostFilter
+     * @return array [componentType, timeRange, requirePostFilter]
+     */
+    private function extractComponentFilters(array $filters, $requirePostFilter) {
+        $componentType = null;
+        $timeRange = null;
 
         // Figuring out if there's a component filter
         if (!empty($filters['comp-filters']) && is_array($filters['comp-filters']) && !$filters['comp-filters'][0]['is-not-defined']) {
@@ -589,56 +586,75 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             if (empty($filters['prop-filters']) && empty($filters['comp-filters'][0]['comp-filters']) && empty($filters['comp-filters'][0]['time-range']) && empty($filters['comp-filters'][0]['prop-filters'])) {
                 $requirePostFilter = false;
             }
+
             // There was a time-range filter
             if ($componentType == 'VEVENT' && is_array($filters['comp-filters'][0]['time-range'])) {
                 $timeRange = $filters['comp-filters'][0]['time-range'];
 
-                // If start time OR the end time is not specified, we can do a
-                // 100% accurate mysql query.
+                // If start time OR the end time is not specified, we can do a 100% accurate query
                 if (empty($filters['prop-filters']) && empty($filters['comp-filters'][0]['comp-filters']) && empty($filters['comp-filters'][0]['prop-filters']) && (empty($timeRange['start']) || empty($timeRange['end']))) {
                     $requirePostFilter = false;
                 }
             }
         }
 
-        // Always include uri, calendardata and etag for this optimized method
-        $projection = [ 'uri' => 1, 'calendardata' => 1, 'etag' => 1 ];
+        return [$componentType, $timeRange, $requirePostFilter];
+    }
 
-        $query = [ 'calendarid' => $calendarId ];
-
-        if ($componentType) {
-            $query['componenttype'] = $componentType;
+    /**
+     * Build projection based on requirements
+     *
+     * @param bool $requirePostFilter
+     * @param bool $returnFullData
+     * @return array Projection array
+     */
+    private function buildProjection($requirePostFilter, $returnFullData) {
+        if ($returnFullData) {
+            return ['uri' => 1, 'calendardata' => 1, 'etag' => 1];
         }
 
-        if ($timeRange && $timeRange['start']) {
-            $query['lastoccurence'] = [ '$gte' =>  $timeRange['start']->getTimeStamp() ];
-        }
-        if ($timeRange && $timeRange['end']) {
-            $query['firstoccurence'] = [ '$lt' => $timeRange['end']->getTimeStamp() ];
+        if ($requirePostFilter) {
+            return ['uri' => 1, 'calendardata' => 1];
         }
 
-        foreach ($this->calendarObjectDAO->findWithQuery($query, $projection) as $row) {
-            $vObject = null;
+        return ['uri' => 1];
+    }
 
-            if ($requirePostFilter) {
-                // Parse VObject once for both filter validation and later reuse
-                $vObject = VObject\Reader::read($row['calendardata']);
+    /**
+     * Process a single query result row
+     *
+     * @param array $row Database row
+     * @param array $filters CalDAV filters
+     * @param bool $requirePostFilter Whether post-filtering is needed
+     * @param bool $returnFullData Whether to return full data
+     * @return array|null Processed result or null if filtered out
+     */
+    private function processQueryResult($row, $filters, $requirePostFilter, $returnFullData) {
+        $vObject = null;
 
-                // Validate filter with pre-parsed VObject (avoids re-parsing)
-                if (!$this->validateFilterForObjectWithVObject($vObject, $filters)) {
-                    // Destroy circular references so PHP will GC the object
-                    $vObject->destroy();
-                    continue;
-                }
+        if ($requirePostFilter) {
+            $vObject = VObject\Reader::read($row['calendardata']);
+
+            if (!$this->validateFilterForObjectWithVObject($vObject, $filters)) {
+                $vObject->destroy();
+                return null;
             }
+        }
 
-            yield [
+        if ($returnFullData) {
+            return [
                 'uri' => $row['uri'],
                 'calendardata' => $row['calendardata'],
                 'etag' => '"' . $row['etag'] . '"',
-                'vObject' => $vObject  // Parsed VObject if requirePostFilter was true, null otherwise
+                'vObject' => $vObject
             ];
         }
+
+        if ($vObject) {
+            $vObject->destroy();
+        }
+
+        return ['uri' => $row['uri']];
     }
 
     /**

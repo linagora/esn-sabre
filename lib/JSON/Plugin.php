@@ -319,70 +319,89 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $path = $request->getPath();
         $node = $this->server->tree->getNodeForPath($path);
+        $queryParams = $request->getQueryParameters();
 
         $code = null;
         $body = null;
 
-        $queryParams = $request->getQueryParameters();
+        if ($node instanceof \ESN\CalDAV\CalendarRoot) {
+            list($code, $body) = $this->getCalendarRoot($node);
+        } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+            list($code, $body) = $this->getCalendarHome($path, $node, $queryParams);
+        } else if ($node instanceof \Sabre\CalDAV\Calendar) {
+            list($code, $body) = $this->getCalendar($path, $node, $queryParams);
+        } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+            list($code, $body) = $this->getSubscription($path, $node, $queryParams);
+        }
+
+        return $this->send($code, $body);
+    }
+
+    private function getCalendarRoot($node) {
+        $authPlugin = $this->server->getPlugin('auth');
+        if (!is_null($authPlugin)) {
+            $currentPrincipal = $authPlugin->getCurrentPrincipal();
+            list(, $type) = explode('/', $currentPrincipal);
+
+            if ($type !== 'technicalUser') {
+                throw new Forbidden();
+            }
+        }
+
+        $calendarHandler = $this->getCalendarHandler();
+        $calendarHomes = $node->getChildren();
+
+        $items = [];
+        foreach ($calendarHomes as $home) {
+            $items[$home->getName()] = $calendarHandler->listAllPersonalCalendars($home);
+        }
+
+        return [200, $items];
+    }
+
+    private function getCalendarHome($path, $node, $queryParams) {
         $withFreeBusy = $this->getBooleanParameter($queryParams, 'withFreeBusy');
         $withRights = $this->getBooleanParameter($queryParams, 'withRights');
         $sharedPublic = $this->getBooleanParameter($queryParams, 'sharedPublic');
         $calendarFilterParameters = $this->getCalendarFilterParameters($queryParams);
 
         $calendarHandler = $this->getCalendarHandler();
+        return $calendarHandler->listCalendars($path, $node, $withRights, $calendarFilterParameters, $sharedPublic, $withFreeBusy);
+    }
 
-        if ($node instanceof \ESN\CalDAV\CalendarRoot) {
-            $authPlugin = $this->server->getPlugin('auth');
-            if (!is_null($authPlugin)) {
-                $currentPrincipal = $authPlugin->getCurrentPrincipal();
-                list(, $type) = explode('/', $currentPrincipal);
-
-                if ($type !== 'technicalUser') {
-                    throw new Forbidden();
-                }
-            }
-
-            $calendarHomes = $node->getChildren();
-
+    private function getCalendar($path, $node, $queryParams) {
+        if ($this->getBooleanParameter($queryParams, 'allEvents')) {
+            $children = $node->getChildren();
             $items = [];
-            foreach ($calendarHomes as $home) {
-                $items[$home->getName()] = $calendarHandler->listAllPersonalCalendars($home);
+
+            foreach ($children as $child) {
+                $items[] = [
+                    '_links' => [ 'self' => [ 'href' => '/' . $path . '/' . $child->getName() ] ],
+                    'data' => $child->get()
+                ];
             }
 
-            list($code, $body) = [200, $items];
-        } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
-            list($code, $body) = $calendarHandler->listCalendars($path, $node, $withRights, $calendarFilterParameters, $sharedPublic, $withFreeBusy);
-        } else if ($node instanceof \Sabre\CalDAV\Calendar) {
-            if ($this->getBooleanParameter($queryParams, 'allEvents')) {
-                $children = $node->getChildren();
-                $items = [];
+            $result = [
+                '_links' => [
+                    'self' => [ 'href' => '/' . $path . '.json' ]
+                ],
+                '_embedded'=> [
+                    'dav:item' => $items
+                ]
+            ];
 
-                foreach ($children as $child) {
-                    $items[] = [
-                        '_links' => [ 'self' => [ 'href' => '/' . $path . '/' . $child->getName() ] ],
-                        'data' => $child->get()
-                    ];
-                }
-
-                $result = [
-                    '_links' => [
-                        'self' => [ 'href' => '/' . $path . '.json' ]
-                    ],
-                    '_embedded'=> [
-                        'dav:item' => $items
-                    ]
-                ];
-
-                list($code, $body) = [200, $result];
-            } else {
-                list($code, $body) = $calendarHandler->getCalendarInformation($path, $node, $withRights);
-            };
-        } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
-            $subscriptionHandler = $this->getSubscriptionHandler();
-            list($code, $body) = $subscriptionHandler->getSubscriptionInformation($path, $node, $withRights);
+            return [200, $result];
+        } else {
+            $withRights = $this->getBooleanParameter($queryParams, 'withRights');
+            $calendarHandler = $this->getCalendarHandler();
+            return $calendarHandler->getCalendarInformation($path, $node, $withRights);
         }
+    }
 
-        return $this->send($code, $body);
+    private function getSubscription($path, $node, $queryParams) {
+        $withRights = $this->getBooleanParameter($queryParams, 'withRights');
+        $subscriptionHandler = $this->getSubscriptionHandler();
+        return $subscriptionHandler->getSubscriptionInformation($path, $node, $withRights);
     }
 
     private function getCalendarFilterParameters($queryParams) {

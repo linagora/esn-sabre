@@ -79,108 +79,131 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function getCalendarsForUser($principalUri) {
-        $fields = array_values($this->propertyMap);
-        $fields[] = 'calendarid';
-        $fields[] = 'uri';
-        $fields[] = 'synctoken';
-        $fields[] = 'components';
-        $fields[] = 'principaluri';
-        $fields[] = 'transparent';
-        $fields[] = 'access';
-        $fields[] = 'share_invitestatus';
+        $instancesData = $this->fetchCalendarInstancesWithData($principalUri);
+        $userCalendars = $this->formatCalendarsForUser($instancesData);
+        return $this->sortCalendarsWithDefaultFirst($userCalendars, $principalUri);
+    }
 
-        $sort = ['calendarorder' => 1];
-        $res = $this->calendarInstanceDAO->findByPrincipalUri($principalUri, $fields, $sort);
+    /**
+     * Fetch calendar instances with their associated calendar data
+     *
+     * @param string $principalUri
+     * @return array ['instances' => array, 'calendars' => array]
+     */
+    private function fetchCalendarInstancesWithData($principalUri) {
+        $fields = array_merge(
+            array_values($this->propertyMap),
+            ['calendarid', 'uri', 'synctoken', 'components', 'principaluri', 'transparent', 'access', 'share_invitestatus']
+        );
+
+        $res = $this->calendarInstanceDAO->findByPrincipalUri($principalUri, $fields, ['calendarorder' => 1]);
 
         $calendarInstances = [];
         $calendarIds = [];
 
         foreach ($res as $row) {
             $calendarId = (string) $row['calendarid'];
-
             $calendarIds[] = new \MongoDB\BSON\ObjectId($calendarId);
 
-            //Little fix for avoid duplication calendarInstance,
-            //a calendarInstance is linked with only one $calendarId
-            //so if a $calendarInstance have been already in the array it gonna be replaced
+            // Avoid duplication: a calendarInstance is linked with only one calendarId
             $calendarInstances[$calendarId] = $row;
         }
 
-        $projection = [
-            '_id' => 1,
-            'synctoken' => 1,
-            'components' => 1
-        ];
-        $result = $this->calendarDAO->findByIds($calendarIds, $projection);
+        $projection = ['_id' => 1, 'synctoken' => 1, 'components' => 1];
+        $calendarsResult = $this->calendarDAO->findByIds($calendarIds, $projection);
 
         $calendars = [];
-
-        foreach ($result as $row) {
+        foreach ($calendarsResult as $row) {
             $calendars[(string) $row['_id']] = $row;
         }
 
+        return ['instances' => $calendarInstances, 'calendars' => $calendars];
+    }
+
+    /**
+     * Format calendar instances with their data for user consumption
+     *
+     * @param array $data ['instances' => array, 'calendars' => array]
+     * @return array Array of formatted calendars
+     */
+    private function formatCalendarsForUser($data) {
         $userCalendars = [];
-        foreach ($calendarInstances as $calendarInstance) {
+
+        foreach ($data['instances'] as $calendarInstance) {
             $currentCalendarId = (string) $calendarInstance['calendarid'];
 
-            if (!isset($calendars[$currentCalendarId])) {
-                $this->server->getLogger().error(
-                    'No matching calendar found',
-                    'Calendar '.$currentCalendarId.' not found for calendar instance '.(string) $calendarInstance['_id']
-                );
-
+            if (!isset($data['calendars'][$currentCalendarId])) {
+                $this->logMissingCalendar($currentCalendarId, $calendarInstance);
                 continue;
             }
 
-            $calendar = $calendars[$currentCalendarId];
-
-            $components = (array) $calendar['components'];
-
-            $userCalendar = [
-                'id' => [ (string) $calendarInstance['calendarid'], (string) $calendarInstance['_id'] ],
-                'uri' => $calendarInstance['uri'],
-                'principaluri' => $calendarInstance['principaluri'],
-                '{' . \Sabre\CalDAV\Plugin::NS_CALENDARSERVER . '}getctag' =>
-                    'http://sabre.io/ns/sync/' . ($calendar['synctoken'] ? $calendar['synctoken'] : '0'),
-                '{http://sabredav.org/ns}sync-token' =>
-                    $calendar['synctoken'] ? $calendar['synctoken'] : '0',
-                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' =>
-                    new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet($components),
-                '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' =>
-                    new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp($calendarInstance['transparent'] ? 'transparent' : 'opaque'),
-                'share-resource-uri' => '/ns/share/' . $calendarInstance['_id'],
-                'share-invitestatus' => $calendarInstance['share_invitestatus']
-            ];
-
-            // 1 = owner, 2 = readonly, 3 = readwrite
-            if ($calendarInstance['access'] > 1) {
-                $userCalendar['share-access'] = (int) $calendarInstance['access'];
-                // read-only is for backwards compatibility.
-                $userCalendar['read-only'] = (int) $calendarInstance['access'] === \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
-            }
-
-            if (!$calendarInstance['displayname'] ) {
-                $calendarInstance['displayname'] = '#default';
-            }
-
-            foreach($this->propertyMap as $xmlName=>$dbName) {
-                $userCalendar[$xmlName] = $calendarInstance[$dbName];
-            }
-
-            $userCalendars[] = $userCalendar;
+            $calendar = $data['calendars'][$currentCalendarId];
+            $userCalendars[] = $this->formatSingleCalendar($calendarInstance, $calendar);
         }
 
-        // Extract principalId from principalUri (e.g., "principals/users/123" -> "123")
-        $principalUriParts = explode('/', $principalUri);
-        $principalId = end($principalUriParts);
+        return $userCalendars;
+    }
 
-        // Reorder calendars to put the default calendar (calendarid == principalId) first
+    /**
+     * Format a single calendar instance with its calendar data
+     *
+     * @param array $calendarInstance Instance data from calendarinstances collection
+     * @param array $calendar Calendar data from calendars collection
+     * @return array Formatted calendar array
+     */
+    private function formatSingleCalendar($calendarInstance, $calendar) {
+        $components = (array) $calendar['components'];
+
+        $userCalendar = [
+            'id' => [(string) $calendarInstance['calendarid'], (string) $calendarInstance['_id']],
+            'uri' => $calendarInstance['uri'],
+            'principaluri' => $calendarInstance['principaluri'],
+            '{' . \Sabre\CalDAV\Plugin::NS_CALENDARSERVER . '}getctag' =>
+                'http://sabre.io/ns/sync/' . ($calendar['synctoken'] ?: '0'),
+            '{http://sabredav.org/ns}sync-token' =>
+                $calendar['synctoken'] ?: '0',
+            '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' =>
+                new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet($components),
+            '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp' =>
+                new \Sabre\CalDAV\Xml\Property\ScheduleCalendarTransp($calendarInstance['transparent'] ? 'transparent' : 'opaque'),
+            'share-resource-uri' => '/ns/share/' . $calendarInstance['_id'],
+            'share-invitestatus' => $calendarInstance['share_invitestatus']
+        ];
+
+        // Add share access info for shared calendars (access > 1 means not owner)
+        if ($calendarInstance['access'] > 1) {
+            $userCalendar['share-access'] = (int) $calendarInstance['access'];
+            $userCalendar['read-only'] = (int) $calendarInstance['access'] === \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
+        }
+
+        // Set default displayname if empty
+        if (!$calendarInstance['displayname']) {
+            $calendarInstance['displayname'] = '#default';
+        }
+
+        // Map properties from propertyMap
+        foreach ($this->propertyMap as $xmlName => $dbName) {
+            $userCalendar[$xmlName] = $calendarInstance[$dbName];
+        }
+
+        return $userCalendar;
+    }
+
+    /**
+     * Sort calendars with default calendar first
+     *
+     * @param array $userCalendars
+     * @param string $principalUri
+     * @return array Sorted calendars
+     */
+    private function sortCalendarsWithDefaultFirst($userCalendars, $principalUri) {
+        $principalId = $this->extractPrincipalId($principalUri);
+
         $defaultCalendar = null;
         $otherCalendars = [];
 
         foreach ($userCalendars as $calendar) {
-            $calendarUriParts = explode('/', $calendar['uri']);
-            $calendarId = end($calendarUriParts);
+            $calendarId = $this->extractCalendarId($calendar['uri']);
 
             if ($calendarId === $principalId && $defaultCalendar === null) {
                 $defaultCalendar = $calendar;
@@ -195,6 +218,41 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         }
 
         return $userCalendars;
+    }
+
+    /**
+     * Extract principal ID from principal URI
+     *
+     * @param string $principalUri e.g., "principals/users/123"
+     * @return string Principal ID e.g., "123"
+     */
+    private function extractPrincipalId($principalUri) {
+        $parts = explode('/', $principalUri);
+        return end($parts);
+    }
+
+    /**
+     * Extract calendar ID from calendar URI
+     *
+     * @param string $calendarUri e.g., "calendars/123/456"
+     * @return string Calendar ID e.g., "456"
+     */
+    private function extractCalendarId($calendarUri) {
+        $parts = explode('/', $calendarUri);
+        return end($parts);
+    }
+
+    /**
+     * Log error when calendar is not found for instance
+     *
+     * @param string $calendarId
+     * @param array $calendarInstance
+     */
+    private function logMissingCalendar($calendarId, $calendarInstance) {
+        $this->server->getLogger().error(
+            'No matching calendar found',
+            'Calendar ' . $calendarId . ' not found for calendar instance ' . (string) $calendarInstance['_id']
+        );
     }
 
     private function checkIfCalendarInstanceExist($principalUri, $calendarUri) {

@@ -119,15 +119,15 @@ class CalendarDataNormalizer {
 
         // Has DURATION
         if (isset($component->DURATION)) {
-            $endDate = clone $component->DTSTART->getDateTime();
-            $endDate->add(VObject\DateTimeParser::parse($component->DURATION->getValue()));
+            $endDate = $component->DTSTART->getDateTime()->add(
+                VObject\DateTimeParser::parse($component->DURATION->getValue())
+            );
             return $endDate->getTimeStamp();
         }
 
         // All-day event (no time)
         if (!$component->DTSTART->hasTime()) {
-            $endDate = clone $component->DTSTART->getDateTime();
-            $endDate->modify('+1 day');
+            $endDate = $component->DTSTART->getDateTime()->modify('+1 day');
             return $endDate->getTimeStamp();
         }
 

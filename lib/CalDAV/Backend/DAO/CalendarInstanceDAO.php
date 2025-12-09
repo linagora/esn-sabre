@@ -64,7 +64,7 @@ class CalendarInstanceDAO extends BaseDAO {
         return $this->findOne($query, ['projection' => ['uri' => 1]]);
     }
 
-    public function deleteInstancesByCalendarIdAndShareHref($calendarId, $shareHref) {
+    public function deleteInstanceByCalendarIdAndShareHref($calendarId, $shareHref) {
         return $this->deleteOne(['calendarid' => new \MongoDB\BSON\ObjectId($calendarId), 'share_href' => $shareHref]);
     }
 
@@ -91,7 +91,7 @@ class CalendarInstanceDAO extends BaseDAO {
 
     public function updateInviteStatus($instanceId, $status) {
         $query = ['_id' => new \MongoDB\BSON\ObjectId($instanceId)];
-        return $this->updateMany($query, ['$set' => ['share_invitestatus' => $status]]);
+        return $this->updateOne($query, ['$set' => ['share_invitestatus' => $status]]);
     }
 
     public function findInstancesByPrincipalUriWithAccess($principalUri, array $projection = []) {

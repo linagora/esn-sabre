@@ -25,12 +25,12 @@ class CalendarObjectDAO extends BaseDAO {
 
     public function updateCalendarObject($calendarId, $objectUri, array $updateData) {
         $query = ['calendarid' => $calendarId, 'uri' => $objectUri];
-        return $this->updateMany($query, ['$set' => $updateData]);
+        return $this->updateOne($query, ['$set' => $updateData]);
     }
 
     public function deleteCalendarObject($calendarId, $objectUri) {
         $query = ['calendarid' => $calendarId, 'uri' => $objectUri];
-        return $this->deleteMany($query);
+        return $this->deleteOne($query);
     }
 
     public function deleteAllObjectsByCalendarId($calendarId) {

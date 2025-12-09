@@ -941,7 +941,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS) {
                 // TODO access === 2 || access === 3
                 $uri = $this->calendarInstanceDAO->findInstanceByCalendarIdAndShareHref($calendarId, $sharee->href);
-                $this->calendarInstanceDAO->deleteInstancesByCalendarIdAndShareHref($calendarId, $sharee->href);
+                $this->calendarInstanceDAO->deleteInstanceByCalendarIdAndShareHref($calendarId, $sharee->href);
 
                 if ($uri) {
                     $calendarInstances[] = [

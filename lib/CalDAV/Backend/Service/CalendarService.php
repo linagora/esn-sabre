@@ -518,9 +518,12 @@ class CalendarService {
      */
     private function logMissingCalendar($calendarId, $calendarInstance) {
         if ($this->server) {
-            $this->server->getLogger().error(
-                'No matching calendar found',
-                'Calendar ' . $calendarId . ' not found for calendar instance ' . (string) $calendarInstance['_id']
+            $this->server->getLogger()->error(
+                'Calendar {calendar} not found for calendar instance {instance}',
+                [
+                    'calendar' => $calendarId,
+                    'instance' => (string) $calendarInstance['_id']
+                ]
             );
         }
     }

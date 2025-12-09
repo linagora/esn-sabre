@@ -171,6 +171,8 @@ class CalendarSharingService {
      */
     private function createSharee($calendarId, $sharee, $existingInstance) {
         $newInstance = $existingInstance;
+        unset($newInstance['_id']); // Ensure MongoDB generates a new _id
+
         $newInstance['calendarid'] = new \MongoDB\BSON\ObjectId($calendarId);
         $newInstance['principaluri'] = $sharee->principal;
         $newInstance['access'] = $sharee->access;

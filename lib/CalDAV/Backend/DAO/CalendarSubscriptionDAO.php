@@ -29,7 +29,7 @@ class CalendarSubscriptionDAO extends BaseDAO {
 
     public function updateSubscriptionById($subscriptionId, array $newValues) {
         $query = ['_id' => new \MongoDB\BSON\ObjectId($subscriptionId)];
-        return $this->updateMany($query, ['$set' => $newValues]);
+        return $this->updateOne($query, ['$set' => $newValues]);
     }
 
     public function findSubscriptionById($subscriptionId, array $projection = []) {
@@ -39,7 +39,7 @@ class CalendarSubscriptionDAO extends BaseDAO {
     }
 
     public function deleteSubscriptionById($subscriptionId) {
-        return $this->deleteMany(['_id' => new \MongoDB\BSON\ObjectId($subscriptionId)]);
+        return $this->deleteOne(['_id' => new \MongoDB\BSON\ObjectId($subscriptionId)]);
     }
 
     public function findSubscribersBySource($source, array $projection = []) {

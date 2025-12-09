@@ -19,7 +19,7 @@ class CalendarDAO extends BaseDAO {
     }
 
     public function deleteById($calendarId) {
-        return $this->deleteMany(['_id' => new \MongoDB\BSON\ObjectId($calendarId)]);
+        return $this->deleteOne(['_id' => new \MongoDB\BSON\ObjectId($calendarId)]);
     }
 
     public function getSyncToken($calendarId) {

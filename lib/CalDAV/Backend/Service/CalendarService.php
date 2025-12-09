@@ -90,6 +90,23 @@ class CalendarService {
         $calendarId = $this->calendarDAO->createCalendar($calendarObj);
 
         // Create calendar instance
+        $instanceId = $this->createCalendarInstance($calendarId, $principalUri, $calendarUri, $properties);
+
+        $this->eventEmitter->emit('esn:calendarCreated', [$this->getCalendarPath($principalUri, $calendarUri)]);
+
+        return [$calendarId, $instanceId];
+    }
+
+    /**
+     * Create a calendar instance
+     *
+     * @param string $calendarId Calendar ID
+     * @param string $principalUri Principal URI
+     * @param string $calendarUri Calendar URI
+     * @param array $properties Calendar properties
+     * @return string Instance ID
+     */
+    private function createCalendarInstance($calendarId, $principalUri, $calendarUri, array $properties) {
         $instanceObj = [
             'principaluri' => $principalUri,
             'uri' => $calendarUri,
@@ -112,11 +129,7 @@ class CalendarService {
             $instanceObj['public_right'] = self::RESOURCE_CALENDAR_PUBLIC_PRIVILEGE;
         }
 
-        $instanceId = $this->calendarInstanceDAO->createInstance($instanceObj);
-
-        $this->eventEmitter->emit('esn:calendarCreated', [$this->getCalendarPath($principalUri, $calendarUri)]);
-
-        return [$calendarId, $instanceId];
+        return $this->calendarInstanceDAO->createInstance($instanceObj);
     }
 
     /**

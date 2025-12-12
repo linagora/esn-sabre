@@ -121,7 +121,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         $this->acceptHeader = explode(', ', $request->getHeader('Accept') ?? '');
-        $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
+        $newUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
+
+        // Invalidate cached handlers if user has changed
+        if ($this->currentUser !== $newUser) {
+            $this->calendarHandler = null;
+            $this->calendarObjectHandler = null;
+            $this->subscriptionHandler = null;
+        }
+
+        $this->currentUser = $newUser;
 
         $calendarHandler = $this->getCalendarHandler();
         if ($calendarHandler->isOldDefaultCalendarUriNotFound($request->getPath())) {
@@ -205,7 +214,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
             list($code, $body) = $this->getCalendarObjectHandler()->getCalendarObjects($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
-            list($code, $body) = $this->getSubscriptionHandler()->getCalendarObjectsForSubscription($path, $node, $jsonData);
+            list($code, $body) = $this->getSubscriptionHandler()->getCalendarObjectsForSubscription($node, $jsonData);
         } else if ($node instanceof \ESN\CalDAV\CalendarRoot) {
             list($code, $body) = $this->getCalendarObjectHandler()->getMultipleCalendarObjectsFromPaths($path, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObject) {
@@ -395,21 +404,21 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         if ($node instanceof \Sabre\CalDAV\Calendar) {
             $jsonData = json_decode($request->getBodyAsString());
-            list($code, $body) = $this->handleCalendarProppatch($path, $node, $jsonData);
+            list($code, $body) = $this->handleCalendarProppatch($path, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
             $jsonData = json_decode($request->getBodyAsString());
-            list($code, $body) = $this->handleSubscriptionProppatch($path, $node, $jsonData);
+            list($code, $body) = $this->handleSubscriptionProppatch($path, $jsonData);
         }
 
         return $this->send($code, $body);
     }
 
-    private function handleCalendarProppatch($path, $node, $jsonData) {
-        return $this->getCalendarHandler()->changeCalendarProperties($path, $node, $jsonData);
+    private function handleCalendarProppatch($path, $jsonData) {
+        return $this->getCalendarHandler()->changeCalendarProperties($path, $jsonData);
     }
 
-    private function handleSubscriptionProppatch($path, $node, $jsonData) {
-        return $this->getSubscriptionHandler()->changeSubscriptionProperties($path, $node, $jsonData);
+    private function handleSubscriptionProppatch($path, $jsonData) {
+        return $this->getSubscriptionHandler()->changeSubscriptionProperties($path, $jsonData);
     }
 
     function findProperties($request) {

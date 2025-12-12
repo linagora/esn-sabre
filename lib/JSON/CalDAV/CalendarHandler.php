@@ -45,7 +45,7 @@ class CalendarHandler {
         return [201, null];
     }
 
-    public function changeCalendarProperties($nodePath, $node, $jsonData) {
+    public function changeCalendarProperties($nodePath, $jsonData) {
         $propnameMap = [
             'dav:name' => '{DAV:}displayname',
             'dav:getetag' => '{DAV:}getetag',
@@ -64,7 +64,7 @@ class CalendarHandler {
         $result = $this->server->updateProperties($nodePath, $davProps);
 
         $returncode = 204;
-        foreach ($result as $prop => $code) {
+        foreach ($result as $code) {
             if ((int)$code > 299) {
                 $returncode = (int)$code;
                 break;
@@ -345,6 +345,9 @@ class CalendarHandler {
                     $access = \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
                 } else if (isset($sharee->{'dav:freebusy'})) {
                     $access = \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY;
+                } else {
+                    // Skip this sharee if no valid access level is found
+                    continue;
                 }
 
                 $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([

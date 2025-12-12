@@ -36,6 +36,7 @@ class CalendarObjectHandler {
         $baseUri = $this->server->getBaseUri();
         $baseUriLen = strlen($baseUri);
         $items = [];
+        $calendarHandler = new CalendarHandler($this->server, $this->currentUser);
 
         foreach ($calendars as $calendarPath) {
             if (substr($calendarPath, 0, $baseUriLen) == $baseUri) {
@@ -49,9 +50,8 @@ class CalendarObjectHandler {
             $node = $this->server->tree->getNodeForPath($calendarPath);
 
             if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
-                $calendarHandler = new CalendarHandler($this->server, $this->currentUser);
                 $calendar = $calendarHandler->calendarToJson($calendarPath, $node);
-                list($code, $calendarObjects) = $this->getCalendarObjects($calendarPath, $node, $jsonData);
+                list(, $calendarObjects) = $this->getCalendarObjects($calendarPath, $node, $jsonData);
                 $calendar['_embedded'] = [
                     'dav:item' => $calendarObjects['_embedded']['dav:item']
                 ];

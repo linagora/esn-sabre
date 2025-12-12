@@ -48,7 +48,7 @@ class SubscriptionHandler {
         return [201, null];
     }
 
-    public function changeSubscriptionProperties($nodePath, $node, $jsonData) {
+    public function changeSubscriptionProperties($nodePath, $jsonData) {
         $returncode = 204;
         $davProps = [];
         $propnameMap = [
@@ -65,7 +65,7 @@ class SubscriptionHandler {
 
         $result = $this->server->updateProperties($nodePath, $davProps);
 
-        foreach ($result as $prop => $code) {
+        foreach ($result as $code) {
             if ((int)$code > 299) {
                 $returncode = (int)$code;
                 break;
@@ -89,10 +89,9 @@ class SubscriptionHandler {
         return [200, $subscription];
     }
 
-    public function getCalendarObjectsForSubscription($nodePath, $subscription, $jsonData) {
+    public function getCalendarObjectsForSubscription($subscription, $jsonData) {
         $propertiesList = ['{http://calendarserver.org/ns/}source'];
         $subprops = $subscription->getProperties($propertiesList);
-        $node = $subscription;
 
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
             $sourcePath = $subprops['{http://calendarserver.org/ns/}source']->getHref();

@@ -251,11 +251,11 @@ class CalendarHandler {
         }
 
         if ($withRights) {
-            if ($node->getInvites()) {
+            if (method_exists($node, 'getInvites') && $node->getInvites()) {
                 $calendar['invite'] = $node->getInvites();
             }
 
-            if ($node->getACL()) {
+            if (method_exists($node, 'getACL') && $node->getACL()) {
                 $calendar['acl'] = $node->getACL();
             }
         }
@@ -308,7 +308,7 @@ class CalendarHandler {
         }
 
         if ($withRights) {
-            if ($node->getACL()) {
+            if (method_exists($node, 'getACL') && $node->getACL()) {
                 $subscription['acl'] = $node->getACL();
             }
         }

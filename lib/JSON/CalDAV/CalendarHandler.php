@@ -17,6 +17,8 @@ use \Sabre\VObject,
  * - Calendar sharing and public rights
  */
 class CalendarHandler {
+    use ValidatesResourceIds;
+
     protected $server;
     protected $currentUser;
 
@@ -28,7 +30,7 @@ class CalendarHandler {
     public function createCalendar($homePath, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
-        if (!isset($jsonData->id) || !$jsonData->id) {
+        if (!$this->isValidResourceId($jsonData->id ?? null)) {
             return [400, null];
         }
 

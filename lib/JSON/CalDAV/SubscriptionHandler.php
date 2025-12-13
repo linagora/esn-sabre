@@ -14,6 +14,8 @@ use \Sabre\DAV;
  * - Subscription calendar object queries
  */
 class SubscriptionHandler {
+    use ValidatesResourceIds;
+
     protected $server;
     protected $currentUser;
 
@@ -25,13 +27,7 @@ class SubscriptionHandler {
     public function createSubscription($homePath, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
-        // Validate id is present and non-empty
-        if (!isset($jsonData->id) || !$jsonData->id) {
-            return [400, null];
-        }
-
-        // Reject ids with path injection characters (slashes, backslashes, dot-segments)
-        if (strpos($jsonData->id, '/') !== false || strpos($jsonData->id, '\\') !== false || strpos($jsonData->id, '..') !== false) {
+        if (!$this->isValidResourceId($jsonData->id ?? null)) {
             return [400, null];
         }
 

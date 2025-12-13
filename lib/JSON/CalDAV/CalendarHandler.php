@@ -426,7 +426,12 @@ class CalendarHandler {
     public function getDefaultCalendarUri($user, $path) {
         list(,,$userId) = explode('/', $user);
 
-        $homePath = substr($path, 0, strpos($path, \ESN\CalDAV\Backend\Esn::EVENTS_URI));
+        $eventUriPos = strpos($path, \ESN\CalDAV\Backend\Esn::EVENTS_URI);
+        if ($eventUriPos === false) {
+            throw new DAV\Exception\NotFound('Unable to determine calendar home path');
+        }
+
+        $homePath = substr($path, 0, $eventUriPos);
         $node = $this->server->tree->getNodeForPath($homePath);
 
         $calendars = $node->getChildren();

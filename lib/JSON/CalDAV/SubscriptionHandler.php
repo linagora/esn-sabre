@@ -14,6 +14,8 @@ use \Sabre\DAV;
  * - Subscription calendar object queries
  */
 class SubscriptionHandler {
+    use ValidatesResourceIds;
+
     protected $server;
     protected $currentUser;
 
@@ -25,11 +27,17 @@ class SubscriptionHandler {
     public function createSubscription($homePath, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
-        if (!isset($jsonData->id) || !$jsonData->id) {
+        if (!$this->isValidResourceId($jsonData->id ?? null)) {
             return [400, null];
         }
 
-        $sourcePath = $this->server->calculateUri($issetdef('calendarserver:source')->href);
+        // Validate calendarserver:source exists and has a valid href
+        $source = $issetdef('calendarserver:source');
+        if (!$source || !is_object($source) || !isset($source->href) || empty($source->href)) {
+            return [400, null];
+        }
+
+        $sourcePath = $this->server->calculateUri($source->href);
 
         if (substr($sourcePath, -5) == '.json') {
             $sourcePath = substr($sourcePath, 0, -5);

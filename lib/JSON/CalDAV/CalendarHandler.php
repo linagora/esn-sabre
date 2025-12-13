@@ -187,9 +187,6 @@ class CalendarHandler {
     }
 
     public function getCalendarInformation($nodePath, $node, $withRights) {
-        $baseUri = $this->server->getBaseUri();
-        $requestPath = $baseUri . $nodePath . '.json';
-
         return [200, $this->calendarToJson($nodePath, $node, $withRights)];
     }
 

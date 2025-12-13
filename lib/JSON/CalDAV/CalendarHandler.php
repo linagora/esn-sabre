@@ -48,7 +48,6 @@ class CalendarHandler {
     public function changeCalendarProperties($nodePath, $jsonData) {
         $propnameMap = [
             'dav:name' => '{DAV:}displayname',
-            'dav:getetag' => '{DAV:}getetag',
             'caldav:description' => '{urn:ietf:params:xml:ns:caldav}calendar-description',
             'apple:color' => '{http://apple.com/ns/ical/}calendar-color',
             'apple:order' => '{http://apple.com/ns/ical/}calendar-order'

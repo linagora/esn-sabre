@@ -389,7 +389,7 @@ class CalendarHandler {
         return [400, null];
     }
 
-    public function changePublicRights($request, $response) {
+    public function changePublicRights($request) {
         //this is a very simplified version of Sabre\DAVACL\Plugin#httpacl function
         //here we do not consider a normal acl payload but only a json formatted like {public_right: aprivilege}
         //if the request is not 400 we need to store this info inside the calendarinstance node (i.e. $node->savePublicRight)
@@ -401,8 +401,12 @@ class CalendarHandler {
         if ($node instanceof \ESN\CalDAV\SharedCalendar) {
             $jsonData = json_decode($request->getBodyAsString());
 
+            if ($jsonData === null || !is_object($jsonData)) {
+                throw new DAV\Exception\BadRequest('Invalid JSON in request body');
+            }
+
             if (!isset($jsonData->public_right)) {
-                throw new DAV\Exception\BadRequest('JSON body expected in ACL request');
+                throw new DAV\Exception\BadRequest('Missing public_right property in JSON request');
             }
 
             $supportedPrivileges = $this->server->getPlugin('acl')->getFlatPrivilegeSet($node);

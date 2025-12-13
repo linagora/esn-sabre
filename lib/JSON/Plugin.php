@@ -466,7 +466,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         // Try calendar handler
-        $result = $this->getCalendarHandler()->changePublicRights($request, $response);
+        $result = $this->getCalendarHandler()->changePublicRights($request);
 
         if ($result !== null) {
             $this->send($result[0], $result[1]);

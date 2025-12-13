@@ -316,7 +316,17 @@ class CalendarHandler {
         return $subscription;
     }
 
-    public function updateSharees($path, $node, $jsonData) {
+    public function getSubscriptionInformation($nodePath, $node, $withRights) {
+        $subscription = $this->subscriptionToJson($nodePath, $node, $withRights);
+
+        if(!isset($subscription)) {
+            return [404, null];
+        }
+
+        return [200, $subscription];
+    }
+
+    public function updateSharees($path, $jsonData) {
         $sharingPlugin = $this->server->getPlugin('sharing');
         $sharees = [];
 
@@ -366,7 +376,7 @@ class CalendarHandler {
         return [200, null];
     }
 
-    public function updateInviteStatus($path, $node, $jsonData) {
+    public function updateInviteStatus($node, $jsonData) {
         if(isset($jsonData->{'invite-reply'}->invitestatus)) {
             switch ($jsonData->{'invite-reply'}->{'invitestatus'}) {
                 case 'accepted':
@@ -374,6 +384,7 @@ class CalendarHandler {
                     break;
                 case 'noresponse':
                     $inviteStatus = \ESN\DAV\Sharing\Plugin::INVITE_NORESPONSE;
+                    break;
             }
 
             if (isset($inviteStatus)) {

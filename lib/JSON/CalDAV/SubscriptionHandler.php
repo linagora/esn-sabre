@@ -83,17 +83,6 @@ class SubscriptionHandler {
         return [$returncode, null];
     }
 
-    public function getSubscriptionInformation($nodePath, $node, $withRights) {
-        $calendarHandler = new CalendarHandler($this->server, $this->currentUser);
-        $subscription = $calendarHandler->subscriptionToJson($nodePath, $node, $withRights);
-
-        if(!isset($subscription)) {
-            return [404, null];
-        }
-
-        return [200, $subscription];
-    }
-
     public function getCalendarObjectsForSubscription($subscription, $jsonData) {
         $propertiesList = ['{http://calendarserver.org/ns/}source'];
         $subprops = $subscription->getProperties($propertiesList);

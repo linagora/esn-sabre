@@ -77,7 +77,6 @@ class SubscriptionHandler {
 
     public function getSubscriptionInformation($nodePath, $node, $withRights) {
         $baseUri = $this->server->getBaseUri();
-        $requestPath = $baseUri . $nodePath . '.json';
 
         $calendarHandler = new CalendarHandler($this->server, $this->currentUser);
         $subscription = $calendarHandler->subscriptionToJson($nodePath, $node, $withRights);

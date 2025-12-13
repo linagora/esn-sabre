@@ -105,7 +105,11 @@ class SubscriptionHandler {
         $subprops = $subscription->getProperties($propertiesList);
 
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
-            $sourcePath = $subprops['{http://calendarserver.org/ns/}source']->getHref();
+            $sourceHref = $subprops['{http://calendarserver.org/ns/}source']->getHref();
+
+            // Normalize href: extract path and trim leading slashes
+            $path = parse_url($sourceHref, PHP_URL_PATH);
+            $sourcePath = ltrim($path ?: $sourceHref, '/');
 
             if (!$this->server->tree->nodeExists($sourcePath)) {
                 return [404, null];

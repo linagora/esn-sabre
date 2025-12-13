@@ -251,11 +251,11 @@ class CalendarHandler {
         }
 
         if ($withRights) {
-            if ($node->getInvites()) {
+            if (method_exists($node, 'getInvites') && $node->getInvites()) {
                 $calendar['invite'] = $node->getInvites();
             }
 
-            if ($node->getACL()) {
+            if (method_exists($node, 'getACL') && $node->getACL()) {
                 $calendar['acl'] = $node->getACL();
             }
         }
@@ -285,19 +285,11 @@ class CalendarHandler {
         }
 
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
-            $sourcePath = $subprops['{http://calendarserver.org/ns/}source']->getHref();
+            $sourceHref = $subprops['{http://calendarserver.org/ns/}source']->getHref();
 
-            // If it starts with "http://", remove it
-            if (str_starts_with($sourcePath, 'http://')) {
-                $sourcePath = substr($sourcePath, strlen('http://'));
-            }
-            if (str_starts_with($sourcePath, 'https://')) {
-                $sourcePath = substr($sourcePath, strlen('https://'));
-            }
-            // If it starts with "/", remove the leading slash
-            if (str_starts_with($sourcePath, '/')) {
-                $sourcePath = substr($sourcePath, 1);
-            }
+            // Normalize href: extract path and trim leading slashes
+            $path = parse_url($sourceHref, PHP_URL_PATH);
+            $sourcePath = ltrim($path ?: $sourceHref, '/');
 
             if (!$this->server->tree->nodeExists($sourcePath)) {
                 return null;
@@ -316,7 +308,7 @@ class CalendarHandler {
         }
 
         if ($withRights) {
-            if ($node->getACL()) {
+            if (method_exists($node, 'getACL') && $node->getACL()) {
                 $subscription['acl'] = $node->getACL();
             }
         }
@@ -324,7 +316,17 @@ class CalendarHandler {
         return $subscription;
     }
 
-    public function updateSharees($path, $node, $jsonData) {
+    public function getSubscriptionInformation($nodePath, $node, $withRights) {
+        $subscription = $this->subscriptionToJson($nodePath, $node, $withRights);
+
+        if(!isset($subscription)) {
+            return [404, null];
+        }
+
+        return [200, $subscription];
+    }
+
+    public function updateSharees($path, $jsonData) {
         $sharingPlugin = $this->server->getPlugin('sharing');
         $sharees = [];
 
@@ -374,7 +376,7 @@ class CalendarHandler {
         return [200, null];
     }
 
-    public function updateInviteStatus($path, $node, $jsonData) {
+    public function updateInviteStatus($node, $jsonData) {
         if(isset($jsonData->{'invite-reply'}->invitestatus)) {
             switch ($jsonData->{'invite-reply'}->{'invitestatus'}) {
                 case 'accepted':
@@ -382,6 +384,7 @@ class CalendarHandler {
                     break;
                 case 'noresponse':
                     $inviteStatus = \ESN\DAV\Sharing\Plugin::INVITE_NORESPONSE;
+                    break;
             }
 
             if (isset($inviteStatus)) {
@@ -397,7 +400,7 @@ class CalendarHandler {
         return [400, null];
     }
 
-    public function changePublicRights($request, $response) {
+    public function changePublicRights($request) {
         //this is a very simplified version of Sabre\DAVACL\Plugin#httpacl function
         //here we do not consider a normal acl payload but only a json formatted like {public_right: aprivilege}
         //if the request is not 400 we need to store this info inside the calendarinstance node (i.e. $node->savePublicRight)
@@ -409,8 +412,12 @@ class CalendarHandler {
         if ($node instanceof \ESN\CalDAV\SharedCalendar) {
             $jsonData = json_decode($request->getBodyAsString());
 
+            if ($jsonData === null || !is_object($jsonData)) {
+                throw new DAV\Exception\BadRequest('Invalid JSON in request body');
+            }
+
             if (!isset($jsonData->public_right)) {
-                throw new DAV\Exception\BadRequest('JSON body expected in ACL request');
+                throw new DAV\Exception\BadRequest('Missing public_right property in JSON request');
             }
 
             $supportedPrivileges = $this->server->getPlugin('acl')->getFlatPrivilegeSet($node);
@@ -434,7 +441,12 @@ class CalendarHandler {
     public function getDefaultCalendarUri($user, $path) {
         list(,,$userId) = explode('/', $user);
 
-        $homePath = substr($path, 0, strpos($path, \ESN\CalDAV\Backend\Esn::EVENTS_URI));
+        $eventUriPos = strpos($path, \ESN\CalDAV\Backend\Esn::EVENTS_URI);
+        if ($eventUriPos === false) {
+            throw new DAV\Exception\NotFound('Unable to determine calendar home path');
+        }
+
+        $homePath = substr($path, 0, $eventUriPos);
         $node = $this->server->tree->getNodeForPath($homePath);
 
         $calendars = $node->getChildren();

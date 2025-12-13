@@ -364,7 +364,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     private function getSubscription($path, $node, $queryParams) {
         $withRights = $this->getBooleanParameter($queryParams, 'withRights');
-        return $this->getSubscriptionHandler()->getSubscriptionInformation($path, $node, $withRights);
+        return $this->getCalendarHandler()->getSubscriptionInformation($path, $node, $withRights);
     }
 
     private function getCalendarFilterParameters($queryParams) {
@@ -452,9 +452,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $calendarHandler = $this->getCalendarHandler();
 
         if (isset($jsonData->{'invite-reply'})) {
-            return $calendarHandler->updateInviteStatus($path, $node, $jsonData);
+            return $calendarHandler->updateInviteStatus($node, $jsonData);
         } else if (isset($jsonData->share)) {
-            return $calendarHandler->updateSharees($path, $node, $jsonData);
+            return $calendarHandler->updateSharees($path, $jsonData);
         }
 
         return [400, null];
@@ -466,7 +466,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         // Try calendar handler
-        $result = $this->getCalendarHandler()->changePublicRights($request, $response);
+        $result = $this->getCalendarHandler()->changePublicRights($request);
 
         if ($result !== null) {
             $this->send($result[0], $result[1]);

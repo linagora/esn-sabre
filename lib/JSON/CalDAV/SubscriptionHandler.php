@@ -83,25 +83,16 @@ class SubscriptionHandler {
         return [$returncode, null];
     }
 
-    public function getSubscriptionInformation($nodePath, $node, $withRights) {
-        $baseUri = $this->server->getBaseUri();
-
-        $calendarHandler = new CalendarHandler($this->server, $this->currentUser);
-        $subscription = $calendarHandler->subscriptionToJson($nodePath, $node, $withRights);
-
-        if(!isset($subscription)) {
-            return [404, null];
-        }
-
-        return [200, $subscription];
-    }
-
     public function getCalendarObjectsForSubscription($subscription, $jsonData) {
         $propertiesList = ['{http://calendarserver.org/ns/}source'];
         $subprops = $subscription->getProperties($propertiesList);
 
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
-            $sourcePath = $subprops['{http://calendarserver.org/ns/}source']->getHref();
+            $sourceHref = $subprops['{http://calendarserver.org/ns/}source']->getHref();
+
+            // Normalize href: extract path and trim leading slashes
+            $path = parse_url($sourceHref, PHP_URL_PATH);
+            $sourcePath = ltrim($path ?: $sourceHref, '/');
 
             if (!$this->server->tree->nodeExists($sourcePath)) {
                 return [404, null];

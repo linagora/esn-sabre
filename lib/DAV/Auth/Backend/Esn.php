@@ -124,22 +124,16 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     protected function validateUserPass($username, $password) {
         $user = trim($username);
-
-        $adminPrefix = SABRE_ADMIN_LOGIN . '&';
-        if (strlen(SABRE_ADMIN_LOGIN) > 0 && strpos($user, $adminPrefix) === 0) {
-            $requestedUsername = substr($user, strlen($adminPrefix));
-            if ($password != SABRE_ADMIN_PASSWORD) {
-                error_log('Bad admin password.');
-                return [false, "Bad admin password"];
+        if ($this->impersonationEnabled()) {
+            $impersonationResult = $this->attemptAdminImpersonation($user, $password);
+            if ($impersonationResult !== null) {
+                [$success, $value] = $impersonationResult;
+                if (!$success) {
+                    return [false, $value];
+                }
+                list($response, $type) = $this->lookupOpenPaaSUserByEmail($value);
+                return [$response, $value];
             }
-
-            # Get OpenPaaS id
-            $url = $this->apiroot . "/api/users?email=$requestedUsername";
-            $headers = [ 'Accept' => 'application/json', 'Authorization' => 'Basic ' . OPENPASS_BASIC_AUTH ];
-            $request = new HTTP\Request('GET', $url, $headers);
-            list($response, $type) = $this->decodeResponseV2($this->httpClient->send($request));
-
-            return [$response, $requestedUsername];
         }
 
         $env_ldap_username_mode = getenv('LDAP_USERNAME_MODE');
@@ -202,15 +196,43 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         $mail = $entries[0]['mail'][0];
         ldap_close($ldapCon);
 
-        # Get OpenPaaS id
-        $url = $this->apiroot . "/api/users?email=$mail";
-        $headers = [ 'Accept' => 'application/json', 'Authorization' => 'Basic ' . OPENPASS_BASIC_AUTH ];
-        $request = new HTTP\Request('GET', $url, $headers);
-        list($response, $type) = $this->decodeResponseV2($this->httpClient->send($request));
-
+        list($response, $type) = $this->lookupOpenPaaSUserByEmail($mail);
         return [$response, $mail];
     }
-    # </Modified>
+
+    private function impersonationEnabled(): bool {
+        return filter_var(getenv('SABRE_IMPERSONATION_ENABLED'), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    private function lookupOpenPaaSUserByEmail(string $email): array {
+        $url = $this->apiroot . "/api/users?email=$email";
+        $headers = [
+            'Accept' => 'application/json',
+            'Authorization' => 'Basic ' . OPENPASS_BASIC_AUTH
+        ];
+        $request = new HTTP\Request('GET', $url, $headers);
+
+        return $this->decodeResponseV2($this->httpClient->send($request));
+    }
+
+    private function attemptAdminImpersonation(string $username, string $password): ?array {
+        if (!SABRE_ADMIN_LOGIN || strlen(SABRE_ADMIN_LOGIN) === 0) {
+            return null;
+        }
+
+        $adminPrefix = SABRE_ADMIN_LOGIN . '&';
+        if (!str_starts_with($username, $adminPrefix)) {
+            return null;
+        }
+
+        if ($password !== SABRE_ADMIN_PASSWORD) {
+            error_log('Bad admin password.');
+            return [false, 'Bad admin password'];
+        }
+
+        $impersonatedEmail = substr($username, strlen($adminPrefix));
+        return [true, $impersonatedEmail];
+    }
 
     function getCurrentPrincipal() {
         $id = $this->currentUserId;

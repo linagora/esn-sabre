@@ -61,10 +61,10 @@ if [ "$SKIP_JAVA" = true ]; then
 fi
 
 (
-  git clone https://github.com/linagora/twake-calendar-integration-tests.git it-tests
+  git clone -b SABRE_IMPERSONATION_ENABLED https://github.com/linagora/twake-calendar-integration-tests.git it-tests
   cd it-tests
   bash pre-build.sh esn_sabre_test
-  mvn clean install -Dtest=com.linagora.dav.sabrev4.**
+  mvn clean install -Dtest=com.linagora.dav.sabrev4_7.**
 )
 exit_code_2=$?
 

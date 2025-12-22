@@ -121,7 +121,6 @@ This plugin handle:
  to retieve the corresponding principalId.
  - Authentication via JWT token, which is still relied upon by legacy OpenPaaS SPAs (deprecated). This token can be generated on the side
  service by calling `/token` endpoint.
- - Authentication via OpenPaaS `ESNToken`. Used by OpenPaaS to perform automated actions like consolidating `domain member address book`. (deprecated)
  - Authentication via `TwakeCalendarToken`. Used by the side service to perform automated actions like consolidating `domain member address book`. 
 
 

@@ -204,6 +204,14 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         return filter_var(getenv('SABRE_IMPERSONATION_ENABLED'), FILTER_VALIDATE_BOOLEAN);
     }
 
+    protected function getAdminCredential(): ?array {
+        if (!SABRE_ADMIN_LOGIN || !SABRE_ADMIN_PASSWORD) {
+            return null;
+        }
+
+        return [SABRE_ADMIN_LOGIN, SABRE_ADMIN_PASSWORD];
+    }
+
     private function lookupOpenPaaSUserByEmail(string $email): array {
         $url = $this->apiroot . "/api/users?email=$email";
         $headers = [
@@ -216,16 +224,19 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     }
 
     private function attemptAdminImpersonation(string $username, string $password): ?array {
-        if (!SABRE_ADMIN_LOGIN || strlen(SABRE_ADMIN_LOGIN) === 0) {
+        $adminCredential = $this->getAdminCredential();
+        if ($adminCredential === null) {
             return null;
         }
 
-        $adminPrefix = SABRE_ADMIN_LOGIN . '&';
+        [$adminLogin, $adminPassword] = $adminCredential;
+
+        $adminPrefix = $adminLogin . '&';
         if (!str_starts_with($username, $adminPrefix)) {
             return null;
         }
 
-        if ($password !== SABRE_ADMIN_PASSWORD) {
+        if ($password !== $adminPassword) {
             error_log('Bad admin password.');
             return [false, 'Bad admin password'];
         }

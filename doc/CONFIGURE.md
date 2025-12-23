@@ -34,6 +34,14 @@ Credentials for impersonation are also set by ENV variables:
  - SABRE_ADMIN_LOGIN
  - SABRE_ADMIN_PASSWORD
 
+Feature flag to enable or disable admin impersonation.
+ - SABRE_IMPERSONATION_ENABLED
+
+   - `true`  : enable impersonation (internal / non-public Sabre only)
+   - `false` : disable impersonation (default, recommended for public Sabre)
+   This flag allows disabling admin impersonation entirely on public Sabre deployments
+   to prevent impersonation over the internet.
+
 Sabre being written in PHP, it supports per-request MongoDB indexes provisioning (defaults to `true`), which can be disabled by setting the SHOULD_CREATE_INDEX environment variable to `false`. This is recommended in production once indexes are provisioned.
 
 ## create the configuration file

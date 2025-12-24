@@ -117,6 +117,9 @@ This plugin handle:
  - Basic auth via impersonation using `SABRE_ADMIN_LOGIN` and `SABRE_ADMIN_PASSWORD` variables following the 
  `{SABRE_ADMIN_LOGIN}&{username}:{SABRE_ADMIN_PASSWORD}` pattern.
   Please note that the Side service leverage this impersonation to expose an OpenID connect authenticated endpoint that proxies requests to Sabre.
+- Admin impersonation is controlled by the `SABRE_IMPERSONATION_ENABLED` environment variable:
+  - `true`  : enable impersonation (internal / non-public Sabre only)
+  - `false` : disable impersonation (default, recommended for public Sabre)
  - Basic auth against a LDAP. The authentication result (mail address) is then consolidated agsainst the side service in order
  to retieve the corresponding principalId.
  - Authentication via JWT token, which is still relied upon by legacy OpenPaaS SPAs (deprecated). This token can be generated on the side

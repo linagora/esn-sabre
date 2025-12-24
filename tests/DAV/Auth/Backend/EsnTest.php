@@ -294,6 +294,72 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $GLOBALS['__ldap_bind_behavior'] = 'default';
     }
 
+
+    function testAdminImpersonationEnabledWithCorrectPassword() {
+        putenv('SABRE_IMPERSONATION_ENABLED=true');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $client = $esnauth->getClient();
+
+        $client->on('curlExec', function(&$return) {
+            $return = "HTTP 200 OK\r\n\r\n[{\"_id\":\"999\",\"user_type\":\"user\"}]";
+        });
+        $client->on('curlStuff', function(&$return) {
+            $return = [ [ 'http_code' => 200, 'header_size' => 12 ], 0, '' ];
+        });
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'admin&user@example.com',
+            'PHP_AUTH_PW'   => 'test-admin-password',
+            'REQUEST_URI'   => '/',
+            'REQUEST_METHOD'=> 'GET',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        [$rv, $msg] = $esnauth->check($request, $response);
+
+        $this->assertTrue($rv);
+        $this->assertEquals('principals/users/999', $msg);
+    }
+
+    function testAdminImpersonationEnabledWithWrongPassword() {
+        putenv('SABRE_IMPERSONATION_ENABLED=true');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'admin&user@example.com',
+            'PHP_AUTH_PW'   => 'wrong-password',
+            'REQUEST_URI'   => '/',
+            'REQUEST_METHOD'=> 'GET',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        [$rv, $msg] = $esnauth->check($request, $response);
+
+        $this->assertFalse($rv);
+        $this->assertEquals('Username or password was incorrect', $msg);
+    }
+
+    function testAdminImpersonationDisabled() {
+        putenv('SABRE_IMPERSONATION_ENABLED=false');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'admin&user@example.com',
+            'PHP_AUTH_PW'   => 'test-admin-password',
+            'REQUEST_URI'   => '/',
+            'REQUEST_METHOD'=> 'GET',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        [$rv, $msg] = $esnauth->check($request, $response);
+
+        $this->assertFalse($rv);
+        $this->assertEquals('Username or password was incorrect', $msg);
+    }
+
 }
 
 class EsnMock extends Esn {
@@ -320,5 +386,9 @@ class EsnMock extends Esn {
 
     function getDb() {
         return $this->esndb;
+    }
+
+    protected function getAdminCredential(): ?array {
+        return ['admin', 'test-admin-password'];
     }
 }

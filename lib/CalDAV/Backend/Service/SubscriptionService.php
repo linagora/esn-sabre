@@ -17,11 +17,13 @@ class SubscriptionService {
     private $calendarSubscriptionDAO;
     private $eventEmitter;
     private $subscriptionPropertyMap;
+    private $ownerDisplayNameResolver;
 
-    public function __construct(CalendarSubscriptionDAO $calendarSubscriptionDAO, EventEmitter $eventEmitter, array $subscriptionPropertyMap) {
+    public function __construct(CalendarSubscriptionDAO $calendarSubscriptionDAO, EventEmitter $eventEmitter, array $subscriptionPropertyMap, OwnerDisplayNameResolver $ownerDisplayNameResolver = null) {
         $this->calendarSubscriptionDAO = $calendarSubscriptionDAO;
         $this->eventEmitter = $eventEmitter;
         $this->subscriptionPropertyMap = $subscriptionPropertyMap;
+        $this->ownerDisplayNameResolver = $ownerDisplayNameResolver;
     }
 
     /**
@@ -77,15 +79,28 @@ class SubscriptionService {
             throw new \Sabre\DAV\Exception\Forbidden('The {http://calendarserver.org/ns/}source property is required when creating subscriptions');
         }
 
+        $sourceHref = $properties['{http://calendarserver.org/ns/}source']->getHref();
+
         $obj = [
             'principaluri' => $principalUri,
             'uri'          => $uri,
-            'source'       => $properties['{http://calendarserver.org/ns/}source']->getHref(),
+            'source'       => $sourceHref,
             'lastmodified' => time(),
         ];
 
         foreach($this->subscriptionPropertyMap as $xmlName => $dbName) {
             $obj[$dbName] = isset($properties[$xmlName]) ? $properties[$xmlName] : null;
+        }
+
+        // Append owner display name if resolver is available
+        if ($this->ownerDisplayNameResolver) {
+            $ownerPrincipalUri = $this->ownerDisplayNameResolver->extractOwnerPrincipalFromSource($sourceHref);
+            $ownerDisplayName = $this->ownerDisplayNameResolver->getDisplayName($ownerPrincipalUri);
+
+            if ($ownerDisplayName) {
+                $currentDisplayName = $obj['displayname'] ?? null;
+                $obj['displayname'] = $this->ownerDisplayNameResolver->appendOwnerName($currentDisplayName, $ownerDisplayName);
+            }
         }
 
         $subscriptionId = $this->calendarSubscriptionDAO->createSubscription($obj);

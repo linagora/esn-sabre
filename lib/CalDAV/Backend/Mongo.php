@@ -40,6 +40,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     protected $schedulingService;
     protected $calendarService;
     protected $calendarObjectService;
+    protected $ownerDisplayNameResolver;
 
     public $propertyMap = [
         '{DAV:}displayname' => 'displayname',
@@ -99,6 +100,42 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     function getEventEmitter() {
         return $this->eventEmitter;
+    }
+
+    /**
+     * Initialize owner display name resolver when server is available
+     * This is called lazily because server property is set after constructor
+     */
+    private function initializeOwnerDisplayNameResolver() {
+        if ($this->ownerDisplayNameResolver !== null) {
+            return; // Already initialized
+        }
+
+        if (!isset($this->server)) {
+            return; // Server not available yet
+        }
+
+        $aclPlugin = $this->server->getPlugin('acl');
+        if (!$aclPlugin || !isset($aclPlugin->principalBackend)) {
+            return; // Principal backend not available
+        }
+
+        $principalBackend = $aclPlugin->principalBackend;
+        $this->ownerDisplayNameResolver = new Service\OwnerDisplayNameResolver($principalBackend);
+
+        // Re-initialize services with the resolver
+        $this->calendarSharingService = new CalendarSharingService(
+            $this->calendarInstanceDAO,
+            $this->eventEmitter,
+            $this->ownerDisplayNameResolver
+        );
+
+        $this->subscriptionService = new SubscriptionService(
+            $this->calendarSubscriptionDAO,
+            $this->eventEmitter,
+            $this->subscriptionPropertyMap,
+            $this->ownerDisplayNameResolver
+        );
     }
 
     function getCalendarsForUser($principalUri) {
@@ -264,6 +301,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     function createSubscription($principalUri, $uri, array $properties) {
+        $this->initializeOwnerDisplayNameResolver();
         return $this->subscriptionService->createSubscription($principalUri, $uri, $properties, [$this, 'getCalendarPath']);
     }
 
@@ -298,6 +336,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function updateInvites($calendarId, array $sharees) {
         $this->_assertIsArray($calendarId);
 
+        $this->initializeOwnerDisplayNameResolver();
         return $this->calendarSharingService->updateInvites($calendarId, $sharees);
     }
 

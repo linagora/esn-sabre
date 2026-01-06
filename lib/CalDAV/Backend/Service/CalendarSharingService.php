@@ -24,10 +24,12 @@ class CalendarSharingService {
 
     private $calendarInstanceDAO;
     private $eventEmitter;
+    private $ownerDisplayNameResolver;
 
-    public function __construct(CalendarInstanceDAO $calendarInstanceDAO, EventEmitter $eventEmitter) {
+    public function __construct(CalendarInstanceDAO $calendarInstanceDAO, EventEmitter $eventEmitter, OwnerDisplayNameResolver $ownerDisplayNameResolver = null) {
         $this->calendarInstanceDAO = $calendarInstanceDAO;
         $this->eventEmitter = $eventEmitter;
+        $this->ownerDisplayNameResolver = $ownerDisplayNameResolver;
     }
 
     /**
@@ -182,6 +184,25 @@ class CalendarSharingService {
             ? $sharee->properties['{DAV:}displayname']
             : null;
         $newInstance['share_invitestatus'] = $sharee->inviteStatus ?: \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
+
+        // Append owner display name if resolver is available
+        if ($this->ownerDisplayNameResolver) {
+            $ownerPrincipalUri = $existingInstance['principaluri'] ?? null;
+
+            // If existing instance is not the owner, query to find owner
+            if (!$ownerPrincipalUri || (int)($existingInstance['access'] ?? 0) !== \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER) {
+                // Query all instances to find owner
+                $instances = $this->calendarInstanceDAO->findInvitesByCalendarId($calendarId, ['principaluri' => 1, 'access' => 1]);
+                $ownerPrincipalUri = $this->ownerDisplayNameResolver->getOwnerPrincipalFromInstances($instances);
+            }
+
+            $ownerDisplayName = $this->ownerDisplayNameResolver->getDisplayName($ownerPrincipalUri);
+
+            if ($ownerDisplayName) {
+                $currentDisplayName = $newInstance['displayname'] ?? null;
+                $newInstance['displayname'] = $this->ownerDisplayNameResolver->appendOwnerName($currentDisplayName, $ownerDisplayName);
+            }
+        }
 
         $this->calendarInstanceDAO->createInstance($newInstance);
 

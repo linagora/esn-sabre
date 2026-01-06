@@ -65,25 +65,11 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
             foreach($xmlResponses as $index => $xmlResponse) {
                 $responseProps = $xmlResponse->getResponseProperties();
-                $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
-                
-                if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
-                    $sourceHref = isset($responseProps[200]['{http://calendarserver.org/ns/}source']) ?
-                                    $responseProps[200]['{http://calendarserver.org/ns/}source']->getHref()
-                                    : $xmlResponse->getHref();
 
-                    $sharedNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
-                    $userPrincipal = $this->server->tree->getNodeForPath($sharedNode->getOwner());
-
-                    $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
-
-                    $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
-                                    $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
-                                    "Agenda - " . $userDisplayName;
-                } else {
-                    if (isset($responseProps[200]['{DAV:}displayname']) && $responseProps[200]['{DAV:}displayname'] === '#default') {
-                        $responseProps[200]['{DAV:}displayname'] = "My agenda";
-                    }
+                // Replace #default displayname with "My agenda"
+                // Note: Owner names are now appended at creation time for shared/subscribed calendars
+                if (isset($responseProps[200]['{DAV:}displayname']) && $responseProps[200]['{DAV:}displayname'] === '#default') {
+                    $responseProps[200]['{DAV:}displayname'] = "My agenda";
                 }
 
                 $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);

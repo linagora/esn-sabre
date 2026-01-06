@@ -56,6 +56,14 @@ class OwnerDisplayNameIntegrationTest extends AbstractDatabaseTest {
 
         // Setup mock server for backend
         $this->server = new \Sabre\DAV\Server();
+
+        // Add Auth plugin BEFORE ACL plugin (required by SabreDAV)
+        $authPlugin = new \Sabre\DAV\Auth\Plugin(new \Sabre\DAV\Auth\Backend\BasicCallBack(function() {
+            return true; // Allow unauthenticated access for tests
+        }));
+        $this->server->addPlugin($authPlugin);
+
+        // Now add ACL plugin
         $aclPlugin = new \Sabre\DAVACL\Plugin();
         $aclPlugin->principalBackend = $this->principalBackend;
         $this->server->addPlugin($aclPlugin);

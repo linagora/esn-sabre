@@ -17,7 +17,7 @@ use Sabre\HTTP\Response;
  * @author Evert Pot (http://evertpot.com/)
  * @license http://sabre.io/license/ Modified BSD License
  */
-abstract class DAVServerTest extends \PHPUnit\Framework\TestCase
+abstract class DAVServerTestBase extends \PHPUnit\Framework\TestCase
 {
     protected $setupCalDAV = false;
     protected $setupCardDAV = false;

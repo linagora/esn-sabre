@@ -2,7 +2,6 @@
 
 namespace ESN\DAV\Auth\Backend;
 
-use \Sabre\DAV;
 use \Sabre\HTTP;
 use Sabre\Event\EventEmitter;
 use \Firebase\JWT\JWT;
@@ -15,7 +14,6 @@ define('LDAP_ADMIN_PASSWORD', getenv("LDAP_ADMIN_PASSWORD"));
 define('LDAP_BASE', getenv("LDAP_BASE"));
 define('LDAP_SERVER', getenv("LDAP_SERVER"));
 define('LDAP_FILTER', getenv("LDAP_FILTER"));
-define('OPENPASS_BASIC_AUTH', getenv("OPENPASS_BASIC_AUTH"));
 define('SABRE_ADMIN_LOGIN', getenv("SABRE_ADMIN_LOGIN"));
 define('SABRE_ADMIN_PASSWORD', getenv("SABRE_ADMIN_PASSWORD"));
 
@@ -68,7 +66,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         );
 
         $userpass = $auth->getCredentials();
-        $myObjDump = print_r($userpass, true);
 
         if (!$userpass) {
             return [false, "No 'Authorization: Basic' header found. Either the client didn't send one, or the server is misconfigured"];
@@ -84,28 +81,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     }
     # </Added>
-
-    private function decodeResponseV2($response) {
-        if ($response->getStatus() != 200) {
-            return [false, null];
-        }
-
-        $decoded = json_decode($response->getBodyAsString());
-        if (!$decoded || !is_array($decoded) || count($decoded) === 0) {
-            return [false, null];
-        }
-
-        $user = $decoded[0];
-
-        if (!$user) {
-            return [false, null];
-        }
-
-
-        $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
-        $this->currentUserId = $user->_id;
-        return [true, $type];
-    }
 
     private function decodeResponse($response) {
         if ($response->getStatus() != 200) {
@@ -131,8 +106,13 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
                 if (!$success) {
                     return [false, $value];
                 }
-                list($response, $type) = $this->lookupOpenPaaSUserByEmail($value);
-                return [$response, $value];
+                $principalId = $this->principalBackend->getPrincipalIdByEmail($value);
+                if (!$principalId) {
+                    error_log("User not found for email: $value");
+                    return [false, "User not found"];
+                }
+                $this->currentUserId = $principalId;
+                return [true, $value];
             }
         }
 
@@ -196,8 +176,13 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         $mail = $entries[0]['mail'][0];
         ldap_close($ldapCon);
 
-        list($response, $type) = $this->lookupOpenPaaSUserByEmail($mail);
-        return [$response, $mail];
+        $principalId = $this->principalBackend->getPrincipalIdByEmail($mail);
+        if (!$principalId) {
+            error_log("User not found for email: $mail");
+            return [false, "User not found"];
+        }
+        $this->currentUserId = $principalId;
+        return [true, $mail];
     }
 
     private function impersonationEnabled(): bool {
@@ -210,17 +195,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
 
         return [SABRE_ADMIN_LOGIN, SABRE_ADMIN_PASSWORD];
-    }
-
-    private function lookupOpenPaaSUserByEmail(string $email): array {
-        $url = $this->apiroot . "/api/users?email=$email";
-        $headers = [
-            'Accept' => 'application/json',
-            'Authorization' => 'Basic ' . OPENPASS_BASIC_AUTH
-        ];
-        $request = new HTTP\Request('GET', $url, $headers);
-
-        return $this->decodeResponseV2($this->httpClient->send($request));
     }
 
     private function attemptAdminImpersonation(string $username, string $password): ?array {

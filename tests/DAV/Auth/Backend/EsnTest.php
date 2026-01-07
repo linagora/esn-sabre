@@ -3,6 +3,22 @@
 namespace ESN\DAV\Auth\Backend;
 
 $GLOBALS['__ldap_bind_behavior'] = 'default';
+$GLOBALS['__ldap_mock_enabled'] = false;
+$GLOBALS['__ldap_mock_email'] = 'johndoe@linagora.com';
+
+function ldap_connect($host) {
+    if ($GLOBALS['__ldap_mock_enabled']) {
+        return 'mock_ldap_connection';
+    }
+    return \ldap_connect($host);
+}
+
+function ldap_set_option($conn, $option, $value) {
+    if ($GLOBALS['__ldap_mock_enabled']) {
+        return true;
+    }
+    return \ldap_set_option($conn, $option, $value);
+}
 
 function ldap_bind($conn, $dn = null, $pwd = null) {
     switch ($GLOBALS['__ldap_bind_behavior']) {
@@ -11,8 +27,45 @@ function ldap_bind($conn, $dn = null, $pwd = null) {
         case 'throw':
             throw new \ErrorException("Simulated LDAP exception");
         default:
+            if ($GLOBALS['__ldap_mock_enabled']) {
+                return true;
+            }
             return \ldap_bind($conn, $dn, $pwd);
     }
+}
+
+function ldap_search($conn, $base, $filter) {
+    if ($GLOBALS['__ldap_mock_enabled']) {
+        return 'mock_ldap_search_result';
+    }
+    return \ldap_search($conn, $base, $filter);
+}
+
+function ldap_get_entries($conn, $result) {
+    if ($GLOBALS['__ldap_mock_enabled']) {
+        return [
+            'count' => 1,
+            0 => [
+                'mail' => [$GLOBALS['__ldap_mock_email'], 'count' => 1],
+                'count' => 1
+            ]
+        ];
+    }
+    return \ldap_get_entries($conn, $result);
+}
+
+function ldap_close($conn) {
+    if ($GLOBALS['__ldap_mock_enabled']) {
+        return true;
+    }
+    return \ldap_close($conn);
+}
+
+function ldap_escape($str, $ignore = '', $flags = 0) {
+    if ($GLOBALS['__ldap_mock_enabled']) {
+        return $str;
+    }
+    return \ldap_escape($str, $ignore, $flags);
 }
 
 namespace ESN\DAV\Auth\Backend;
@@ -24,18 +77,24 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
 
 
     function testAuthenticatePasswordSuccess() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+
         $esnauth = new EsnMock('http://localhost:8080/');
-        $client = $esnauth->getClient();
 
-        $requestCount = 0;
-
-        $client->on('curlExec', function(&$return) use (&$requestCount) {
-            $return = "HTTP 200 OK\r\nSet-Cookie: test=passed\r\n\r\n[{\"_id\":\"123456789\",\"firstname\":\"John\",\"lastname\":\"Doe\",\"emails\":[\"johndoe@linagora.com\"]}]";
-        });
-
-        $client->on('curlStuff', function(&$return) use (&$requestCount) {
-            $return = [ [ 'http_code' => 200, 'header_size' => 40 ], 0, '' ];
-        });
+        // Insert a user into the db with email that matches LDAP
+        $esnDb = $esnauth->getDb();
+        $userId = new \MongoDB\BSON\ObjectId('123456789012345678901234');
+        $esnDb->users->insertOne([
+            '_id' => $userId,
+            'firstname' => 'John',
+            'lastname' => 'Doe',
+            'accounts' => [
+                [ 'type' => 'email', 'emails' => [ 'johndoe@linagora.com' ] ]
+            ],
+            'domains' => [
+                [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]
+            ]
+        ]);
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
@@ -48,7 +107,9 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         list($rv, $msg) = $esnauth->check($request, $response);
 
         $this->assertTrue($rv);
-        $this->assertEquals($esnauth->getCurrentPrincipal(), 'principals/users/123456789');
+        $this->assertEquals($esnauth->getCurrentPrincipal(), 'principals/users/123456789012345678901234');
+
+        $GLOBALS['__ldap_mock_enabled'] = false;
     }
 
     function testAuthenticateFailedCode() {
@@ -109,15 +170,24 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testPluginCalled() {
-        $esnauth = new EsnMock('http://localhost:8080/');
-        $client = $esnauth->getClient();
+        $GLOBALS['__ldap_mock_enabled'] = true;
 
-        $client->on('curlExec', function(&$return) {
-            $return = "HTTP 200 OK\r\nSet-Cookie: test=passed\r\n\r\n[{\"_id\":\"123456789\",\"type\":\"user\",\"firstname\":\"John\",\"lastname\":\"Doe\",\"emails\":[\"johndoe@linagora.com\"]}]";
-        });
-        $client->on('curlStuff', function(&$return) {
-            $return = [ [ 'http_code' => 200, 'header_size' => 40 ], 0, '' ];
-        });
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        // Insert a user into the db with email that matches LDAP
+        $esnDb = $esnauth->getDb();
+        $userId = new \MongoDB\BSON\ObjectId('123456789012345678901234');
+        $esnDb->users->insertOne([
+            '_id' => $userId,
+            'firstname' => 'John',
+            'lastname' => 'Doe',
+            'accounts' => [
+                [ 'type' => 'email', 'emails' => [ 'johndoe@linagora.com' ] ]
+            ],
+            'domains' => [
+                [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]
+            ]
+        ]);
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
@@ -134,7 +204,9 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         list($rv, $msg) = $esnauth->check($request, $response);
 
         $this->assertTrue($rv);
-        $this->assertEquals($msg, 'principals/users/123456789');
+        $this->assertEquals($msg, 'principals/users/123456789012345678901234');
+
+        $GLOBALS['__ldap_mock_enabled'] = false;
     }
 
     function testAuthenticationSuccessWithJWT() {
@@ -299,14 +371,21 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         putenv('SABRE_IMPERSONATION_ENABLED=true');
 
         $esnauth = new EsnMock('http://localhost:8080/');
-        $client = $esnauth->getClient();
 
-        $client->on('curlExec', function(&$return) {
-            $return = "HTTP 200 OK\r\n\r\n[{\"_id\":\"999\",\"user_type\":\"user\"}]";
-        });
-        $client->on('curlStuff', function(&$return) {
-            $return = [ [ 'http_code' => 200, 'header_size' => 12 ], 0, '' ];
-        });
+        // Insert a user into the db
+        $esnDb = $esnauth->getDb();
+        $userId = new \MongoDB\BSON\ObjectId('999999999999999999999999');
+        $esnDb->users->insertOne([
+            '_id' => $userId,
+            'firstname' => 'Test',
+            'lastname' => 'User',
+            'accounts' => [
+                [ 'type' => 'email', 'emails' => [ 'user@example.com' ] ]
+            ],
+            'domains' => [
+                [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]
+            ]
+        ]);
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'PHP_AUTH_USER' => 'admin&user@example.com',
@@ -319,7 +398,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         [$rv, $msg] = $esnauth->check($request, $response);
 
         $this->assertTrue($rv);
-        $this->assertEquals('principals/users/999', $msg);
+        $this->assertEquals('principals/users/999999999999999999999999', $msg);
     }
 
     function testAdminImpersonationEnabledWithWrongPassword() {

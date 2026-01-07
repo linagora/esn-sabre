@@ -2,7 +2,7 @@
 
 namespace ESN\CardDAV\Backend;
 
-abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
+abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
 
     protected $bookId;
 

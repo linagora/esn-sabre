@@ -7,7 +7,7 @@ require_once ESN_TEST_BASE . '/Sabre/HTTP/SapiMock.php';
 require_once ESN_TEST_BASE . '/Sabre/DAVACL/PrincipalBackend/Mock.php';
 require_once ESN_TEST_BASE . '/Sabre/CalDAV/Backend/Mock.php';
 require_once ESN_TEST_BASE . '/Sabre/CardDAV/Backend/Mock.php';
-require_once ESN_TEST_BASE . '/Sabre/DAVServerTest.php';
+require_once ESN_TEST_BASE . '/Sabre/DAVServerTestBase.php';
 require_once ESN_TEST_BASE . '/Sabre/DAV/Auth/Backend/Mock.php';
 use \ESN\Utils\Utils as Utils;
 

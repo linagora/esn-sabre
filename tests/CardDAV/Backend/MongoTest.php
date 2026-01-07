@@ -4,13 +4,13 @@ namespace ESN\CardDAV\Backend;
 
 use \Sabre\DAV\Sharing\Plugin as SPlugin;
 
-require_once 'AbstractDatabaseTest.php';
+require_once 'AbstractDatabaseTestBase.php';
 
 /**
  * @medium
  */
 #[\AllowDynamicProperties]
-class MongoTest extends AbstractDatabaseTest {
+class MongoTest extends AbstractDatabaseTestBase {
 
     function setUp(): void {
         parent::setUp();

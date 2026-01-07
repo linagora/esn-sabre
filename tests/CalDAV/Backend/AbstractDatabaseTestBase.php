@@ -7,7 +7,7 @@ use \Sabre\DAV;
 use \Sabre\DAV\PropPatch;
 use Sabre\DAV\Xml\Element\Sharee;
 
-abstract class AbstractDatabaseTest extends \PHPUnit\Framework\TestCase {
+abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
 
     abstract protected function getBackend();
     abstract protected function generateId();

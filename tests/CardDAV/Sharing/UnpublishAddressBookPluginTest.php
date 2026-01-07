@@ -7,7 +7,7 @@ use \Sabre\DAV\Sharing\Plugin as SPlugin;
 
 require_once ESN_TEST_BASE . '/CardDAV/PluginTestBase.php';
 
-class UnpublishAddressBook extends \ESN\CardDAV\PluginTestBase {
+class UnpublishAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
 
     function setUp(): void {
         parent::setUp();

@@ -2,12 +2,12 @@
 
 namespace ESN\CalDAV\Backend;
 
-require_once ESN_TEST_BASE . '/CalDAV/Backend/RecurrenceExpansionTest.php';
+require_once ESN_TEST_BASE . '/CalDAV/Backend/RecurrenceExpansionTestBase.php';
 
 /**
  * @medium
  */
-class MongoRecurrenceExpansionTest extends RecurrenceExpansionTest {
+class MongoRecurrenceExpansionTest extends RecurrenceExpansionTestBase {
 
     protected $esndb;
     protected $sabredb;

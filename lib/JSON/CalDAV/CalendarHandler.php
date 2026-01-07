@@ -55,8 +55,16 @@ class CalendarHandler {
             'apple:order' => '{http://apple.com/ns/ical/}calendar-order'
         ];
 
+        // List of read-only properties that cannot be modified
+        $readonlyProps = ['dav:getetag', 'dav:getctag', 'calendarserver:ctag'];
+
         $davProps = [];
         foreach ($jsonData as $jsonProp => $value) {
+            // Check if trying to modify a read-only property
+            if (in_array($jsonProp, $readonlyProps)) {
+                return [403, null];
+            }
+
             if (isset($propnameMap[$jsonProp])) {
                 $davProps[$propnameMap[$jsonProp]] = $value;
             }

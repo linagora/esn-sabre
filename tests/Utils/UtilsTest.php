@@ -168,6 +168,32 @@ ICS;
     }
 
     /**
+     * Test for issue #242 - Handle null URI in getPrincipalByUri
+     *
+     * When deleting a calendar event, if the iTipMessage recipient is null,
+     * getPrincipalByUri should handle it gracefully instead of causing a
+     * TypeError in substr().
+     */
+    function testGetPrincipalByUriWithNullUri() {
+        // This should not throw a TypeError
+        $result = Utils::getPrincipalByUri(null, $this->server);
+
+        // Should return null when URI is null
+        $this->assertNull($result);
+    }
+
+    /**
+     * Test for issue #242 - Handle empty string URI in getPrincipalByUri
+     */
+    function testGetPrincipalByUriWithEmptyUri() {
+        // This should not throw a TypeError
+        $result = Utils::getPrincipalByUri('', $this->server);
+
+        // Should return null when URI is empty
+        $this->assertNull($result);
+    }
+
+    /**
      * Test for issue #43 - Non-standard timezone IDs from Microsoft Exchange
      *
      * This test verifies that calendar events with non-standard timezone identifiers

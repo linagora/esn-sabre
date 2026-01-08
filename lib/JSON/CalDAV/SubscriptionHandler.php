@@ -43,6 +43,18 @@ class SubscriptionHandler {
             $sourcePath = substr($sourcePath, 0, -5);
         }
 
+        // Check if source calendar exists
+        if (!$this->server->tree->nodeExists($sourcePath)) {
+            return [404, null];
+        }
+
+        // Check if user has read access to the source calendar
+        // This will reject subscriptions to private calendars if the user doesn't have explicit access
+        $aclPlugin = $this->server->getPlugin('acl');
+        if (!$aclPlugin || !$aclPlugin->checkPrivileges($sourcePath, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+            return [403, null];
+        }
+
         $rt = ['{DAV:}collection', '{http://calendarserver.org/ns/}subscribed'];
         $props = [
             '{DAV:}displayname' => $issetdef('dav:name'),

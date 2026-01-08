@@ -414,6 +414,18 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $this->server->calculateUri($issetdef('openpaas:source')->_links->self->href)
         );
 
+        // Check if source addressbook exists
+        if (!$this->server->tree->nodeExists($sourcePath)) {
+            return [404, null];
+        }
+
+        // Check if user has read access to the source addressbook
+        // This will reject subscriptions to private addressbooks if the user doesn't have explicit access
+        $aclPlugin = $this->server->getPlugin('acl');
+        if (!$aclPlugin || !$aclPlugin->checkPrivileges($sourcePath, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+            return [403, null];
+        }
+
         $rt = ['{DAV:}collection', '{http://open-paas.org/contacts}subscribed'];
         $props = [
             '{DAV:}displayname' => $issetdef('dav:name'),

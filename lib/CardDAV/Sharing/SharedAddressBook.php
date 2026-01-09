@@ -8,11 +8,43 @@ use \Sabre\DAV\Sharing\Plugin as SPlugin;
 #[\AllowDynamicProperties]
 class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection, ISharedAddressBook {
     function getACL() {
-        $acl[] = [
-            'privilege' => '{DAV:}read',
-            'principal' => $this->getOwner(),
-            'protected' => true
-        ];
+        $acl = [];
+        $shareAccess = $this->getShareAccess();
+
+        // Grant privileges based on the share access level
+        switch($shareAccess) {
+            case SPlugin::ACCESS_ADMINISTRATION:
+                $acl[] = [
+                    'privilege' => '{DAV:}share',
+                    'principal' => $this->getOwner(),
+                    'protected' => true
+                ];
+                // Fall through to add read/write privileges
+            case SPlugin::ACCESS_READWRITE:
+                $acl[] = [
+                    'privilege' => '{DAV:}write-content',
+                    'principal' => $this->getOwner(),
+                    'protected' => true
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}bind',
+                    'principal' => $this->getOwner(),
+                    'protected' => true
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}unbind',
+                    'principal' => $this->getOwner(),
+                    'protected' => true
+                ];
+                // Fall through to add read privilege
+            case SPlugin::ACCESS_READ:
+                $acl[] = [
+                    'privilege' => '{DAV:}read',
+                    'principal' => $this->getOwner(),
+                    'protected' => true
+                ];
+                break;
+        }
 
         // If user is delegated from another user, he can change delegated address book properties
         if (Utils::isUserPrincipal($this->addressBookInfo['share_owner'])) {
@@ -31,19 +63,67 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
     }
 
     function getChild($uri) {
-        return null;
+        // Get the card from the source address book
+        $sourceAddressBookId = $this->addressBookInfo['addressbookid'];
+        $obj = $this->carddavBackend->getCard($sourceAddressBookId, $uri);
+        if (!$obj) throw new \Sabre\DAV\Exception\NotFound('Card not found');
+        $obj['acl'] = $this->getChildACL();
+        return new \Sabre\CardDAV\Card($this->carddavBackend, $this->addressBookInfo, (array) $obj);
     }
 
     function getChildren($offset = 0, $limit = 0, $sort = null, $filters = null) {
-        return [];
+        // Get cards from the source address book
+        $sourceAddressBookId = $this->addressBookInfo['addressbookid'];
+        $objs = $this->carddavBackend->getCards($sourceAddressBookId, $offset, $limit, $sort, $filters);
+        $children = [];
+        foreach($objs as $obj) {
+            $obj['acl'] = $this->getChildACL();
+            $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $this->addressBookInfo, $obj);
+        }
+        return $children;
     }
 
     function getMultipleChildren(array $paths) {
-        return [];
+        // Get multiple cards from the source address book
+        $sourceAddressBookId = $this->addressBookInfo['addressbookid'];
+        $objs = $this->carddavBackend->getMultipleCards($sourceAddressBookId, $paths);
+        $children = [];
+        foreach($objs as $obj) {
+            $obj['acl'] = $this->getChildACL();
+            $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $this->addressBookInfo, $obj);
+        }
+        return $children;
     }
 
     function getChildCount() {
-        return 0;
+        // Get count from the source address book
+        $sourceAddressBookId = $this->addressBookInfo['addressbookid'];
+        return $this->carddavBackend->getCardCount($sourceAddressBookId);
+    }
+
+    /**
+     * Returns the changes for this address book.
+     *
+     * This method should return changes from the source address book, not the shared instance.
+     *
+     * @param string $syncToken
+     * @param int $syncLevel
+     * @param int $limit
+     * @return array|null
+     */
+    function getChanges($syncToken, $syncLevel, $limit = null) {
+        if (!$this->carddavBackend instanceof \Sabre\CardDAV\Backend\SyncSupport) {
+            return null;
+        }
+
+        // Use the source address book ID for sync operations
+        $sourceAddressBookId = $this->addressBookInfo['addressbookid'];
+        return $this->carddavBackend->getChangesForAddressBook(
+            $sourceAddressBookId,
+            $syncToken,
+            $syncLevel,
+            $limit
+        );
     }
 
     function getProperties($properties) {

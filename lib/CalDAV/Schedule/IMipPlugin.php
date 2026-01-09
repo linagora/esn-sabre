@@ -71,13 +71,32 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
      * @param ITip\Message $iTipMessage
      */
     function schedule(ITip\Message $iTipMessage) {
-        $recipientPrincipalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
         $matched = preg_match("|/(calendars/.*/.*)/|", $_SERVER["REQUEST_URI"], $matches);
 
         if ($matched) {
             $calendarPath = $matches[1];
             // TODO Handle unmatched calendar error
         }
+
+        // Issue #242: Handle malformed events missing ORGANIZER property
+        // If sender is null (no ORGANIZER), infer it from the calendar owner
+        if (($iTipMessage->sender === null || $iTipMessage->sender === '') && $matched) {
+            try {
+                $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+                $ownerPrincipal = $calendarNode->getOwner();
+                if ($ownerPrincipal) {
+                    $ownerEmail = Utils::getPrincipalEmail($ownerPrincipal, $this->server);
+                    if ($ownerEmail) {
+                        $iTipMessage->sender = $ownerEmail;
+                        error_log("iTip message missing ORGANIZER, inferred from calendar owner: $ownerEmail");
+                    }
+                }
+            } catch (\Exception $e) {
+                error_log("Failed to infer organizer from calendar owner: " . $e->getMessage());
+            }
+        }
+
+        $recipientPrincipalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
 
         if (!($this->checkPreconditions($iTipMessage, $matched, $recipientPrincipalUri))) {
             return;

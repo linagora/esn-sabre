@@ -134,4 +134,66 @@ class VObjectCloneTest extends TestCase {
             $this->fail('hidePrivateEventInfoForUser threw an exception: ' . $e->getMessage());
         }
     }
+
+    /**
+     * Test Utils::hidePrivateEventInfoForUser with CONFIDENTIAL events
+     */
+    function testHideConfidentialEventInfoUsesCloneSafely() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'BEGIN:VEVENT',
+            'UID:confidential-event',
+            'DTSTART:20251028T100000Z',
+            'DTEND:20251028T110000Z',
+            'SUMMARY:Confidential Meeting',
+            'CLASS:CONFIDENTIAL',
+            'ORGANIZER;CN=Boss:mailto:boss@example.com',
+            'ATTENDEE;CN=Boss:mailto:boss@example.com',
+            'LOCATION:Confidential Location',
+            'DESCRIPTION:Highly confidential information',
+            'DTSTAMP:20251027T120000Z',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vCalendar = \Sabre\VObject\Reader::read($icalData);
+
+        $parentNode = new class('principals/users/boss') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $userPrincipal = 'principals/users/employee';
+
+        // Set time limit to catch infinite loops
+        set_time_limit(5);
+
+        $startTime = microtime(true);
+
+        try {
+            // This should not cause infinite recursion
+            $result = Utils::hidePrivateEventInfoForUser($vCalendar, $parentNode, $userPrincipal);
+
+            $endTime = microtime(true);
+            $duration = $endTime - $startTime;
+
+            // Processing should be fast
+            $this->assertLessThan(1.0, $duration,
+                'hidePrivateEventInfoForUser took too long (' . $duration . ' seconds), possible infinite loop');
+
+            // Verify the result
+            $this->assertNotNull($result);
+            $this->assertEquals('Busy', $result->VEVENT->SUMMARY->getValue());
+            $this->assertEquals('PRIVATE', $result->VEVENT->CLASS->getValue());
+
+        } catch (\Exception $e) {
+            $this->fail('hidePrivateEventInfoForUser threw an exception: ' . $e->getMessage());
+        }
+    }
 }

@@ -243,7 +243,7 @@ class Utils {
     }
 
     static function isHiddenPrivateEvent($vevent, $node, $userPrincipal) {
-        return $vevent->CLASS == 'PRIVATE' && ($node->getOwner() !== $userPrincipal);
+        return ($vevent->CLASS == 'PRIVATE' || $vevent->CLASS == 'CONFIDENTIAL') && ($node->getOwner() !== $userPrincipal);
     }
 
     /**

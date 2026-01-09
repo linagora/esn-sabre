@@ -216,4 +216,286 @@ ICS;
             $this->fail('Failed to convert DTSTART/DTEND to DateTime: ' . $e->getMessage());
         }
     }
+
+    /**
+     * Test that PRIVATE events are identified as hidden for non-owners
+     */
+    function testIsHiddenPrivateEventForNonOwner() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:private-event-test',
+            'DTSTART:20260110T100000Z',
+            'DTEND:20260110T110000Z',
+            'SUMMARY:Secret Meeting',
+            'CLASS:PRIVATE',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+        $vevent = $vcalendar->VEVENT;
+
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $userPrincipal = 'principals/users/other';
+
+        $this->assertTrue(Utils::isHiddenPrivateEvent($vevent, $node, $userPrincipal));
+    }
+
+    /**
+     * Test that PRIVATE events are not hidden for owners
+     */
+    function testIsHiddenPrivateEventForOwner() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:private-event-test',
+            'DTSTART:20260110T100000Z',
+            'DTEND:20260110T110000Z',
+            'SUMMARY:Secret Meeting',
+            'CLASS:PRIVATE',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+        $vevent = $vcalendar->VEVENT;
+
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $userPrincipal = 'principals/users/owner';
+
+        $this->assertFalse(Utils::isHiddenPrivateEvent($vevent, $node, $userPrincipal));
+    }
+
+    /**
+     * Test that CONFIDENTIAL events are identified as hidden for non-owners
+     */
+    function testIsHiddenConfidentialEventForNonOwner() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:confidential-event-test',
+            'DTSTART:20260110T100000Z',
+            'DTEND:20260110T110000Z',
+            'SUMMARY:Confidential Meeting',
+            'CLASS:CONFIDENTIAL',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+        $vevent = $vcalendar->VEVENT;
+
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $userPrincipal = 'principals/users/other';
+
+        $this->assertTrue(Utils::isHiddenPrivateEvent($vevent, $node, $userPrincipal));
+    }
+
+    /**
+     * Test that CONFIDENTIAL events are not hidden for owners
+     */
+    function testIsHiddenConfidentialEventForOwner() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:confidential-event-test',
+            'DTSTART:20260110T100000Z',
+            'DTEND:20260110T110000Z',
+            'SUMMARY:Confidential Meeting',
+            'CLASS:CONFIDENTIAL',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+        $vevent = $vcalendar->VEVENT;
+
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $userPrincipal = 'principals/users/owner';
+
+        $this->assertFalse(Utils::isHiddenPrivateEvent($vevent, $node, $userPrincipal));
+    }
+
+    /**
+     * Test that PUBLIC events are not hidden for anyone
+     */
+    function testIsHiddenPublicEventForNonOwner() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:public-event-test',
+            'DTSTART:20260110T100000Z',
+            'DTEND:20260110T110000Z',
+            'SUMMARY:Public Meeting',
+            'CLASS:PUBLIC',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+        $vevent = $vcalendar->VEVENT;
+
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $userPrincipal = 'principals/users/other';
+
+        $this->assertFalse(Utils::isHiddenPrivateEvent($vevent, $node, $userPrincipal));
+    }
+
+    /**
+     * Test that hidePrivateEventInfoForUser masks PRIVATE event details
+     */
+    function testHidePrivateEventInfoForUserMasksPrivateEvents() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:private-event-test',
+            'DTSTART:20260110T100000Z',
+            'DTEND:20260110T110000Z',
+            'SUMMARY:Secret Meeting',
+            'DESCRIPTION:Very secret details',
+            'LOCATION:Secret Location',
+            'CLASS:PRIVATE',
+            'ORGANIZER:mailto:boss@example.com',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $userPrincipal = 'principals/users/other';
+
+        $result = Utils::hidePrivateEventInfoForUser($vcalendar, $node, $userPrincipal);
+
+        $this->assertEquals('Busy', $result->VEVENT->SUMMARY->getValue());
+        $this->assertEquals('PRIVATE', $result->VEVENT->CLASS->getValue());
+        $this->assertEquals('private-event-test', $result->VEVENT->UID->getValue());
+        $this->assertEquals('mailto:boss@example.com', $result->VEVENT->ORGANIZER->getValue());
+        $this->assertFalse(isset($result->VEVENT->DESCRIPTION));
+        $this->assertFalse(isset($result->VEVENT->LOCATION));
+    }
+
+    /**
+     * Test that hidePrivateEventInfoForUser masks CONFIDENTIAL event details
+     */
+    function testHidePrivateEventInfoForUserMasksConfidentialEvents() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:confidential-event-test',
+            'DTSTART:20260110T100000Z',
+            'DTEND:20260110T110000Z',
+            'SUMMARY:Confidential Meeting',
+            'DESCRIPTION:Very confidential details',
+            'LOCATION:Confidential Location',
+            'CLASS:CONFIDENTIAL',
+            'ORGANIZER:mailto:boss@example.com',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $userPrincipal = 'principals/users/other';
+
+        $result = Utils::hidePrivateEventInfoForUser($vcalendar, $node, $userPrincipal);
+
+        $this->assertEquals('Busy', $result->VEVENT->SUMMARY->getValue());
+        $this->assertEquals('PRIVATE', $result->VEVENT->CLASS->getValue());
+        $this->assertEquals('confidential-event-test', $result->VEVENT->UID->getValue());
+        $this->assertEquals('mailto:boss@example.com', $result->VEVENT->ORGANIZER->getValue());
+        $this->assertFalse(isset($result->VEVENT->DESCRIPTION));
+        $this->assertFalse(isset($result->VEVENT->LOCATION));
+    }
+
+    /**
+     * Test that hidePrivateEventInfoForUser does not mask events for owners
+     */
+    function testHidePrivateEventInfoForUserDoesNotMaskForOwner() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:private-event-test',
+            'DTSTART:20260110T100000Z',
+            'DTEND:20260110T110000Z',
+            'SUMMARY:Secret Meeting',
+            'DESCRIPTION:Very secret details',
+            'LOCATION:Secret Location',
+            'CLASS:PRIVATE',
+            'ORGANIZER:mailto:boss@example.com',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $userPrincipal = 'principals/users/owner';
+
+        $result = Utils::hidePrivateEventInfoForUser($vcalendar, $node, $userPrincipal);
+
+        // Event should remain unchanged for owner
+        $this->assertEquals('Secret Meeting', $result->VEVENT->SUMMARY->getValue());
+        $this->assertEquals('PRIVATE', $result->VEVENT->CLASS->getValue());
+        $this->assertTrue(isset($result->VEVENT->DESCRIPTION));
+        $this->assertTrue(isset($result->VEVENT->LOCATION));
+    }
 }

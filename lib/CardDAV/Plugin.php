@@ -180,7 +180,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             }
 
             list($code, $body) = $this->getAddressBooks($path, $node, $options);
-        } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
+        } else if ($node instanceof \Sabre\CardDAV\AddressBook || $node instanceof Subscriptions\Subscription) {
             list($code, $body) = $this->getContacts($request, $response, $path, $node);
         }
 

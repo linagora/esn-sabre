@@ -179,14 +179,15 @@ class Subscription extends Collection implements ISubscription, IACL {
      * @return array|null
      */
     protected function getSourceAddressBookInfo() {
-        if (!isset($this->subscriptionInfo['source'])) {
-            error_log("Subscription source not set in subscriptionInfo");
+        $sourceKey = '{http://open-paas.org/contacts}source';
+        if (!isset($this->subscriptionInfo[$sourceKey])) {
+            error_log("Subscription source not set in subscriptionInfo. Available keys: " . implode(', ', array_keys($this->subscriptionInfo)));
             return null;
         }
 
         // Parse the source URL to extract principalUri and addressbook URI
         // Format: /addressbooks/{principalId}/{addressbookUri}
-        $sourcePath = $this->subscriptionInfo['source'];
+        $sourcePath = $this->subscriptionInfo[$sourceKey];
         error_log("Parsing subscription source: " . var_export($sourcePath, true));
 
         $parts = explode('/', trim($sourcePath, '/'));

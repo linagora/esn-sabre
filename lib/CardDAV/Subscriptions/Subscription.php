@@ -115,6 +115,7 @@ class Subscription extends Collection implements ISubscription, IACL {
         $children = [];
 
         foreach($objs as $obj) {
+            $obj = (array) $obj; // Convert BSONDocument to array
             $obj['acl'] = $this->getChildACL();
             $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, $obj);
         }
@@ -137,6 +138,7 @@ class Subscription extends Collection implements ISubscription, IACL {
         if (!$obj) {
             throw new \Sabre\DAV\Exception\NotFound('Card not found');
         }
+        $obj = (array) $obj; // Convert BSONDocument to array
         $obj['acl'] = $this->getChildACL();
 
         return new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, $obj);

@@ -68,7 +68,10 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
         $obj = $this->carddavBackend->getCard($sourceAddressBookId, $uri);
         if (!$obj) throw new \Sabre\DAV\Exception\NotFound('Card not found');
         $obj['acl'] = $this->getChildACL();
-        return new \Sabre\CardDAV\Card($this->carddavBackend, $this->addressBookInfo, (array) $obj);
+
+        // Pass source address book info to Card so CRUD operations work on the source
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        return new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, (array) $obj);
     }
 
     function getChildren($offset = 0, $limit = 0, $sort = null, $filters = null) {
@@ -76,9 +79,12 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
         $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
         $objs = $this->carddavBackend->getCards($sourceAddressBookId, $offset, $limit, $sort, $filters);
         $children = [];
+
+        // Pass source address book info to Cards so CRUD operations work on the source
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
         foreach($objs as $obj) {
             $obj['acl'] = $this->getChildACL();
-            $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $this->addressBookInfo, $obj);
+            $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, $obj);
         }
         return $children;
     }
@@ -88,17 +94,74 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
         $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
         $objs = $this->carddavBackend->getMultipleCards($sourceAddressBookId, $paths);
         $children = [];
+
+        // Pass source address book info to Cards so CRUD operations work on the source
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
         foreach($objs as $obj) {
             $obj['acl'] = $this->getChildACL();
-            $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $this->addressBookInfo, $obj);
+            $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, $obj);
         }
         return $children;
+    }
+
+    /**
+     * Returns address book info for the source address book.
+     * This is used when creating Card objects so that update/delete operations
+     * are performed on the source address book instead of the shared instance.
+     *
+     * @return array
+     */
+    protected function getSourceAddressBookInfo() {
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
+
+        // Create a modified addressBookInfo with the source ID
+        // This ensures Card's put() and delete() operations use the source address book
+        $sourceInfo = $this->addressBookInfo;
+        $sourceInfo['id'] = $sourceAddressBookId;
+
+        return $sourceInfo;
     }
 
     function getChildCount() {
         // Get count from the source address book
         $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
         return $this->carddavBackend->getCardCount($sourceAddressBookId);
+    }
+
+    /**
+     * Creates a new file in the directory
+     *
+     * Data will either be supplied as a stream resource, or in certain cases
+     * as a string. Keep in mind that you may have to support either.
+     *
+     * After successful creation of the file, you may choose to return the ETag
+     * of the new file here.
+     *
+     * The returned ETag must be surrounded by double-quotes (The quotes should
+     * be part of the actual string).
+     *
+     * If you cannot accurately determine the ETag, you should not return it.
+     * If you don't store the file exactly as-is (you're transforming it
+     * somehow) you should also not return an ETag.
+     *
+     * This means that if a subsequent GET to this new file does not exactly
+     * return the same contents of what was submitted here, you are strongly
+     * recommended to omit the ETag.
+     *
+     * @param string $name Name of the file
+     * @param resource|string $vcardData Initial payload
+     * @return string|null
+     */
+    function createFile($name, $vcardData = null) {
+        if (is_resource($vcardData)) {
+            $vcardData = stream_get_contents($vcardData);
+        }
+        // Converting to UTF-8, if needed
+        $vcardData = \Sabre\DAV\StringUtil::ensureUTF8($vcardData);
+
+        // Create the card in the source address book
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
+        return $this->carddavBackend->createCard($sourceAddressBookId, $name, $vcardData);
     }
 
     /**

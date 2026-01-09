@@ -3,16 +3,48 @@
 namespace ESN\CardDAV\Sharing;
 
 use \ESN\Utils\Utils as Utils;
-use \Sabre\DAV\Sharing\Plugin as SPlugin;
+use \ESN\DAV\Sharing\Plugin as SPlugin;
 
 #[\AllowDynamicProperties]
 class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection, ISharedAddressBook {
     function getACL() {
-        $acl[] = [
-            'privilege' => '{DAV:}read',
-            'principal' => $this->getOwner(),
-            'protected' => true
-        ];
+        $acl = [];
+        $shareAccess = $this->getShareAccess();
+
+        // Grant privileges based on the share access level
+        switch($shareAccess) {
+            case SPlugin::ACCESS_ADMINISTRATION:
+                $acl[] = [
+                    'privilege' => '{DAV:}share',
+                    'principal' => $this->getOwner(),
+                    'protected' => true
+                ];
+                // Fall through to add read/write privileges
+            case SPlugin::ACCESS_READWRITE:
+                $acl[] = [
+                    'privilege' => '{DAV:}write-content',
+                    'principal' => $this->getOwner(),
+                    'protected' => true
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}bind',
+                    'principal' => $this->getOwner(),
+                    'protected' => true
+                ];
+                $acl[] = [
+                    'privilege' => '{DAV:}unbind',
+                    'principal' => $this->getOwner(),
+                    'protected' => true
+                ];
+                // Fall through to add read privilege
+            case SPlugin::ACCESS_READ:
+                $acl[] = [
+                    'privilege' => '{DAV:}read',
+                    'principal' => $this->getOwner(),
+                    'protected' => true
+                ];
+                break;
+        }
 
         // If user is delegated from another user, he can change delegated address book properties
         if (Utils::isUserPrincipal($this->addressBookInfo['share_owner'])) {
@@ -31,19 +63,130 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
     }
 
     function getChild($uri) {
-        return null;
+        // Get the card from the source address book
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
+        $obj = $this->carddavBackend->getCard($sourceAddressBookId, $uri);
+        if (!$obj) throw new \Sabre\DAV\Exception\NotFound('Card not found');
+        $obj['acl'] = $this->getChildACL();
+
+        // Pass source address book info to Card so CRUD operations work on the source
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        return new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, (array) $obj);
     }
 
     function getChildren($offset = 0, $limit = 0, $sort = null, $filters = null) {
-        return [];
+        // Get cards from the source address book
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
+        $objs = $this->carddavBackend->getCards($sourceAddressBookId, $offset, $limit, $sort, $filters);
+        $children = [];
+
+        // Pass source address book info to Cards so CRUD operations work on the source
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        foreach($objs as $obj) {
+            $obj['acl'] = $this->getChildACL();
+            $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, $obj);
+        }
+        return $children;
     }
 
     function getMultipleChildren(array $paths) {
-        return [];
+        // Get multiple cards from the source address book
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
+        $objs = $this->carddavBackend->getMultipleCards($sourceAddressBookId, $paths);
+        $children = [];
+
+        // Pass source address book info to Cards so CRUD operations work on the source
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        foreach($objs as $obj) {
+            $obj['acl'] = $this->getChildACL();
+            $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, $obj);
+        }
+        return $children;
+    }
+
+    /**
+     * Returns address book info for the source address book.
+     * This is used when creating Card objects so that update/delete operations
+     * are performed on the source address book instead of the shared instance.
+     *
+     * @return array
+     */
+    protected function getSourceAddressBookInfo() {
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
+
+        // Create a modified addressBookInfo with the source ID
+        // This ensures Card's put() and delete() operations use the source address book
+        $sourceInfo = $this->addressBookInfo;
+        $sourceInfo['id'] = $sourceAddressBookId;
+
+        return $sourceInfo;
     }
 
     function getChildCount() {
-        return 0;
+        // Get count from the source address book
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
+        return $this->carddavBackend->getCardCount($sourceAddressBookId);
+    }
+
+    /**
+     * Creates a new file in the directory
+     *
+     * Data will either be supplied as a stream resource, or in certain cases
+     * as a string. Keep in mind that you may have to support either.
+     *
+     * After successful creation of the file, you may choose to return the ETag
+     * of the new file here.
+     *
+     * The returned ETag must be surrounded by double-quotes (The quotes should
+     * be part of the actual string).
+     *
+     * If you cannot accurately determine the ETag, you should not return it.
+     * If you don't store the file exactly as-is (you're transforming it
+     * somehow) you should also not return an ETag.
+     *
+     * This means that if a subsequent GET to this new file does not exactly
+     * return the same contents of what was submitted here, you are strongly
+     * recommended to omit the ETag.
+     *
+     * @param string $name Name of the file
+     * @param resource|string $vcardData Initial payload
+     * @return string|null
+     */
+    function createFile($name, $vcardData = null) {
+        if (is_resource($vcardData)) {
+            $vcardData = stream_get_contents($vcardData);
+        }
+        // Converting to UTF-8, if needed
+        $vcardData = \Sabre\DAV\StringUtil::ensureUTF8($vcardData);
+
+        // Create the card in the source address book
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
+        return $this->carddavBackend->createCard($sourceAddressBookId, $name, $vcardData);
+    }
+
+    /**
+     * Returns the changes for this address book.
+     *
+     * This method should return changes from the source address book, not the shared instance.
+     *
+     * @param string $syncToken
+     * @param int $syncLevel
+     * @param int $limit
+     * @return array|null
+     */
+    function getChanges($syncToken, $syncLevel, $limit = null) {
+        if (!$this->carddavBackend instanceof \Sabre\CardDAV\Backend\SyncSupport) {
+            return null;
+        }
+
+        // Use the source address book ID for sync operations
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
+        return $this->carddavBackend->getChangesForAddressBook(
+            $sourceAddressBookId,
+            $syncToken,
+            $syncLevel,
+            $limit
+        );
     }
 
     function getProperties($properties) {

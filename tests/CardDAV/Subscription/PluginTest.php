@@ -45,11 +45,12 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertEquals(200, $response->status);
         $this->assertEquals($jsonResponse['uri'], 'user2subscription1');
         $this->assertEquals($jsonResponse['{http://open-paas.org/contacts}source'], '/addressbooks/' . $this->userTestId1 . '/book1.json');
-        $this->assertEquals($jsonResponse['acl'][0], array(
-            "privilege" => "{DAV:}all",
-            "principal" => "principals/users/" . $this->userTestId2,
-            "protected" => true
-        ));
+
+        // Old subscriptions without share_access default to ACCESS_READ
+        // ACL contains: read + write-properties
+        $this->assertCount(2, $jsonResponse['acl']);
+        $this->assertEquals($jsonResponse['acl'][0]['privilege'], '{DAV:}read');
+        $this->assertEquals($jsonResponse['acl'][1]['privilege'], '{DAV:}write-properties');
     }
 
     function testCreateSubscriptionAddressBook() {
@@ -87,10 +88,10 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
             'subscription1',
             [
                 '{DAV:}displayname' => 'Subscription 1',
-                '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/' . $this->userTestId2 . '/user2book1', false)
+                '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/' . $this->userTestId2 . '/user2book1', false),
+                '{DAV:}acl' => ['dav:read', 'dav:write', 'dav:unbind']
             ]
         );
-
 
         $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId1);
         $this->assertCount(1, $subscriptions);
@@ -100,6 +101,7 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
           '/addressbooks/' . $this->userTestId1 . '/subscription1.json'
         );
 
+        // Should succeed because subscription has dav:unbind privilege (ACCESS_READWRITE)
         $this->assertEquals($response->status, 204);
 
         $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId1);

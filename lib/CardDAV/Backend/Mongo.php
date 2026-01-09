@@ -474,6 +474,14 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         $subscriptions = [];
         foreach ($res as $row) {
+            // Get privilege field
+            $privilege = $this->getValue($row, 'privilege', ['dav:read']);
+
+            // Convert MongoDB BSONArray to PHP array if needed
+            if ($privilege instanceof \MongoDB\Model\BSONArray) {
+                $privilege = $privilege->getArrayCopy();
+            }
+
             $subscription = [
                 'id'           => (string)$row['_id'],
                 '{DAV:}displayname' => $row['displayname'],
@@ -481,8 +489,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'principaluri' => $row['principaluri'],
                 '{http://open-paas.org/contacts}subscription-type' => 'public',
                 '{http://open-paas.org/contacts}source' => $row['source'],
+                'source'       => $row['source'],
                 'lastmodified' => $row['lastmodified'],
-                '{DAV:}acl'    => $this->getValue($row, 'privilege', ['dav:read', 'dav:write']),
+                '{DAV:}acl'    => $privilege,
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getValue($row, 'description', '')
             ];
 
@@ -502,7 +511,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'description'  => '',
             'principaluri' => $principalUri,
             'uri'          => $uri,
-            'privilege' => ['dav:read', 'dav:write'],
+            'privilege' => ['dav:read'],
             'source'       => $properties['{http://open-paas.org/contacts}source']->getHref(),
             'lastmodified' => time(),
         ];

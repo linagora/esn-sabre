@@ -3,7 +3,7 @@
 namespace ESN\CardDAV\Sharing;
 
 use \ESN\Utils\Utils as Utils;
-use \Sabre\DAV\Sharing\Plugin as SPlugin;
+use \ESN\DAV\Sharing\Plugin as SPlugin;
 
 #[\AllowDynamicProperties]
 class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection, ISharedAddressBook {
@@ -64,7 +64,7 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
 
     function getChild($uri) {
         // Get the card from the source address book
-        $sourceAddressBookId = $this->addressBookInfo['addressbookid'];
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
         $obj = $this->carddavBackend->getCard($sourceAddressBookId, $uri);
         if (!$obj) throw new \Sabre\DAV\Exception\NotFound('Card not found');
         $obj['acl'] = $this->getChildACL();
@@ -73,7 +73,7 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
 
     function getChildren($offset = 0, $limit = 0, $sort = null, $filters = null) {
         // Get cards from the source address book
-        $sourceAddressBookId = $this->addressBookInfo['addressbookid'];
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
         $objs = $this->carddavBackend->getCards($sourceAddressBookId, $offset, $limit, $sort, $filters);
         $children = [];
         foreach($objs as $obj) {
@@ -85,7 +85,7 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
 
     function getMultipleChildren(array $paths) {
         // Get multiple cards from the source address book
-        $sourceAddressBookId = $this->addressBookInfo['addressbookid'];
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
         $objs = $this->carddavBackend->getMultipleCards($sourceAddressBookId, $paths);
         $children = [];
         foreach($objs as $obj) {
@@ -97,7 +97,7 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
 
     function getChildCount() {
         // Get count from the source address book
-        $sourceAddressBookId = $this->addressBookInfo['addressbookid'];
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
         return $this->carddavBackend->getCardCount($sourceAddressBookId);
     }
 
@@ -117,7 +117,7 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
         }
 
         // Use the source address book ID for sync operations
-        $sourceAddressBookId = $this->addressBookInfo['addressbookid'];
+        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
         return $this->carddavBackend->getChangesForAddressBook(
             $sourceAddressBookId,
             $syncToken,

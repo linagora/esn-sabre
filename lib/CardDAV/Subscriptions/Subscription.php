@@ -258,6 +258,35 @@ class Subscription extends Collection implements ISubscription, IACL {
     }
 
     /**
+     * Returns the sync token for the source address book.
+     *
+     * This is used by clients to detect changes in the address book.
+     *
+     * @return string|null
+     */
+    function getSyncToken() {
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        if (!$sourceAddressBookInfo) {
+            return null;
+        }
+
+        if (
+            $this->carddavBackend instanceof \Sabre\CardDAV\Backend\SyncSupport &&
+            isset($sourceAddressBookInfo['{DAV:}sync-token'])
+        ) {
+            return $sourceAddressBookInfo['{DAV:}sync-token'];
+        }
+        if (
+            $this->carddavBackend instanceof \Sabre\CardDAV\Backend\SyncSupport &&
+            isset($sourceAddressBookInfo['{http://sabredav.org/ns}sync-token'])
+        ) {
+            return $sourceAddressBookInfo['{http://sabredav.org/ns}sync-token'];
+        }
+
+        return null;
+    }
+
+    /**
      * Updates properties on this node.
      *
      * This method received a PropPatch object, which contains all the

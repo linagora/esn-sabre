@@ -180,16 +180,20 @@ class Subscription extends Collection implements ISubscription, IACL {
      */
     protected function getSourceAddressBookInfo() {
         if (!isset($this->subscriptionInfo['source'])) {
+            error_log("Subscription source not set in subscriptionInfo");
             return null;
         }
 
         // Parse the source URL to extract principalUri and addressbook URI
         // Format: /addressbooks/{principalId}/{addressbookUri}
         $sourcePath = $this->subscriptionInfo['source'];
+        error_log("Parsing subscription source: " . var_export($sourcePath, true));
+
         $parts = explode('/', trim($sourcePath, '/'));
+        error_log("Source parts: " . var_export($parts, true));
 
         if (count($parts) < 3 || $parts[0] !== 'addressbooks') {
-            error_log("Invalid subscription source format: " . $sourcePath);
+            error_log("Invalid subscription source format: " . $sourcePath . " (parts count: " . count($parts) . ")");
             return null;
         }
 
@@ -197,10 +201,16 @@ class Subscription extends Collection implements ISubscription, IACL {
         $addressbookUri = $parts[2];
         $principalUri = 'principals/users/' . $principalId;
 
+        error_log("Looking for source addressbook - principalUri: $principalUri, addressbookUri: $addressbookUri");
+
         // Get the source address book
         $addressbooks = $this->carddavBackend->getAddressBooksForUser($principalUri);
+        error_log("Found " . count($addressbooks) . " addressbooks for principal $principalUri");
+
         foreach ($addressbooks as $addressbook) {
+            error_log("Checking addressbook: " . var_export($addressbook['uri'], true) . " against target: " . var_export($addressbookUri, true));
             if ($addressbook['uri'] === $addressbookUri) {
+                error_log("Found matching source addressbook!");
                 return $addressbook;
             }
         }

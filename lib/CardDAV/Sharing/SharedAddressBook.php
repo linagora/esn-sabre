@@ -11,6 +11,12 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
         $acl = [];
         $shareAccess = $this->getShareAccess();
 
+        // Debug logging for ACL issues
+        error_log("SharedAddressBook::getACL() called - ID: " . $this->addressBookInfo['id'] .
+                 ", Owner: " . $this->getOwner() .
+                 ", ShareOwner: " . $this->getShareOwner() .
+                 ", ShareAccess: " . var_export($shareAccess, true));
+
         // Grant privileges based on the share access level
         switch($shareAccess) {
             case SPlugin::ACCESS_ADMINISTRATION:
@@ -43,6 +49,16 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
                     'principal' => $this->getOwner(),
                     'protected' => true
                 ];
+                break;
+            case SPlugin::ACCESS_NOACCESS:
+                // No access - return empty ACL
+                error_log("SharedAddressBook ACL: No access granted for address book " . $this->addressBookInfo['id']);
+                break;
+            default:
+                // Unexpected share access value - log it for debugging
+                error_log("SharedAddressBook ACL: Unexpected share_access value: " . var_export($shareAccess, true) .
+                         " for address book " . $this->addressBookInfo['id'] .
+                         " (owner: " . $this->getOwner() . ")");
                 break;
         }
 

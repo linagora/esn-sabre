@@ -92,6 +92,8 @@ class Subscription extends Collection implements ISubscription, IACL {
      * @return void
      */
     function delete() {
+        // Check unbind privilege before deleting
+        $this->checkDeleteAccess();
 
         $this->carddavBackend->deleteSubscription(
             $this->subscriptionInfo['id']
@@ -117,7 +119,7 @@ class Subscription extends Collection implements ISubscription, IACL {
         foreach($objs as $obj) {
             $obj = (array) $obj; // Convert BSONDocument to array
             $obj['acl'] = $this->getChildACL();
-            $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, $obj);
+            $children[] = new SubscriptionCard($this->carddavBackend, $sourceAddressBookInfo, $obj, $this);
         }
         return $children;
     }
@@ -141,7 +143,7 @@ class Subscription extends Collection implements ISubscription, IACL {
         $obj = (array) $obj; // Convert BSONDocument to array
         $obj['acl'] = $this->getChildACL();
 
-        return new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, $obj);
+        return new SubscriptionCard($this->carddavBackend, $sourceAddressBookInfo, $obj, $this);
     }
 
     /**
@@ -158,6 +160,9 @@ class Subscription extends Collection implements ISubscription, IACL {
      * @return string|null
      */
     function createFile($name, $vcardData = null) {
+        // Check write access before creating
+        $this->checkWriteAccess();
+
         if (is_resource($vcardData)) {
             $vcardData = stream_get_contents($vcardData);
         }
@@ -232,6 +237,85 @@ class Subscription extends Collection implements ISubscription, IACL {
     }
 
     /**
+     * Checks if the subscription has write privileges
+     *
+     * @throws \Sabre\DAV\Exception\Forbidden
+     */
+    protected function checkWriteAccess() {
+        $acl = $this->getACL();
+        $hasWrite = false;
+
+        foreach ($acl as $ace) {
+            // Check for write privileges: write, write-content, bind, unbind, or all
+            if (in_array($ace['privilege'], [
+                '{DAV:}write',
+                '{DAV:}write-content',
+                '{DAV:}bind',
+                '{DAV:}unbind',
+                '{DAV:}all'
+            ])) {
+                $hasWrite = true;
+                break;
+            }
+        }
+
+        if (!$hasWrite) {
+            throw new \Sabre\DAV\Exception\Forbidden('You do not have write access to this subscription');
+        }
+    }
+
+    /**
+     * Checks if the subscription can be deleted
+     *
+     * @throws \Sabre\DAV\Exception\Forbidden
+     */
+    protected function checkDeleteAccess() {
+        $acl = $this->getACL();
+        $hasDelete = false;
+
+        foreach ($acl as $ace) {
+            // Check for delete privileges: unbind or all
+            if (in_array($ace['privilege'], [
+                '{DAV:}unbind',
+                '{DAV:}all'
+            ])) {
+                $hasDelete = true;
+                break;
+            }
+        }
+
+        if (!$hasDelete) {
+            throw new \Sabre\DAV\Exception\Forbidden('You do not have permission to delete this subscription');
+        }
+    }
+
+    /**
+     * Checks if properties can be updated on this subscription
+     *
+     * @throws \Sabre\DAV\Exception\Forbidden
+     */
+    protected function checkWritePropertiesAccess() {
+        $acl = $this->getACL();
+        $hasWriteProperties = false;
+
+        foreach ($acl as $ace) {
+            // Check for write-properties or all privilege
+            if (in_array($ace['privilege'], [
+                '{DAV:}write-properties',
+                '{DAV:}write',
+                '{DAV:}all'
+            ])) {
+                $hasWriteProperties = true;
+                break;
+            }
+        }
+
+        if (!$hasWriteProperties) {
+            throw new \Sabre\DAV\Exception\Forbidden('You do not have permission to modify properties of this subscription');
+        }
+    }
+
+    /**
      * Returns the list of subscribers (addressbook) of this subscription.
      *
      * A subscription itself doesn't have subscribers, but we implement this
@@ -299,6 +383,8 @@ class Subscription extends Collection implements ISubscription, IACL {
      * @return void
      */
     function propPatch(PropPatch $propPatch) {
+        // Check write-properties privilege before updating
+        $this->checkWritePropertiesAccess();
 
         return $this->carddavBackend->updateSubscription(
             $this->subscriptionInfo['id'],
@@ -372,15 +458,30 @@ class Subscription extends Collection implements ISubscription, IACL {
      * @return array
      */
     function getACL() {
+        $acl = [];
+        $principal = $this->getOwner();
 
-        return [
-            [
-                'privilege' => '{DAV:}all',
-                'principal' => $this->getOwner(),
+        // Get privileges from subscriptionInfo
+        $privileges = isset($this->subscriptionInfo['{DAV:}acl'])
+            ? $this->subscriptionInfo['{DAV:}acl']
+            : ['dav:read']; // Default to read-only if not specified
+
+        // Convert privileges array to ACE format
+        foreach ($privileges as $privilege) {
+            // Normalize privilege to DAV format
+            $davPrivilege = $privilege;
+            if (strpos($privilege, 'dav:') === 0) {
+                $davPrivilege = '{DAV:}' . substr($privilege, 4);
+            }
+
+            $acl[] = [
+                'privilege' => $davPrivilege,
+                'principal' => $principal,
                 'protected' => true,
-            ]
-        ];
+            ];
+        }
 
+        return $acl;
     }
 
 }

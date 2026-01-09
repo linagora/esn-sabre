@@ -105,9 +105,117 @@ class Subscription extends Collection implements ISubscription, IACL {
      * @return \Sabre\DAV\INode[]
      */
     function getChildren() {
+        // Get cards from the source address book
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        if (!$sourceAddressBookInfo) {
+            return [];
+        }
 
-        return [];
+        $objs = $this->carddavBackend->getCards($sourceAddressBookInfo['id']);
+        $children = [];
 
+        foreach($objs as $obj) {
+            $obj['acl'] = $this->getChildACL();
+            $children[] = new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, $obj);
+        }
+        return $children;
+    }
+
+    /**
+     * Returns a single child node by name
+     *
+     * @param string $name
+     * @return \Sabre\DAV\INode
+     */
+    function getChild($name) {
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        if (!$sourceAddressBookInfo) {
+            throw new \Sabre\DAV\Exception\NotFound('Card not found');
+        }
+
+        $obj = $this->carddavBackend->getCard($sourceAddressBookInfo['id'], $name);
+        if (!$obj) {
+            throw new \Sabre\DAV\Exception\NotFound('Card not found');
+        }
+        $obj['acl'] = $this->getChildACL();
+
+        return new \Sabre\CardDAV\Card($this->carddavBackend, $sourceAddressBookInfo, $obj);
+    }
+
+    /**
+     * Creates a new file in the directory
+     *
+     * Data will either be supplied as a stream resource, or in certain cases
+     * as a string. Keep in mind that you may have to support either.
+     *
+     * After successful creation of the file, you may choose to return the ETag
+     * of the new file here.
+     *
+     * @param string $name Name of the file
+     * @param resource|string $vcardData Initial payload
+     * @return string|null
+     */
+    function createFile($name, $vcardData = null) {
+        if (is_resource($vcardData)) {
+            $vcardData = stream_get_contents($vcardData);
+        }
+        // Converting to UTF-8, if needed
+        $vcardData = \Sabre\DAV\StringUtil::ensureUTF8($vcardData);
+
+        // Create the card in the source address book
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        if (!$sourceAddressBookInfo) {
+            throw new \Sabre\DAV\Exception\Forbidden('Cannot create card: source address book not found');
+        }
+
+        return $this->carddavBackend->createCard($sourceAddressBookInfo['id'], $name, $vcardData);
+    }
+
+    /**
+     * Returns address book info for the source address book that this subscription points to.
+     * This is used when creating/updating/deleting Card objects so that operations
+     * are performed on the source address book instead of the subscription.
+     *
+     * @return array|null
+     */
+    protected function getSourceAddressBookInfo() {
+        if (!isset($this->subscriptionInfo['source'])) {
+            return null;
+        }
+
+        // Parse the source URL to extract principalUri and addressbook URI
+        // Format: /addressbooks/{principalId}/{addressbookUri}
+        $sourcePath = $this->subscriptionInfo['source'];
+        $parts = explode('/', trim($sourcePath, '/'));
+
+        if (count($parts) < 3 || $parts[0] !== 'addressbooks') {
+            error_log("Invalid subscription source format: " . $sourcePath);
+            return null;
+        }
+
+        $principalId = $parts[1];
+        $addressbookUri = $parts[2];
+        $principalUri = 'principals/users/' . $principalId;
+
+        // Get the source address book
+        $addressbooks = $this->carddavBackend->getAddressBooksForUser($principalUri);
+        foreach ($addressbooks as $addressbook) {
+            if ($addressbook['uri'] === $addressbookUri) {
+                return $addressbook;
+            }
+        }
+
+        error_log("Source address book not found for subscription: " . $sourcePath);
+        return null;
+    }
+
+    /**
+     * Returns the ACL for child nodes (contacts)
+     *
+     * @return array
+     */
+    function getChildACL() {
+        return $this->getACL();
     }
 
     /**

@@ -2,7 +2,7 @@
 
 namespace ESN\CardDAV\Sharing;
 
-use \Sabre\DAV\Sharing\Plugin as SPlugin;
+use \ESN\DAV\Sharing\Plugin as SPlugin;
 
 require_once ESN_TEST_BASE . '/CardDAV/PluginTestBase.php';
 
@@ -21,7 +21,8 @@ class SharedAddressBookTest extends \ESN\CardDAV\PluginTestBase {
             'id' => '54b64eadf6d7d8e41d263e7e',
             'uri' => 'test',
             'principaluri' => $this->userPrincipal,
-            'share_owner' => 'principals/domains/54b64eadf6d7d8e41d263e9f'
+            'share_owner' => 'principals/domains/54b64eadf6d7d8e41d263e9f',
+            'share_access' => SPlugin::ACCESS_READ
         ];
         $sharedAddressBook = new SharedAddressBook($this->carddavBackend, $addressBook);
 
@@ -39,7 +40,8 @@ class SharedAddressBookTest extends \ESN\CardDAV\PluginTestBase {
             'id' => '54b64eadf6d7d8e41d263e7e',
             'uri' => 'test',
             'principaluri' => $this->userPrincipal,
-            'share_owner' => 'principals/users/54b64eadf6d7d8e41d263e9f'
+            'share_owner' => 'principals/users/54b64eadf6d7d8e41d263e9f',
+            'share_access' => SPlugin::ACCESS_READ
         ];
         $sharedAddressBook = new SharedAddressBook($this->carddavBackend, $addressBook);
 

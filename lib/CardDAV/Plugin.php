@@ -180,7 +180,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             }
 
             list($code, $body) = $this->getAddressBooks($path, $node, $options);
-        } else if ($node instanceof \Sabre\CardDAV\AddressBook) {
+        } else if ($node instanceof \Sabre\CardDAV\AddressBook || $node instanceof Subscriptions\Subscription) {
             list($code, $body) = $this->getContacts($request, $response, $path, $node);
         }
 
@@ -419,18 +419,68 @@ class Plugin extends \ESN\JSON\BasePlugin {
             return [404, null];
         }
 
-        // Check if user has read access to the source addressbook
-        // This will reject subscriptions to private addressbooks if the user doesn't have explicit access
-        $aclPlugin = $this->server->getPlugin('acl');
-        if (!$aclPlugin || !$aclPlugin->checkPrivileges($sourcePath, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+        // Get the source addressbook node to check its ACLs
+        $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+        if (!$sourceNode instanceof \Sabre\DAVACL\IACL) {
             return [403, null];
         }
 
+        // Get current user principal
+        $aclPlugin = $this->server->getPlugin('acl');
+        if (!$aclPlugin) {
+            return [403, null];
+        }
+        $currentUserPrincipal = $aclPlugin->getCurrentUserPrincipal();
+
+        // Get the ACLs of the source addressbook
+        $sourceAcls = $sourceNode->getACL();
+
+        // Determine what privileges the current user has on the source
+        // Check for read and write privileges, including public access via {DAV:}authenticated
+        $hasReadAccess = false;
+        $hasWriteAccess = false;
+
+        foreach ($sourceAcls as $ace) {
+            // Check if this ACE applies to current user (direct or via {DAV:}authenticated)
+            if ($ace['principal'] === $currentUserPrincipal ||
+                $ace['principal'] === '{DAV:}authenticated' ||
+                $ace['principal'] === '{DAV:}all') {
+
+                $privilege = $ace['privilege'];
+
+                if ($privilege === '{DAV:}read' || $privilege === '{DAV:}all') {
+                    $hasReadAccess = true;
+                }
+
+                if ($privilege === '{DAV:}write' ||
+                    $privilege === '{DAV:}write-content' ||
+                    $privilege === '{DAV:}bind' ||
+                    $privilege === '{DAV:}unbind' ||
+                    $privilege === '{DAV:}all') {
+                    $hasWriteAccess = true;
+                }
+            }
+        }
+
+        // Must have at least read access
+        if (!$hasReadAccess) {
+            return [403, null];
+        }
+
+        // Determine privilege array based on actual privileges on the source
+        // Store normalized privilege in database
+        if ($hasWriteAccess) {
+            $privilege = ['dav:read', 'dav:write'];
+        } else {
+            $privilege = ['dav:read'];
+        }
+
         $rt = ['{DAV:}collection', '{http://open-paas.org/contacts}subscribed'];
+
         $props = [
             '{DAV:}displayname' => $issetdef('dav:name'),
-            '{DAV:}acl' => $issetdef('dav:acl'),
-            '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href($sourcePath, false)
+            '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href($sourcePath, false),
+            '{DAV:}acl' => $privilege
         ];
 
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));

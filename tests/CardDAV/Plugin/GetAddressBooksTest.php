@@ -195,10 +195,13 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
 
         $this->assertEquals($addressBooks[0]->{'_links'}->self->href, '/addressbooks/' . $this->userTestId2 . '/user2Subscription1.json');
         $this->assertEquals($addressBooks[0]->{'dav:name'}, 'user2Subscription1');
+
+        // getAddressBookAcl() returns the LAST privilege for a given principal
+        // ACL contains: read + write-properties, so it returns write-properties
         $this->assertEquals(
             $this->getAddressBookAcl($addressBooks[0]),
             array(
-                'principals/users/'. $this->userTestId2 => '{DAV:}all'
+                'principals/users/'. $this->userTestId2 => '{DAV:}write-properties'
             )
         );
 

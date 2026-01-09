@@ -232,6 +232,18 @@ class Subscription extends Collection implements ISubscription, IACL {
     }
 
     /**
+     * Returns the list of subscribers (addressbook) of this subscription.
+     *
+     * A subscription itself doesn't have subscribers, but we implement this
+     * method to satisfy the interface expected by plugins.
+     *
+     * @return array Empty array (subscriptions don't have their own subscribers)
+     */
+    function getSubscribedAddressBooks() {
+        return [];
+    }
+
+    /**
      * Updates properties on this node.
      *
      * This method received a PropPatch object, which contains all the

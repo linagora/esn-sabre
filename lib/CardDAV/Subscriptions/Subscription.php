@@ -244,6 +244,20 @@ class Subscription extends Collection implements ISubscription, IACL {
     }
 
     /**
+     * Returns the number of contacts in the source address book.
+     *
+     * @return int
+     */
+    function getChildCount() {
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        if (!$sourceAddressBookInfo) {
+            return 0;
+        }
+
+        return $this->carddavBackend->getCardCount($sourceAddressBookInfo['id']);
+    }
+
+    /**
      * Updates properties on this node.
      *
      * This method received a PropPatch object, which contains all the

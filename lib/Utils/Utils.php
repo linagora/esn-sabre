@@ -58,6 +58,12 @@ class Utils {
     }
 
     static function getPrincipalByUri($uri, \Sabre\DAV\Server $server) {
+        // Issue #242: Handle null or empty URI to prevent TypeError in substr()
+        if ($uri === null || $uri === '') {
+            error_log('3.7;getPrincipalByUri called with null or empty URI.');
+            return;
+        }
+
         $aclPlugin = $server->getPlugin('acl');
 
         if (!$aclPlugin) {

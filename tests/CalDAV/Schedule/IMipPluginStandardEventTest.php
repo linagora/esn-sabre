@@ -376,5 +376,58 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
         $this->assertEquals('1.1', $itipMessage->scheduleStatus);
     }
 
-  
+    /**
+     * Test for issue #242: Handle malformed events without ORGANIZER
+     *
+     * When an event has ATTENDEE but no ORGANIZER (malformed), deleting it
+     * should not cause a TypeError. The organizer should be inferred from
+     * the calendar owner.
+     */
+    function testCancelEventWithoutOrganizer()
+    {
+        $plugin = $this->getPlugin();
+        $plugin->setNewEvent(false);
+
+        // Event with ATTENDEE but without ORGANIZER (malformed as per RFC 5545)
+        $scheduledIcal = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:CANCEL',
+            'BEGIN:VEVENT',
+            'UID:6feb0657-e890-47bc-a326-63b5859cf1fb',
+            'DTSTART:'. $this->afterCurrentDate.'T093000Z',
+            'DTEND:'. $this->afterCurrentDate.'T100000Z',
+            'SUMMARY:Event without organizer',
+            'ATTENDEE;PARTSTAT=ACCEPTED;RSVP=FALSE;ROLE=CHAIR;CUTYPE=INDIVIDUAL;CN=John2 Doe2:mailto:' . $this->user2Email,
+            'DTSTAMP:20251211T182947Z',
+            'SEQUENCE:2',
+            'CLASS:PUBLIC',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $itipMessage = new \Sabre\VObject\ITip\Message();
+        $itipMessage->uid = '6feb0657-e890-47bc-a326-63b5859cf1fb';
+        $itipMessage->component = 'VEVENT';
+        $itipMessage->method = 'CANCEL';
+        $itipMessage->sequence = null;
+        $itipMessage->sender = null;  // No ORGANIZER in event - this is the key issue
+        $itipMessage->recipient = 'mailto:' . $this->user2Email;
+        $itipMessage->recipientName = 'John2 Doe2';
+        $itipMessage->scheduleStatus = 'null';
+        $itipMessage->significantChange = true;
+        $itipMessage->message = Reader::read($scheduledIcal);
+
+        // Before fix: this would throw TypeError in substr()
+        // After fix: sender should be inferred from calendar owner
+        $plugin->schedule($itipMessage);
+
+        // Verify that sender was inferred (should be user1's email since it's their calendar)
+        $this->assertNotNull($itipMessage->sender, 'Sender should be inferred from calendar owner');
+        $this->assertStringContainsString('mailto:', $itipMessage->sender, 'Sender should be a mailto URI');
+    }
+
 }

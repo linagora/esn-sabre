@@ -195,7 +195,7 @@ class Subscription extends Collection implements ISubscription, IACL {
 
         // Parse the source URL to extract principalUri and addressbook URI
         // Format: /addressbooks/{principalId}/{addressbookUri}
-        $sourcePath = $this->subscriptionInfo['source'];
+        $sourcePath = $this->subscriptionInfo[$sourceKey];
         $parts = explode('/', trim($sourcePath, '/'));
 
         if (count($parts) < 3 || $parts[0] !== 'addressbooks') {

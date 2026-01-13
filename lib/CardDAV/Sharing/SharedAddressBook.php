@@ -325,4 +325,16 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
     function setPublishStatus($value) {
         throw new DAV\Exception\MethodNotAllowed('You are not allowed to publish a shared address book');
     }
+
+    /**
+     * Returns the list of subscribers (addressbook) of this shared addressbook.
+     *
+     * A shared addressbook itself doesn't have subscribers in the subscription sense.
+     * This method exists to satisfy the interface expected by plugins.
+     *
+     * @return array Empty array (shared addressbooks don't have their own subscribers)
+     */
+    function getSubscribedAddressBooks() {
+        return [];
+    }
 }

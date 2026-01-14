@@ -421,50 +421,30 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         // Get the source addressbook node to check its ACLs
         $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
-        if (!$sourceNode instanceof \Sabre\DAVACL\IACL) {
+        if (!($sourceNode instanceof \Sabre\DAVACL\IACL)) {
             return [403, null];
         }
 
-        // Get current user principal
+        // Check privileges using the ACL plugin
         $aclPlugin = $this->server->getPlugin('acl');
         if (!$aclPlugin) {
             return [403, null];
         }
-        $currentUserPrincipal = $aclPlugin->getCurrentUserPrincipal();
 
-        // Get the ACLs of the source addressbook
-        $sourceAcls = $sourceNode->getACL();
-
-        // Determine what privileges the current user has on the source
-        // Check for read and write privileges, including public access via {DAV:}authenticated
-        $hasReadAccess = false;
+        // Check for read access (required)
         $hasWriteAccess = false;
-
-        foreach ($sourceAcls as $ace) {
-            // Check if this ACE applies to current user (direct or via {DAV:}authenticated)
-            if ($ace['principal'] === $currentUserPrincipal ||
-                $ace['principal'] === '{DAV:}authenticated' ||
-                $ace['principal'] === '{DAV:}all') {
-
-                $privilege = $ace['privilege'];
-
-                if ($privilege === '{DAV:}read' || $privilege === '{DAV:}all') {
-                    $hasReadAccess = true;
-                }
-
-                if ($privilege === '{DAV:}write' ||
-                    $privilege === '{DAV:}write-content' ||
-                    $privilege === '{DAV:}bind' ||
-                    $privilege === '{DAV:}unbind' ||
-                    $privilege === '{DAV:}all') {
-                    $hasWriteAccess = true;
-                }
-            }
+        try {
+            $aclPlugin->checkPrivileges($sourcePath, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT);
+        } catch (\Sabre\DAV\Exception\Forbidden $e) {
+            return [403, null];
         }
 
-        // Must have at least read access
-        if (!$hasReadAccess) {
-            return [403, null];
+        // Check for write access (optional, determines subscription privileges)
+        try {
+            $aclPlugin->checkPrivileges($sourcePath, '{DAV:}write', \Sabre\DAVACL\Plugin::R_PARENT);
+            $hasWriteAccess = true;
+        } catch (\Sabre\DAV\Exception\Forbidden $e) {
+            // read-only subscription
         }
 
         // Determine privilege array based on actual privileges on the source

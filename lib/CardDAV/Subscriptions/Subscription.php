@@ -106,16 +106,20 @@ class Subscription extends Collection implements ISubscription, IACL {
     /**
      * Returns an array with all the child nodes
      *
+     * @param int $offset
+     * @param int $limit
+     * @param string|null $sort
+     * @param array|null $filters
      * @return \Sabre\DAV\INode[]
      */
-    function getChildren() {
+    function getChildren($offset = 0, $limit = 0, $sort = null, $filters = null) {
         // Get cards from the source address book
         $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
         if (!$sourceAddressBookInfo) {
             return [];
         }
 
-        $objs = $this->carddavBackend->getCards($sourceAddressBookInfo['id']);
+        $objs = $this->carddavBackend->getCards($sourceAddressBookInfo['id'], $offset, $limit, $sort, $filters);
         $children = [];
 
         foreach($objs as $obj) {

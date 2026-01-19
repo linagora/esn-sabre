@@ -13,6 +13,8 @@ use \ESN\CalDAV\Schedule\IMipPlugin;
 #[\AllowDynamicProperties]
 class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     const PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN = 101;
+    // Run after Sabre's CalDAV plugin (priority 100) to get the converted ICS data
+    const PRIORITY_AFTER_CALDAV_PLUGIN = 150;
 
     protected $caldavBackend;
 
@@ -42,10 +44,12 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     function initialize(Server $server) {
         parent::initialize($server);
 
-        $server->on('beforeCreateFile',   [$this, 'beforeCreateFile']);
+        // Use lower priority (higher number) to run after Sabre's CalDAV plugin
+        // which converts jCal/JSON to ICS format at priority 100
+        $server->on('beforeCreateFile',   [$this, 'beforeCreateFile'], self::PRIORITY_AFTER_CALDAV_PLUGIN);
         $server->on('afterCreateFile',    [$this, 'after']);
 
-        $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
+        $server->on('beforeWriteContent', [$this, 'beforeWriteContent'], self::PRIORITY_AFTER_CALDAV_PLUGIN);
         $server->on('afterWriteContent',  [$this, 'after']);
 
         $server->on('beforeUnbind',       [$this, 'beforeUnbind']);

@@ -32,6 +32,7 @@ class CalendarDataNormalizer {
 
         $componentType = $component->name;
         $uid = (string) $component->UID;
+        $classification = isset($component->CLASS) ? strtoupper((string) $component->CLASS) : null;
 
         list($firstOccurence, $lastOccurence) = $this->calculateOccurrences($component, $vObject);
 
@@ -42,6 +43,7 @@ class CalendarDataNormalizer {
             'firstOccurence' => $firstOccurence,
             'lastOccurence'  => $lastOccurence,
             'uid' => $uid,
+            'classification' => $classification,
         ];
     }
 

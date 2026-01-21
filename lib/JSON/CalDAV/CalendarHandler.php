@@ -418,6 +418,13 @@ class CalendarHandler {
         $node = $this->server->tree->getNodeForPath($path);
 
         if ($node instanceof \ESN\CalDAV\SharedCalendar) {
+            // Check that the user has the {DAV:}share privilege before modifying public rights
+            // Only ADMINISTRATION access level grants this privilege
+            $aclPlugin = $this->server->getPlugin('acl');
+            if (!$aclPlugin->checkPrivileges($path, '{DAV:}share', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+                throw new Forbidden('You do not have permission to modify public rights on this calendar');
+            }
+
             $jsonData = json_decode($request->getBodyAsString());
 
             if ($jsonData === null || !is_object($jsonData)) {

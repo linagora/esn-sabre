@@ -21,7 +21,8 @@ class CalendarObjectService {
         'etag' => 1,
         'calendarid' => 1,
         'size' => 1,
-        'componenttype' => 1
+        'componenttype' => 1,
+        'classification' => 1
     ];
 
     const FULL_PROJECTION = self::LIGHT_PROJECTION + [
@@ -54,6 +55,7 @@ class CalendarObjectService {
             'etag'         => '"' . $row['etag'] . '"',
             'size'         => (int) $row['size'],
             'component'    => strtolower($row['componenttype']),
+            'classification' => isset($row['classification']) ? $row['classification'] : null,
         ];
 
         if ($includeCalendarData && isset($row['calendardata'])) {
@@ -84,7 +86,8 @@ class CalendarObjectService {
             'componenttype' => $extraData['componentType'],
             'firstoccurence' => $extraData['firstOccurence'],
             'lastoccurence' => $extraData['lastOccurence'],
-            'uid' => $extraData['uid']
+            'uid' => $extraData['uid'],
+            'classification' => $extraData['classification']
         ];
     }
 

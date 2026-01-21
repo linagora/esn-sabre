@@ -86,7 +86,8 @@ class CalendarObjectService {
             'componenttype' => $extraData['componentType'],
             'firstoccurence' => $extraData['firstOccurence'],
             'lastoccurence' => $extraData['lastOccurence'],
-            'uid' => $extraData['uid']
+            'uid' => $extraData['uid'],
+            'classification' => $extraData['classification']
         ];
     }
 

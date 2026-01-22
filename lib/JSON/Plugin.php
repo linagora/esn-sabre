@@ -211,10 +211,11 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             list($code, $body) = $this->handleSyncTokenReport($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
             list($code, $body) = $this->getCalendarObjectHandler()->getCalendarObjectByUID($path, $node, $jsonData);
+        } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+            // Check Subscription before ICalendarObjectContainer since Subscription now implements it
+            list($code, $body) = $this->getSubscriptionHandler()->getCalendarObjectsForSubscription($node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
             list($code, $body) = $this->getCalendarObjectHandler()->getCalendarObjects($path, $node, $jsonData);
-        } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
-            list($code, $body) = $this->getSubscriptionHandler()->getCalendarObjectsForSubscription($node, $jsonData);
         } else if ($node instanceof \ESN\CalDAV\CalendarRoot) {
             list($code, $body) = $this->getCalendarObjectHandler()->getMultipleCalendarObjectsFromPaths($path, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObject) {

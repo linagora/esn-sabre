@@ -3,6 +3,7 @@
 namespace ESN\CalDAV\Subscriptions;
 
 use Sabre\CalDAV\Backend\SubscriptionSupport;
+use Sabre\CalDAV\ICalendarObjectContainer;
 
 /**
  * Subscription Node
@@ -11,7 +12,7 @@ use Sabre\CalDAV\Backend\SubscriptionSupport;
  * This allows REPORT queries on subscriptions to return events from the source calendar.
  */
 #[\AllowDynamicProperties]
-class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription {
+class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements ICalendarObjectContainer {
 
     /**
      * Cached source calendar info
@@ -118,5 +119,20 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription {
 
         $this->sourceCalendarInfo = false;
         return null;
+    }
+
+    /**
+     * Performs a calendar-query on the contents of the source calendar.
+     *
+     * @param array $filters
+     * @return array
+     */
+    function calendarQuery(array $filters) {
+        $sourceCalendarInfo = $this->getSourceCalendarInfo();
+        if (!$sourceCalendarInfo) {
+            return [];
+        }
+
+        return $this->caldavBackend->calendarQuery($sourceCalendarInfo['id'], $filters);
     }
 }

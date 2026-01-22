@@ -67,7 +67,7 @@ class PrivateEventPlugin extends ServerPlugin {
             return;
         }
 
-        $calendarOwner = $node->getOwner();
+        $calendarOwner = $this->getCalendarOwner($path);
         if (!$calendarOwner || $calendarOwner === $currentUser) {
             return;
         }
@@ -111,7 +111,8 @@ class PrivateEventPlugin extends ServerPlugin {
             return;
         }
 
-        $calendarOwner = $node->getOwner();
+        $path = $propFind->getPath();
+        $calendarOwner = $this->getCalendarOwner($path);
         if (!$calendarOwner || $calendarOwner === $currentUser) {
             return;
         }
@@ -150,6 +151,31 @@ class PrivateEventPlugin extends ServerPlugin {
     protected function getCurrentUser() {
         $authPlugin = $this->server->getPlugin('auth');
         return $authPlugin ? $authPlugin->getCurrentPrincipal() : null;
+    }
+
+    /**
+     * Get the real owner of the calendar containing the object.
+     * For shared calendars, this returns the original owner, not the sharee.
+     *
+     * @param string $objectPath Path to the calendar object (e.g., calendars/bob/alice-calendar/event.ics)
+     * @return string|null The owner principal URI
+     */
+    protected function getCalendarOwner($objectPath) {
+        // Get the parent calendar path by removing the last segment (the object URI)
+        $pathParts = explode('/', $objectPath);
+        array_pop($pathParts);
+        $calendarPath = implode('/', $pathParts);
+
+        try {
+            $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+            if ($calendarNode && method_exists($calendarNode, 'getOwner')) {
+                return $calendarNode->getOwner();
+            }
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            // Calendar not found
+        }
+
+        return null;
     }
 
     protected function sanitizeCalendarData($calendarData, $calendarOwner, $currentUser) {

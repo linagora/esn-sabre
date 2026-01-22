@@ -145,6 +145,10 @@ $server->addPlugin($freeBusyPlugin);
 $caldavPlugin = new ESN\CalDAV\Plugin();
 $server->addPlugin($caldavPlugin);
 
+// Private event sanitization for delegated calendars
+$privateEventPlugin = new ESN\CalDAV\PrivateEventPlugin();
+$server->addPlugin($privateEventPlugin);
+
 // CardDAV support
 $carddavPlugin = new Sabre\CardDAV\Plugin();
 $server->addPlugin($carddavPlugin);

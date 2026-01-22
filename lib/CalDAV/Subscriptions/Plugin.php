@@ -43,18 +43,37 @@ class Plugin extends \Sabre\CalDAV\Subscriptions\Plugin {
 
         $sccs = '{' . CalDAVPlugin::NS_CALDAV . '}supported-calendar-component-set';
 
-        $propFind->handle($sccs, function() use ($node) {
-            // Get the subscription info which should contain the supported-calendar-component-set
-            if (method_exists($node, 'getProperties')) {
-                $props = $node->getProperties([$sccs]);
-                if (isset($props[$sccs])) {
-                    return $props[$sccs];
-                }
-            }
+        // For allprops requests or when the property hasn't been set yet,
+        // we need to add it directly using set() rather than handle()
+        if ($propFind->isAllProps() || $propFind->getStatus($sccs) === 404) {
+            $value = $this->getSupportedCalendarComponentSet($node, $sccs);
+            $propFind->set($sccs, $value, 200);
+        } else {
+            // For explicit property requests, use handle()
+            $propFind->handle($sccs, function() use ($node, $sccs) {
+                return $this->getSupportedCalendarComponentSet($node, $sccs);
+            });
+        }
+    }
 
-            // Default to VEVENT and VTODO if not found in subscription info
-            return new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(['VEVENT', 'VTODO']);
-        });
+    /**
+     * Get the supported calendar component set for a subscription node.
+     *
+     * @param INode $node
+     * @param string $sccs The property name
+     * @return \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet
+     */
+    private function getSupportedCalendarComponentSet(INode $node, $sccs) {
+        // Get the subscription info which should contain the supported-calendar-component-set
+        if (method_exists($node, 'getProperties')) {
+            $props = $node->getProperties([$sccs]);
+            if (isset($props[$sccs])) {
+                return $props[$sccs];
+            }
+        }
+
+        // Default to VEVENT and VTODO if not found in subscription info
+        return new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(['VEVENT', 'VTODO']);
     }
 
     /**

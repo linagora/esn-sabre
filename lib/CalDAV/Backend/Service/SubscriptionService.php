@@ -47,7 +47,7 @@ class SubscriptionService {
                 'source'       => $row['source'],
                 'lastmodified' => $row['lastmodified'],
                 '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}supported-calendar-component-set' =>
-                    new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(['VTODO', 'VEVENT']),
+                    new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(['VEVENT', 'VTODO']),
             ];
 
             foreach($this->subscriptionPropertyMap as $xmlName => $dbName) {

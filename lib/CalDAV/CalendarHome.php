@@ -35,7 +35,35 @@ class CalendarHome extends \Sabre\CalDAV\CalendarHome {
             return new SharedCalendar($cal);
         }
 
+        // Wrap Sabre's default Subscription with our custom one that exposes source calendar events
+        if ($cal instanceof \Sabre\CalDAV\Subscriptions\Subscription && !$cal instanceof \ESN\CalDAV\Subscriptions\Subscription) {
+            // Get the subscription info from the original subscription
+            $subscriptionInfo = $this->getSubscriptionInfoForNode($cal);
+            if ($subscriptionInfo) {
+                return new \ESN\CalDAV\Subscriptions\Subscription($this->caldavBackend, $subscriptionInfo);
+            }
+        }
+
         return $cal;
+    }
+
+    /**
+     * Get subscription info for a subscription node
+     *
+     * @param \Sabre\CalDAV\Subscriptions\Subscription $subscription
+     * @return array|null
+     */
+    private function getSubscriptionInfoForNode($subscription) {
+        $uri = $subscription->getName();
+        $subscriptions = $this->caldavBackend->getSubscriptionsForUser($this->principalInfo['uri']);
+
+        foreach ($subscriptions as $sub) {
+            if ($sub['uri'] === $uri) {
+                return $sub;
+            }
+        }
+
+        return null;
     }
 
     function getACL() {

@@ -34,9 +34,10 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
 
         $objs = $this->caldavBackend->getCalendarObjects($sourceCalendarInfo['id']);
         $children = [];
+        $subscriptionOwner = $this->subscriptionInfo['principaluri'];
 
         foreach ($objs as $obj) {
-            $children[] = new SubscriptionObject($this->caldavBackend, $sourceCalendarInfo, $obj);
+            $children[] = new SubscriptionObject($this->caldavBackend, $sourceCalendarInfo, $obj, $subscriptionOwner);
         }
 
         return $children;
@@ -59,7 +60,8 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
             throw new \Sabre\DAV\Exception\NotFound('Calendar object not found: ' . $name);
         }
 
-        return new SubscriptionObject($this->caldavBackend, $sourceCalendarInfo, $obj);
+        $subscriptionOwner = $this->subscriptionInfo['principaluri'];
+        return new SubscriptionObject($this->caldavBackend, $sourceCalendarInfo, $obj, $subscriptionOwner);
     }
 
     /**

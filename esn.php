@@ -173,7 +173,7 @@ $server->addPlugin($carddavSharingListenerPlugin);
 
 // Calendar subscription support
 $server->addPlugin(
-    new Sabre\CalDAV\Subscriptions\Plugin()
+    new ESN\CalDAV\Subscriptions\Plugin()
 );
 
 // Calendar sharing support

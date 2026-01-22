@@ -71,33 +71,8 @@ class SubscriptionObject extends CalendarObject {
      * @return bool
      */
     protected function hasWriteAccess() {
-        // Check if the source calendar has public write ACL
-        $publicAcl = $this->calendarInfo['{DAV:}acl'] ?? null;
-        if ($publicAcl) {
-            if ($publicAcl === '{DAV:}write' || $publicAcl === '{DAV:}all') {
-                return true;
-            }
-        }
-
-        // Check share-access level (if this is a shared calendar)
-        $shareAccess = $this->calendarInfo['share-access'] ?? null;
-        if ($shareAccess !== null) {
-            // ACCESS_READWRITE (3), ACCESS_SHAREDOWNER (1), or ACCESS_ADMINISTRATION (5) allow write
-            if (in_array($shareAccess, [
-                \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
-                \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
-                \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION
-            ])) {
-                return true;
-            }
-        }
-
-        // Check read-only flag
-        $readOnly = $this->calendarInfo['read-only'] ?? $this->calendarInfo['{http://sabredav.org/ns}read-only'] ?? null;
-        if ($readOnly === false) {
-            return true;
-        }
-
-        return false;
+        // Check if the source calendar has public write right
+        $publicRight = $this->caldavBackend->getCalendarPublicRight($this->calendarInfo['id']);
+        return $publicRight === '{DAV:}write';
     }
 }

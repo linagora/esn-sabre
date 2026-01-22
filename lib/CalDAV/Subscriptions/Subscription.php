@@ -166,8 +166,7 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
      * Checks if the subscription allows write access.
      *
      * Write access is determined by checking if the source calendar grants
-     * write privileges to the public (unauthenticated) principal or to the
-     * subscription owner.
+     * write privileges via public right.
      *
      * @throws \Sabre\DAV\Exception\Forbidden
      */
@@ -177,31 +176,9 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
             throw new \Sabre\DAV\Exception\Forbidden('Source calendar not found');
         }
 
-        // Check if the source calendar has public write ACL
-        $publicAcl = $sourceCalendarInfo['{DAV:}acl'] ?? null;
-        if ($publicAcl) {
-            // If {DAV:}acl contains write privilege, allow access
-            if ($publicAcl === '{DAV:}write' || $publicAcl === '{DAV:}all') {
-                return;
-            }
-        }
-
-        // Check share-access level (if this is a shared calendar)
-        $shareAccess = $sourceCalendarInfo['share-access'] ?? null;
-        if ($shareAccess !== null) {
-            // ACCESS_READWRITE (3), ACCESS_SHAREDOWNER (1), or ACCESS_ADMINISTRATION (5) allow write
-            if (in_array($shareAccess, [
-                \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
-                \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
-                \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION
-            ])) {
-                return;
-            }
-        }
-
-        // Check read-only flag
-        $readOnly = $sourceCalendarInfo['read-only'] ?? $sourceCalendarInfo['{http://sabredav.org/ns}read-only'] ?? null;
-        if ($readOnly === false) {
+        // Check if the source calendar has public write right
+        $publicRight = $this->caldavBackend->getCalendarPublicRight($sourceCalendarInfo['id']);
+        if ($publicRight === '{DAV:}write') {
             return;
         }
 

@@ -250,6 +250,10 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
                 return $sharee->principal;
             }
         }
+
+        // Fallback to parent implementation for non-shared or public calendars
+        // This ensures getOwner() always returns the principaluri
+        return parent::getOwner();
     }
 
     function getBackend() {

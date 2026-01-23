@@ -74,6 +74,12 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
 
                 if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
+                    // Only modify displayname if it was requested in the PROPFIND
+                    if (!array_key_exists('{DAV:}displayname', $responseProps[200] ?? [])) {
+                        $xml[] = ['{DAV:}response' => $xmlResponse];
+                        continue;
+                    }
+
                     // Shared/subscribed calendars: add owner name
                     $calendarPath = $xmlResponse->getHref();
                     $calendarNode = $this->server->tree->getNodeForPath($calendarPath);

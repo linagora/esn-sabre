@@ -77,6 +77,12 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
 
                 if (isset($resourceType) && $resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook")) {
+                    // Only modify displayname if it was requested in the PROPFIND
+                    if (!array_key_exists('{DAV:}displayname', $responseProps[200] ?? [])) {
+                        $xml[] = ['{DAV:}response' => $xmlResponse];
+                        continue;
+                    }
+
                     $addressBookPath = $xmlResponse->getHref();
                     list($type, $bookId, $addressbookType) = explode('/', trim($addressBookPath, '/'));
                     list(,, $currentUserId) = explode('/', $this->currentUser);

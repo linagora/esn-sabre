@@ -53,7 +53,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function afterMethodPropfind($request, $response) {
-        if(!$this->checkUserAgent($request)) {
+        if($this->acceptJson()) {
             return true;
         }
 

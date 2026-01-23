@@ -178,11 +178,7 @@ Adds a `?import` query parameter to overwrite pre-existing event if the URI is t
 
 ### ESN\CalDAV\MobileRequestPlugin
 
-DEPRECATED
-
 Modify shared calendar name in order to match owner.
-
-Buggy: it always set to the current user.
 
 ### ESN\CalDAV\ParticipationPlugin
 
@@ -243,11 +239,7 @@ Currently limited to the JSON API support.
 
 ### ESN\CardDAV\MobileRequestPlugin
 
-DEPRECATED
-
-Modify shared calendar name in order to match owner.
-
-Buggy: it always set to the current user.
+Modify shared addressbook name in order to match owner.
 
 ### ESN\CardDAV\Plugin
 

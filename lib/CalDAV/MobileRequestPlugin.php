@@ -51,7 +51,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function afterMethodPropfind($request, $response) {
-        if(!$this->checkUserAgent($request) && !$this->acceptJson()) {
+        if($this->acceptJson()) {
             return true;
         }
 
@@ -68,18 +68,17 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
                 
                 if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
-                    $sourceHref = isset($responseProps[200]['{http://calendarserver.org/ns/}source']) ?
-                                    $responseProps[200]['{http://calendarserver.org/ns/}source']->getHref()
-                                    : $xmlResponse->getHref();
+                    $calendarPath = $xmlResponse->getHref();
+                    $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
-                    $sharedNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
-                    $userPrincipal = $this->server->tree->getNodeForPath($sharedNode->getOwner());
+                    if (method_exists($calendarNode, 'getOwner')) {
+                        $userPrincipal = $this->server->tree->getNodeForPath($calendarNode->getOwner());
+                        $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
-                    $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
-
-                    $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
-                                    $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
-                                    "Agenda - " . $userDisplayName;
+                        $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
+                                        $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
+                                        "Agenda - " . $userDisplayName;
+                    }
                 } else {
                     if (isset($responseProps[200]['{DAV:}displayname']) && $responseProps[200]['{DAV:}displayname'] === '#default') {
                         $responseProps[200]['{DAV:}displayname'] = "My agenda";

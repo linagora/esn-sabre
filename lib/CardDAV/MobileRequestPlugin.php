@@ -83,16 +83,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     list(,, $ownerId) = explode('/', $addressBookNode->getOwner());
                     list(,, $shareOwnerId) = explode('/', $addressBookNode->getShareOwner());
 
-                    if ($addressBookNode instanceof Group\GroupAddressBook && $addressBookNode->isDisabled()) {
-                        $xml[] = ['{DAV:}response' => $xmlResponse];
-                        continue;
-                    }
-
-                    // Do not modify display name if the query book ID is owner ID
-                    if ($bookId === $ownerId) {
-                        $xml[] = ['{DAV:}response' => $xmlResponse];
-                        continue;
-                    }
+                    if ($addressBookNode instanceof Group\GroupAddressBook && $addressBookNode->isDisabled()) continue;
 
                     $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getShareOwner());
                     $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));

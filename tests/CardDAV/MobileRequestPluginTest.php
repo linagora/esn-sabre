@@ -70,11 +70,9 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             }
         }
 
-        // My default address books
-        $this->assertContains('My Collected Contacts', $displayNames);
-        $this->assertContains('My Contacts', $displayNames);
-
-        // Normal address book
+        // User's own address books are not modified
+        $this->assertContains('Collected contacts', $displayNames);
+        $this->assertContains('My contacts', $displayNames);
         $this->assertContains('Book 1', $displayNames);
     }
 
@@ -146,11 +144,9 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             }
         }
 
-        $this->assertCount(2, $displayNames);
-
-        // My default address books
-        $this->assertContains('My Collected Contacts', $displayNames);
-        $this->assertContains('My Contacts', $displayNames);
+        // User's own address books are not modified (no Group address book since it's shared)
+        $this->assertContains('Collected contacts', $displayNames);
+        $this->assertContains('My contacts', $displayNames);
     }
 
     function testAfterPropFindWithGroupAddressBookWhenBookIdIsOwnerId() {
@@ -300,6 +296,8 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             }
         }
 
-        $this->assertCount(0, $displayNames);
+        // Disabled GroupAddressBook is still returned (no filtering), just with modified name
+        $this->assertCount(1, $displayNames);
+        $this->assertEquals('Domain address book - test', $displayNames[0]);
     }
 }

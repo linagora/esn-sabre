@@ -70,68 +70,49 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
             }
 
             $xmlResponses = $propFindXml->getResponses();
+            $modified = false;
 
             foreach($xmlResponses as $index => $xmlResponse) {
                 $responseProps = $xmlResponse->getResponseProperties();
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
+
                 if (isset($resourceType) && $resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook")) {
                     $addressBookPath = $xmlResponse->getHref();
                     list($type, $bookId, $addressbookType) = explode('/', trim($addressBookPath, '/'));
                     list(,, $currentUserId) = explode('/', $this->currentUser);
 
                     $addressBookNode = $this->server->tree->getNodeForPath($addressBookPath);
-                    list(,, $ownerId) = explode('/', $addressBookNode->getOwner());
                     list(,, $shareOwnerId) = explode('/', $addressBookNode->getShareOwner());
 
-                    if ($addressBookNode instanceof Group\GroupAddressBook && $addressBookNode->isDisabled()) continue;
+                    // Only modify display name for shared/delegated address books (not user's own)
+                    if ($shareOwnerId !== $currentUserId) {
+                        $modified = true;
+                        $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getShareOwner());
+                        $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
-                    $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getShareOwner());
-                    $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
-
-                    if($shareOwnerId === $currentUserId) {
-                        if($addressbookType === 'contacts') {
-                            $addressBookDisplayName = 'My Contacts';
-                        }
-                        else if($addressbookType === 'collected') {
-                            $addressBookDisplayName = 'My Collected Contacts';
-                        }
-                        else {
-                            $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] ?? "Carnet d'addresse - nom indefinit";
-                        }
-                    } else {
                         if (array_key_exists("{DAV:}displayname", $responseProps[200])) {
-                            if($responseProps[200]['{DAV:}displayname'] === 'Collected contacts') {
-                                $addressBookDisplayName = 'Collected Contacts - '. $userDisplayName;
-                            }
-                            else if($responseProps[200]['{DAV:}displayname'] === 'My contacts') {
-                                $addressBookDisplayName = 'Contacts - ' . $userDisplayName;
-                            }
-                            else {
-                                $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName;
-                            }
-                        }
-                        else if($addressbookType === 'dab') {
+                            $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName;
+                        } else if($addressbookType === 'dab') {
                             $addressBookDisplayName = 'Domain address book - '. $userDisplayName;
+                        } else {
+                            $addressBookDisplayName = "Address book - " . $userDisplayName;
                         }
-                        else {
-                            $addressBookDisplayName = "Domain members";
-                        }
+
+                        $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;
+                        $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
+                        $xml[] = ['{DAV:}response' => $newResponse];
+                    } else {
+                        $xml[] = ['{DAV:}response' => $xmlResponse];
                     }
-
-                    $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;
-
-                    $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-
-                    $xml[] = ['{DAV:}response' => $newResponse];
                 } else {
                     $xml[] = ['{DAV:}response' => $xmlResponse];
                 }
             }
 
-            $service = new \Sabre\Xml\Service();
-            $data = $service->write('{DAV:}multistatus', $xml);
-            
-            $response->setBody($data);
+            if ($modified) {
+                $data = $this->server->xml->write('{DAV:}multistatus', $xml);
+                $response->setBody($data);
+            }
         }
     }
 }

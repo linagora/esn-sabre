@@ -70,9 +70,10 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             }
         }
 
-        // User's own address books are not modified
-        $this->assertContains('Collected contacts', $displayNames);
-        $this->assertContains('My contacts', $displayNames);
+        // User's own address books with empty displayname are renamed
+        $this->assertContains('My Collected Contacts', $displayNames);
+        $this->assertContains('My Contacts', $displayNames);
+        // User's own address book with existing displayname is kept
         $this->assertContains('Book 1', $displayNames);
     }
 
@@ -144,9 +145,9 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             }
         }
 
-        // User's own address books are not modified (no Group address book since it's shared)
-        $this->assertContains('Collected contacts', $displayNames);
-        $this->assertContains('My contacts', $displayNames);
+        // User's own address books with empty displayname are renamed
+        $this->assertContains('My Collected Contacts', $displayNames);
+        $this->assertContains('My Contacts', $displayNames);
     }
 
     function testAfterPropFindWithGroupAddressBookWhenBookIdIsOwnerId() {

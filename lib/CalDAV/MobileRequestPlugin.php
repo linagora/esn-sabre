@@ -73,30 +73,41 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 $responseProps = $xmlResponse->getResponseProperties();
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
 
+                // Only modify displayname if it was requested in the PROPFIND
+                if (!array_key_exists('{DAV:}displayname', $responseProps[200] ?? [])) {
+                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    continue;
+                }
+
+                $calendarPath = $xmlResponse->getHref();
+                $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+
+                if (!method_exists($calendarNode, 'getOwner')) {
+                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    continue;
+                }
+
+                $userPrincipal = $this->server->tree->getNodeForPath($calendarNode->getOwner());
+                $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
+                $existingDisplayName = $responseProps[200]['{DAV:}displayname'] ?? '';
+
                 if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
-                    // Shared/subscribed calendars: always add owner name to displayname
-                    $calendarPath = $xmlResponse->getHref();
-                    $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+                    // Shared/subscribed calendars: add owner name or just show owner name if no displayname
+                    $modified = true;
 
-                    if (method_exists($calendarNode, 'getOwner')) {
-                        $modified = true;
-                        $userPrincipal = $this->server->tree->getNodeForPath($calendarNode->getOwner());
-                        $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
-
-                        $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
-                                        $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
-                                        "Agenda - " . $userDisplayName;
-
-                        $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-                        $xml[] = ['{DAV:}response' => $newResponse];
+                    if (!empty($existingDisplayName)) {
+                        $responseProps[200]['{DAV:}displayname'] = $existingDisplayName . " - " . $userDisplayName;
                     } else {
-                        $xml[] = ['{DAV:}response' => $xmlResponse];
+                        $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
                     }
+
+                    $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
+                    $xml[] = ['{DAV:}response' => $newResponse];
                 } else {
-                    // User's own calendars: rename #default to "My agenda"
-                    if (isset($responseProps[200]['{DAV:}displayname']) && $responseProps[200]['{DAV:}displayname'] === '#default') {
+                    // User's own calendars: rename #default or empty to user's display name
+                    if (empty($existingDisplayName) || $existingDisplayName === '#default') {
                         $modified = true;
-                        $responseProps[200]['{DAV:}displayname'] = "My agenda";
+                        $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
                         $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
                         $xml[] = ['{DAV:}response' => $newResponse];
                     } else {

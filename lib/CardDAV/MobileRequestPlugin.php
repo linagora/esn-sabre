@@ -92,40 +92,27 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                     $existingDisplayName = $responseProps[200]['{DAV:}displayname'] ?? '';
 
+                    $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getShareOwner());
+                    $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
+
                     if ($shareOwnerId === $currentUserId) {
                         // User's own address books: rename only if no existing displayname
                         if (empty($existingDisplayName)) {
                             $modified = true;
-                            if ($addressbookType === 'contacts') {
-                                $addressBookDisplayName = 'My Contacts';
-                            } else if ($addressbookType === 'collected') {
-                                $addressBookDisplayName = 'My Collected Contacts';
-                            } else {
-                                $addressBookDisplayName = null;
-                            }
-
-                            if ($addressBookDisplayName) {
-                                $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;
-                                $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-                                $xml[] = ['{DAV:}response' => $newResponse];
-                            } else {
-                                $xml[] = ['{DAV:}response' => $xmlResponse];
-                            }
+                            $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
+                            $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
+                            $xml[] = ['{DAV:}response' => $newResponse];
                         } else {
                             $xml[] = ['{DAV:}response' => $xmlResponse];
                         }
                     } else {
-                        // Shared/delegated address books: add owner name
+                        // Shared/delegated address books: add owner name or just show owner name if no displayname
                         $modified = true;
-                        $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getShareOwner());
-                        $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
                         if (!empty($existingDisplayName)) {
                             $addressBookDisplayName = $existingDisplayName . " - " . $userDisplayName;
-                        } else if ($addressbookType === 'dab') {
-                            $addressBookDisplayName = 'Domain address book - '. $userDisplayName;
                         } else {
-                            $addressBookDisplayName = "Address book - " . $userDisplayName;
+                            $addressBookDisplayName = $userDisplayName;
                         }
 
                         $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;

@@ -99,7 +99,11 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                         // User's own address books: rename only if no existing displayname
                         if (empty($existingDisplayName)) {
                             $modified = true;
-                            $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
+                            if ($addressbookType === 'collected') {
+                                $responseProps[200]['{DAV:}displayname'] = $userDisplayName . ' (collected)';
+                            } else {
+                                $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
+                            }
                             $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
                             $xml[] = ['{DAV:}response' => $newResponse];
                         } else {

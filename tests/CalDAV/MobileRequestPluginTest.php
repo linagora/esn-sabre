@@ -67,6 +67,15 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_URI'       => 'calendars/54b64eadf6d7d8e41d263e0f',
         ));
 
+        $request->setBody('<?xml version="1.0" encoding="utf-8" ?>
+            <D:propfind xmlns:D="DAV:">
+                <D:prop>
+                    <D:displayname/>
+                    <D:resourcetype/>
+                </D:prop>
+            </D:propfind>'
+        );
+
         $response = $this->request($request);
 
         $this->assertEquals($response->status, 207);

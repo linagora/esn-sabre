@@ -72,6 +72,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
 
         // User's own address books with empty displayname are renamed to user's display name
         $this->assertContains('Roberto Carlos', $displayNames);
+        $this->assertContains('Roberto Carlos (collected)', $displayNames);
         // User's own address book with existing displayname is kept
         $this->assertContains('Book 1', $displayNames);
     }
@@ -146,6 +147,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
 
         // User's own address books with empty displayname are renamed to user's display name
         $this->assertContains('foo bar', $displayNames);
+        $this->assertContains('foo bar (collected)', $displayNames);
     }
 
     function testAfterPropFindWithGroupAddressBookWhenBookIdIsOwnerId() {

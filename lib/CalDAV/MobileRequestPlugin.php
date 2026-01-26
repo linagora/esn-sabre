@@ -74,16 +74,30 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
 
                 if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
-                    // Shared/subscribed calendars: always modify displayname with owner info
-                    $calendarPath = $xmlResponse->getHref();
-                    $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+                    // Shared/subscribed calendars: get owner from source or shared calendar
+                    try {
+                        $calendarPath = $xmlResponse->getHref();
+                        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
-                    if (method_exists($calendarNode, 'getOwner')) {
-                        $modified = true;
-                        $userPrincipal = $this->server->tree->getNodeForPath($calendarNode->getOwner());
+                        // For subscriptions, get owner from source calendar
+                        // For shared calendars (delegations), get owner directly from the shared node
+                        if (isset($responseProps[200]['{http://calendarserver.org/ns/}source'])) {
+                            $sourceHref = $responseProps[200]['{http://calendarserver.org/ns/}source']->getHref();
+                            $sourceNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
+                            $ownerPrincipalPath = $sourceNode->getOwner();
+                        } else {
+                            // For shared calendars, getOwner() returns the original owner
+                            $ownerPrincipalPath = $calendarNode->getOwner();
+                        }
+
+                        $userPrincipal = $this->server->tree->getNodeForPath($ownerPrincipalPath);
                         $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
-                        $existingDisplayName = $responseProps[200]['{DAV:}displayname'] ?? '';
+                        $existingDisplayName = isset($responseProps[200]['{DAV:}displayname']) ? $responseProps[200]['{DAV:}displayname'] : '';
+                        if ($existingDisplayName === null) {
+                            $existingDisplayName = '';
+                        }
 
+                        $modified = true;
                         if (!empty($existingDisplayName)) {
                             $responseProps[200]['{DAV:}displayname'] = $existingDisplayName . " - " . $userDisplayName;
                         } else {
@@ -92,31 +106,35 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                         $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
                         $xml[] = ['{DAV:}response' => $newResponse];
-                    } else {
+                    } catch (\Exception $e) {
                         $xml[] = ['{DAV:}response' => $xmlResponse];
                     }
                 } else {
                     // User's own calendars: rename #default or empty to user's display name
-                    // Only modify if displayname was requested
-                    if (!array_key_exists('{DAV:}displayname', $responseProps[200] ?? [])) {
+                    $existingDisplayName = isset($responseProps[200]['{DAV:}displayname']) ? $responseProps[200]['{DAV:}displayname'] : null;
+
+                    if ($existingDisplayName === null) {
+                        // displayname not requested, skip
                         $xml[] = ['{DAV:}response' => $xmlResponse];
                         continue;
                     }
 
-                    $existingDisplayName = $responseProps[200]['{DAV:}displayname'] ?? '';
+                    if ($existingDisplayName === '' || $existingDisplayName === '#default') {
+                        try {
+                            $calendarPath = $xmlResponse->getHref();
+                            $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
-                    if (empty($existingDisplayName) || $existingDisplayName === '#default') {
-                        $calendarPath = $xmlResponse->getHref();
-                        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
-
-                        if (method_exists($calendarNode, 'getOwner')) {
-                            $modified = true;
-                            $userPrincipal = $this->server->tree->getNodeForPath($calendarNode->getOwner());
-                            $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
-                            $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
-                            $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-                            $xml[] = ['{DAV:}response' => $newResponse];
-                        } else {
+                            if (method_exists($calendarNode, 'getOwner')) {
+                                $modified = true;
+                                $userPrincipal = $this->server->tree->getNodeForPath($calendarNode->getOwner());
+                                $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
+                                $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
+                                $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
+                                $xml[] = ['{DAV:}response' => $newResponse];
+                            } else {
+                                $xml[] = ['{DAV:}response' => $xmlResponse];
+                            }
+                        } catch (\Exception $e) {
                             $xml[] = ['{DAV:}response' => $xmlResponse];
                         }
                     } else {

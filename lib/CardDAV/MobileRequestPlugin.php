@@ -77,51 +77,64 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
 
                 if (isset($resourceType) && $resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook")) {
-                    // Only modify displayname if it was requested in the PROPFIND
-                    if (!array_key_exists('{DAV:}displayname', $responseProps[200] ?? [])) {
+                    $addressBookPath = $xmlResponse->getHref();
+                    $pathParts = explode('/', trim($addressBookPath, '/'));
+
+                    // Skip if path doesn't have expected format
+                    if (count($pathParts) < 3) {
                         $xml[] = ['{DAV:}response' => $xmlResponse];
                         continue;
                     }
 
-                    $addressBookPath = $xmlResponse->getHref();
-                    list($type, $bookId, $addressbookType) = explode('/', trim($addressBookPath, '/'));
+                    list($type, $bookId, $addressbookType) = $pathParts;
                     list(,, $currentUserId) = explode('/', $this->currentUser);
 
-                    $addressBookNode = $this->server->tree->getNodeForPath($addressBookPath);
-                    list(,, $shareOwnerId) = explode('/', $addressBookNode->getShareOwner());
+                    try {
+                        $addressBookNode = $this->server->tree->getNodeForPath($addressBookPath);
+                        $shareOwner = $addressBookNode->getShareOwner();
+                        list(,, $shareOwnerId) = explode('/', $shareOwner);
 
-                    $existingDisplayName = $responseProps[200]['{DAV:}displayname'] ?? '';
+                        $existingDisplayName = isset($responseProps[200]['{DAV:}displayname']) ? $responseProps[200]['{DAV:}displayname'] : '';
+                        if ($existingDisplayName === null) {
+                            $existingDisplayName = '';
+                        }
 
-                    $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getShareOwner());
-                    $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
+                        $userPrincipal = $this->server->tree->getNodeForPath($shareOwner);
+                        $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
-                    if ($shareOwnerId === $currentUserId) {
-                        // User's own address books: rename only if no existing displayname
-                        if (empty($existingDisplayName)) {
-                            $modified = true;
-                            if ($addressbookType === 'collected') {
-                                $responseProps[200]['{DAV:}displayname'] = $userDisplayName . ' (collected)';
+                        // Detect shared address books: shareOwner differs from current user
+                        $isShared = ($shareOwnerId !== $currentUserId);
+
+                        if (!$isShared) {
+                            // User's own address books: rename only if no existing displayname
+                            if (empty($existingDisplayName)) {
+                                $modified = true;
+                                if ($addressbookType === 'collected') {
+                                    $responseProps[200]['{DAV:}displayname'] = $userDisplayName . ' (collected)';
+                                } else {
+                                    $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
+                                }
+                                $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
+                                $xml[] = ['{DAV:}response' => $newResponse];
                             } else {
-                                $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
+                                $xml[] = ['{DAV:}response' => $xmlResponse];
                             }
+                        } else {
+                            // Shared/delegated address books: add owner name or just show owner name if no displayname
+                            $modified = true;
+
+                            if (!empty($existingDisplayName)) {
+                                $addressBookDisplayName = $existingDisplayName . " - " . $userDisplayName;
+                            } else {
+                                $addressBookDisplayName = $userDisplayName;
+                            }
+
+                            $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;
                             $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
                             $xml[] = ['{DAV:}response' => $newResponse];
-                        } else {
-                            $xml[] = ['{DAV:}response' => $xmlResponse];
                         }
-                    } else {
-                        // Shared/delegated address books: add owner name or just show owner name if no displayname
-                        $modified = true;
-
-                        if (!empty($existingDisplayName)) {
-                            $addressBookDisplayName = $existingDisplayName . " - " . $userDisplayName;
-                        } else {
-                            $addressBookDisplayName = $userDisplayName;
-                        }
-
-                        $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;
-                        $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-                        $xml[] = ['{DAV:}response' => $newResponse];
+                    } catch (\Exception $e) {
+                        $xml[] = ['{DAV:}response' => $xmlResponse];
                     }
                 } else {
                     $xml[] = ['{DAV:}response' => $xmlResponse];

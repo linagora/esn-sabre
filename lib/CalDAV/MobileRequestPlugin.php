@@ -92,23 +92,35 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                                             ($calendarNode instanceof \Sabre\CalDAV\Subscriptions\Subscription);
 
                     if ($isSharedOrSubscribed) {
-                        // Shared/subscribed calendars: get owner from source or shared calendar
-                        // For subscriptions, get owner from source calendar
+                        // Shared/subscribed calendars: get owner and displayname from source calendar
+                        $sourceDisplayName = '';
+
                         if ($calendarNode instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+                            // For subscriptions, get owner and displayname from source calendar
                             $sourceHref = $calendarNode->getProperties(['{http://calendarserver.org/ns/}source'])['{http://calendarserver.org/ns/}source']->getHref();
                             $sourceNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
                             $ownerPrincipalPath = $sourceNode->getOwner();
+                            // Get displayname from source calendar
+                            $sourceProps = $sourceNode->getProperties(['{DAV:}displayname']);
+                            $sourceDisplayName = isset($sourceProps['{DAV:}displayname']) ? $sourceProps['{DAV:}displayname'] : '';
                         } else {
-                            // For shared calendars, getOwner() returns the original owner
+                            // For shared calendars (delegations), getOwner() returns the original owner
                             $ownerPrincipalPath = $calendarNode->getOwner();
+                            // Use the displayname from the shared calendar itself
+                            $sourceDisplayName = $existingDisplayName;
+                        }
+
+                        // Treat #default as empty
+                        if ($sourceDisplayName === '#default') {
+                            $sourceDisplayName = '';
                         }
 
                         $userPrincipal = $this->server->tree->getNodeForPath($ownerPrincipalPath);
                         $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
                         $modified = true;
-                        if (!empty($existingDisplayName)) {
-                            $responseProps[200]['{DAV:}displayname'] = $existingDisplayName . " - " . $userDisplayName;
+                        if (!empty($sourceDisplayName)) {
+                            $responseProps[200]['{DAV:}displayname'] = $sourceDisplayName . " - " . $userDisplayName;
                         } else {
                             $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
                         }

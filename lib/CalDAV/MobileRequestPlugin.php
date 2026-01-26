@@ -72,20 +72,20 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
             foreach($xmlResponses as $index => $xmlResponse) {
                 $responseProps = $xmlResponse->getResponseProperties();
 
-                // Check if displayname was requested
-                $existingDisplayName = isset($responseProps[200]['{DAV:}displayname']) ? $responseProps[200]['{DAV:}displayname'] : null;
-                if ($existingDisplayName === null) {
-                    // displayname not requested, skip
-                    $xml[] = ['{DAV:}response' => $xmlResponse];
-                    continue;
-                }
-                if ($existingDisplayName === null) {
-                    $existingDisplayName = '';
-                }
-
                 try {
-                    $calendarPath = $xmlResponse->getHref();
+                    $calendarPath = trim($xmlResponse->getHref(), '/');
                     $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+
+                    // Check if displayname was requested (present in response with status 200)
+                    if (!isset($responseProps[200]) || !array_key_exists('{DAV:}displayname', $responseProps[200])) {
+                        $xml[] = ['{DAV:}response' => $xmlResponse];
+                        continue;
+                    }
+
+                    $existingDisplayName = $responseProps[200]['{DAV:}displayname'];
+                    if ($existingDisplayName === null) {
+                        $existingDisplayName = '';
+                    }
 
                     // Detect shared/subscribed calendars by node type, not by resourcetype in response
                     $isSharedOrSubscribed = ($calendarNode instanceof \Sabre\CalDAV\SharedCalendar) ||

@@ -51,7 +51,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function afterMethodPropfind($request, $response) {
-        if(!$this->checkUserAgent($request) && !$this->acceptJson()) {
+        if($this->acceptJson()) {
             return true;
         }
 
@@ -60,40 +60,95 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
         $node = $this->server->tree->getNodeForPath($path);
 
         if($node instanceof \Sabre\CalDAV\CalendarHome) {
-            $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
+            try {
+                $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
+            } catch (\Exception $e) {
+                return true;
+            }
+
             $xmlResponses = $propFindXml->getResponses();
+            $modified = false;
 
             foreach($xmlResponses as $index => $xmlResponse) {
                 $responseProps = $xmlResponse->getResponseProperties();
-                $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
-                
-                if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
-                    $sourceHref = isset($responseProps[200]['{http://calendarserver.org/ns/}source']) ?
-                                    $responseProps[200]['{http://calendarserver.org/ns/}source']->getHref()
-                                    : $xmlResponse->getHref();
 
-                    $sharedNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
-                    $userPrincipal = $this->server->tree->getNodeForPath($sharedNode->getOwner());
+                try {
+                    $calendarPath = trim($xmlResponse->getHref(), '/');
+                    $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
-                    $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
-
-                    $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
-                                    $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
-                                    "Agenda - " . $userDisplayName;
-                } else {
-                    if (isset($responseProps[200]['{DAV:}displayname']) && $responseProps[200]['{DAV:}displayname'] === '#default') {
-                        $responseProps[200]['{DAV:}displayname'] = "My agenda";
+                    // Check if displayname was requested (present in response with status 200)
+                    if (!isset($responseProps[200]) || !array_key_exists('{DAV:}displayname', $responseProps[200])) {
+                        $xml[] = ['{DAV:}response' => $xmlResponse];
+                        continue;
                     }
+
+                    $existingDisplayName = $responseProps[200]['{DAV:}displayname'];
+                    if ($existingDisplayName === null) {
+                        $existingDisplayName = '';
+                    }
+
+                    // Detect shared/subscribed calendars by node type, not by resourcetype in response
+                    $isSharedOrSubscribed = ($calendarNode instanceof \Sabre\CalDAV\SharedCalendar) ||
+                                            ($calendarNode instanceof \Sabre\CalDAV\Subscriptions\Subscription);
+
+                    if ($isSharedOrSubscribed) {
+                        // Shared/subscribed calendars: get owner and displayname from source calendar
+                        $sourceDisplayName = '';
+
+                        if ($calendarNode instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
+                            // For subscriptions, get owner and displayname from source calendar
+                            $sourceHref = $calendarNode->getProperties(['{http://calendarserver.org/ns/}source'])['{http://calendarserver.org/ns/}source']->getHref();
+                            $sourceNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
+                            $ownerPrincipalPath = $sourceNode->getOwner();
+                            // Get displayname from source calendar
+                            $sourceProps = $sourceNode->getProperties(['{DAV:}displayname']);
+                            $sourceDisplayName = isset($sourceProps['{DAV:}displayname']) ? $sourceProps['{DAV:}displayname'] : '';
+                        } else {
+                            // For shared calendars (delegations), getOwner() returns the original owner
+                            $ownerPrincipalPath = $calendarNode->getOwner();
+                            // Use the displayname from the shared calendar itself
+                            $sourceDisplayName = $existingDisplayName;
+                        }
+
+                        // Treat #default as empty
+                        if ($sourceDisplayName === '#default') {
+                            $sourceDisplayName = '';
+                        }
+
+                        $userPrincipal = $this->server->tree->getNodeForPath($ownerPrincipalPath);
+                        $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
+
+                        $modified = true;
+                        if (!empty($sourceDisplayName)) {
+                            $responseProps[200]['{DAV:}displayname'] = $sourceDisplayName . " - " . $userDisplayName;
+                        } else {
+                            $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
+                        }
+
+                        $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
+                        $xml[] = ['{DAV:}response' => $newResponse];
+                    } else if ($calendarNode instanceof \Sabre\CalDAV\Calendar) {
+                        // User's own calendars: rename #default or empty to user's display name
+                        if ($existingDisplayName === '' || $existingDisplayName === '#default') {
+                            $modified = true;
+                            $userPrincipal = $this->server->tree->getNodeForPath($calendarNode->getOwner());
+                            $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
+                            $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
+                            $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
+                            $xml[] = ['{DAV:}response' => $newResponse];
+                        } else {
+                            $xml[] = ['{DAV:}response' => $xmlResponse];
+                        }
+                    } else {
+                        $xml[] = ['{DAV:}response' => $xmlResponse];
+                    }
+                } catch (\Exception $e) {
+                    $xml[] = ['{DAV:}response' => $xmlResponse];
                 }
-
-                $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-
-                $xml[] = ['{DAV:}response' => $newResponse];
             }
 
-            $service = new \Sabre\Xml\Service();
-            $data = $service->write('{DAV:}multistatus', $xml);
-            
+            // Always rewrite the body to ensure consistency
+            $data = $this->server->xml->write('{DAV:}multistatus', $xml);
             $response->setBody($data);
         }
     }

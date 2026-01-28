@@ -235,9 +235,12 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
             }
         }
 
-        // Always rewrite the body to ensure consistency
-        $data = $this->server->xml->write('{DAV:}multistatus', $xml);
-        $response->setBody($data);
+        // Only rewrite the body if modifications were made
+        if ($modified) {
+            $service = new \Sabre\Xml\Service();
+            $data = $service->write('{DAV:}multistatus', $xml);
+            $response->setBody($data);
+        }
     }
 
     /**

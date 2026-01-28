@@ -89,7 +89,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                 // Check if displayname was requested (present in response with status 200)
                 if (!isset($responseProps[200]) || !is_array($responseProps[200]) || !array_key_exists('{DAV:}displayname', $responseProps[200])) {
-                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    $xml[] = $xmlResponse;
                     continue;
                 }
 
@@ -102,7 +102,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                 // Skip non-addressbook nodes (like the AddressBookHome itself)
                 if (!$isSubscription && !$isAddressBook) {
-                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    $xml[] = $xmlResponse;
                     continue;
                 }
 
@@ -115,7 +115,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                 // Skip if path doesn't have expected format
                 if (count($pathParts) < 3) {
-                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    $xml[] = $xmlResponse;
                     continue;
                 }
 
@@ -123,12 +123,12 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                 // Skip if currentUser is not set or invalid
                 if (empty($this->currentUser)) {
-                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    $xml[] = $xmlResponse;
                     continue;
                 }
                 $currentUserParts = explode('/', $this->currentUser);
                 if (count($currentUserParts) < 3) {
-                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    $xml[] = $xmlResponse;
                     continue;
                 }
                 $currentUserId = $currentUserParts[2];
@@ -137,7 +137,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 if ($isSubscription) {
                     $props = $addressBookNode->getProperties(['{http://open-paas.org/contacts}source']);
                     if (!isset($props['{http://open-paas.org/contacts}source'])) {
-                        $xml[] = ['{DAV:}response' => $xmlResponse];
+                        $xml[] = $xmlResponse;
                         continue;
                     }
                     $sourceHref = $props['{http://open-paas.org/contacts}source']->getHref();
@@ -160,7 +160,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     }
 
                     $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-                    $xml[] = ['{DAV:}response' => $newResponse];
+                    $xml[] = $newResponse;
                     continue;
                 }
 
@@ -178,19 +178,19 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     }
 
                     $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-                    $xml[] = ['{DAV:}response' => $newResponse];
+                    $xml[] = $newResponse;
                     continue;
                 }
 
                 // Handle regular AddressBook (user's own or domain addressbooks)
                 $shareOwner = $addressBookNode->getShareOwner();
                 if (empty($shareOwner)) {
-                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    $xml[] = $xmlResponse;
                     continue;
                 }
                 $shareOwnerParts = explode('/', $shareOwner);
                 if (count($shareOwnerParts) < 3) {
-                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    $xml[] = $xmlResponse;
                     continue;
                 }
                 $shareOwnerId = $shareOwnerParts[2];
@@ -212,9 +212,9 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                             $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
                         }
                         $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-                        $xml[] = ['{DAV:}response' => $newResponse];
+                        $xml[] = $newResponse;
                     } else {
-                        $xml[] = ['{DAV:}response' => $xmlResponse];
+                        $xml[] = $xmlResponse;
                     }
                 } else {
                     // Shared/domain address books: add owner name or just show owner name if no displayname
@@ -228,17 +228,16 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                     $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;
                     $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-                    $xml[] = ['{DAV:}response' => $newResponse];
+                    $xml[] = $newResponse;
                 }
             } catch (\Exception $e) {
-                $xml[] = ['{DAV:}response' => $xmlResponse];
+                $xml[] = $xmlResponse;
             }
         }
 
         // Only rewrite the body if modifications were made
         if ($modified) {
-            $service = new \Sabre\Xml\Service();
-            $data = $service->write('{DAV:}multistatus', $xml);
+            $data = $this->server->xml->write('{DAV:}multistatus', $xml, $this->server->getBaseUri());
             $response->setBody($data);
         }
     }

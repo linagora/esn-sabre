@@ -80,6 +80,7 @@ class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     function updateSharees($calendarInstances) {
         $sharingPlugin = $this->server->getPlugin('sharing');
+        $sourcePathsPublished = [];
 
         foreach($calendarInstances as $instance) {
             if ($instance['type'] == 'delete') {
@@ -106,9 +107,26 @@ class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                     'calendarProps' => $props
                 ]
             );
+            $this->publishSourceDelegationUpdate($instance['sourceCalendarPath'] ?? null, $sourcePathsPublished);
         }
 
         $this->publishMessages();
+    }
+
+    // Publish a single delegation update per source calendar path.
+    private function publishSourceDelegationUpdate($sourcePath, array &$sourcePathsPublished) {
+        if (empty($sourcePath) || !empty($sourcePathsPublished[$sourcePath])) {
+            return;
+        }
+
+        $sourcePathsPublished[$sourcePath] = true;
+        $this->createMessage(
+            $this->CALENDAR_TOPICS['CALENDAR_UPDATED'],
+            [
+                'calendarPath' => $sourcePath,
+                'calendarProps' => ['delegation_updated' => true]
+            ]
+        );
     }
 
     function updatePublicRight($path, $notifySubscribers = true) {

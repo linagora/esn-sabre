@@ -3,6 +3,7 @@
 namespace ESN\CalDAV\Backend\Service;
 
 use ESN\CalDAV\Backend\DAO\CalendarInstanceDAO;
+use ESN\Utils\Utils;
 use Sabre\Event\EventEmitter;
 
 /**
@@ -67,12 +68,16 @@ class CalendarSharingService {
 
         $currentInvites = $this->getInvites([$calendarId, $instanceId]);
         $existingInstance = $this->calendarInstanceDAO->findInstanceById($instanceId, ['_id' => 0]);
+        $sourceCalendarPath = $this->getSourceCalendarPath($calendarId, $existingInstance);
 
         $calendarInstances = [];
 
         foreach($sharees as $sharee) {
             $result = $this->processSharee($calendarId, $sharee, $currentInvites, $existingInstance);
             if ($result) {
+                if ($sourceCalendarPath) {
+                    $result['sourceCalendarPath'] = $sourceCalendarPath;
+                }
                 $calendarInstances[] = $result;
             }
         }
@@ -80,6 +85,19 @@ class CalendarSharingService {
         $this->eventEmitter->emit('esn:updateSharees', [$calendarInstances]);
 
         return $calendarInstances;
+    }
+
+    // Prefer instance from request; fallback to source instance to build the source calendar path.
+    private function getSourceCalendarPath($calendarId, $instance) {
+        if (empty($instance)) {
+            $instance = $this->calendarInstanceDAO->findSourceInstanceByCalendarId($calendarId, ['principaluri' => 1, 'uri' => 1]);
+        }
+
+        if (empty($instance['principaluri']) || empty($instance['uri'])) {
+            return null;
+        }
+
+        return Utils::calendarPathFromUri($instance['principaluri'], $instance['uri']);
     }
 
     /**

@@ -234,6 +234,141 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
         $this->plugin->updateSharees($calendarInstances);
     }
+
+    function testUpdateShareesPublishesSourceDelegationUpdate() {
+        // Given: a sharee update with a source calendar path.
+        $sharingPlugin = $this->createMock(\ESN\DAV\Sharing\Plugin::class);
+        $sharingPlugin->method('accessToRightRse')->willReturn('dav:read');
+        $server = $this->createMock(\Sabre\DAV\Server::class);
+        $server->method('getPlugin')->with('sharing')->willReturn($sharingPlugin);
+        $this->plugin->initialize($server);
+
+        $calendarInstances = [
+            [
+                'sharee' => new ShareeSimple('principal/users/alice', \Sabre\DAV\Sharing\Plugin::ACCESS_READ),
+                'uri' => 'uid-alice',
+                'type' => 'update',
+                'sourceCalendarPath' => '/calendars/bob/bobcal'
+            ]
+        ];
+
+        // When/Then: publish sharee update plus a delegation update for the source calendar.
+        $expectedCalls = [
+            ['calendar:calendar:updated', json_encode([
+                'calendarPath' => '/calendars/alice/uid-alice',
+                'calendarProps' => ['access' => 'dav:read']
+            ])],
+            ['calendar:calendar:updated', json_encode([
+                'calendarPath' => '/calendars/bob/bobcal',
+                'calendarProps' => ['delegation_updated' => true]
+            ])]
+        ];
+        $callIndex = 0;
+
+        $this->publisher
+            ->expects($this->exactly(2))
+            ->method('publish')
+            ->willReturnCallback(function($topic, $data) use (&$expectedCalls, &$callIndex) {
+                $this->assertEquals($expectedCalls[$callIndex][0], $topic);
+                $this->assertEquals($expectedCalls[$callIndex][1], $data);
+                $callIndex++;
+            });
+
+        $this->plugin->updateSharees($calendarInstances);
+    }
+
+    function testUpdateShareesDedupesSourceDelegationUpdate() {
+        // Given: multiple sharee updates for the same source calendar.
+        $sharingPlugin = $this->createMock(\ESN\DAV\Sharing\Plugin::class);
+        $sharingPlugin->method('accessToRightRse')->willReturn('dav:read');
+        $server = $this->createMock(\Sabre\DAV\Server::class);
+        $server->method('getPlugin')->with('sharing')->willReturn($sharingPlugin);
+        $this->plugin->initialize($server);
+
+        $calendarInstances = [
+            [
+                'sharee' => new ShareeSimple('principal/users/alice', \Sabre\DAV\Sharing\Plugin::ACCESS_READ),
+                'uri' => 'uid-alice',
+                'type' => 'update',
+                'sourceCalendarPath' => '/calendars/bob/bobcal'
+            ],
+            [
+                'sharee' => new ShareeSimple('principal/users/cedric', \Sabre\DAV\Sharing\Plugin::ACCESS_READ),
+                'uri' => 'uid-cedric',
+                'type' => 'update',
+                'sourceCalendarPath' => '/calendars/bob/bobcal'
+            ]
+        ];
+
+        // When/Then: publish each sharee update but only one source delegation update.
+        $expectedCalls = [
+            ['calendar:calendar:updated', json_encode([
+                'calendarPath' => '/calendars/alice/uid-alice',
+                'calendarProps' => ['access' => 'dav:read']
+            ])],
+            ['calendar:calendar:updated', json_encode([
+                'calendarPath' => '/calendars/bob/bobcal',
+                'calendarProps' => ['delegation_updated' => true]
+            ])],
+            ['calendar:calendar:updated', json_encode([
+                'calendarPath' => '/calendars/cedric/uid-cedric',
+                'calendarProps' => ['access' => 'dav:read']
+            ])]
+        ];
+        $callIndex = 0;
+
+        $this->publisher
+            ->expects($this->exactly(3))
+            ->method('publish')
+            ->willReturnCallback(function($topic, $data) use (&$expectedCalls, &$callIndex) {
+                $this->assertEquals($expectedCalls[$callIndex][0], $topic);
+                $this->assertEquals($expectedCalls[$callIndex][1], $data);
+                $callIndex++;
+            });
+
+        $this->plugin->updateSharees($calendarInstances);
+    }
+
+    function testUpdateShareesDeletePublishesSourceDelegationUpdate() {
+        // Given: a sharee delete with a source calendar path.
+        $sharingPlugin = $this->createMock(\ESN\DAV\Sharing\Plugin::class);
+        $server = $this->createMock(\Sabre\DAV\Server::class);
+        $server->method('getPlugin')->with('sharing')->willReturn($sharingPlugin);
+        $this->plugin->initialize($server);
+
+        $calendarInstances = [
+            [
+                'sharee' => new ShareeSimple('principal/users/alice', 1),
+                'uri' => 'uid-alice',
+                'type' => 'delete',
+                'sourceCalendarPath' => '/calendars/bob/bobcal'
+            ]
+        ];
+
+        // When/Then: publish delete for the sharee and delegation update for the source.
+        $expectedCalls = [
+            ['calendar:calendar:deleted', json_encode([
+                'calendarPath' => '/calendars/alice/uid-alice',
+                'calendarProps' => null
+            ])],
+            ['calendar:calendar:updated', json_encode([
+                'calendarPath' => '/calendars/bob/bobcal',
+                'calendarProps' => ['delegation_updated' => true]
+            ])]
+        ];
+        $callIndex = 0;
+
+        $this->publisher
+            ->expects($this->exactly(2))
+            ->method('publish')
+            ->willReturnCallback(function($topic, $data) use (&$expectedCalls, &$callIndex) {
+                $this->assertEquals($expectedCalls[$callIndex][0], $topic);
+                $this->assertEquals($expectedCalls[$callIndex][1], $data);
+                $callIndex++;
+            });
+
+        $this->plugin->updateSharees($calendarInstances);
+    }
 }
 
 #[\AllowDynamicProperties]

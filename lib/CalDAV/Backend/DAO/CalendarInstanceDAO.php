@@ -2,6 +2,8 @@
 
 namespace ESN\CalDAV\Backend\DAO;
 
+use Sabre\DAV\Sharing\Plugin;
+
 class CalendarInstanceDAO extends BaseDAO {
     public function __construct(\MongoDB\Database $db, $collectionName = 'calendarinstances') {
         parent::__construct($db, $collectionName);
@@ -81,6 +83,18 @@ class CalendarInstanceDAO extends BaseDAO {
     public function findInvitesByCalendarId($calendarId, array $projection = []) {
         $options = empty($projection) ? [] : ['projection' => $projection];
         return $this->find(['calendarid' => new \MongoDB\BSON\ObjectId($calendarId)], $options);
+    }
+
+    // Fetch the source calendar instance for a shared calendar.
+    public function findSourceInstanceByCalendarId($calendarId, array $projection = []) {
+        $options = empty($projection) ? [] : ['projection' => $projection];
+        return $this->findOne(
+            [
+                'calendarid' => new \MongoDB\BSON\ObjectId($calendarId),
+                'access' => Plugin::ACCESS_SHAREDOWNER
+            ],
+            $options
+        );
     }
 
     public function updatePublicRight($calendarId, $privilege) {

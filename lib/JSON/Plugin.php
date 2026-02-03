@@ -86,6 +86,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             if ($isIcal || $isXml) {
                 if ($isIcal) {
                     $result = \Sabre\VObject\Reader::read($data);
+
+                    // Sanitize private events for non-owners (only if there are VEVENTs)
+                    if (isset($result->VEVENT)) {
+                        $path = $request->getPath();
+                        $parentNode = $this->getParentCalendarNode($path);
+                        if ($parentNode) {
+                            $result = Utils::hidePrivateEventInfoForUser($result, $parentNode, $this->currentUser);
+                        }
+                    }
                 } else {
                     $result = $this->server->xml->parse($data);
                 }
@@ -111,6 +120,35 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return true;
+    }
+
+    /**
+     * Get the parent calendar node from an event path.
+     *
+     * @param string $path The request path (can be calendar or event path)
+     * @return \Sabre\CalDAV\ICalendarObjectContainer|null The calendar node or null
+     */
+    private function getParentCalendarNode($path) {
+        try {
+            $node = $this->server->tree->getNodeForPath($path);
+
+            // If path is a calendar object, get its parent calendar
+            if ($node instanceof \Sabre\CalDAV\ICalendarObject) {
+                $pathParts = explode('/', trim($path, '/'));
+                array_pop($pathParts);
+                $parentPath = implode('/', $pathParts);
+                return $this->server->tree->getNodeForPath($parentPath);
+            }
+
+            // If path is already a calendar, return it
+            if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+                return $node;
+            }
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            // Node not found
+        }
+
+        return null;
     }
 
     function beforeMethod($request, $response) {

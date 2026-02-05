@@ -184,4 +184,27 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
 
         throw new \Sabre\DAV\Exception\Forbidden('You do not have write access to this subscription');
     }
+
+    /**
+     * Returns the owner of the source calendar.
+     *
+     * For subscriptions, this returns the owner of the source calendar (not the subscriber).
+     * This is important for permission checks like hiding private events.
+     *
+     * @return string|null The principal URI of the source calendar owner
+     */
+    function getSourceOwner() {
+        $source = $this->subscriptionInfo['source'] ?? null;
+        if ($source && preg_match('#calendars/([^/]+)#', $source, $matches)) {
+            return 'principals/users/' . $matches[1];
+        }
+
+        // Fallback to database lookup
+        $sourceCalendarInfo = $this->getSourceCalendarInfo();
+        if ($sourceCalendarInfo && isset($sourceCalendarInfo['principaluri'])) {
+            return $sourceCalendarInfo['principaluri'];
+        }
+
+        return $this->getOwner();
+    }
 }

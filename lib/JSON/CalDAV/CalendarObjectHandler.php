@@ -328,7 +328,6 @@ class CalendarObjectHandler {
      */
     public function expandEvent($nodePath, $node, $jsonData) {
         // Parse time-range parameters
-
         $start = VObject\DateTimeParser::parseDateTime($jsonData->match->start);
         $end = VObject\DateTimeParser::parseDateTime($jsonData->match->end);
 
@@ -337,11 +336,13 @@ class CalendarObjectHandler {
         $vObject = VObject\Reader::read($calendarData);
 
         // Get parent calendar node for permission checks
-        // Extract parent path by removing the last segment (event filename)
         $pathParts = explode('/', trim($nodePath, '/'));
-        array_pop($pathParts); // Remove event filename
+        array_pop($pathParts);
         $parentPath = '/' . implode('/', $pathParts);
         $parentNode = $this->server->tree->getNodeForPath($parentPath);
+
+        // Hide private event info BEFORE expansion (sanitize original data first)
+        $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
 
         // Expand the event in the time range
         $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
@@ -351,27 +352,18 @@ class CalendarObjectHandler {
         foreach ($vevents as $vevent) {
             $eventStart = $vevent->DTSTART->getDateTime();
 
-            // Calculate event end: use DTEND if available, otherwise calculate from DURATION
             if (isset($vevent->DTEND)) {
                 $eventEnd = $vevent->DTEND->getDateTime();
             } elseif (isset($vevent->DURATION)) {
                 $eventEnd = clone $eventStart;
                 $eventEnd->add($vevent->DURATION->getDateInterval());
             } else {
-                // No DTEND or DURATION: event is instantaneous or all-day
                 $eventEnd = $eventStart;
             }
 
-            // If event is completely outside the time range, remove it
             if ($eventEnd <= $start || $eventStart >= $end) {
                 $vObject->remove($vevent);
             }
-        }
-
-        // Hide private event info if necessary (only if there are events)
-        $remainingEvents = $vObject->select('VEVENT');
-        if (count($remainingEvents) > 0) {
-            $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
         }
 
         // Get etag

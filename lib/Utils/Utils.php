@@ -249,7 +249,16 @@ class Utils {
     }
 
     static function isHiddenPrivateEvent($vevent, $node, $userPrincipal) {
-        return ($vevent->CLASS == 'PRIVATE' || $vevent->CLASS == 'CONFIDENTIAL') && ($node->getOwner() !== $userPrincipal);
+        if ($vevent->CLASS != 'PRIVATE' && $vevent->CLASS != 'CONFIDENTIAL') {
+            return false;
+        }
+
+        // For subscriptions, check against the source calendar owner
+        if (method_exists($node, 'getSourceOwner')) {
+            return $node->getSourceOwner() !== $userPrincipal;
+        }
+
+        return $node->getOwner() !== $userPrincipal;
     }
 
     /**

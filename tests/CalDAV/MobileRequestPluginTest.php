@@ -63,7 +63,6 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_METHOD'    => 'PROPFIND',
             'HTTP_CONTENT_TYPE' => 'application/xml',
             'HTTP_ACCEPT'       => 'application/xml',
-            'HTTP_USER_AGENT'   => 'DAVdroid/1.10.1.1-ose (2/13/18; dav4android; okhttp3) Android/8.1.0',
             'REQUEST_URI'       => 'calendars/54b64eadf6d7d8e41d263e0f',
         ));
 

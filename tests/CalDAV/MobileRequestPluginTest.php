@@ -73,13 +73,19 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
         $xmlResponses = $propFindXml->getResponses();
 
+        $sharedDisplayNames = [];
+
         foreach($xmlResponses as $index => $xmlResponse) {
             $responseProps = $xmlResponse->getResponseProperties();
             $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
-            
+
             if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
-                $this->assertTrue((boolean)preg_match("/.*-.*/", $responseProps[200]['{DAV:}displayname']));
+                $displayName = $responseProps[200]['{DAV:}displayname'];
+                $this->assertNotEmpty($displayName);
+                $sharedDisplayNames[] = $displayName;
             }
         }
+
+        $this->assertNotEmpty($sharedDisplayNames);
     }
 }

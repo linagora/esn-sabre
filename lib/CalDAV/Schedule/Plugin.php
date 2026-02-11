@@ -48,6 +48,56 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     }
 
+    private function canonicalizeCalendarAddress($value): string {
+        $value = (string) $value;
+        $value = strtolower(trim($value));
+        if (strpos($value, 'mailto:') === 0) {
+            return substr($value, 7);
+        }
+
+        return $value;
+    }
+
+    private function isPubliclyCreatedAndNotAcceptedByChairOrganizer(VCalendar $vCal): bool {
+        $vevent = $vCal->VEVENT;
+        if ($vevent === null) {
+            return false;
+        }
+
+        $isPubliclyCreated = isset($vevent->{'X-PUBLICLY-CREATED'}) &&
+            filter_var(trim((string) $vevent->{'X-PUBLICLY-CREATED'}), FILTER_VALIDATE_BOOLEAN) === true;
+
+        if (!$isPubliclyCreated) {
+            return false;
+        }
+
+        $organizer = $vevent->ORGANIZER;
+        $attendees = $vevent->select('ATTENDEE');
+        if ($organizer === null || empty($attendees)) {
+            return false;
+        }
+
+        $organizerEmail = $this->canonicalizeCalendarAddress($organizer);
+        foreach ($attendees as $attendee) {
+            $attendeeEmail = $this->canonicalizeCalendarAddress($attendee);
+            if ($attendeeEmail !== $organizerEmail) {
+                continue;
+            }
+
+            $role = strtoupper((string) ($attendee['ROLE'] ?? ''));
+            if ($role !== 'CHAIR') {
+                continue;
+            }
+
+            $partstat = strtoupper((string) ($attendee['PARTSTAT'] ?? ''));
+            $partstat = str_replace('_', '-', $partstat);
+
+            return in_array($partstat, ['NEEDS-ACTION', 'TENTATIVE', 'DECLINED'], true);
+        }
+
+        return false;
+    }
+
     /**
      * Used to perform healthchecks on the Message before delivery.
      *
@@ -73,6 +123,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
         // ITIP operations are silent -> no email should be sent
         if ($request->getMethod() === 'ITIP' || !$this->scheduleReply($this->server->httpRequest)) {
+            return;
+        }
+
+        if ($this->isPubliclyCreatedAndNotAcceptedByChairOrganizer($vCal)) {
             return;
         }
 

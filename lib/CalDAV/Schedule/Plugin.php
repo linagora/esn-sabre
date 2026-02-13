@@ -49,13 +49,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     private function canonicalizeCalendarAddress($value): string {
-        $value = (string) $value;
-        $value = strtolower(trim($value));
-        if (strpos($value, 'mailto:') === 0) {
-            return substr($value, 7);
-        }
+        $value = strtolower(trim((string) $value));
 
-        return $value;
+        return strncmp($value, 'mailto:', 7) === 0
+            ? substr($value, 7)
+            : $value;
     }
 
     private function isPubliclyCreatedAndNotAcceptedByChairOrganizer(VCalendar $vCal): bool {
@@ -64,23 +62,22 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false;
         }
 
-        $isPubliclyCreated = isset($vevent->{'X-PUBLICLY-CREATED'}) &&
-            filter_var(trim((string) $vevent->{'X-PUBLICLY-CREATED'}), FILTER_VALIDATE_BOOLEAN) === true;
+        $publiclyCreated = isset($vevent->{'X-PUBLICLY-CREATED'})
+            ? filter_var(trim((string) $vevent->{'X-PUBLICLY-CREATED'}), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
+            : null;
 
-        if (!$isPubliclyCreated) {
+        if ($publiclyCreated !== true) {
             return false;
         }
 
         $organizer = $vevent->ORGANIZER;
-        $attendees = $vevent->select('ATTENDEE');
-        if ($organizer === null || empty($attendees)) {
+        if ($organizer === null) {
             return false;
         }
 
         $organizerEmail = $this->canonicalizeCalendarAddress($organizer);
-        foreach ($attendees as $attendee) {
-            $attendeeEmail = $this->canonicalizeCalendarAddress($attendee);
-            if ($attendeeEmail !== $organizerEmail) {
+        foreach ($vevent->select('ATTENDEE') as $attendee) {
+            if ($this->canonicalizeCalendarAddress($attendee) !== $organizerEmail) {
                 continue;
             }
 
@@ -92,7 +89,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $partstat = strtoupper((string) ($attendee['PARTSTAT'] ?? ''));
             $partstat = str_replace('_', '-', $partstat);
 
-            return in_array($partstat, ['NEEDS-ACTION', 'TENTATIVE', 'DECLINED'], true);
+            return in_array($partstat, ['NEEDS-ACTION', 'DECLINED'], true);
         }
 
         return false;

@@ -9,12 +9,17 @@ use Sabre\VObject\Reader;
 #[\AllowDynamicProperties]
 class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     private $plugin;
+    private $publiclyCreatedCheckMethod;
 
     function setUp(): void {
         $server = new Server();
 
         $this->plugin = new Plugin();
         $this->plugin->initialize($server);
+
+        $reflection = new \ReflectionClass($this->plugin);
+        $this->publiclyCreatedCheckMethod = $reflection->getMethod('isPubliclyCreatedAndNotAcceptedByChairOrganizer');
+        $this->publiclyCreatedCheckMethod->setAccessible(true);
     }
 
     function testDeliverShouldSetSequenceTo0WhenNotPresent() {
@@ -39,6 +44,22 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->plugin->deliver($message);
 
         $this->assertEquals('1', $message->message->VEVENT->SEQUENCE->getValue());
+    }
+
+    function testShouldDetectPubliclyCreatedWhenChairOrganizerNeedsAction() {
+        $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('NEEDS-ACTION', true));
+
+        $shouldSkip = $this->publiclyCreatedCheckMethod->invoke($this->plugin, $vcalendar);
+
+        $this->assertTrue($shouldSkip);
+    }
+
+    function testShouldNotSkipWhenChairOrganizerAcceptedEvenIfPubliclyCreated() {
+        $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('ACCEPTED', true));
+
+        $shouldSkip = $this->publiclyCreatedCheckMethod->invoke($this->plugin, $vcalendar);
+
+        $this->assertFalse($shouldSkip);
     }
 
     private function newItipMessage($sequence) {
@@ -67,5 +88,24 @@ END:VCALENDAR
         $message->message = Reader::read($ical);
 
         return $message;
+    }
+
+    private function newCalendarWithOrganizerChairPartstat($partstat, $publiclyCreated) {
+        $publiclyCreatedValue = $publiclyCreated ? 'true' : 'false';
+
+        return "BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:test-publicly-created
+DTSTART:20260227T000000Z
+DTEND:20260227T003000Z
+SUMMARY:Test event
+X-PUBLICLY-CREATED:$publiclyCreatedValue
+ORGANIZER:mailto:alice@example.org
+ATTENDEE;PARTSTAT=$partstat;ROLE=CHAIR:mailto:alice@example.org
+ATTENDEE;PARTSTAT=NEEDS-ACTION;ROLE=REQ-PARTICIPANT:mailto:bob@example.org
+END:VEVENT
+END:VCALENDAR
+";
     }
 }

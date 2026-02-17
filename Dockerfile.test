@@ -41,7 +41,7 @@ RUN apt-get update && \
     pkg-config \
     git && \
   # Compile MongoDB extension
-  pecl install mongodb-2.1.4 && \
+  (pecl install mongodb-2.2.0 || pecl install mongodb) && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini 
 
@@ -98,7 +98,7 @@ RUN cp -v docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh \
 # Install dependencies
 RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject' && \
     composer clearcache && \
-    composer update --optimize-autoloader --no-interaction
+    composer install --optimize-autoloader --no-interaction
 
 EXPOSE 80
 

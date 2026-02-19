@@ -389,7 +389,7 @@ END:VCALENDAR'
         $authPlugin = new \ESN\DAV\Auth\PluginMock($this->authBackend);
         $this->server->addPlugin($authPlugin);
 
-        $aclPlugin = new \Sabre\DAVACL\Plugin();
+        $aclPlugin = new \ESN\CalDAV\MoveWithDelegationPlugin();
         $aclPlugin->principalCollectionSet = [
             PRINCIPALS_USERS,
             PRINCIPALS_RESOURCES,
@@ -397,8 +397,6 @@ END:VCALENDAR'
         ];
         $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
         $this->server->addPlugin($aclPlugin);
-
-        $this->server->addPlugin(new \ESN\CalDAV\MoveWithDelegationPlugin());
 
         $this->oldCal = $this->oldCaldavCalendar;
         $this->oldCal['id'] = $this->caldavBackend->createCalendar($this->oldCal['principaluri'], $this->oldCal['uri'], $this->oldCal);

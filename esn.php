@@ -116,7 +116,7 @@ $server->setBaseUri($config['webserver']['baseUri']);
 $authPlugin = new Sabre\DAV\Auth\Plugin($authBackend);
 $server->addPlugin($authPlugin);
 
-$aclPlugin = new Sabre\DAVACL\Plugin();
+$aclPlugin = new ESN\CalDAV\MoveWithDelegationPlugin();
 $aclPlugin->principalCollectionSet = [
     PRINCIPALS_USERS,
     PRINCIPALS_RESOURCES,

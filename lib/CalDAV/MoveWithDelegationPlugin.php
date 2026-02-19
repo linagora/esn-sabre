@@ -8,26 +8,30 @@ use Sabre\HTTP\ResponseInterface;
 
 /**
  * Extends Sabre\DAVACL\Plugin to allow delegates with write access to MOVE
- * events to and from the owner's calendar via the owner's path.
+ * events/contacts to and from the owner's calendar or address book via the
+ * owner's path.
  *
  * Standard DAVACL blocks MOVE because it requires:
- *   - {DAV:}read    on the source event   (checked in beforeMethod for MOVE)
- *   - {DAV:}unbind  on the source calendar (checked in beforeUnbind)
- *   - {DAV:}bind    on the dest calendar   (checked in beforeBind)
+ *   - {DAV:}read    on the source resource (checked in beforeMethod for MOVE)
+ *   - {DAV:}unbind  on the source collection (checked in beforeUnbind)
+ *   - {DAV:}bind    on the dest collection   (checked in beforeBind)
  *
- * Granting those privileges broadly would expose events to GET/REPORT and
+ * Granting those privileges broadly would expose resources to GET/REPORT and
  * enable PUT/DELETE as well.  We therefore override only these three DAVACL
  * methods and skip the privilege check when the current user is a delegate
- * with READWRITE or ADMINISTRATION access on the relevant calendar.
+ * with READWRITE or ADMINISTRATION access on the relevant collection.
  * All other HTTP methods (GET, PUT, DELETE, REPORT …) continue to use the
  * normal ACL enforcement provided by the parent class.
+ *
+ * This handles both CalDAV (SharedCalendar) and CardDAV (AddressBook)
+ * delegation via the common \Sabre\DAV\Sharing\ISharedNode interface.
  */
 #[\AllowDynamicProperties]
 class MoveWithDelegationPlugin extends \Sabre\DAVACL\Plugin {
 
     /**
      * Overrides beforeMethod to skip the {DAV:}read check on the MOVE source
-     * when the current user is a write-delegate of the source calendar.
+     * when the current user is a write-delegate of the source collection.
      *
      * For every other HTTP method the parent implementation is used unchanged.
      */
@@ -35,8 +39,8 @@ class MoveWithDelegationPlugin extends \Sabre\DAVACL\Plugin {
         if ($request->getMethod() === 'MOVE') {
             $path = $request->getPath();
             if ($this->server->tree->nodeExists($path)) {
-                list($calendarPath) = \Sabre\Uri\split($path);
-                if ($this->currentUserHasDelegateWriteAccess($calendarPath)) {
+                list($collectionPath) = \Sabre\Uri\split($path);
+                if ($this->currentUserHasDelegateWriteAccess($collectionPath)) {
                     // Delegate has write rights — skip {DAV:}read check on source.
                     return;
                 }
@@ -46,7 +50,7 @@ class MoveWithDelegationPlugin extends \Sabre\DAVACL\Plugin {
     }
 
     /**
-     * Overrides beforeUnbind to allow a MOVE from a delegated calendar.
+     * Overrides beforeUnbind to allow a MOVE from a delegated collection.
      * DELETE operations still go through normal ACL checks (parent call).
      */
     function beforeUnbind($uri) {
@@ -60,7 +64,7 @@ class MoveWithDelegationPlugin extends \Sabre\DAVACL\Plugin {
     }
 
     /**
-     * Overrides beforeBind to allow a MOVE to a delegated calendar.
+     * Overrides beforeBind to allow a MOVE to a delegated collection.
      * PUT operations still go through normal ACL checks (parent call).
      */
     function beforeBind($uri) {
@@ -74,17 +78,19 @@ class MoveWithDelegationPlugin extends \Sabre\DAVACL\Plugin {
     }
 
     /**
-     * Returns true when the current principal is a sharee of the calendar
-     * collection at $calendarPath with READWRITE or ADMINISTRATION access.
+     * Returns true when the current principal is a sharee of the collection
+     * at $collectionPath with READWRITE or ADMINISTRATION access.
+     * Works for both CalDAV calendars (SharedCalendar) and CardDAV address
+     * books (AddressBook) via the common ISharedNode interface.
      */
-    private function currentUserHasDelegateWriteAccess($calendarPath) {
+    private function currentUserHasDelegateWriteAccess($collectionPath) {
         try {
-            $node = $this->server->tree->getNodeForPath($calendarPath);
+            $node = $this->server->tree->getNodeForPath($collectionPath);
         } catch (\Sabre\DAV\Exception\NotFound $e) {
             return false;
         }
 
-        if (!($node instanceof SharedCalendar)) {
+        if (!($node instanceof \Sabre\DAV\Sharing\ISharedNode)) {
             return false;
         }
 

@@ -398,6 +398,8 @@ END:VCALENDAR'
         $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
         $this->server->addPlugin($aclPlugin);
 
+        $this->server->addPlugin(new \ESN\CalDAV\MoveWithDelegationPlugin());
+
         $this->oldCal = $this->oldCaldavCalendar;
         $this->oldCal['id'] = $this->caldavBackend->createCalendar($this->oldCal['principaluri'], $this->oldCal['uri'], $this->oldCal);
         $this->caldavBackend->createCalendarObject($this->oldCal['id'], 'event1.ics', $this->caldavCalendarObjects['event1.ics']);

@@ -99,82 +99,8 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
                 break;
         }
 
-        // When this is the owner's view of a shared calendar, add ACEs for all
-        // sharees so they can perform operations on the calendar via the owner's
-        // path (e.g. MOVE events to/from a delegated calendar).
-        if ($this->getShareAccess() == SPlugin::ACCESS_NOTSHARED
-            || $this->getShareAccess() == SPlugin::ACCESS_SHAREDOWNER) {
-            foreach ($this->getInvites() as $sharee) {
-                if (empty($sharee->principal)
-                    || in_array($sharee->access, [
-                        SPlugin::ACCESS_SHAREDOWNER,
-                        SPlugin::ACCESS_NOTSHARED,
-                        SPlugin::ACCESS_NOACCESS,
-                    ])) {
-                    continue;
-                }
-                $acl = array_merge($acl, $this->getShareeCalendarACEs($sharee->principal, $sharee->access));
-            }
-        }
-
         $acl = $this->updateAclWithPublicRight($acl);
 
-        return $acl;
-    }
-
-    /**
-     * Returns ACEs for a sharee on the calendar collection itself.
-     *
-     * @param string $principal
-     * @param int    $access
-     * @return array
-     */
-    private function getShareeCalendarACEs($principal, $access) {
-        $acl = [];
-        switch ((int) $access) {
-            case SPlugin::ACCESS_ADMINISTRATION:
-                $acl[] = ['privilege' => '{DAV:}read-acl', 'principal' => $principal, 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}read-acl', 'principal' => $principal . '/calendar-proxy-write', 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}share', 'principal' => $principal, 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}share', 'principal' => $principal . '/calendar-proxy-write', 'protected' => true];
-                // No break intentional!
-            case SPlugin::ACCESS_READWRITE:
-                $acl[] = ['privilege' => '{DAV:}write', 'principal' => $principal, 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}write', 'principal' => $principal . '/calendar-proxy-write', 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}write-properties', 'principal' => $principal, 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}write-properties', 'principal' => $principal . '/calendar-proxy-write', 'protected' => true];
-                // No break intentional!
-            case SPlugin::ACCESS_READ:
-                $acl[] = ['privilege' => '{DAV:}read', 'principal' => $principal, 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}read', 'principal' => $principal . '/calendar-proxy-read', 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}read', 'principal' => $principal . '/calendar-proxy-write', 'protected' => true];
-                break;
-        }
-        return $acl;
-    }
-
-    /**
-     * Returns ACEs for a sharee on calendar objects (events) inside a calendar.
-     *
-     * @param string $principal
-     * @param int    $access
-     * @return array
-     */
-    private function getShareeCalendarObjectACEs($principal, $access) {
-        $acl = [];
-        switch ((int) $access) {
-            case SPlugin::ACCESS_ADMINISTRATION:
-                // No break intentional — same write privileges as READWRITE for child objects
-            case SPlugin::ACCESS_READWRITE:
-                $acl[] = ['privilege' => '{DAV:}write', 'principal' => $principal, 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}write', 'principal' => $principal . '/calendar-proxy-write', 'protected' => true];
-                // No break intentional!
-            case SPlugin::ACCESS_READ:
-                $acl[] = ['privilege' => '{DAV:}read', 'principal' => $principal, 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}read', 'principal' => $principal . '/calendar-proxy-write', 'protected' => true];
-                $acl[] = ['privilege' => '{DAV:}read', 'principal' => $principal . '/calendar-proxy-read', 'protected' => true];
-                break;
-        }
         return $acl;
     }
 
@@ -250,24 +176,6 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
                 'principal' => $this->calendarInfo['principaluri'] . '/calendar-proxy-read',
                 'protected' => true,
             ];
-        }
-
-        // When this is the owner's view of a shared calendar, add child ACEs for
-        // all sharees so they can read/write events via the owner's path
-        // (e.g. MOVE events to/from a delegated calendar).
-        if ($this->getShareAccess() == SPlugin::ACCESS_NOTSHARED
-            || $this->getShareAccess() == SPlugin::ACCESS_SHAREDOWNER) {
-            foreach ($this->getInvites() as $sharee) {
-                if (empty($sharee->principal)
-                    || in_array($sharee->access, [
-                        SPlugin::ACCESS_SHAREDOWNER,
-                        SPlugin::ACCESS_NOTSHARED,
-                        SPlugin::ACCESS_NOACCESS,
-                    ])) {
-                    continue;
-                }
-                $childACL = array_merge($childACL, $this->getShareeCalendarObjectACEs($sharee->principal, $sharee->access));
-            }
         }
 
         $acl = $this->getACL();

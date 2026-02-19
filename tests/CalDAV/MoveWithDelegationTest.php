@@ -107,4 +107,45 @@ class MoveWithDelegationTest extends \ESN\DAV\ServerMock {
             'Bob (delegate) should be able to MOVE an event from Camille\'s delegated calendar into his own calendar'
         );
     }
+
+    /**
+     * Read-only delegate must NOT be able to MOVE events to the delegated calendar.
+     * Should return 403 Forbidden.
+     */
+    function testMoveEventToDelegatedCalendarFailsWithReadOnlyRight() {
+        // Re-share delegatedCal1 with user2 as READ-only
+        $sharee = new \Sabre\DAV\Xml\Element\Sharee([
+            'href'        => 'mailto:johndoe@example.org',
+            'access'      => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+            'principal'   => 'principals/users/54b64eadf6d7d8e41d263e0e',
+            'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+        ]);
+        $this->caldavBackend->updateInvites($this->delegatedCal['id'], [$sharee]);
+
+        // Create an event in user2's own calendar
+        $this->caldavBackend->createCalendarObject(
+            $this->calUser2['id'],
+            'move-event.ics',
+            $this->simpleEventData
+        );
+
+        // Switch auth to user2 (Bob, read-only delegate)
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0e');
+
+        // MOVE user2's event to user1's delegated calendar (read-only) — must fail
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'   => 'MOVE',
+            'REQUEST_URI'      => '/calendars/54b64eadf6d7d8e41d263e0e/calendar2/move-event.ics',
+            'HTTP_DESTINATION' => '/calendars/54b64eadf6d7d8e41d263e0f/delegatedCal1/move-event.ics',
+            'HTTP_OVERWRITE'   => 'T',
+        ]);
+
+        $response = $this->request($request);
+
+        $this->assertEquals(
+            403,
+            $response->getStatus(),
+            'Read-only delegate must NOT be able to MOVE events into the owner\'s calendar'
+        );
+    }
 }

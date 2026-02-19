@@ -412,6 +412,146 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($sharedCalendarESN->getOwner(), 'principals/user/54b64eadf6d7d8e41d263e0f');
     }
 
+    function testGetACLOwnerViewWithReadWriteSharee() {
+        $ownerPrincipal = 'principals/owner/54b64eadf6d7d8e41d263e0f';
+        $shareePrincipal = 'principals/sharee/54b64eadf6d7d8e41d263e0e';
+
+        $props = [
+            'id'           => 1,
+            'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
+            'principaluri' => $ownerPrincipal,
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+
+        $backend->updateInvites(1, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'      => 'mailto:sharee@example.org',
+                'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+                'principal' => $shareePrincipal,
+            ])
+        ]);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $acl = $sharedCalendar->getACL();
+
+        $shareeWriteACE = null;
+        $shareeReadACE  = null;
+        foreach ($acl as $ace) {
+            if ($ace['principal'] === $shareePrincipal) {
+                if ($ace['privilege'] === '{DAV:}write') {
+                    $shareeWriteACE = $ace;
+                }
+                if ($ace['privilege'] === '{DAV:}read') {
+                    $shareeReadACE = $ace;
+                }
+            }
+        }
+
+        $this->assertNotNull($shareeWriteACE, 'Sharee should have {DAV:}write on the owner calendar ACL');
+        $this->assertNotNull($shareeReadACE, 'Sharee should have {DAV:}read on the owner calendar ACL');
+    }
+
+    function testGetChildACLOwnerViewWithReadWriteSharee() {
+        $ownerPrincipal = 'principals/owner/54b64eadf6d7d8e41d263e0f';
+        $shareePrincipal = 'principals/sharee/54b64eadf6d7d8e41d263e0e';
+
+        $props = [
+            'id'           => 1,
+            'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
+            'principaluri' => $ownerPrincipal,
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+
+        $backend->updateInvites(1, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'      => 'mailto:sharee@example.org',
+                'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+                'principal' => $shareePrincipal,
+            ])
+        ]);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $childACL = $sharedCalendar->getChildACL();
+
+        $shareeWriteACE = null;
+        $shareeReadACE  = null;
+        foreach ($childACL as $ace) {
+            if ($ace['principal'] === $shareePrincipal) {
+                if ($ace['privilege'] === '{DAV:}write') {
+                    $shareeWriteACE = $ace;
+                }
+                if ($ace['privilege'] === '{DAV:}read') {
+                    $shareeReadACE = $ace;
+                }
+            }
+        }
+
+        $this->assertNotNull($shareeWriteACE, 'Sharee should have {DAV:}write on child objects of the owner calendar');
+        $this->assertNotNull($shareeReadACE, 'Sharee should have {DAV:}read on child objects of the owner calendar');
+    }
+
+    function testGetACLOwnerViewWithReadOnlySharee() {
+        $ownerPrincipal = 'principals/owner/54b64eadf6d7d8e41d263e0f';
+        $shareePrincipal = 'principals/sharee/54b64eadf6d7d8e41d263e0e';
+
+        $props = [
+            'id'           => 1,
+            'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
+            'principaluri' => $ownerPrincipal,
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+
+        $backend->updateInvites(1, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'      => 'mailto:sharee@example.org',
+                'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+                'principal' => $shareePrincipal,
+            ])
+        ]);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $acl = $sharedCalendar->getACL();
+
+        $shareeWriteACE = null;
+        $shareeReadACE  = null;
+        foreach ($acl as $ace) {
+            if ($ace['principal'] === $shareePrincipal) {
+                if ($ace['privilege'] === '{DAV:}write') {
+                    $shareeWriteACE = $ace;
+                }
+                if ($ace['privilege'] === '{DAV:}read') {
+                    $shareeReadACE = $ace;
+                }
+            }
+        }
+
+        $this->assertNull($shareeWriteACE, 'Read-only sharee should NOT have {DAV:}write on the owner calendar ACL');
+        $this->assertNotNull($shareeReadACE, 'Read-only sharee should have {DAV:}read on the owner calendar ACL');
+    }
+
+    function testGetACLOwnerViewWithNoSharees() {
+        $ownerPrincipal = 'principals/owner/54b64eadf6d7d8e41d263e0f';
+
+        $props = [
+            'id'           => 1,
+            'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
+            'principaluri' => $ownerPrincipal,
+        ];
+
+        $backend = new SimpleBackendMock([$props], [], []);
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+        $sabreCalendar  = new \Sabre\CalDAV\SharedCalendar($backend, $props);
+
+        // No extra sharees — ACLs should be identical
+        $this->assertEquals($sabreCalendar->getACL(), $sharedCalendar->getACL());
+    }
+
 }
 
 class SimpleBackendMock extends \Sabre\CalDAV\Backend\MockSharing {

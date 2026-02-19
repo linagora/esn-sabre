@@ -279,6 +279,20 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertTrue(true); // Explicit assertion to avoid risky test warning
     }
 
+    function testAfterMoveWithNonCalDavPathReturnsWithoutCrashing() {
+        $plugin = $this->getPlugin();
+
+        // A CardDAV vCard path does not match the CalDAV event regex,
+        // so splitEventPath returns [null, null]. afterMove should handle
+        // this gracefully and return true without calling getNodeForPath(null).
+        $result = $plugin->afterMove(
+            'addressbooks/54b64eadf6d7d8e41d263e0f/book1/card.vcf',
+            'addressbooks/54b64eadf6d7d8e41d263e0e/book2/card.vcf'
+        );
+
+        $this->assertTrue($result);
+    }
+
     function testBuildData() {
         $plugin = $this->getPlugin();
         $data = $plugin->buildData([

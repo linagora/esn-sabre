@@ -99,10 +99,14 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     function afterMove($path, $destinationPath) {
-        $eventNode = $this->server->tree->getNodeForPath($destinationPath);
         $eventPath = '/' . $destinationPath;
 
         list($calendarNodePath, $eventURI) = Utils::splitEventPath($eventPath);
+        if (!$calendarNodePath || !$eventURI) {
+            return true; // Not a CalDAV event path, skip notification
+        }
+
+        $eventNode = $this->server->tree->getNodeForPath($destinationPath);
         $calendar = $this->server->tree->getNodeForPath($calendarNodePath);
 
         $parts = explode('/', $calendarNodePath);

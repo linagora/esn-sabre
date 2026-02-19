@@ -51,7 +51,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function afterMethodPropfind($request, $response) {
-        if(!$this->checkUserAgent($request) && !$this->acceptJson()) {
+        if($this->acceptJson()) {
             return true;
         }
 
@@ -66,7 +66,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
             foreach($xmlResponses as $index => $xmlResponse) {
                 $responseProps = $xmlResponse->getResponseProperties();
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
-                
+
                 if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
                     $sourceHref = isset($responseProps[200]['{http://calendarserver.org/ns/}source']) ?
                                     $responseProps[200]['{http://calendarserver.org/ns/}source']->getHref()
@@ -77,12 +77,16 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                     $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
-                    $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
-                                    $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
-                                    "Agenda - " . $userDisplayName;
+                    $displayName = $responseProps[200]['{DAV:}displayname'] ?? null;
+                    if (empty($displayName) || $displayName === '#default') {
+                        $responseProps[200]['{DAV:}displayname'] = $userDisplayName;
+                    } else {
+                        $responseProps[200]['{DAV:}displayname'] = $displayName . " - " . $userDisplayName;
+                    }
                 } else {
                     if (isset($responseProps[200]['{DAV:}displayname']) && $responseProps[200]['{DAV:}displayname'] === '#default') {
-                        $responseProps[200]['{DAV:}displayname'] = "My agenda";
+                        $currentUserPrincipal = $this->server->tree->getNodeForPath($this->currentUser);
+                        $responseProps[200]['{DAV:}displayname'] = $currentUserPrincipal->getDisplayName() ?: current($currentUserPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
                     }
                 }
 
@@ -93,7 +97,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
             $service = new \Sabre\Xml\Service();
             $data = $service->write('{DAV:}multistatus', $xml);
-            
+
             $response->setBody($data);
         }
     }

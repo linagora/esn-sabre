@@ -51,7 +51,13 @@ class Esn extends Mongo {
     function getCalendarsForUser($principalUri) {
         $calendars = parent::getCalendarsForUser($principalUri);
 
-        if (count($calendars) == 0) {
+        $ownCalendars = array_filter($calendars, function ($cal) {
+            $access = isset($cal['share-access']) ? (int) $cal['share-access'] : \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED;
+            return $access === \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED
+                || $access === \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER;
+        });
+
+        if (count($ownCalendars) == 0) {
             $properties = [];
             $principalExploded = explode('/', $principalUri);
 

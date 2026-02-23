@@ -15,7 +15,7 @@
 #
 
 FROM debian:trixie-slim
-LABEL maintainer Linagora Folks <openpaas@linagora.com>
+LABEL maintainer="Linagora Folks <openpaas@linagora.com>"
 
 ENV PHPVERSION=8.4
 
@@ -52,7 +52,7 @@ RUN apt-get update && \
     pkg-config \
     git && \
   # Compile MongoDB extension
-  pecl install mongodb-2.1.4 && \
+  (pecl install mongodb-2.2.0 || pecl install mongodb) && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini && \
   # Remove build tools to reduce image size

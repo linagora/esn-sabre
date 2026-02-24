@@ -210,8 +210,18 @@ class CalendarHandler {
 
             foreach($invites as $user) {
                 if ($user->access == \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER) {
+                    // Skip if principal is null or malformed
+                    if ($user->principal === null) {
+                        continue;
+                    }
                     $uriExploded = explode('/', $user->principal);
+                    if (count($uriExploded) < 3) {
+                        continue;
+                    }
                     $sourceCalendarOwner = $uriExploded[2];
+                    if ($sourceCalendarOwner === null || $sourceCalendarOwner === '') {
+                        continue;
+                    }
                     $ownerHomePath = '/calendars/' . $sourceCalendarOwner;
 
                     $myNode = $this->server->tree->getNodeForPath($ownerHomePath);
@@ -295,9 +305,19 @@ class CalendarHandler {
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
             $sourceHref = $subprops['{http://calendarserver.org/ns/}source']->getHref();
 
+            // Skip if source href is null or empty
+            if ($sourceHref === null || $sourceHref === '') {
+                return null;
+            }
+
             // Normalize href: extract path and trim leading slashes
             $path = parse_url($sourceHref, PHP_URL_PATH);
             $sourcePath = ltrim($path ?: $sourceHref, '/');
+
+            // Skip if source path is empty after normalization
+            if ($sourcePath === '') {
+                return null;
+            }
 
             if (!$this->server->tree->nodeExists($sourcePath)) {
                 return null;

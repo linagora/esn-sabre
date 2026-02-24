@@ -102,9 +102,19 @@ class SubscriptionHandler {
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
             $sourceHref = $subprops['{http://calendarserver.org/ns/}source']->getHref();
 
+            // Skip if source href is null or empty
+            if ($sourceHref === null || $sourceHref === '') {
+                return [404, null];
+            }
+
             // Normalize href: extract path and trim leading slashes
             $path = parse_url($sourceHref, PHP_URL_PATH);
             $sourcePath = ltrim($path ?: $sourceHref, '/');
+
+            // Skip if source path is empty after normalization
+            if ($sourcePath === '') {
+                return [404, null];
+            }
 
             if (!$this->server->tree->nodeExists($sourcePath)) {
                 return [404, null];

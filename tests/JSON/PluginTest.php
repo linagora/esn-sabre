@@ -791,6 +791,51 @@ END:VCALENDAR
         $this->assertEquals($calendars[0]->{'calendarserver:delegatedsource'}, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
     }
 
+    /**
+     * Test that listing calendars with a subscription that has an empty source href
+     * does not crash with TypeError (null passed to getNodeForPath).
+     *
+     * Regression test for: Sabre\Uri\split(): Argument #1 ($path) must be of type string, null given
+     */
+    function testFilteredCalendarListWithEmptySubscriptionSourceDoesNotCrash() {
+        // Create a subscription with an empty source href
+        $brokenSubscription = [
+            '{DAV:}displayname' => 'Broken Subscription',
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href(''),
+            '{http://apple.com/ns/ical/}calendar-color' => '#FF0000FF',
+            '{http://apple.com/ns/ical/}calendar-order' => '99',
+            'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+            'uri' => 'broken-subscription'
+        ];
+        $this->caldavBackend->createSubscription(
+            $brokenSubscription['principaluri'],
+            $brokenSubscription['uri'],
+            $brokenSubscription
+        );
+
+        // This request should NOT throw a TypeError
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json?sharedPublicSubscription=true',
+        ));
+
+        $response = $this->request($request);
+
+        // Should return 200, not crash with TypeError
+        $this->assertEquals(200, $response->status);
+
+        // The broken subscription should be excluded from results (source not found)
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'} ?? [];
+
+        // Should only contain the valid subscription, not the broken one
+        foreach ($calendars as $calendar) {
+            $this->assertNotEquals('Broken Subscription', $calendar->{'dav:name'} ?? '');
+        }
+    }
+
     function testGetCalendarConfiguration() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',

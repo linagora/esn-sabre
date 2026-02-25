@@ -253,7 +253,10 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                 }
             }
 
-            return false;
+            // Business rule: for publicly-created events, organizer-chair
+            // moving from NEEDS-ACTION/DECLINED to ACCEPTED should trigger
+            // notification flow even if generic "significant change" is false.
+            return PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($formerEvent, $currentEvent);
         } catch (\Exception $e) {
             // If we can't parse, assume no changes
             return false;
@@ -373,7 +376,8 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
             // Create message if instance have been created or modified
             if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
-                $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]))) {
+                $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]) ||
+                PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($formerEvent, $scheduledEvent))) {
 
                 // Check if recipient was attending this occurrence before
                 $isNewOccurrenceException = !isset($previousEventVEvents[$recurrenceId]);

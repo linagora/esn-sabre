@@ -48,53 +48,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     }
 
-    private function canonicalizeCalendarAddress($value): string {
-        $value = strtolower(trim((string) $value));
-
-        return strncmp($value, 'mailto:', 7) === 0
-            ? substr($value, 7)
-            : $value;
-    }
-
-    private function isPubliclyCreatedAndNotAcceptedByChairOrganizer(VCalendar $vCal): bool {
-        $vevent = $vCal->VEVENT;
-        if ($vevent === null) {
-            return false;
-        }
-
-        $publiclyCreated = isset($vevent->{'X-PUBLICLY-CREATED'})
-            ? filter_var(trim((string) $vevent->{'X-PUBLICLY-CREATED'}), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
-            : null;
-
-        if ($publiclyCreated !== true) {
-            return false;
-        }
-
-        $organizer = $vevent->ORGANIZER;
-        if ($organizer === null) {
-            return false;
-        }
-
-        $organizerEmail = $this->canonicalizeCalendarAddress($organizer);
-        foreach ($vevent->select('ATTENDEE') as $attendee) {
-            if ($this->canonicalizeCalendarAddress($attendee) !== $organizerEmail) {
-                continue;
-            }
-
-            $role = strtoupper((string) ($attendee['ROLE'] ?? ''));
-            if ($role !== 'CHAIR') {
-                continue;
-            }
-
-            $partstat = strtoupper((string) ($attendee['PARTSTAT'] ?? ''));
-            $partstat = str_replace('_', '-', $partstat);
-
-            return in_array($partstat, ['NEEDS-ACTION', 'DECLINED'], true);
-        }
-
-        return false;
-    }
-
     /**
      * Used to perform healthchecks on the Message before delivery.
      *
@@ -123,7 +76,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        if ($this->isPubliclyCreatedAndNotAcceptedByChairOrganizer($vCal)) {
+        if (PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($vCal)) {
             return;
         }
 

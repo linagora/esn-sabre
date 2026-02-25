@@ -9,17 +9,12 @@ use Sabre\VObject\Reader;
 #[\AllowDynamicProperties]
 class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     private $plugin;
-    private $publiclyCreatedCheckMethod;
 
     function setUp(): void {
         $server = new Server();
 
         $this->plugin = new Plugin();
         $this->plugin->initialize($server);
-
-        $reflection = new \ReflectionClass($this->plugin);
-        $this->publiclyCreatedCheckMethod = $reflection->getMethod('isPubliclyCreatedAndNotAcceptedByChairOrganizer');
-        $this->publiclyCreatedCheckMethod->setAccessible(true);
     }
 
     function testDeliverShouldSetSequenceTo0WhenNotPresent() {
@@ -49,7 +44,7 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     function testShouldDetectPubliclyCreatedWhenChairOrganizerNeedsAction() {
         $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('NEEDS-ACTION', true));
 
-        $shouldSkip = $this->publiclyCreatedCheckMethod->invoke($this->plugin, $vcalendar);
+        $shouldSkip = PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($vcalendar);
 
         $this->assertTrue($shouldSkip);
     }
@@ -57,7 +52,7 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     function testShouldNotSkipWhenChairOrganizerAcceptedEvenIfPubliclyCreated() {
         $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('ACCEPTED', true));
 
-        $shouldSkip = $this->publiclyCreatedCheckMethod->invoke($this->plugin, $vcalendar);
+        $shouldSkip = PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($vcalendar);
 
         $this->assertFalse($shouldSkip);
     }

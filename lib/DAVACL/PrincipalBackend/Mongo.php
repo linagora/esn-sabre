@@ -134,26 +134,20 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         $projection = ['_id' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1];
-        $query = ['accounts.emails' => strtolower($email)];
+
+        // Use $or operator to check all email fields in a single query
+        // This replaces 3 sequential queries with 1 query
+        $query = [
+            '$or' => [
+                ['accounts.emails' => strtolower($email)],
+                ['preferredEmail' => strtolower($email)],
+                ['emails' => strtolower($email)]
+            ]
+        ];
 
         $user = $this->db->users->findOne($query, ['projection' => $projection]);
 
-        if (!$user) {
-            // Try alternative query patterns
-            $altQuery = ['preferredEmail' => strtolower($email)];
-            $user = $this->db->users->findOne($altQuery, ['projection' => $projection]);
-
-            if (!$user) {
-                $altQuery2 = ['emails' => strtolower($email)];
-                $user = $this->db->users->findOne($altQuery2, ['projection' => $projection]);
-
-                if (!$user) {
-                    return null;
-                }
-            }
-        }
-
-        return $user['_id'];
+        return $user ? $user['_id'] : null;
     }
 
     private function objectToPrincipal($obj, $type) {

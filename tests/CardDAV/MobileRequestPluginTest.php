@@ -39,7 +39,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_METHOD'    => 'PROPFIND',
             'HTTP_CONTENT_TYPE' => 'application/xml',
             'HTTP_ACCEPT'       => 'application/xml',
-            'HTTP_USER_AGENT'   => 'DAVdroid/1.10.1.1-ose (2/13/18; dav4android; okhttp3) Android/8.1.0',
+
             'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/',
         ));
 
@@ -70,9 +70,8 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             }
         }
 
-        // My default address books
-        $this->assertContains('My Collected Contacts', $displayNames);
-        $this->assertContains('My Contacts', $displayNames);
+        // My default address books should display user's principal display name
+        $this->assertContains('Roberto Carlos', $displayNames);
 
         // Normal address book
         $this->assertContains('Book 1', $displayNames);
@@ -115,7 +114,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_METHOD'    => 'PROPFIND',
             'HTTP_CONTENT_TYPE' => 'application/xml',
             'HTTP_ACCEPT'       => 'application/xml',
-            'HTTP_USER_AGENT'   => 'DAVdroid/1.10.1.1-ose (2/13/18; dav4android; okhttp3) Android/8.1.0',
+
             'REQUEST_URI'       => '/addressbooks/' . $USER_ID,
         ));
 
@@ -148,9 +147,8 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
 
         $this->assertCount(2, $displayNames);
 
-        // My default address books
-        $this->assertContains('My Collected Contacts', $displayNames);
-        $this->assertContains('My Contacts', $displayNames);
+        // My default address books should display user's principal display name
+        $this->assertContains('foo bar', $displayNames);
     }
 
     function testAfterPropFindWithGroupAddressBookWhenBookIdIsOwnerId() {
@@ -193,7 +191,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_METHOD'    => 'PROPFIND',
             'HTTP_CONTENT_TYPE' => 'application/xml',
             'HTTP_ACCEPT'       => 'application/xml',
-            'HTTP_USER_AGENT'   => 'DAVdroid/1.10.1.1-ose (2/13/18; dav4android; okhttp3) Android/8.1.0',
+
             'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID,
         ));
 
@@ -269,7 +267,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_METHOD'    => 'PROPFIND',
             'HTTP_CONTENT_TYPE' => 'application/xml',
             'HTTP_ACCEPT'       => 'application/xml',
-            'HTTP_USER_AGENT'   => 'DAVdroid/1.10.1.1-ose (2/13/18; dav4android; okhttp3) Android/8.1.0',
+
             'REQUEST_URI'       => '/addressbooks/' . $DOMAIN_ID,
         ));
 

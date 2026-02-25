@@ -836,6 +836,54 @@ END:VCALENDAR
         }
     }
 
+    /**
+     * Test that listing calendars with a subscription that has a path ending with //
+     * does not crash with TypeError.
+     *
+     * When a path ends with //, Sabre\Uri\split() returns [NULL, NULL],
+     * which causes getNodeForPath(null) to be called, triggering the error:
+     * Sabre\Uri\split(): Argument #1 ($path) must be of type string, null given
+     *
+     * Regression test for issue #278
+     */
+    function testFilteredCalendarListWithTrailingDoubleSlashDoesNotCrash() {
+        // Create a subscription with a path ending in //
+        $brokenSubscription = [
+            '{DAV:}displayname' => 'Trailing Slash Subscription',
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('/calendars/user/cal//'),
+            '{http://apple.com/ns/ical/}calendar-color' => '#FF0000FF',
+            '{http://apple.com/ns/ical/}calendar-order' => '99',
+            'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+            'uri' => 'trailing-slash-subscription'
+        ];
+        $this->caldavBackend->createSubscription(
+            $brokenSubscription['principaluri'],
+            $brokenSubscription['uri'],
+            $brokenSubscription
+        );
+
+        // This request should NOT throw a TypeError
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json?sharedPublicSubscription=true',
+        ));
+
+        $response = $this->request($request);
+
+        // Should return 200, not crash with TypeError
+        $this->assertEquals(200, $response->status);
+
+        // The broken subscription should be excluded from results
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'} ?? [];
+
+        foreach ($calendars as $calendar) {
+            $this->assertNotEquals('Trailing Slash Subscription', $calendar->{'dav:name'} ?? '');
+        }
+    }
+
     function testGetCalendarConfiguration() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',

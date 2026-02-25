@@ -310,9 +310,19 @@ class CalendarHandler {
                 return null;
             }
 
-            // Normalize href: extract path and trim leading slashes
+            // Normalize href: extract path component
+            // parse_url can return null (component absent) or false (malformed URL)
             $path = parse_url($sourceHref, PHP_URL_PATH);
-            $sourcePath = ltrim($path ?: $sourceHref, '/');
+
+            // Skip if path extraction failed or returned null/false
+            if (!is_string($path) || $path === '') {
+                return null;
+            }
+
+            // Normalize: remove leading slashes, collapse multiple slashes, remove trailing slashes
+            $sourcePath = ltrim($path, '/');
+            $sourcePath = preg_replace('#/+#', '/', $sourcePath);
+            $sourcePath = rtrim($sourcePath, '/');
 
             // Skip if source path is empty after normalization
             if ($sourcePath === '') {

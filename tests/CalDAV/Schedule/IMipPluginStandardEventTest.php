@@ -430,4 +430,84 @@ class IMipPluginStandardEventTest extends IMipPluginTestBase {
         $this->assertStringContainsString('mailto:', $itipMessage->sender, 'Sender should be a mailto URI');
     }
 
+    function testShouldPublishWhenPubliclyCreatedChairMovesFromNeedsActionToAccepted() {
+        $plugin = $this->getPlugin();
+        $plugin->setNewEvent(false);
+
+        $uid = 'publicly-created-transition-accepted';
+        $plugin->setFormerEventICal($this->newPubliclyCreatedEvent($uid, 'NEEDS-ACTION'));
+
+        $itipMessage = $this->newPubliclyCreatedRequestMessage($uid, 'ACCEPTED');
+
+        $this->amqpPublisher->expects($this->once())
+            ->method('publish')
+            ->with(IMipPlugin::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($this->getMessageForPublisher($itipMessage, false)));
+
+        $plugin->schedule($itipMessage);
+        $this->assertEquals('1.1', $itipMessage->scheduleStatus);
+    }
+
+    function testShouldNotPublishWhenPubliclyCreatedChairStaysNeedsAction() {
+        $plugin = $this->getPlugin();
+        $plugin->setNewEvent(false);
+
+        $uid = 'publicly-created-no-transition';
+        $plugin->setFormerEventICal($this->newPubliclyCreatedEvent($uid, 'NEEDS-ACTION'));
+
+        $itipMessage = $this->newPubliclyCreatedRequestMessage($uid, 'NEEDS-ACTION');
+
+        $this->amqpPublisher->expects($this->never())
+            ->method('publish');
+
+        $plugin->schedule($itipMessage);
+        $this->assertEquals('1.1', $itipMessage->scheduleStatus);
+    }
+
+    private function newPubliclyCreatedRequestMessage(string $uid, string $organizerChairPartstat): \Sabre\VObject\ITip\Message {
+        $itipMessage = new \Sabre\VObject\ITip\Message();
+        $itipMessage->uid = $uid;
+        $itipMessage->component = 'VEVENT';
+        $itipMessage->method = 'REQUEST';
+        $itipMessage->sequence = 0;
+        $itipMessage->sender = 'mailto:' . $this->user1Email;
+        $itipMessage->recipient = 'mailto:' . $this->user2Email;
+        $itipMessage->scheduleStatus = null;
+        $itipMessage->significantChange = true;
+        $itipMessage->message = Reader::read($this->newPubliclyCreatedEvent($uid, $organizerChairPartstat, true));
+
+        return $itipMessage;
+    }
+
+    private function newPubliclyCreatedEvent(string $uid, string $organizerChairPartstat, bool $withMethod = false): string {
+        $lines = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Sabre//Sabre VObject 4.1.3//EN',
+            'CALSCALE:GREGORIAN'
+        ];
+
+        if ($withMethod) {
+            $lines[] = 'METHOD:REQUEST';
+        }
+
+        $lines = array_merge($lines, [
+            'BEGIN:VEVENT',
+            'UID:' . $uid,
+            'DTSTART:' . $this->afterCurrentDate . 'T170000Z',
+            'DTEND:' . $this->afterCurrentDate . 'T173000Z',
+            'SUMMARY:Publicly created event',
+            'X-PUBLICLY-CREATED:true',
+            'ORGANIZER:mailto:' . $this->user1Email,
+            'ATTENDEE;PARTSTAT=' . $organizerChairPartstat . ';ROLE=CHAIR:mailto:' . $this->user1Email,
+            'ATTENDEE;PARTSTAT=NEEDS-ACTION;ROLE=REQ-PARTICIPANT:mailto:' . $this->user2Email,
+            'DTSTAMP:20201029T145516Z',
+            'SEQUENCE:0',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        return join("\r\n", $lines);
+    }
+
 }

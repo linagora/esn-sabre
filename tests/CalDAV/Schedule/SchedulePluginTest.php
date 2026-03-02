@@ -62,6 +62,15 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertFalse($shouldSkip);
     }
 
+    function testDeliverShouldNotCrashWhenRecipientIsNull() {
+        $message = $this->newItipMessage('1');
+        $message->recipient = null;
+
+        $this->plugin->deliver($message);
+
+        $this->assertSame('', $message->recipient);
+    }
+
     private function newItipMessage($sequence) {
         $message = new Message();
         $ical = "BEGIN:VCALENDAR

@@ -27,6 +27,7 @@ use
  */
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
+    private const MASTER_EVENT = 'master';
 
     private $logger;
     private $principalBackend;
@@ -46,53 +47,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $scheduleReply = $request->getHeader('Schedule-Reply');
         return $scheduleReply!=='F';
 
-    }
-
-    private function canonicalizeCalendarAddress($value): string {
-        $value = strtolower(trim((string) $value));
-
-        return strncmp($value, 'mailto:', 7) === 0
-            ? substr($value, 7)
-            : $value;
-    }
-
-    private function isPubliclyCreatedAndNotAcceptedByChairOrganizer(VCalendar $vCal): bool {
-        $vevent = $vCal->VEVENT;
-        if ($vevent === null) {
-            return false;
-        }
-
-        $publiclyCreated = isset($vevent->{'X-PUBLICLY-CREATED'})
-            ? filter_var(trim((string) $vevent->{'X-PUBLICLY-CREATED'}), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
-            : null;
-
-        if ($publiclyCreated !== true) {
-            return false;
-        }
-
-        $organizer = $vevent->ORGANIZER;
-        if ($organizer === null) {
-            return false;
-        }
-
-        $organizerEmail = $this->canonicalizeCalendarAddress($organizer);
-        foreach ($vevent->select('ATTENDEE') as $attendee) {
-            if ($this->canonicalizeCalendarAddress($attendee) !== $organizerEmail) {
-                continue;
-            }
-
-            $role = strtoupper((string) ($attendee['ROLE'] ?? ''));
-            if ($role !== 'CHAIR') {
-                continue;
-            }
-
-            $partstat = strtoupper((string) ($attendee['PARTSTAT'] ?? ''));
-            $partstat = str_replace('_', '-', $partstat);
-
-            return in_array($partstat, ['NEEDS-ACTION', 'DECLINED'], true);
-        }
-
-        return false;
     }
 
     /**
@@ -127,7 +81,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        if ($this->isPubliclyCreatedAndNotAcceptedByChairOrganizer($vCal)) {
+        if (PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($vCal)) {
             return;
         }
 
@@ -200,7 +154,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         // Determine the recurrence ID of this message
         $recurrenceId = isset($messageEvent->{'RECURRENCE-ID'})
             ? $messageEvent->{'RECURRENCE-ID'}->getValue()
-            : 'master';
+            : self::MASTER_EVENT;
 
         // Find the corresponding VEVENTs in old and new objects
         $oldVEvent = null;
@@ -209,7 +163,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         foreach ($oldObject->VEVENT as $vevent) {
             $oldRecurId = isset($vevent->{'RECURRENCE-ID'})
                 ? $vevent->{'RECURRENCE-ID'}->getValue()
-                : 'master';
+                : self::MASTER_EVENT;
             if ($oldRecurId === $recurrenceId) {
                 $oldVEvent = $vevent;
                 break;
@@ -219,7 +173,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         foreach ($newObject->VEVENT as $vevent) {
             $newRecurId = isset($vevent->{'RECURRENCE-ID'})
                 ? $vevent->{'RECURRENCE-ID'}->getValue()
-                : 'master';
+                : self::MASTER_EVENT;
             if ($newRecurId === $recurrenceId) {
                 $newVEvent = $vevent;
                 break;
@@ -228,6 +182,12 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         // If this is a new occurrence (wasn't in oldObject), don't skip
         if (!$oldVEvent || !$newVEvent) {
+            return false;
+        }
+
+        // Public Agenda rule: organizer chair transition to ACCEPTED must trigger notification delivery.
+        if ($recurrenceId === self::MASTER_EVENT
+            && PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($oldObject, $newObject)) {
             return false;
         }
 

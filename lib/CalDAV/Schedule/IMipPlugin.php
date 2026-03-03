@@ -2,19 +2,16 @@
 
 namespace ESN\CalDAV\Schedule;
 
-use DateTimeZone;
-use \Sabre\DAV;
-use \Sabre\VObject;
-use Sabre\VObject\Component\VCalendar;
+use ESN\Utils\DateTime;
+use ESN\Utils\Utils;
+use Sabre\DAV;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
+use Sabre\VObject;
+use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Component\VEvent;
 use Sabre\VObject\Document;
-use \Sabre\VObject\ITip;
-use \Sabre\VObject\Property;
-use \ESN\Utils\Utils as Utils;
-use ESN\Utils\DateTime;
-use ESN\Utils\DateTimeWithAllDay;
+use Sabre\VObject\ITip;
 use Sabre\VObject\Reader;
 
 #[\AllowDynamicProperties]
@@ -361,6 +358,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     private function computeModifiedEventMessages(Document $scheduledEvent, Document $formerEvent, string $recipient) {
         $modifiedInstances = [];
         $cancelledEvents = [];
+        $isChairAcceptedTransition = PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($formerEvent, $scheduledEvent);
 
         $previousEventVEvents = $this->getSequencePerVEvent($formerEvent);
         $currentEventVEvents = $this->getSequencePerVEvent($scheduledEvent);
@@ -369,15 +367,17 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $clonedScheduledEvent = Utils::safeCloneVObject($scheduledEvent);
 
         foreach ($currentEventVEvents as $recurrenceId => $sequence) {
+            $isAcceptedTransitionForInstance = $isChairAcceptedTransition && $recurrenceId === self::MASTER_EVENT;
             if ($recurrenceId == self::MASTER_EVENT && isset($currentEventVEvents[$recurrenceId]->RRULE)) {
                 // TODO Add RRULE checking to avoid processing non-recurring event
                 list($cancelledEvents, $cancelledInstancesId) = $this->computeMasterEventExDateMessage($previousEventVEvents, $currentEventVEvents, $scheduledEvent);
             }
 
             // Create message if instance have been created or modified
-            if (!isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
+            $shouldIncludeCurrentInstance = !isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
                 $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]) ||
-                PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($formerEvent, $scheduledEvent))) {
+                $isAcceptedTransitionForInstance);
+            if ($shouldIncludeCurrentInstance) {
 
                 // Check if recipient was attending this occurrence before
                 $isNewOccurrenceException = !isset($previousEventVEvents[$recurrenceId]);

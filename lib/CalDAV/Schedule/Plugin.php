@@ -27,6 +27,7 @@ use
  */
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
+    private const MASTER_EVENT = 'master';
 
     private $logger;
     private $principalBackend;
@@ -153,7 +154,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         // Determine the recurrence ID of this message
         $recurrenceId = isset($messageEvent->{'RECURRENCE-ID'})
             ? $messageEvent->{'RECURRENCE-ID'}->getValue()
-            : 'master';
+            : self::MASTER_EVENT;
 
         // Find the corresponding VEVENTs in old and new objects
         $oldVEvent = null;
@@ -162,7 +163,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         foreach ($oldObject->VEVENT as $vevent) {
             $oldRecurId = isset($vevent->{'RECURRENCE-ID'})
                 ? $vevent->{'RECURRENCE-ID'}->getValue()
-                : 'master';
+                : self::MASTER_EVENT;
             if ($oldRecurId === $recurrenceId) {
                 $oldVEvent = $vevent;
                 break;
@@ -172,7 +173,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         foreach ($newObject->VEVENT as $vevent) {
             $newRecurId = isset($vevent->{'RECURRENCE-ID'})
                 ? $vevent->{'RECURRENCE-ID'}->getValue()
-                : 'master';
+                : self::MASTER_EVENT;
             if ($newRecurId === $recurrenceId) {
                 $newVEvent = $vevent;
                 break;
@@ -181,6 +182,12 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         // If this is a new occurrence (wasn't in oldObject), don't skip
         if (!$oldVEvent || !$newVEvent) {
+            return false;
+        }
+
+        // Public Agenda rule: organizer chair transition to ACCEPTED must trigger notification delivery.
+        if ($recurrenceId === self::MASTER_EVENT
+            && PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($oldObject, $newObject)) {
             return false;
         }
 

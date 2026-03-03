@@ -56,7 +56,7 @@ class PublicAgendaScheduleUtils {
                 continue;
             }
 
-            $partstat = strtoupper((string) ($attendee['PARTSTAT'] ?? ''));
+            $partstat = strtoupper((string) ($attendee['PARTSTAT'] ?? 'NEEDS-ACTION'));
             $partstat = str_replace('_', '-', $partstat);
 
             return $partstat;

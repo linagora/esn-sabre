@@ -177,6 +177,62 @@ END:VCALENDAR'
         $this->assertEquals(204, $response->getStatus());
     }
 
+    function testITipReplyWithoutOrganizerShouldReturn204WhenSenderIsAttendee()
+    {
+        $this->iTipRequestData['method'] = 'REPLY';
+        $this->iTipRequestData['recipient'] = 'b@linagora.com';
+        $this->iTipRequestData['sender'] = 'a@linagora.com';
+        $this->iTipRequestData['ical'] = 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20120313T142342Z
+UID:event1
+DTEND;TZID=Europe/Berlin:20120227T000000
+TRANSP:OPAQUE
+SUMMARY:Monday 0h
+DTSTART;TZID=Europe/Berlin:20120227T000000
+DTSTAMP:20120313T142416Z
+SEQUENCE:4
+ATTENDEE:mailto:b@linagora.com
+ATTENDEE:mailto:a@linagora.com
+END:VEVENT
+END:VCALENDAR';
+
+        $request = $this->makeRequest($this->iTipRequestData);
+        $this->iTipPlugin->iTip($request);
+
+        $response = $this->server->httpResponse;
+        $this->assertEquals(204, $response->getStatus());
+    }
+
+    function testITipReplyWithoutOrganizerShouldReturn400WhenSenderIsNotAttendee()
+    {
+        $this->iTipRequestData['method'] = 'REPLY';
+        $this->iTipRequestData['recipient'] = 'c@linagora.com';
+        $this->iTipRequestData['sender'] = 'x@linagora.com';
+        $this->iTipRequestData['ical'] = 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20120313T142342Z
+UID:event1
+DTEND;TZID=Europe/Berlin:20120227T000000
+TRANSP:OPAQUE
+SUMMARY:Monday 0h
+DTSTART;TZID=Europe/Berlin:20120227T000000
+DTSTAMP:20120313T142416Z
+SEQUENCE:4
+ATTENDEE:mailto:b@linagora.com
+ATTENDEE:mailto:a@linagora.com
+END:VEVENT
+END:VCALENDAR';
+
+        $request = $this->makeRequest($this->iTipRequestData);
+        $this->iTipPlugin->iTip($request);
+
+        $response = $this->server->httpResponse;
+        $this->assertEquals(400, $response->getStatus());
+    }
+
 }
 
 #[\AllowDynamicProperties]

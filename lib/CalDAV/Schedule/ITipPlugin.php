@@ -64,7 +64,7 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         //
         // Some use cases, like a user forwarding an invite email to another user, brings a recipient
         // that is not, at all, in the event. We ignore it
-        if (!$this->assertRecipientIsConcernedByEvent($message->message->vevent, $message->recipient)) {
+        if (!$this->assertRecipientIsConcernedByEvent($message)) {
             $this->server->getLogger()->error("Recipient ". $message->recipient ." is not organizer, not attendee of event ". (string)$message->message->VEVENT->UID .": skipping");
             return $this->send(400, null);
         }
@@ -103,11 +103,17 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         };
     }
 
-    private function assertRecipientIsConcernedByEvent($vevent, $recipient)
+    private function assertRecipientIsConcernedByEvent(Message $message)
     {
+        $vevent = $message->message->VEVENT;
+        $recipient = $message->recipient;
+
         $isConcerned = false;
+        $hasOrganizer = false;
+        $senderIsAttendee = false;
         try {
             $organizer = (string)$vevent->ORGANIZER;
+            $hasOrganizer = trim((string)$organizer) !== '';
             if (strtolower($organizer) === strtolower($recipient)) {
                 $isConcerned = true;
             }
@@ -118,9 +124,17 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
             foreach ($vevent->ATTENDEE as $attendee) {
                 if (strtolower((string)$attendee) === strtolower($recipient)) {
                     $isConcerned = true;
-                    break;
+                } else if (strtolower((string)$attendee) === strtolower((string)$message->sender)) {
+                    $senderIsAttendee = true;
                 }
             }
+        }
+
+        if (!$isConcerned
+            && strtoupper((string)$message->method) === 'REPLY'
+            && !$hasOrganizer
+            && $senderIsAttendee) {
+            $isConcerned = true;
         }
 
         return $isConcerned;

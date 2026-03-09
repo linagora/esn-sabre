@@ -208,7 +208,7 @@ END:VCALENDAR';
     function testITipReplyWithoutOrganizerShouldReturn400WhenSenderIsNotAttendee()
     {
         $this->iTipRequestData['method'] = 'REPLY';
-        $this->iTipRequestData['recipient'] = 'b@linagora.com';
+        $this->iTipRequestData['recipient'] = 'c@linagora.com';
         $this->iTipRequestData['sender'] = 'x@linagora.com';
         $this->iTipRequestData['ical'] = 'BEGIN:VCALENDAR
 VERSION:2.0

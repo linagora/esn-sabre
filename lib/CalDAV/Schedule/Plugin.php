@@ -111,6 +111,127 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     /**
+     * Override scheduleLocalDelivery to skip inbox creation for non-significant
+     * REQUEST messages (e.g. pure PARTSTAT propagation after an attendee replies).
+     *
+     * When an attendee updates their PARTSTAT, Sabre fans out REQUEST messages to
+     * all other attendees so they see the updated status. These messages have
+     * hasChange=false (PARTSTAT is not in significantChangeProperties/changeProperties).
+     * Creating an inbox item for each attendee is unnecessary in this case and causes
+     * O(n) inbox writes. The calendar object is still updated so the PARTSTAT change
+     * is visible to all attendees.
+     */
+    function scheduleLocalDelivery(ITip\Message $iTipMessage) {
+        $aclPlugin = $this->server->getPlugin('acl');
+
+        if (!$aclPlugin) {
+            return;
+        }
+
+        $caldavNS = '{' . self::NS_CALDAV . '}';
+
+        $principalUri = $aclPlugin->getPrincipalByUri($iTipMessage->recipient);
+        if (!$principalUri) {
+            $iTipMessage->scheduleStatus = '3.7;Could not find principal.';
+            return;
+        }
+
+        $this->server->removeListener('propFind', [$aclPlugin, 'propFind']);
+
+        $result = $this->server->getProperties(
+            $principalUri,
+            [
+                '{DAV:}principal-URL',
+                 $caldavNS . 'calendar-home-set',
+                 $caldavNS . 'schedule-inbox-URL',
+                 $caldavNS . 'schedule-default-calendar-URL',
+                '{http://sabredav.org/ns}email-address',
+            ]
+        );
+
+        $this->server->on('propFind', [$aclPlugin, 'propFind'], 20);
+
+        if (!isset($result[$caldavNS . 'schedule-inbox-URL'])) {
+            $iTipMessage->scheduleStatus = '5.2;Could not find local inbox';
+            return;
+        }
+        if (!isset($result[$caldavNS . 'calendar-home-set'])) {
+            $iTipMessage->scheduleStatus = '5.2;Could not locate a calendar-home-set';
+            return;
+        }
+        if (!isset($result[$caldavNS . 'schedule-default-calendar-URL'])) {
+            $iTipMessage->scheduleStatus = '5.2;Could not find a schedule-default-calendar-URL property';
+            return;
+        }
+
+        $calendarPath = $result[$caldavNS . 'schedule-default-calendar-URL']->getHref();
+        $homePath = $result[$caldavNS . 'calendar-home-set']->getHref();
+        $inboxPath = $result[$caldavNS . 'schedule-inbox-URL']->getHref();
+
+        if ($iTipMessage->method === 'REPLY') {
+            $privilege = 'schedule-deliver-reply';
+        } else {
+            $privilege = 'schedule-deliver-invite';
+        }
+
+        if (!$aclPlugin->checkPrivileges($inboxPath, $caldavNS . $privilege, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+            $iTipMessage->scheduleStatus = '3.8;insufficient privileges: ' . $privilege . ' is required on the recipient schedule inbox.';
+            return;
+        }
+
+        $uid = $iTipMessage->uid;
+        $newFileName = 'sabredav-' . \Sabre\DAV\UUIDUtil::getUUID() . '.ics';
+
+        $home = $this->server->tree->getNodeForPath($homePath);
+        $inbox = $this->server->tree->getNodeForPath($inboxPath);
+
+        $currentObject = null;
+        $objectNode = null;
+        $isNewNode = false;
+
+        $result = $home->getCalendarObjectByUID($uid);
+        if ($result) {
+            $objectPath = $homePath . '/' . $result;
+            $objectNode = $this->server->tree->getNodeForPath($objectPath);
+            $oldICalendarData = $objectNode->get();
+            $currentObject = \Sabre\VObject\Reader::read($oldICalendarData);
+        } else {
+            $isNewNode = true;
+        }
+
+        $broker = new ITip\Broker();
+        $newObject = $broker->processMessage($iTipMessage, $currentObject);
+
+        // Skip inbox creation for non-significant REQUEST messages (pure PARTSTAT
+        // propagation). The calendar object is still updated below so attendees
+        // see the PARTSTAT change without polluting everyone's inbox.
+        if ($iTipMessage->method !== 'REQUEST' || $iTipMessage->hasChange) {
+            $inbox->createFile($newFileName, $iTipMessage->message->serialize());
+        }
+
+        if (!$newObject) {
+            $iTipMessage->scheduleStatus = '5.0;iTip message was not processed by the server, likely because we didn\'t understand it.';
+            return;
+        }
+
+        if ($isNewNode) {
+            $calendar = $this->server->tree->getNodeForPath($calendarPath);
+            $calendar->createFile($newFileName, $newObject->serialize());
+        } else {
+            if ($iTipMessage->method === 'REPLY') {
+                $this->processICalendarChange(
+                    $oldICalendarData,
+                    $newObject,
+                    [$iTipMessage->recipient],
+                    [$iTipMessage->sender]
+                );
+            }
+            $objectNode->put($newObject->serialize());
+        }
+        $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
+    }
+
+    /**
      *
      * Override default method because:
      *  * ITIP operations must not be processed

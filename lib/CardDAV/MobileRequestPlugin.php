@@ -53,7 +53,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function afterMethodPropfind($request, $response) {
-        if(!$this->checkUserAgent($request)) {
+        if($this->acceptJson()) {
             return true;
         }
 
@@ -92,25 +92,19 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
 
                     if($shareOwnerId === $currentUserId) {
-                        if($addressbookType === 'contacts') {
-                            $addressBookDisplayName = 'My Contacts';
-                        }
-                        else if($addressbookType === 'collected') {
-                            $addressBookDisplayName = 'My Collected Contacts';
+                        if($addressbookType === 'contacts' || $addressbookType === 'collected') {
+                            $addressBookDisplayName = $userDisplayName;
                         }
                         else {
-                            $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] ?? "Carnet d'addresse - nom indefinit";
+                            $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] ?? $userDisplayName;
                         }
                     } else {
                         if (array_key_exists("{DAV:}displayname", $responseProps[200])) {
-                            if($responseProps[200]['{DAV:}displayname'] === 'Collected contacts') {
-                                $addressBookDisplayName = 'Collected Contacts - '. $userDisplayName;
-                            }
-                            else if($responseProps[200]['{DAV:}displayname'] === 'My contacts') {
-                                $addressBookDisplayName = 'Contacts - ' . $userDisplayName;
-                            }
-                            else {
-                                $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName;
+                            $displayName = $responseProps[200]['{DAV:}displayname'];
+                            if (empty($displayName)) {
+                                $addressBookDisplayName = $userDisplayName;
+                            } else {
+                                $addressBookDisplayName = $displayName . " - " . $userDisplayName;
                             }
                         }
                         else if($addressbookType === 'dab') {

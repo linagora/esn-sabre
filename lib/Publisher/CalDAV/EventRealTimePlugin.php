@@ -460,7 +460,6 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             }
         }
 
-        $this->publishMessages();
         return true;
     }
 

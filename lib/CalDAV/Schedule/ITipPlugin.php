@@ -55,9 +55,9 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         $message->uid = $payload->uid;
         $message->method = $issetdef('method', 'REQUEST');
         $message->sequence = $issetdef('sequence', '0');
-        $message->sender = 'mailto:' . $issetdef('replyTo', $payload->sender);
-        $message->recipient = 'mailto:' . $payload->recipient;
         $message->message = VObject\Reader::read($payload->ical);
+        $message->sender = $this->resolveSenderFromItipMessage($message, $issetdef('replyTo', $payload->sender));
+        $message->recipient = 'mailto:' . $payload->recipient;
 
         // we need to check that the current user ($message->recipient) is related to the event,
         // because he's either organizer, or attendee, or both.
@@ -101,6 +101,39 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         return function ($key, $default = null) use ($jsonData) {
             return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
         };
+    }
+
+    // Preserve the sender calendar address from the iTIP payload so REPLY matching does not break on MAILTO/mailto casing.
+    private function resolveSenderFromItipMessage(Message $message, string $senderInput): string
+    {
+        if (!$message->message || !$message->message->VEVENT) {
+            return 'mailto:' . $senderInput;
+        }
+
+        $vevent = $message->message->VEVENT;
+
+        $organizer = (string) $vevent->ORGANIZER;
+        if ($organizer !== '' && $this->matchesCalendarAddress($organizer, $senderInput)) {
+            return $organizer;
+        }
+
+        if ($vevent->ATTENDEE) {
+            foreach ($vevent->ATTENDEE as $attendee) {
+                if ($this->matchesCalendarAddress($attendee->getValue(), $senderInput)) {
+                    return $attendee->getValue();
+                }
+            }
+        }
+
+        return 'mailto:' . $senderInput;
+    }
+
+    private function matchesCalendarAddress(string $calendarAddress, string $emailOrAddress): bool
+    {
+        $calendarAddress = stripos($calendarAddress, 'mailto:') === 0 ? substr($calendarAddress, 7) : $calendarAddress;
+        $emailOrAddress = stripos($emailOrAddress, 'mailto:') === 0 ? substr($emailOrAddress, 7) : $emailOrAddress;
+
+        return strtolower($calendarAddress) === strtolower($emailOrAddress);
     }
 
     private function assertRecipientIsConcernedByEvent(Message $message)

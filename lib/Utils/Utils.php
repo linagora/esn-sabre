@@ -71,7 +71,7 @@ class Utils {
             return;
         }
 
-        $principalUri = $aclPlugin->getPrincipalByUri($uri);
+        $principalUri = $aclPlugin->getPrincipalByUri(self::normalizeCalendarLookupUri($uri));
         if (!$principalUri) {
             error_log("3.7;Could not find principal for $uri.");
 
@@ -79,6 +79,18 @@ class Utils {
         }
 
         return $principalUri;
+    }
+
+    private static function normalizeCalendarLookupUri($uri) {
+        if (!is_string($uri)) {
+            return $uri;
+        }
+
+        if (stripos($uri, 'mailto:') === 0) {
+            return 'mailto:' . substr($uri, 7);
+        }
+
+        return $uri;
     }
 
     static function getEventObjectFromAnotherPrincipalHome($principalUri, $eventUid, $method, \Sabre\DAV\Server $server) {

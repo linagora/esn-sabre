@@ -406,12 +406,63 @@ For each recipient (Promise.all / goroutines)
 
 ---
 
+## Related Fix — `EventRealTimePlugin.schedule()` short-circuit
+
+### Bug description
+
+`EventRealTimePlugin` listens to the `schedule` hook at priority 101 (after `scheduleLocalDelivery`). It contains an early-return guard designed to skip real-time notification when the iTIP message has not yet been locally delivered:
+
+```php
+// EventRealTimePlugin.php:281
+switch($iTipMessage->scheduleStatus) {
+    case IMipPlugin::SCHEDSTAT_SUCCESS_PENDING:  // '1.0'
+    case IMipPlugin::SCHEDSTAT_FAIL_TEMPORARY:   // '5.1'
+    case IMipPlugin::SCHEDSTAT_FAIL_PERMANENT:   // '5.2'
+        return false;
+}
+```
+
+In `AMQPSchedulePlugin::scheduleLocalDelivery()`, if the status is set as:
+
+```php
+$iTipMessage->scheduleStatus = '1.0;Message queued for delivery';
+```
+
+the switch **does not match** (`'1.0;Message queued for delivery' !== '1.0'`), so `EventRealTimePlugin.schedule()` proceeds and performs **4–5 additional MongoDB reads per recipient** (principal resolution, calendar home fetch, event lookup by UID, calendar node fetch). For 100 attendees this means ~400–500 extra synchronous MongoDB reads — entirely negating the performance gain of the new architecture.
+
+### Fix
+
+Set the status to the bare code without description text:
+
+```php
+// AMQPSchedulePlugin::scheduleLocalDelivery()
+$iTipMessage->scheduleStatus = '1.0';  // exact match — short-circuits EventRealTimePlugin
+```
+
+This causes `EventRealTimePlugin.schedule()` to return immediately for every recipient, reducing the MongoDB read count in the PUT path from **O(n)** to **O(1)**.
+
+### Real-time notifications in the async world
+
+With the short-circuit in place, `EventRealTimePlugin` no longer publishes WebSocket notifications for iTIP messages in the async path. This is correct — the event has not yet been written to the recipient's calendar when the PUT response is returned, so notifying the recipient's UI at that point would be premature.
+
+**The consumer is responsible for publishing real-time notifications** after writing each recipient's calendar. It should publish to the appropriate topics (`calendar:event:request`, `calendar:event:cancel`, etc.) once the write is confirmed. This responsibility must be added to the consumer implementation (see Agent prompt below).
+
+### Performance summary
+
+| Metric | Legacy (sync) | New (async, without fix) | New (async, with fix) |
+|---|---|---|---|
+| MongoDB reads / PUT (100 attendees) | ~900 | ~500 | **1** |
+| AMQP publishes / PUT | 100 | 1 | **1** |
+| PUT response time | O(n) | O(n) | **O(1)** |
+
+---
+
 ## Agent prompt — consumer implementation
 
 > **Context**: In the `esn-sabre` project (SabreDAV/PHP), we are replacing the synchronous CalDAV invitation propagation with an asynchronous AMQP consumer. The PHP plugin now publishes a single RabbitMQ message on the topic `calendar:itip:localDelivery` instead of writing directly into attendee calendars.
 >
 > **Your task**: Design and implement a consumer (Node.js with `amqplib`, or Go with `amqp091-go`) that:
-> 1. Consumes messages from `calendar:itip:localDelivery` (see payload spec in `ard/0001-async-scheduling.md`).
+> 1. Consumes messages from `calendar:itip:localDelivery` (see payload spec in `adr/0001-async-scheduling.md`).
 > 2. For each recipient in `recipients[]`, in parallel:
 >    - Resolves the principal via MongoDB (collection `principals`, lookup by email).
 >    - Finds the existing event by UID in the principal's `calendar-home-set`.

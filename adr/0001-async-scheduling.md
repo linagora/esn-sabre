@@ -73,7 +73,7 @@ AMQPSchedulePlugin.flushDeliveries()
   └─ publishes ONE AMQP message → calendar:itip:localDelivery
         │
         ▼
-  Consumer (Node/Go)
+  Twake Calendar Side Service (Java)
   ├─ resolves principals (parallel)
   ├─ REQUEST/CANCEL → writes calendar + inbox
   ├─ REPLY → updates PARTSTAT in organizer's calendar only
@@ -333,78 +333,111 @@ class MinimalIMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
 ---
 
-## External Consumer — `calendar:itip:localDelivery`
+## Twake Calendar Side Service — `calendar:itip:localDelivery`
 
 ### Design principle
 
-The consumer does **not** reimplement Sabre's scheduling logic. It delegates all iTIP processing back to Sabre via the existing `ITIP` HTTP method, which `ITipPlugin` already handles. The consumer is a thin AMQP-to-HTTP bridge — no MongoDB access, no iCal parsing, no iTIP broker.
-
-```
-AMQP message  →  N parallel ITIP HTTP calls to Sabre  →  Sabre applies iTIP natively
-```
+**Twake Calendar Side Service** does **not** reimplement Sabre's scheduling logic. It delegates all iTIP processing back to Sabre via the existing `ITIP` HTTP method, which `ITipPlugin` already handles. The service is a thin AMQP-to-HTTP bridge — no MongoDB access, no iCal parsing, no iTIP broker.
 
 Sabre's full stack fires for each ITIP call: principal resolution, calendar write, inbox write, ACL check, `EventRealTimePlugin` real-time notification — all handled as if the request came from an email gateway. The loop is prevented in `AMQPSchedulePlugin::scheduleLocalDelivery()` by detecting the `ITIP` method and delegating to the parent's synchronous delivery (see sample code above).
 
+### Fan-out pattern
+
+Messages arriving with N recipients are **not processed directly**. Twake Calendar Side Service first fans them out: it splits the message into N single-recipient messages and re-publishes each to the **same** `calendar:itip:localDelivery` exchange. Only messages with exactly **one recipient** are processed (ITIP call + email).
+
+```
+calendar:itip:localDelivery { recipients: [alice, cedric, ... ] }   ← N recipients
+        │
+        ▼  Fan-out pass (re-publish, do not process)
+        ├─ calendar:itip:localDelivery { recipients: [alice]  }     ← 1 recipient
+        ├─ calendar:itip:localDelivery { recipients: [cedric] }     ← 1 recipient
+        └─ ...
+                │
+                ▼  Processing pass (recipients.length === 1)
+                ├─ POST /itip (impersonate recipient)
+                └─ [hasChange] → publishNotificationEmail(...)
+```
+
+**Benefits of this pattern:**
+- Retry and DLQ are **per recipient**, not per batch — one failing attendee does not block the others.
+- Natural parallelism via queue consumers, no explicit Promise.all needed.
+- Fan-out and processing can be scaled independently.
+
 ### Exact responsibilities
 
-#### 1. Per recipient (in parallel)
+#### Phase 1 — Fan-out (recipients.length > 1)
 
-**a. Submit ITIP to Sabre**
+For each recipient in `recipients[]`, re-publish to `calendar:itip:localDelivery` with the same payload but `recipients` reduced to that single entry. Ack the original message immediately after all re-publishes succeed.
+
+```json
+{
+  "sender":     "mailto:bob@example.com",
+  "method":     "REQUEST",
+  "uid":        "abc-123",
+  "message":    "BEGIN:VCALENDAR...",
+  "oldMessage": "BEGIN:VCALENDAR...",
+  "hasChange":  true,
+  "recipients": ["mailto:alice@example.com"]
+}
+```
+
+#### Phase 2 — Processing (recipients.length === 1)
+
+**a. Local recipient — submit ITIP to Sabre** (impersonating the recipient)
 
 ```
 POST /itip
-Authorization: Basic <service-account>
+Authorization: Basic <recipient-credentials>
 Content-Type: application/json
 
 {
-  "uid":       "<uid from AMQP message>",
+  "uid":       "<uid>",
   "sender":    "<sender email, without mailto:>",
   "recipient": "<recipient email, without mailto:>",
-  "ical":      "<message iCal string from AMQP message>",
+  "ical":      "<message iCal string>",
   "method":    "<REQUEST|CANCEL|REPLY>"
 }
 ```
 
-- `204` → success.
-- `400` → recipient not concerned by event (external user forwarded invite) → skip, log.
-- Other errors → retry with backoff.
+- `204` → success → proceed to email step.
+- `400` → recipient not locally known (external attendee) → skip ITIP, proceed to email step.
+- `5xx` → DLQ immediately.
 
-**b. Email notification** (conditional, after successful ITIP)
-- If `hasChange === true` from the AMQP payload:
-  - Compute the diff (SUMMARY, LOCATION, DESCRIPTION, DTSTART, DTEND, attendees) between `oldMessage` and `message`.
-  - Determine `isNewEvent` for this recipient (was they already an attendee in `oldMessage`?).
-  - Publish to `calendar:event:notificationEmail:send`.
-- Resources are filtered naturally: Sabre's `ITipPlugin` handles them and the consumer has no special-case logic needed.
+**b. Email notification** (conditional)
+- If `hasChange === true`:
+  - Compute the diff between `oldMessage` and `message` (SUMMARY, LOCATION, DESCRIPTION, DTSTART, DTEND, attendees).
+  - Determine `isNewEvent` for this recipient (absent from `oldMessage` attendees?).
+  - Publish to `calendar:event:notificationEmail:send` (see payload spec section).
+- Applies to **both local and external recipients** — external recipients skip ITIP but still receive email.
 
-#### 2. Error handling
-
-- Retry with exponential backoff on HTTP 5xx or network errors.
-- Dead-letter queue after N failed attempts.
-- Log per-recipient outcome (HTTP status) for observability.
-
-#### 3. What the consumer does NOT do
+#### What Twake Calendar Side Service does NOT do
 
 - Does **not** touch MongoDB directly.
 - Does **not** reimplement iTIP logic (REQUEST/CANCEL/REPLY routing, inbox writes, PARTSTAT merging).
 - Does **not** publish real-time WebSocket notifications — Sabre's `EventRealTimePlugin` fires on the ITIP call.
 - Does **not** update `SCHEDULE-STATUS` in Bob's calendar. See Trade-offs section.
 
-### Consumer flow diagram
+### Flow diagram
 
 ```
 Receives calendar:itip:localDelivery
-  { sender, method, uid, message, oldMessage, hasChange, recipients[] }
         │
         ▼
-For each recipient (Promise.all / goroutines)
-        │
-        ├─ POST /itip  { uid, sender, recipient, ical, method }
-        │       ├─ 204 OK
-        │       │     └─ [hasChange] → publishNotificationEmail(diff oldMessage→message)
-        │       ├─ 400 → skip + log (not concerned)
-        │       └─ 5xx → retry with backoff → DLQ
-        │
-        └─ ack AMQP message once all recipients processed
+recipients.length > 1 ?
+        │ YES                              NO (single recipient)
+        ▼                                  ▼
+Re-publish N single-recipient      Is recipient local?
+messages to same exchange           │ YES              NO (external)
+Ack original.                       ▼                  ▼
+                               POST /itip          skip ITIP
+                                204 → ok            │
+                                400 → skip          │
+                                5xx → DLQ           │
+                                    │               │
+                                    └───────┬───────┘
+                                            ▼
+                                    [hasChange] → publishNotificationEmail(...)
+                                    Ack message.
 ```
 
 ---
@@ -448,7 +481,7 @@ This causes `EventRealTimePlugin.schedule()` to return immediately for every rec
 
 With the short-circuit in place, `EventRealTimePlugin` no longer publishes WebSocket notifications for iTIP messages in the async path. This is correct — the event has not yet been written to the recipient's calendar when the PUT response is returned, so notifying the recipient's UI at that point would be premature.
 
-**The consumer is responsible for publishing real-time notifications** after writing each recipient's calendar. It should publish to the appropriate topics (`calendar:event:request`, `calendar:event:cancel`, etc.) once the write is confirmed. This responsibility must be added to the consumer implementation (see Agent prompt below).
+**Twake Calendar Side Service is responsible for publishing real-time notifications** after writing each recipient's calendar. It should publish to the appropriate topics (`calendar:event:request`, `calendar:event:cancel`, etc.) once the write is confirmed. This responsibility must be added to the consumer implementation (see Agent prompt below).
 
 ### Performance summary
 
@@ -460,9 +493,9 @@ With the short-circuit in place, `EventRealTimePlugin` no longer publishes WebSo
 
 ---
 
-## Agent prompt — consumer implementation
+## Agent prompt — Twake Calendar Side Service implementation
 
-> **Context**: In the `esn-sabre` project (SabreDAV/PHP), we are replacing the synchronous CalDAV invitation propagation with an asynchronous AMQP consumer. The PHP plugin now publishes a single RabbitMQ message on the topic `calendar:itip:localDelivery` instead of writing directly into attendee calendars.
+> **Context**: In the `esn-sabre` project (SabreDAV/PHP), we are replacing the synchronous CalDAV invitation propagation with an asynchronous consumer implemented in **Java** called **Twake Calendar Side Service**. The PHP plugin now publishes a single RabbitMQ message on the topic `calendar:itip:localDelivery` instead of writing directly into attendee calendars.
 >
 > **AMQP message payload** (`calendar:itip:localDelivery`):
 > ```json
@@ -483,34 +516,33 @@ With the short-circuit in place, `EventRealTimePlugin` no longer publishes WebSo
 > - `recipients[]` contains **all attendees** — local (same Sabre instance) and external (different domain). The consumer distinguishes them: ITIP call for local (204 → calendar written), no ITIP for external; both receive a `calendar:event:notificationEmail:send` notification if `hasChange === true`.
 > - `hasChange` is `true` if the iTIP broker detected a significant change (SUMMARY, LOCATION, DESCRIPTION, DTSTART, DTEND, attendees list).
 >
-> **Your task**: Implement a consumer (Node.js with `amqplib`, or Go with `amqp091-go`) that:
-> 1. Consumes messages from `calendar:itip:localDelivery`.
-> 2. For each recipient in `recipients[]`, in parallel, submits an HTTP `ITIP` request to Sabre **impersonating the recipient** (the ITIP call is made on behalf of the user for whom the delivery is being done):
+> **Your task**: In the **Twake Calendar Side Service** (Java), implement a RabbitMQ listener that processes messages from `calendar:itip:localDelivery` using a **fan-out then process** pattern:
+>
+> **Phase 1 — Fan-out** (`recipients.length > 1`):
+> Re-publish one message per recipient to the **same** `calendar:itip:localDelivery` exchange, each with `recipients` reduced to that single entry (all other fields identical). Ack the original message once all re-publishes succeed.
+>
+> **Phase 2 — Process** (`recipients.length === 1`):
+> 1. If the recipient is local: submit an HTTP `ITIP` request to Sabre **impersonating the recipient**:
 >    ```
 >    POST /itip
 >    Authorization: Basic <recipient-credentials>
 >    Content-Type: application/json
->    {
->      "uid":       "<uid>",
->      "sender":    "<sender email, strip mailto:>",
->      "recipient": "<recipient email, strip mailto:>",
->      "ical":      "<message field verbatim>",
->      "method":    "<method>"
->    }
+>    { "uid": "<uid>", "sender": "<sender, strip mailto:>", "recipient": "<recipient, strip mailto:>",
+>      "ical": "<message verbatim>", "method": "<method>" }
 >    ```
->    Sabre handles all iTIP logic natively (calendar write, inbox, principal resolution, real-time notification via `EventRealTimePlugin`). No MongoDB access required in the consumer.
-> 3. If `hasChange === true`: publish to `calendar:event:notificationEmail:send` (see subsection below) — for **both local and external recipients**. For local recipients this is done after a successful ITIP call (204). For external recipients there is no ITIP call; publish the email notification directly.
-> 4. Error handling: HTTP 400 → skip ITIP + log (recipient not concerned by event), still publish email if `hasChange`; HTTP 5xx → DLQ immediately.
+>    - `204` → success. `400` → recipient not locally known (external), skip ITIP. `5xx` → DLQ.
+>    - Sabre handles calendar write, inbox, principal resolution, real-time notification natively.
+> 2. If `hasChange === true`: publish to `calendar:event:notificationEmail:send` (see payload spec section below) for **both local and external recipients**.
 >
 > **Constraints**:
 > - No direct MongoDB access — all persistence goes through Sabre's ITIP endpoint.
-> - Tests must cover: REQUEST (new event, local), REQUEST (update, local), REQUEST (external recipient — no ITIP, email only), CANCEL, REPLY, `hasChange=false` (no email published), HTTP 400 (skip ITIP, email still sent), HTTP 5xx (DLQ).
+> - Tests must cover: fan-out of N-recipient message, REQUEST (new event, local), REQUEST (update, local), REQUEST (external — no ITIP, email only), CANCEL, REPLY, `hasChange=false` (no email), HTTP 400 (skip ITIP, email still sent), HTTP 5xx (DLQ).
 
 ---
 
 ## `calendar:event:notificationEmail:send` payload spec
 
-This topic is consumed by the email notification service. It is published by the consumer for **all recipients** (local and external) whenever `hasChange === true`. One message per recipient per VEVENT occurrence — recurring events must be split into individual per-occurrence messages before publishing.
+This topic is consumed by the email notification service. It is published by **Twake Calendar Side Service** for **all recipients** (local and external) whenever `hasChange === true`. One message per recipient per VEVENT occurrence — recurring events must be split into individual per-occurrence messages before publishing.
 
 ```json
 {

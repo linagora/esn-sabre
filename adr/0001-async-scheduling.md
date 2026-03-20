@@ -80,7 +80,7 @@ AMQPSchedulePlugin.flushDeliveries()
   └─ publishes email notification if hasChange
 ```
 
-> **Local recipients only**: Sabre only calls `scheduleLocalDelivery` for recipients hosted on this server. External attendees (different domain) do not go through this path and are out of scope for this consumer.
+> **All recipients included**: Sabre's `deliver()` emits the `schedule` hook for every recipient, local or external. `AMQPSchedulePlugin.scheduleLocalDelivery()` therefore buffers all of them. For local recipients the consumer delivers via ITIP (calendar write). For external recipients the ITIP call finds no local principal and skips the calendar write, but the consumer still publishes `calendar:event:notificationEmail:send` so the external attendee receives an email.
 
 > `MinimalIMipPlugin` becomes a residual plugin handling only cases not covered by the consumer (e.g. COUNTER messages received by email via `ITipPlugin`). It no longer plays any role in the standard PUT flow.
 
@@ -134,10 +134,22 @@ class AMQPSchedulePlugin extends Plugin {
     }
 
     /**
-     * Replaces synchronous local delivery with a buffered AMQP publish.
-     * Called once per iTip\Message (= once per recipient).
+     * Buffers recipients for AMQP publish on PUT/POST.
+     * Falls back to synchronous parent delivery on ITIP requests (from consumer)
+     * to avoid an infinite loop: consumer → ITIP → scheduleLocalDelivery → AMQP → consumer → ...
+     *
+     * ITipPlugin calls this method directly (line 73):
+     *   $this->server->getPlugin('caldav-schedule')->scheduleLocalDelivery($message)
+     * so the loop prevention must live here, not in calendarObjectChange.
      */
     function scheduleLocalDelivery(ITip\Message $iTipMessage) {
+        if ($this->server->httpRequest->getMethod() === 'ITIP') {
+            // Consumer's ITIP call — delegate to parent (sync write to calendar/inbox)
+            // EventRealTimePlugin will fire via the 'iTip' hook and publish real-time notifications
+            parent::scheduleLocalDelivery($iTipMessage);
+            return;
+        }
+
         $key = $iTipMessage->method . '|' . $iTipMessage->uid;
 
         if (!isset($this->pendingDeliveries[$key])) {
@@ -153,8 +165,8 @@ class AMQPSchedulePlugin extends Plugin {
 
         $this->pendingDeliveries[$key]['recipients'][] = $iTipMessage->recipient;
 
-        // Honest: delivery is queued, not yet performed
-        $iTipMessage->scheduleStatus = '1.0;Message queued for delivery';
+        // Exact '1.0' — short-circuits EventRealTimePlugin.schedule() (see Related Fix section)
+        $iTipMessage->scheduleStatus = '1.0';
     }
 
     /**
@@ -323,85 +335,76 @@ class MinimalIMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
 ## External Consumer — `calendar:itip:localDelivery`
 
-### Overview
+### Design principle
 
-The consumer is a standalone service (Node.js, Go, or equivalent) listening on the RabbitMQ queue `calendar:itip:localDelivery`. It is the sole owner of attendee calendar propagation. It can process recipients **in parallel**, which PHP cannot do efficiently in a single request thread.
+The consumer does **not** reimplement Sabre's scheduling logic. It delegates all iTIP processing back to Sabre via the existing `ITIP` HTTP method, which `ITipPlugin` already handles. The consumer is a thin AMQP-to-HTTP bridge — no MongoDB access, no iCal parsing, no iTIP broker.
+
+```
+AMQP message  →  N parallel ITIP HTTP calls to Sabre  →  Sabre applies iTIP natively
+```
+
+Sabre's full stack fires for each ITIP call: principal resolution, calendar write, inbox write, ACL check, `EventRealTimePlugin` real-time notification — all handled as if the request came from an email gateway. The loop is prevented in `AMQPSchedulePlugin::scheduleLocalDelivery()` by detecting the `ITIP` method and delegating to the parent's synchronous delivery (see sample code above).
 
 ### Exact responsibilities
 
-#### 0. Routing by `method`
-
-- `REQUEST` → create or update the event in each recipient's calendar (attendees).
-- `CANCEL` → delete or mark the event as CANCELLED in each recipient's calendar.
-- `REPLY` → the recipient is **the organizer** (Bob); update only the PARTSTAT of the replying attendee in Bob's calendar. Do not write to any other attendee's calendar.
-
 #### 1. Per recipient (in parallel)
 
-**a. Principal resolution**
-- Query MongoDB: find the principal matching the recipient email address.
-- If not found → log and skip (equivalent to legacy `SCHEDULE-STATUS 3.7`).
+**a. Submit ITIP to Sabre**
 
-**b. Calendar target resolution**
-- Fetch `schedule-default-calendar-URL` and `schedule-inbox-URL` for the principal.
-- Look up the existing event by UID in the principal's `calendar-home-set`.
+```
+POST /itip
+Authorization: Basic <service-account>
+Content-Type: application/json
 
-**c. iTIP message processing**
-- Instantiate `ITip\Broker` and call `processMessage(iTipMessage, currentObject)`.
-- `currentObject` = the existing event if found, `null` for a new event.
+{
+  "uid":       "<uid from AMQP message>",
+  "sender":    "<sender email, without mailto:>",
+  "recipient": "<recipient email, without mailto:>",
+  "ical":      "<message iCal string from AMQP message>",
+  "method":    "<REQUEST|CANCEL|REPLY>"
+}
+```
 
-**d. Calendar write**
-- If new (event did not exist): `calendar.createFile(newFileName, newObject.serialize())`.
-- Otherwise: `objectNode.put(newObject.serialize())`.
+- `204` → success.
+- `400` → recipient not concerned by event (external user forwarded invite) → skip, log.
+- Other errors → retry with backoff.
 
-**e. Inbox write** (conditional)
-- Create an inbox entry **only** if `hasChange === true` or the event is new for this recipient.
-- Skip inbox for PARTSTAT-only updates (`hasChange === false`) — optimization already present in the legacy code.
-
-**f. Email notification** (conditional)
-- If `hasChange === true` and the recipient is not a resource:
+**b. Email notification** (conditional, after successful ITIP)
+- If `hasChange === true` from the AMQP payload:
   - Compute the diff (SUMMARY, LOCATION, DESCRIPTION, DTSTART, DTEND, attendees) between `oldMessage` and `message`.
-  - Determine `isNewEvent` for this specific recipient (was they already an attendee in `oldMessage`?).
-  - Publish to `calendar:event:notificationEmail:send` with the standard payload.
+  - Determine `isNewEvent` for this recipient (was they already an attendee in `oldMessage`?).
+  - Publish to `calendar:event:notificationEmail:send`.
+- Resources are filtered naturally: Sabre's `ITipPlugin` handles them and the consumer has no special-case logic needed.
 
 #### 2. Error handling
 
-- Retry with exponential backoff on transient MongoDB errors.
-- Dead-letter queue for permanently undeliverable messages.
-- Log the final per-recipient delivery outcome for observability.
+- Retry with exponential backoff on HTTP 5xx or network errors.
+- Dead-letter queue after N failed attempts.
+- Log per-recipient outcome (HTTP status) for observability.
 
 #### 3. What the consumer does NOT do
 
-- Does **not** update `SCHEDULE-STATUS` in Bob's calendar — it stays at `1.0` (pending) permanently. See Trade-offs section.
-- Does **not** process external recipients (different domain) — they are not present in `recipients[]`.
-- Does **not** enforce CalDAV ACL privileges — trust is granted to AMQP messages originating from Sabre.
+- Does **not** touch MongoDB directly.
+- Does **not** reimplement iTIP logic (REQUEST/CANCEL/REPLY routing, inbox writes, PARTSTAT merging).
+- Does **not** publish real-time WebSocket notifications — Sabre's `EventRealTimePlugin` fires on the ITIP call.
+- Does **not** update `SCHEDULE-STATUS` in Bob's calendar. See Trade-offs section.
 
 ### Consumer flow diagram
 
 ```
 Receives calendar:itip:localDelivery
-        │
-        ▼
-Route by method (REQUEST / CANCEL / REPLY)
+  { sender, method, uid, message, oldMessage, hasChange, recipients[] }
         │
         ▼
 For each recipient (Promise.all / goroutines)
         │
-        ├─ getPrincipalByEmail(recipient)
-        │         └─ NotFound → skip + log
+        ├─ POST /itip  { uid, sender, recipient, ical, method }
+        │       ├─ 204 OK
+        │       │     └─ [hasChange] → publishNotificationEmail(diff oldMessage→message)
+        │       ├─ 400 → skip + log (not concerned)
+        │       └─ 5xx → retry with backoff → DLQ
         │
-        ├─ getCalendarProperties(principal)
-        │         └─ inbox, defaultCalendar, homeSet
-        │
-        ├─ getExistingEvent(homeSet, uid)
-        │         └─ null if new event
-        │
-        ├─ broker.processMessage(iTipMessage, existingEvent)
-        │
-        ├─ writeCalendar(defaultCalendar, newEvent)
-        │
-        ├─ [hasChange || isNew] → writeInbox(inbox, iTipMessage)
-        │
-        └─ [hasChange && !isResource] → publishNotificationEmail(...)
+        └─ ack AMQP message once all recipients processed
 ```
 
 ---
@@ -461,18 +464,108 @@ With the short-circuit in place, `EventRealTimePlugin` no longer publishes WebSo
 
 > **Context**: In the `esn-sabre` project (SabreDAV/PHP), we are replacing the synchronous CalDAV invitation propagation with an asynchronous AMQP consumer. The PHP plugin now publishes a single RabbitMQ message on the topic `calendar:itip:localDelivery` instead of writing directly into attendee calendars.
 >
-> **Your task**: Design and implement a consumer (Node.js with `amqplib`, or Go with `amqp091-go`) that:
-> 1. Consumes messages from `calendar:itip:localDelivery` (see payload spec in `adr/0001-async-scheduling.md`).
-> 2. For each recipient in `recipients[]`, in parallel:
->    - Resolves the principal via MongoDB (collection `principals`, lookup by email).
->    - Finds the existing event by UID in the principal's `calendar-home-set`.
->    - Applies the iTIP message (RFC 5546 logic: REQUEST creates/updates, CANCEL deletes, REPLY updates PARTSTAT).
->    - Writes the event to the recipient's default calendar (MongoDB, collection `calendarObjects`).
->    - If `hasChange === true` or new event: writes to inbox (collection `schedulingObjects`).
->    - If `hasChange === true` and recipient is not a resource: publishes to `calendar:event:notificationEmail:send` with the diff computed between `oldMessage` and `message`.
-> 3. Handles errors with retry/backoff and dead-letter queue.
+> **AMQP message payload** (`calendar:itip:localDelivery`):
+> ```json
+> {
+>   "sender":     "mailto:bob@example.com",
+>   "method":     "REQUEST",
+>   "uid":        "abc-123-def-456",
+>   "message":    "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n...END:VCALENDAR",
+>   "oldMessage": "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n...END:VCALENDAR",
+>   "hasChange":  true,
+>   "recipients": [
+>     "mailto:alice@example.com",
+>     "mailto:cedric@example.com"
+>   ]
+> }
+> ```
+> - `oldMessage` is absent on event creation.
+> - `recipients[]` contains **all attendees** — local (same Sabre instance) and external (different domain). The consumer distinguishes them: ITIP call for local (204 → calendar written), no ITIP for external; both receive a `calendar:event:notificationEmail:send` notification if `hasChange === true`.
+> - `hasChange` is `true` if the iTIP broker detected a significant change (SUMMARY, LOCATION, DESCRIPTION, DTSTART, DTEND, attendees list).
+>
+> **Your task**: Implement a consumer (Node.js with `amqplib`, or Go with `amqp091-go`) that:
+> 1. Consumes messages from `calendar:itip:localDelivery`.
+> 2. For each recipient in `recipients[]`, in parallel, submits an HTTP `ITIP` request to Sabre **impersonating the recipient** (the ITIP call is made on behalf of the user for whom the delivery is being done):
+>    ```
+>    POST /itip
+>    Authorization: Basic <recipient-credentials>
+>    Content-Type: application/json
+>    {
+>      "uid":       "<uid>",
+>      "sender":    "<sender email, strip mailto:>",
+>      "recipient": "<recipient email, strip mailto:>",
+>      "ical":      "<message field verbatim>",
+>      "method":    "<method>"
+>    }
+>    ```
+>    Sabre handles all iTIP logic natively (calendar write, inbox, principal resolution, real-time notification via `EventRealTimePlugin`). No MongoDB access required in the consumer.
+> 3. If `hasChange === true`: publish to `calendar:event:notificationEmail:send` (see subsection below) — for **both local and external recipients**. For local recipients this is done after a successful ITIP call (204). For external recipients there is no ITIP call; publish the email notification directly.
+> 4. Error handling: HTTP 400 → skip ITIP + log (recipient not concerned by event), still publish email if `hasChange`; HTTP 5xx → DLQ immediately.
 >
 > **Constraints**:
-> - MongoDB schema is the one used by `esn-sabre` — read `lib/CalDAV/Backend/Mongo.php` to understand collection structure.
-> - iTIP processing logic (processMessage) can be ported from `vendor/sabre/vobject/lib/ITip/Broker.php` or implemented using an existing iCalendar library.
-> - Tests must cover: creation, update, cancellation, PARTSTAT-only (no inbox write), new attendee on existing event.
+> - No direct MongoDB access — all persistence goes through Sabre's ITIP endpoint.
+> - Tests must cover: REQUEST (new event, local), REQUEST (update, local), REQUEST (external recipient — no ITIP, email only), CANCEL, REPLY, `hasChange=false` (no email published), HTTP 400 (skip ITIP, email still sent), HTTP 5xx (DLQ).
+
+---
+
+## `calendar:event:notificationEmail:send` payload spec
+
+This topic is consumed by the email notification service. It is published by the consumer for **all recipients** (local and external) whenever `hasChange === true`. One message per recipient per VEVENT occurrence — recurring events must be split into individual per-occurrence messages before publishing.
+
+```json
+{
+  "senderEmail":    "bob@example.com",
+  "recipientEmail": "alice@example.com",
+  "method":         "REQUEST",
+  "event":          "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n...END:VCALENDAR",
+  "notify":         true,
+  "calendarURI":    "bob-calendar-uri",
+  "eventPath":      "/calendars/alice-id/events/abc-123.ics",
+  "isNewEvent":     true,
+  "changes": {
+    "summary":     { "previous": "Old title", "current": "New title" },
+    "location":    { "previous": "Old room",  "current": "New room" },
+    "description": { "previous": "Old desc",  "current": "New desc" },
+    "dtstart": {
+      "previous": { "isAllDay": false, "date": "2024-06-01 10:00:00.000000", "timezone_type": 3, "timezone": "Europe/Paris" },
+      "current":  { "isAllDay": false, "date": "2024-06-01 11:00:00.000000", "timezone_type": 3, "timezone": "Europe/Paris" }
+    },
+    "dtend": {
+      "previous": { "isAllDay": false, "date": "2024-06-01 11:00:00.000000", "timezone_type": 3, "timezone": "Europe/Paris" },
+      "current":  { "isAllDay": false, "date": "2024-06-01 12:00:00.000000", "timezone_type": 3, "timezone": "Europe/Paris" }
+    }
+  }
+}
+```
+
+| Field           | Type     | Present when  | Description |
+|-----------------|----------|---------------|-------------|
+| `senderEmail`   | `string` | always        | Organizer email, `mailto:` stripped |
+| `recipientEmail`| `string` | always        | Attendee email, `mailto:` stripped — local or external |
+| `method`        | `string` | always        | `REQUEST`, `CANCEL`, `REPLY`, `COUNTER` |
+| `event`         | `string` | always        | Serialized iCal — **single VEVENT** (one occurrence per message) |
+| `notify`        | `bool`   | always        | Always `true` |
+| `calendarURI`   | `string` | always        | URI of the organizer's calendar (e.g. `events`) |
+| `eventPath`     | `string` | local only    | Path of the event in the recipient's calendar — `/calendars/<recipientUserId>/<calendarUri>/<uid>.ics`. Omit for external recipients (no local calendar). |
+| `isNewEvent`    | `bool`   | new attendee  | `true` if the recipient was not an attendee in `oldMessage` |
+| `changes`       | `object` | update only   | Per-property diff — only changed properties included |
+| `oldEvent`      | `string` | COUNTER only  | Serialized iCal of current state before the COUNTER proposal |
+
+### `changes` field detail
+
+Computed by diffing the `oldMessage` vs `message` fields from the `calendar:itip:localDelivery` payload.
+
+- **String properties** (`summary`, `location`, `description`, `duration`):
+  ```json
+  { "previous": "<old value>", "current": "<new value>" }
+  ```
+- **Date properties** (`dtstart`, `dtend`):
+  ```json
+  {
+    "previous": { "isAllDay": false, "date": "YYYY-MM-DD HH:mm:ss.000000", "timezone_type": 3, "timezone": "Europe/Paris" },
+    "current":  { "isAllDay": false, "date": "YYYY-MM-DD HH:mm:ss.000000", "timezone_type": 3, "timezone": "Europe/Paris" }
+  }
+  ```
+  `isAllDay` is `true` when the iCal property has no time component (DATE value type).
+
+Only properties that actually changed are present in the `changes` object. An empty `changes` object means no tracked property changed (the change was on a non-tracked field such as attendee list).

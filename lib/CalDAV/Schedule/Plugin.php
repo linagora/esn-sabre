@@ -516,7 +516,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * @return array
      * @throws \Sabre\DAV\Exception\NotFound
      */
-    private function fetchCalendarOwnerAddresses($calendarPath): array {
+    protected function fetchCalendarOwnerAddresses($calendarPath): array {
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
         if ($calendarNode === null || !method_exists($calendarNode, 'getOwner')) {

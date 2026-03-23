@@ -253,6 +253,13 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         $path = $request->getPath();
+
+        // /itip is handled by ESN\CalDAV\Schedule\ITipPlugin — don't try to
+        // resolve it as a CardDAV node (it lives outside the DAV tree).
+        if ($path === 'itip') {
+            return true;
+        }
+
         $node = $this->server->tree->getNodeForPath($path);
         $code = null;
         $body = null;

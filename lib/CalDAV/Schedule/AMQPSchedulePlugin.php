@@ -50,8 +50,10 @@ class AMQPSchedulePlugin extends Plugin {
      * so the loop guard must live here, not in calendarObjectChange.
      */
     function scheduleLocalDelivery(ITip\Message $iTipMessage) {
-        if ($this->server->httpRequest->getMethod() === 'ITIP') {
-            // ITIP call from Twake Calendar Side Service — use synchronous delivery.
+        $req = $this->server->httpRequest;
+        if ($req->getMethod() === 'ITIP' || $req->getPath() === 'itip') {
+            // ITIP call from Twake Calendar Side Service (via custom ITIP verb or
+            // POST /itip) — use synchronous delivery.
             // EventRealTimePlugin will fire via the 'iTip' hook and publish real-time notifications.
             parent::scheduleLocalDelivery($iTipMessage);
             return;
@@ -88,7 +90,7 @@ class AMQPSchedulePlugin extends Plugin {
         &$modified,
         $isNew
     ) {
-        if ($request->getMethod() === 'ITIP' || !$this->scheduleReply($this->server->httpRequest)) {
+        if ($request->getMethod() === 'ITIP' || $request->getPath() === 'itip' || !$this->scheduleReply($this->server->httpRequest)) {
             return;
         }
 

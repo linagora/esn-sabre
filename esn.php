@@ -182,9 +182,15 @@ $server->addPlugin(new ESN\DAV\Sharing\Plugin());
 $server->addPlugin(new Sabre\CalDAV\SharingPlugin());
 
 // Calendar scheduling support
-$server->addPlugin(
-    new ESN\CalDAV\Schedule\Plugin($principalBackend)
-);
+// AMQP_SCHEDULING_ENABLED=true → async via AMQPSchedulePlugin + Twake Calendar Side Service
+// AMQP_SCHEDULING_ENABLED=false (default) → legacy synchronous behaviour, unchanged
+if (getenv('AMQP_SCHEDULING_ENABLED') !== 'true') {
+    // Legacy synchronous scheduling — AMQPSchedulePlugin is registered below
+    // inside the amqp block where $AMQPPublisher is available.
+    $server->addPlugin(
+        new ESN\CalDAV\Schedule\Plugin($principalBackend)
+    );
+}
 
 // WebDAV-Sync plugin
 $server->addPlugin(new Sabre\DAV\Sync\Plugin());
@@ -221,8 +227,15 @@ if (!empty($config['amqp']['host'])) {
     $subscriptionRealTimePlugin = new ESN\Publisher\CardDAV\SubscriptionRealTimePlugin($AMQPPublisher, $addressbookBackend);
     $server->addPlugin($subscriptionRealTimePlugin);
 
-    // iMip Plugin to handle sending emails
-    $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));
+    if (getenv('AMQP_SCHEDULING_ENABLED') === 'true') {
+        // Async scheduling: buffer recipients and publish a single AMQP message per PUT.
+        // Twake Calendar Side Service fans out and submits individual ITIP calls back to Sabre.
+        $server->addPlugin(new ESN\CalDAV\Schedule\AMQPSchedulePlugin($AMQPPublisher, $principalBackend));
+        $server->addPlugin(new ESN\CalDAV\Schedule\MinimalIMipPlugin($AMQPPublisher));
+    } else {
+        // Legacy synchronous scheduling + email notifications.
+        $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));
+    }
 }
 
 $server->addPlugin(new ESN\CalDAV\Schedule\ITipPlugin());

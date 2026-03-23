@@ -19,6 +19,7 @@ use Sabre\DAV;
 class MinimalIMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
     protected $amqpPublisher;
+    protected $server;
 
     function __construct($amqpPublisher) {
         $this->amqpPublisher = $amqpPublisher;

@@ -395,6 +395,26 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             }
         }
 
+        // Compare PARTSTAT for all attendees. A PARTSTAT-only change (e.g. an attendee
+        // accepting/declining) is invisible to the checks above because PARTSTAT is not in
+        // significantChangeProperties. Without this check, recurring-event attendees never see
+        // co-attendee PARTSTAT updates — inconsistent with the single-day-event behaviour
+        // (single-day events short-circuit at the $hasRecurrence guard above and always deliver).
+        $collectPartStats = function ($vevent): array {
+            $map = [];
+            if (isset($vevent->ATTENDEE)) {
+                foreach ($vevent->ATTENDEE as $attendee) {
+                    $email = strtolower($attendee->getNormalizedValue());
+                    $map[$email] = $attendee['PARTSTAT'] ? strtoupper((string)$attendee['PARTSTAT']) : 'NEEDS-ACTION';
+                }
+            }
+            ksort($map);
+            return $map;
+        };
+        if ($collectPartStats($oldVEvent) !== $collectPartStats($newVEvent)) {
+            return false; // An attendee's PARTSTAT changed, don't skip
+        }
+
         // Occurrence hasn't changed significantly, skip the message
         return true;
     }

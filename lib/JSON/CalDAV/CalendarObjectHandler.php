@@ -561,7 +561,8 @@ class CalendarObjectHandler {
     private function convertDateTimeToUTC($vevent, $propertyName) {
         if (isset($vevent->$propertyName) && $vevent->$propertyName->hasTime()) {
             $dt = $vevent->$propertyName->getDateTime();
-            $dt->setTimezone(new \DateTimeZone('UTC'));
+            // DateTimeImmutable::setTimezone() returns a new object — must reassign.
+            $dt = $dt->setTimezone(new \DateTimeZone('UTC'));
 
             // Recreate the property with UTC value
             // setDateTime() alone doesn't properly convert, we need to set the raw value

@@ -1,4 +1,4 @@
-# ARD-0001 — Async Scheduling via AMQP
+# ADR-0001 — Async Scheduling via AMQP
 
 ## Current State
 
@@ -59,7 +59,7 @@ The legacy `ESN\CalDAV\Schedule\Plugin` and `IMipPlugin` are **not modified** ex
 
 ### Overview
 
-```
+```text
 PUT /calendars/bob/events/event.ics       DELETE /calendars/bob/events/event.ics
         │                                          │
         ▼                                          ▼
@@ -82,7 +82,7 @@ AMQPSchedulePlugin.flushDeliveries()
 
 > **All recipients included**: Sabre's `deliver()` emits the `schedule` hook for every recipient, local or external. `AMQPSchedulePlugin.scheduleLocalDelivery()` therefore buffers all of them. For local recipients the consumer delivers via ITIP (calendar write). For external recipients the ITIP call finds no local principal and skips the calendar write, but the consumer still publishes `calendar:event:notificationEmail:send` so the external attendee receives an email.
 
-> `MinimalIMipPlugin` becomes a residual plugin handling only cases not covered by the consumer (e.g. COUNTER messages received by email via `ITipPlugin`). It no longer plays any role in the standard PUT flow.
+> `MinimalIMipPlugin` becomes a residual plugin handling only iTIP cases that arrive outside the standard PUT flow — specifically COUNTER messages received by email via the `ITipPlugin` `schedule` hook. It plays no role in the standard REQUEST/CANCEL/REPLY flow. Note: `ITipPlugin` also contains an intentional organizer-less REPLY fallback (`!$isConcerned && method === 'REPLY' && !$hasOrganizer && $senderIsAttendee`) for attendees replying to events without an ORGANIZER field; this is handled directly in `ITipPlugin` and is unrelated to `MinimalIMipPlugin`.
 
 ---
 
@@ -283,7 +283,7 @@ class AMQPSchedulePlugin extends Plugin {
 | `message`    | `string`  | Serialized iCal — new state |
 | `oldMessage` | `string?` | Serialized iCal — previous state (absent on creation) |
 | `hasChange`  | `bool`    | `true` if the iTIP broker detected a significant change |
-| `recipients` | `string[]`| List of attendee mailto URIs (local users only) |
+| `recipients` | `string[]`| List of attendee mailto URIs — local and external |
 
 ---
 
@@ -337,7 +337,7 @@ class MinimalIMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
 
 ### Design principle
 
-**Twake Calendar Side Service** does **not** reimplement Sabre's scheduling logic. It delegates all iTIP processing back to Sabre via the existing `ITIP` HTTP method, which `ITipPlugin` already handles. The service is a thin AMQP-to-HTTP bridge — no MongoDB access, no iCal parsing, no iTIP broker.
+**Twake Calendar Side Service** does **not** reimplement Sabre's scheduling logic. It delegates all iTIP processing back to Sabre via the existing `ITIP` HTTP method, which `ITipPlugin` already handles. The service acts as an AMQP-to-HTTP bridge with no MongoDB access and no iTIP broker (no REQUEST/CANCEL/REPLY routing, no PARTSTAT merging, no inbox writes — all of that is handled by Sabre). It does parse the iCalendar payloads in `message` and `oldMessage` to compute per-property diffs for the email notification step (see Phase 2b below).
 
 Sabre's full stack fires for each ITIP call: principal resolution, calendar write, inbox write, ACL check, `EventRealTimePlugin` real-time notification — all handled as if the request came from an email gateway. The loop is prevented in `AMQPSchedulePlugin::scheduleLocalDelivery()` by detecting the `ITIP` method and delegating to the parent's synchronous delivery (see sample code above).
 
@@ -345,7 +345,7 @@ Sabre's full stack fires for each ITIP call: principal resolution, calendar writ
 
 Messages arriving with N recipients are **not processed directly**. Twake Calendar Side Service first fans them out: it splits the message into N single-recipient messages and re-publishes each to the **same** `calendar:itip:localDelivery` exchange. Only messages with exactly **one recipient** are processed (ITIP call + email).
 
-```
+```text
 calendar:itip:localDelivery { recipients: [alice, cedric, ... ] }   ← N recipients
         │
         ▼  Fan-out pass (re-publish, do not process)
@@ -385,7 +385,7 @@ For each recipient in `recipients[]`, re-publish to `calendar:itip:localDelivery
 
 **a. Local recipient — submit ITIP to Sabre** (impersonating the recipient)
 
-```
+```text
 POST /itip
 Authorization: Basic <recipient-credentials>
 Content-Type: application/json
@@ -419,7 +419,7 @@ Content-Type: application/json
 
 ### Flow diagram
 
-```
+```text
 Receives calendar:itip:localDelivery
         │
         ▼
@@ -481,7 +481,7 @@ This causes `EventRealTimePlugin.schedule()` to return immediately for every rec
 
 With the short-circuit in place, `EventRealTimePlugin` no longer publishes WebSocket notifications for iTIP messages in the async path. This is correct — the event has not yet been written to the recipient's calendar when the PUT response is returned, so notifying the recipient's UI at that point would be premature.
 
-**Twake Calendar Side Service is responsible for publishing real-time notifications** after writing each recipient's calendar. It should publish to the appropriate topics (`calendar:event:request`, `calendar:event:cancel`, etc.) once the write is confirmed. This responsibility must be added to the consumer implementation (see Agent prompt below).
+Real-time notifications are **owned by the core** (`EventRealTimePlugin`), not by Twake Calendar Side Service. After `scheduleLocalDelivery` writes the recipient's calendar, `ITipPlugin::iTip()` emits the `'iTip'` server event (line 85), which `EventRealTimePlugin::itip()` catches. It reads the up-to-date event from the recipient's calendar and publishes the appropriate AMQP topics (`calendar:event:request`, `calendar:event:cancel`, etc.). The Side Service does not need to publish any real-time notification — Sabre handles it natively as part of the ITIP call.
 
 ### Performance summary
 
@@ -523,7 +523,7 @@ With the short-circuit in place, `EventRealTimePlugin` no longer publishes WebSo
 >
 > **Phase 2 — Process** (`recipients.length === 1`):
 > 1. If the recipient is local: submit an HTTP `ITIP` request to Sabre **impersonating the recipient**:
->    ```
+>    ```text
 >    POST /itip
 >    Authorization: Basic <recipient-credentials>
 >    Content-Type: application/json

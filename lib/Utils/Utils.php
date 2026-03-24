@@ -117,8 +117,6 @@ class Utils {
                 [
                     '{DAV:}principal-URL',
                     $caldavNS . 'calendar-home-set',
-                    $caldavNS . 'schedule-inbox-URL',
-                    $caldavNS . 'schedule-default-calendar-URL',
                     '{http://sabredav.org/ns}email-address',
                 ]
             );
@@ -126,30 +124,11 @@ class Utils {
             // Re-registering the ACL event
             $server->on('propFind', [$aclPlugin, 'propFind'], 20);
         }
-        if (!isset($result[$caldavNS . 'schedule-inbox-URL'])) {
-            error_log('5.2;Could not find local inbox');
-            return;
-        }
         if (!isset($result[$caldavNS . 'calendar-home-set'])) {
             error_log('5.2;Could not locate a calendar-home-set');
             return;
         }
-        if (!isset($result[$caldavNS . 'schedule-default-calendar-URL'])) {
-            error_log('5.2;Could not find a schedule-default-calendar-URL property');
-            return;
-        }
-        $calendarPath = $result[$caldavNS . 'schedule-default-calendar-URL']->getHref();
         $homePath = $result[$caldavNS . 'calendar-home-set']->getHref();
-        $inboxPath = $result[$caldavNS . 'schedule-inbox-URL']->getHref();
-        if ($method === 'REPLY') {
-            $privilege = 'schedule-deliver-reply';
-        } else {
-            $privilege = 'schedule-deliver-invite';
-        }
-        if (!$aclPlugin->checkPrivileges($inboxPath, $caldavNS . $privilege, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
-            error_log('3.8;organizer did not have the ' . $privilege . ' privilege on the attendees inbox');
-            return;
-        }
         // Next, we're going to find out if the item already exits in one of
         // the users' calendars.
         $home = $server->tree->getNodeForPath($homePath);

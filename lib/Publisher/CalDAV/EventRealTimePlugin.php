@@ -372,7 +372,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         $dataMessage = [
             'eventPath' => '/' . $eventPath,
-            'event' => VObject\Reader::read($upToDateEventIcs)
+            'event'     => VObject\Reader::read($upToDateEventIcs),
+            'rawEvent'  => $upToDateEventIcs,
         ];
 
         $this->createMessage(

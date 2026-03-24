@@ -132,7 +132,19 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $privilege = 'schedule-deliver-invite';
         }
 
-        if (!$aclPlugin->checkPrivileges($inboxPath, $caldavNS . $privilege, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+        // On the ITIP path (POST /itip) the Twake Side Service is an internal trusted caller
+        // and assertRecipientIsConcernedByEvent() in ITipPlugin already validated the recipient.
+        // Skip the inbox ACL privilege check:
+        //   • The Side Service may authenticate via a token that does not map to a Sabre
+        //     principal, so getCurrentUserPrincipal() returns null.
+        //   • DAVACL\Plugin::checkPrivileges() ignores $throwExceptions=false when the user is
+        //     unauthenticated and allowUnauthenticatedAccess=true — it always throws
+        //     NotAuthenticated (401) in that branch (Plugin.php:208).
+        //   • This surfaces as a hard 401 for resource/room recipients whose inbox ACL does not
+        //     explicitly grant schedule-deliver-* to {DAV:}unauthenticated.
+        $req = $this->server->httpRequest;
+        $isItipPath = $req->getMethod() === 'ITIP' || $req->getPath() === 'itip';
+        if (!$isItipPath && !$aclPlugin->checkPrivileges($inboxPath, $caldavNS . $privilege, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
             $iTipMessage->scheduleStatus = '3.8;insufficient privileges: ' . $privilege . ' is required on the recipient schedule inbox.';
             return;
         }

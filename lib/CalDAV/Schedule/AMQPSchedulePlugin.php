@@ -138,18 +138,80 @@ class AMQPSchedulePlugin extends Plugin {
         $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
         if (empty($addresses)) return;
 
+        $nodeIcs = $node->get();
+
+        // The ITip Broker crashes on exception-only calendars (VEVENT with RECURRENCE-ID but no
+        // master VEVENT): it tries DateTimeParser::parse("master") → InvalidDataException.
+        // This happens when an attendee invited to a single occurrence deletes it — their stored
+        // calendar object has no master VEVENT (RRULE stripped by sanitizeOutgoingRequestMessage).
+        //
+        // Fix: fetch the organizer's full calendar (which has the master VEVENT + the override
+        // with this attendee) and pass it to the Broker so it can generate a proper REPLY.
+        $nodeIcs = $this->resolveFullCalendarForBroker($nodeIcs) ?: $nodeIcs;
+
         $broker = new ITip\Broker();
         $broker->significantChangeProperties = array_merge(
             $broker->significantChangeProperties,
             ['SUMMARY', 'LOCATION', 'DESCRIPTION']
         );
-        $messages = $broker->parseEvent(null, $addresses, $node->get());
+        $messages = $broker->parseEvent(null, $addresses, $nodeIcs);
 
         foreach ($messages as $message) {
             $this->deliver($message);
         }
 
         $this->flushDeliveries();
+    }
+
+    /**
+     * When a calendar ICS has no master VEVENT (exception-only, e.g. an attendee invited to
+     * a single occurrence), fetch the organizer's full calendar for the same UID so the ITip
+     * Broker has a complete event to work with.
+     *
+     * Returns the organizer's ICS string on success, or null if unavailable (external organizer,
+     * permission error, not found) — callers must fall back to the original ICS.
+     */
+    private function resolveFullCalendarForBroker(string $ics): ?string {
+        $vCal = \Sabre\VObject\Reader::read($ics);
+
+        $hasMaster = false;
+        foreach ($vCal->VEVENT as $vevent) {
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                $hasMaster = true;
+                break;
+            }
+        }
+
+        if ($hasMaster) {
+            $vCal->destroy();
+            return null; // Nothing to fix — caller uses original ICS as-is.
+        }
+
+        // Pick organizer and UID from the first (only) exception VEVENT.
+        $exceptionVevent = $vCal->VEVENT;
+        $organizerRaw    = isset($exceptionVevent->ORGANIZER) ? (string)$exceptionVevent->ORGANIZER : null;
+        $uid             = isset($exceptionVevent->UID)       ? (string)$exceptionVevent->UID       : null;
+        $vCal->destroy();
+
+        if (!$organizerRaw || !$uid) {
+            return null;
+        }
+
+        $organizerPrincipal = Utils::getPrincipalByUri($organizerRaw, $this->server);
+        if (!$organizerPrincipal) {
+            return null; // External organizer — can't fetch their calendar.
+        }
+
+        $result = Utils::getEventObjectFromAnotherPrincipalHome(
+            $organizerPrincipal, $uid, 'REQUEST', $this->server
+        );
+
+        if (!$result) {
+            return null;
+        }
+
+        list(, $organizerIcs) = $result;
+        return $organizerIcs ?: null;
     }
 
     /**

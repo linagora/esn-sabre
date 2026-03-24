@@ -157,6 +157,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $isNewNode = true;
         }
 
+        if ($iTipMessage->method === 'REPLY' && $currentObject) {
+            $this->normalizeReplyRecurrenceId($iTipMessage, $currentObject);
+        }
+
         $broker = new ITip\Broker();
         $newObject = $broker->processMessage($iTipMessage, $currentObject);
 
@@ -488,6 +492,54 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                             break;
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * Correct a RECURRENCE-ID mismatch in incoming REPLY messages.
+     *
+     * Some CalDAV clients (e.g. Twake) create a new exception override when the
+     * attendee accepts a moved occurrence.  Because the stored DTSTART is already
+     * the moved time (e.g. 05:30 UTC), the client sets RECURRENCE-ID = DTSTART
+     * (05:30 UTC) rather than preserving the original occurrence time (05:00 UTC)
+     * that is the canonical RECURRENCE-ID in the organiser's calendar.
+     *
+     * Result: processMessageReply() receives RECURRENCE-ID:T053000Z but the
+     * organiser's exception has RECURRENCE-ID:T050000Z → no match → silent no-op.
+     *
+     * Heuristic fix: if the REPLY carries a RECURRENCE-ID that does not match any
+     * exception in the organiser's calendar, but that value equals the DTSTART of
+     * one of the organiser's exceptions, replace it with the canonical RECURRENCE-ID
+     * so the broker can route the update correctly.
+     */
+    private function normalizeReplyRecurrenceId(ITip\Message $iTipMessage, VCalendar $organizerCalendar): void {
+        foreach ($iTipMessage->message->VEVENT as $replyVevent) {
+            if (!isset($replyVevent->{'RECURRENCE-ID'})) {
+                continue;
+            }
+
+            $replyRecurTs = $replyVevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp();
+
+            // Check whether this RECURRENCE-ID already matches an exception.
+            foreach ($organizerCalendar->VEVENT as $orgVevent) {
+                if (isset($orgVevent->{'RECURRENCE-ID'}) &&
+                    $orgVevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp() === $replyRecurTs) {
+                    continue 2; // Exact match — no correction needed.
+                }
+            }
+
+            // No match by RECURRENCE-ID.  Try to find an exception whose DTSTART
+            // equals the REPLY's RECURRENCE-ID (the client used the moved time as key).
+            foreach ($organizerCalendar->VEVENT as $orgVevent) {
+                if (!isset($orgVevent->{'RECURRENCE-ID'})) {
+                    continue; // Skip master VEVENT.
+                }
+                if ($orgVevent->DTSTART->getDateTime()->getTimestamp() === $replyRecurTs) {
+                    // Correct: replace client's wrong RECURRENCE-ID with the canonical one.
+                    $replyVevent->{'RECURRENCE-ID'} = clone $orgVevent->{'RECURRENCE-ID'};
+                    break;
                 }
             }
         }

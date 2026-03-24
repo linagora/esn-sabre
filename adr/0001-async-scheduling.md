@@ -29,27 +29,27 @@ Both the legacy behaviour and the new async behaviour are **retained simultaneou
 Plugin registration in `esn.php`:
 
 ```php
-// Calendar scheduling support
-// NOTE: both branches require $AMQPPublisher, so this block moves inside
-// the existing `if ($AMQPPublisher)` guard (currently around line 210).
-// The legacy Plugin was registered outside that guard — this is intentional
-// relocation, not an oversight.
+// Calendar scheduling support.
+// AMQPSchedulePlugin requires $AMQPPublisher; the legacy Plugin does not.
+// Only the AMQP branches go inside the existing `if ($AMQPPublisher)` guard.
 if (getenv('AMQP_SCHEDULING_ENABLED') === 'true') {
+    // Inside the if ($AMQPPublisher) guard — fails fast at boot if publisher is missing.
     $server->addPlugin(new ESN\CalDAV\Schedule\AMQPSchedulePlugin($AMQPPublisher, $principalBackend));
 } else {
     $server->addPlugin(new ESN\CalDAV\Schedule\Plugin($principalBackend));
 }
 
-// ... further down, still inside the $AMQPPublisher block ...
+// ... further down; IMipPlugin branches follow the same pattern ...
 
 if (getenv('AMQP_SCHEDULING_ENABLED') === 'true') {
+    // Inside the if ($AMQPPublisher) guard.
     $server->addPlugin(new ESN\CalDAV\Schedule\MinimalIMipPlugin($AMQPPublisher));
 } else {
     $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));
 }
 ```
 
-> **Placement note**: in the current `esn.php`, `ESN\CalDAV\Schedule\Plugin` is registered **outside** the `if ($AMQPPublisher)` block (line ~184) while `IMipPlugin` is **inside** it (line ~224). `AMQPSchedulePlugin` requires `$AMQPPublisher`, so both registrations must move inside the guard. Verify that `$AMQPPublisher` is always available when `AMQP_SCHEDULING_ENABLED=true` — a missing publisher should fail fast at boot.
+> **Placement note**: in the current `esn.php`, `ESN\CalDAV\Schedule\Plugin` is registered **outside** the `if ($AMQPPublisher)` block (line ~184) while `IMipPlugin` is **inside** it (line ~224). Only the `AMQPSchedulePlugin` and `MinimalIMipPlugin` branches require `$AMQPPublisher` — move only those into the guard. The legacy `Plugin` and `IMipPlugin` branches must remain reachable even when `$AMQPPublisher` is null. Verify that `$AMQPPublisher` is always available when `AMQP_SCHEDULING_ENABLED=true` — a missing publisher should fail fast at boot.
 
 The legacy `ESN\CalDAV\Schedule\Plugin` and `IMipPlugin` are **not modified** except for changing `fetchCalendarOwnerAddresses` visibility from `private` to `protected` in `Plugin`. This flag is the sole switching mechanism — no logic is shared or entangled between the two paths.
 
@@ -81,7 +81,7 @@ AMQPSchedulePlugin.flushDeliveries()
 ```
 
 > **All recipients included**: Sabre's `deliver()` emits the `schedule` hook for every recipient, local or external. `AMQPSchedulePlugin.scheduleLocalDelivery()` therefore buffers all of them. For local recipients the consumer delivers via ITIP (calendar write). For external recipients the ITIP call finds no local principal and skips the calendar write, but the consumer still publishes `calendar:event:notificationEmail:send` so the external attendee receives an email.
-
+>
 > `MinimalIMipPlugin` becomes a residual plugin handling only iTIP cases that arrive outside the standard PUT flow — specifically COUNTER messages received by email via the `ITipPlugin` `schedule` hook. It plays no role in the standard REQUEST/CANCEL/REPLY flow. Note: `ITipPlugin` also contains an intentional organizer-less REPLY fallback (`!$isConcerned && method === 'REPLY' && !$hasOrganizer && $senderIsAttendee`) for attendees replying to events without an ORGANIZER field; this is handled directly in `ITipPlugin` and is unrelated to `MinimalIMipPlugin`.
 
 ---
@@ -165,8 +165,8 @@ class AMQPSchedulePlugin extends Plugin {
 
         $this->pendingDeliveries[$key]['recipients'][] = $iTipMessage->recipient;
 
-        // Exact '1.0' — short-circuits EventRealTimePlugin.schedule() (see Related Fix section)
-        $iTipMessage->scheduleStatus = '1.0';
+        // Sets SCHEDSTAT_SUCCESS_PENDING — short-circuits EventRealTimePlugin.schedule() (see Related Fix section)
+        $iTipMessage->scheduleStatus = IMipPlugin::SCHEDSTAT_SUCCESS_PENDING;
     }
 
     /**
@@ -458,21 +458,22 @@ switch($iTipMessage->scheduleStatus) {
 }
 ```
 
-In `AMQPSchedulePlugin::scheduleLocalDelivery()`, if the status is set as:
+In `AMQPSchedulePlugin::scheduleLocalDelivery()`, if the status is set as a string with a description suffix:
 
 ```php
 $iTipMessage->scheduleStatus = '1.0;Message queued for delivery';
 ```
 
-the switch **does not match** (`'1.0;Message queued for delivery' !== '1.0'`), so `EventRealTimePlugin.schedule()` proceeds and performs **4–5 additional MongoDB reads per recipient** (principal resolution, calendar home fetch, event lookup by UID, calendar node fetch). For 100 attendees this means ~400–500 extra synchronous MongoDB reads — entirely negating the performance gain of the new architecture.
+the switch **does not match** `IMipPlugin::SCHEDSTAT_SUCCESS_PENDING` (which equals the bare string `'1.0'`), so `EventRealTimePlugin.schedule()` proceeds and performs **4–5 additional MongoDB reads per recipient** (principal resolution, calendar home fetch, event lookup by UID, calendar node fetch). For 100 attendees this means ~400–500 extra synchronous MongoDB reads — entirely negating the performance gain of the new architecture.
 
 ### Fix
 
-Set the status to the bare code without description text:
+Set the status using the constant so the `switch` matches exactly:
 
 ```php
 // AMQPSchedulePlugin::scheduleLocalDelivery()
-$iTipMessage->scheduleStatus = '1.0';  // exact match — short-circuits EventRealTimePlugin
+$iTipMessage->scheduleStatus = IMipPlugin::SCHEDSTAT_SUCCESS_PENDING;
+// Equivalent to '1.0' — matches the switch in EventRealTimePlugin::schedule()
 ```
 
 This causes `EventRealTimePlugin.schedule()` to return immediately for every recipient, reducing the MongoDB read count in the PUT path from **O(n)** to **O(1)**.

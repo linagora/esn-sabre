@@ -508,9 +508,19 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         if (!$hasMaster) {
-            // Override-only message: flatten every VEVENT to a standalone event.
+            // Override-only message: strip RRULE only (invalid per RFC 5545 §3.8.5.3
+            // in a component that has RECURRENCE-ID), but KEEP RECURRENCE-ID.
+            //
+            // RECURRENCE-ID must be preserved so that when the attendee replies
+            // (PARTSTAT change), the broker can route the REPLY back to the correct
+            // occurrence in the organiser's calendar.  Without it, processMessage()
+            // treats the REPLY as targeting the master VEVENT, propagating the
+            // PARTSTAT change to all occurrences — which is wrong.
+            //
+            // Calendar clients that receive a VEVENT with RECURRENCE-ID but no
+            // master VEVENT display it as a plain standalone event (the series
+            // context is absent), so the attendee sees exactly one occurrence.
             foreach ($message->message->VEVENT as $vevent) {
-                unset($vevent->{'RECURRENCE-ID'});
                 unset($vevent->RRULE);
             }
             return;

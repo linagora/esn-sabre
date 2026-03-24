@@ -438,6 +438,17 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 continue;
             }
 
+            // When a new attendee is added only to a RECURRENCE-ID override (not the master),
+            // the Broker iterates only $attendee['newInstances'] which contains no 'master' key,
+            // so it builds a message with just the override VEVENT. The attendee then receives
+            // an orphaned exception with no knowledge of the recurring series.
+            // Fix: inject the master VEVENT from $newObject so the attendee gets a complete
+            // iTIP payload. Also strip RRULE from override VEVENTs (RFC 5545 §3.8.5.3 forbids
+            // RRULE in a component that has RECURRENCE-ID; a misbehaving client may send it).
+            if ($message->method === 'REQUEST') {
+                $this->sanitizeOutgoingRequestMessage($message);
+            }
+
             $this->deliver($message);
 
             // Update schedule status for organizer or attendee
@@ -458,6 +469,67 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Sanitises an outgoing REQUEST message that concerns a RECURRENCE-ID
+     * override whose attendee is not present in the master VEVENT.
+     *
+     * The Sabre ITip\Broker builds each attendee's message by iterating only
+     * the instances that attendee is invited to.  An attendee added exclusively
+     * to an override (not the master) therefore receives a message with only
+     * the override VEVENT — no master, no RRULE context.
+     *
+     * Two strategies are possible:
+     *  A) Inject the master VEVENT → the attendee sees the whole recurring
+     *     series in their calendar, including occurrences they are NOT part of.
+     *     This confuses most calendar frontends.
+     *  B) Strip RECURRENCE-ID (and any invalid RRULE) from the override VEVENT
+     *     → the attendee receives a clean, standalone event for the one
+     *     occurrence they were actually invited to.  If they are later invited
+     *     to the master, the subsequent iTIP will carry the full master VEVENT
+     *     and processMessage() will upgrade their entry naturally (same UID).
+     *
+     * Strategy B is applied here.
+     *
+     * As a secondary sanitisation, RRULE is stripped from any override VEVENT
+     * (RFC 5545 §3.8.5.3: RRULE MUST NOT appear in a component that has
+     * RECURRENCE-ID; some clients send it anyway).
+     */
+    private function sanitizeOutgoingRequestMessage(ITip\Message $message): void {
+        $hasMaster = false;
+        foreach ($message->message->VEVENT as $vevent) {
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                $hasMaster = true;
+                break;
+            }
+        }
+
+        if (!$hasMaster) {
+            // Override-only message: strip RRULE only (invalid per RFC 5545 §3.8.5.3
+            // in a component that has RECURRENCE-ID), but KEEP RECURRENCE-ID.
+            //
+            // RECURRENCE-ID must be preserved so that when the attendee replies
+            // (PARTSTAT change), the broker can route the REPLY back to the correct
+            // occurrence in the organiser's calendar.  Without it, processMessage()
+            // treats the REPLY as targeting the master VEVENT, propagating the
+            // PARTSTAT change to all occurrences — which is wrong.
+            //
+            // Calendar clients that receive a VEVENT with RECURRENCE-ID but no
+            // master VEVENT display it as a plain standalone event (the series
+            // context is absent), so the attendee sees exactly one occurrence.
+            foreach ($message->message->VEVENT as $vevent) {
+                unset($vevent->RRULE);
+            }
+            return;
+        }
+
+        // Master is present: only strip the invalid RRULE from override VEVENTs.
+        foreach ($message->message->VEVENT as $vevent) {
+            if (isset($vevent->{'RECURRENCE-ID'}) && isset($vevent->RRULE)) {
+                unset($vevent->RRULE);
             }
         }
     }

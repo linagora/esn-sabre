@@ -370,6 +370,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $upToDateEventIcs = $iTipMessage->message->serialize();
         }
 
+        // Normalize to relative path — getEventObjectFromAnotherPrincipalHome() returns an
+        // absolute path ('/calendars/...') but all downstream code assumes relative (no leading slash).
+        $eventPath = ltrim($eventPath, '/');
+
         $dataMessage = [
             'eventPath' => '/' . $eventPath,
             'event'     => VObject\Reader::read($upToDateEventIcs),

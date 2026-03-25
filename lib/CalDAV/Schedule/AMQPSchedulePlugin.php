@@ -32,6 +32,7 @@ class AMQPSchedulePlugin extends Plugin {
     private $amqpPublisher;
     private $pendingDeliveries = [];
     private $currentOldMessage = null;
+    private $currentCalendarId = null;
 
     public function __construct($amqpPublisher, $principalBackend = null) {
         parent::__construct($principalBackend);
@@ -105,6 +106,7 @@ class AMQPSchedulePlugin extends Plugin {
         $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
 
         $this->currentOldMessage = null;
+        $this->currentCalendarId = basename($calendarPath);
         $oldObj = null;
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
@@ -139,6 +141,7 @@ class AMQPSchedulePlugin extends Plugin {
         list($calendarPath,) = Utils::splitEventPath('/' . $path);
         if (!$calendarPath) return;
 
+        $this->currentCalendarId = basename($calendarPath);
         $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
         if (empty($addresses)) return;
 
@@ -226,6 +229,9 @@ class AMQPSchedulePlugin extends Plugin {
             if (!empty($this->currentOldMessage)) {
                 $delivery['oldMessage'] = $this->currentOldMessage;
             }
+            if ($this->currentCalendarId !== null) {
+                $delivery['calendarId'] = $this->currentCalendarId;
+            }
             $this->amqpPublisher->publish(
                 self::TOPIC_LOCAL_DELIVERY,
                 json_encode($delivery)
@@ -233,5 +239,6 @@ class AMQPSchedulePlugin extends Plugin {
         }
         $this->pendingDeliveries  = [];
         $this->currentOldMessage  = null;
+        $this->currentCalendarId  = null;
     }
 }

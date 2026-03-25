@@ -64,7 +64,8 @@ fi
   git clone -b amqp-scheduling-test https://github.com/linagora/twake-calendar-integration-tests.git it-tests
   cd it-tests
   bash pre-build.sh esn_sabre_test
-  mvn clean install -Pamqp-scheduling-on -Dapi.version=1.43 -Dtest=com.linagora.dav.sabrev4_7.**
+  mvn clean install -Dapi.version=1.43 -Dtest=com.linagora.dav.sabrev4_7.**
+  mvn test -Damqp.scheduling.enabled=true -Dapi.version=1.43 -Dtest=com.linagora.dav.sabrev4_7.**
 )
 exit_code_2=$?
 

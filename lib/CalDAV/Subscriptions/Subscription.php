@@ -108,14 +108,15 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
 
         $principalId = $parts[1];
         $calendarUri = $parts[2];
-        $principalUri = 'principals/users/' . $principalId;
 
-        // Get the source calendar
-        $calendars = $this->caldavBackend->getCalendarsForUser($principalUri);
-        foreach ($calendars as $calendar) {
-            if ($calendar['uri'] === $calendarUri) {
-                $this->sourceCalendarInfo = $calendar;
-                return $this->sourceCalendarInfo;
+        // Try both user and resource principal namespaces
+        foreach (['principals/users/', 'principals/resources/'] as $prefix) {
+            $calendars = $this->caldavBackend->getCalendarsForUser($prefix . $principalId);
+            foreach ($calendars as $calendar) {
+                if ($calendar['uri'] === $calendarUri) {
+                    $this->sourceCalendarInfo = $calendar;
+                    return $this->sourceCalendarInfo;
+                }
             }
         }
 
@@ -199,12 +200,6 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
      * @return string|null The principal URI of the source calendar owner
      */
     function getSourceOwner() {
-        $source = $this->subscriptionInfo['source'] ?? null;
-        if ($source && preg_match('#calendars/([^/]+)#', $source, $matches)) {
-            return 'principals/users/' . $matches[1];
-        }
-
-        // Fallback to database lookup
         $sourceCalendarInfo = $this->getSourceCalendarInfo();
         if ($sourceCalendarInfo && isset($sourceCalendarInfo['principaluri'])) {
             return $sourceCalendarInfo['principaluri'];

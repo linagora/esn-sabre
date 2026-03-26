@@ -68,11 +68,19 @@ class SubscriptionObject extends CalendarObject {
     /**
      * Checks if write access is allowed based on the source calendar's permissions.
      *
+     * Returns true if the source calendar has a public write right, or if the
+     * subscription owner has an individual write or admin access level.
+     *
      * @return bool
      */
     protected function hasWriteAccess() {
-        // Check if the source calendar has public write right
         $publicRight = $this->caldavBackend->getCalendarPublicRight($this->calendarInfo['id']);
-        return $publicRight === '{DAV:}write';
+        if ($publicRight === '{DAV:}write') {
+            return true;
+        }
+
+        $access = $this->caldavBackend->getUserCalendarAccess($this->calendarInfo['id'], $this->subscriptionOwner);
+        return $access === \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE
+            || $access === \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION;
     }
 }

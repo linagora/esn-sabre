@@ -123,6 +123,14 @@ class CalendarInstanceDAO extends BaseDAO {
         return $this->find(['principaluri' => $principalUri], $options);
     }
 
+    public function getUserCalendarAccess($calendarId, $principalUri) {
+        $instance = $this->findOne(
+            ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId), 'principaluri' => $principalUri],
+            ['projection' => ['access' => 1]]
+        );
+        return $instance ? (int) $instance['access'] : null;
+    }
+
     public function ensureIndexes() {
         // Create a unique compound index on 'principaluri' and 'uri'
         $this->createIndex(

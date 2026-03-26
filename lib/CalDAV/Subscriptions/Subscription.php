@@ -165,8 +165,8 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
     /**
      * Checks if the subscription allows write access.
      *
-     * Write access is determined by checking if the source calendar grants
-     * write privileges via public right.
+     * Write access is granted if the source calendar has a public write right,
+     * or if the subscriber has an individual write or admin access level.
      *
      * @throws \Sabre\DAV\Exception\Forbidden
      */
@@ -176,9 +176,14 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
             throw new \Sabre\DAV\Exception\Forbidden('Source calendar not found');
         }
 
-        // Check if the source calendar has public write right
         $publicRight = $this->caldavBackend->getCalendarPublicRight($sourceCalendarInfo['id']);
         if ($publicRight === '{DAV:}write') {
+            return;
+        }
+
+        $subscriberPrincipal = $this->subscriptionInfo['principaluri'];
+        $access = $this->caldavBackend->getUserCalendarAccess($sourceCalendarInfo['id'], $subscriberPrincipal);
+        if ($access === \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE || $access === \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION) {
             return;
         }
 

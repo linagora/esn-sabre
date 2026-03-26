@@ -260,12 +260,15 @@ class CalendarService {
      * @param callable $getSubscribersCallback
      * @param callable $deleteSubscriptionCallback
      */
-    public function deleteSubscribers($principaluri, $uri, $getSubscribersCallback, $deleteSubscriptionCallback) {
+    public function deleteSubscribers($principaluri, $uri, $getSubscribersCallback, $deleteSubscriptionCallback, $hasElevatedAccessCallback = null) {
         $principalUriExploded = explode('/', $principaluri);
         $source = 'calendars/' . $principalUriExploded[2] . '/' . $uri;
 
         $subscriptions = $getSubscribersCallback($source);
         foreach($subscriptions as $subscription) {
+            if ($hasElevatedAccessCallback !== null && $hasElevatedAccessCallback($subscription['principaluri'])) {
+                continue;
+            }
             $deleteSubscriptionCallback($subscription['_id']);
         }
     }

@@ -108,14 +108,15 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
 
         $principalId = $parts[1];
         $calendarUri = $parts[2];
-        $principalUri = 'principals/users/' . $principalId;
 
-        // Get the source calendar
-        $calendars = $this->caldavBackend->getCalendarsForUser($principalUri);
-        foreach ($calendars as $calendar) {
-            if ($calendar['uri'] === $calendarUri) {
-                $this->sourceCalendarInfo = $calendar;
-                return $this->sourceCalendarInfo;
+        // Try both user and resource principal namespaces
+        foreach (['principals/users/', 'principals/resources/'] as $prefix) {
+            $calendars = $this->caldavBackend->getCalendarsForUser($prefix . $principalId);
+            foreach ($calendars as $calendar) {
+                if ($calendar['uri'] === $calendarUri) {
+                    $this->sourceCalendarInfo = $calendar;
+                    return $this->sourceCalendarInfo;
+                }
             }
         }
 
@@ -165,8 +166,8 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
     /**
      * Checks if the subscription allows write access.
      *
-     * Write access is determined by checking if the source calendar grants
-     * write privileges via public right.
+     * Write access is granted if the source calendar has a public write right,
+     * or if the subscriber has an individual write or admin access level.
      *
      * @throws \Sabre\DAV\Exception\Forbidden
      */
@@ -176,9 +177,14 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
             throw new \Sabre\DAV\Exception\Forbidden('Source calendar not found');
         }
 
-        // Check if the source calendar has public write right
         $publicRight = $this->caldavBackend->getCalendarPublicRight($sourceCalendarInfo['id']);
         if ($publicRight === '{DAV:}write') {
+            return;
+        }
+
+        $subscriberPrincipal = $this->subscriptionInfo['principaluri'];
+        $access = $this->caldavBackend->getUserCalendarAccess($sourceCalendarInfo['id'], $subscriberPrincipal);
+        if ($access === \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE || $access === \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION) {
             return;
         }
 
@@ -194,12 +200,6 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
      * @return string|null The principal URI of the source calendar owner
      */
     function getSourceOwner() {
-        $source = $this->subscriptionInfo['source'] ?? null;
-        if ($source && preg_match('#calendars/([^/]+)#', $source, $matches)) {
-            return 'principals/users/' . $matches[1];
-        }
-
-        // Fallback to database lookup
         $sourceCalendarInfo = $this->getSourceCalendarInfo();
         if ($sourceCalendarInfo && isset($sourceCalendarInfo['principaluri'])) {
             return $sourceCalendarInfo['principaluri'];

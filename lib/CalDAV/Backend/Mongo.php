@@ -315,13 +315,34 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     function saveCalendarPublicRight($calendarId, $privilege, $calendarInfo) {
         $this->_assertIsArray($calendarId);
 
+        $rawCalendarId = $calendarId[0];
+        $deleteSubscribersCallback = function($principaluri, $uri) use ($rawCalendarId) {
+            $getSubscribersCallback = function($source) {
+                return $this->getSubscribers($source);
+            };
+            $deleteSubscriptionCallback = function($subscriptionId) {
+                $this->deleteSubscription($subscriptionId);
+            };
+            $hasElevatedAccessCallback = function($principalUri) use ($rawCalendarId) {
+                $access = $this->calendarInstanceDAO->getUserCalendarAccess($rawCalendarId, $principalUri);
+                return $access === \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE
+                    || $access === \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION;
+            };
+            return $this->calendarService->deleteSubscribers($principaluri, $uri, $getSubscribersCallback, $deleteSubscriptionCallback, $hasElevatedAccessCallback);
+        };
+
         $this->calendarSharingService->saveCalendarPublicRight(
             $calendarId,
             $privilege,
             $calendarInfo,
-            [$this, 'deleteSubscribers'],
+            $deleteSubscribersCallback,
             [$this, 'getCalendarPath']
         );
+    }
+
+    function getUserCalendarAccess($calendarId, $principalUri) {
+        $this->_assertIsArray($calendarId);
+        return $this->calendarInstanceDAO->getUserCalendarAccess($calendarId[0], $principalUri);
     }
 
     function saveCalendarInviteStatus($calendarId, $status) {

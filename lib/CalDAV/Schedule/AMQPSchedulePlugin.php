@@ -53,6 +53,11 @@ class AMQPSchedulePlugin extends Plugin {
     function scheduleLocalDelivery(ITip\Message $iTipMessage) {
         $req = $this->server->httpRequest;
         if ($req->getMethod() === 'ITIP' || $req->getPath() === 'itip') {
+            if (strtoupper((string)$iTipMessage->method) === 'COUNTER') {
+                $this->handleItipCounterLocalDelivery($iTipMessage, $req);
+                return;
+            }
+
             // ITIP call from Twake Calendar Side Service (via custom ITIP verb or
             // POST /itip) — use synchronous delivery.
             // EventRealTimePlugin will fire via the 'iTip' hook and publish real-time notifications.
@@ -82,6 +87,57 @@ class AMQPSchedulePlugin extends Plugin {
         // Exact '1.0' (no description text) — short-circuits EventRealTimePlugin.schedule()
         // which checks scheduleStatus with a strict string comparison against the constant.
         $iTipMessage->scheduleStatus = '1.0';
+    }
+
+    private function handleItipCounterLocalDelivery(ITip\Message $iTipMessage, RequestInterface $req): void {
+        list($calendarPath,) = Utils::splitEventPath('/' . ltrim($req->getPath(), '/'));
+        $calendarId = $calendarPath ? basename($calendarPath) : null;
+        $oldMessage = $this->resolveCounterOldMessage($iTipMessage, $req);
+
+        // Keep synchronous delivery for ITIP path.
+        parent::scheduleLocalDelivery($iTipMessage);
+
+        $payload = [
+            'sender' => $iTipMessage->sender,
+            'method' => $iTipMessage->method,
+            'uid' => $iTipMessage->uid,
+            'message' => $iTipMessage->message->serialize(),
+            'hasChange' => $iTipMessage->hasChange,
+            'recipients' => [$iTipMessage->recipient],
+        ];
+        if ($calendarId !== null) {
+            $payload['calendarId'] = $calendarId;
+        }
+        if ($oldMessage !== null) {
+            $payload['oldMessage'] = $oldMessage;
+        }
+
+        $this->amqpPublisher->publish(self::TOPIC_LOCAL_DELIVERY, json_encode($payload));
+    }
+
+    private function resolveCounterOldMessage(ITip\Message $iTipMessage, RequestInterface $req): ?string {
+        $recipientPrincipal = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
+
+        if ($recipientPrincipal) {
+            $result = Utils::getEventObjectFromAnotherPrincipalHome(
+                $recipientPrincipal,
+                $iTipMessage->uid,
+                $iTipMessage->method,
+                $this->server
+            );
+            if ($result) {
+                list(, $oldMessage) = $result;
+                if ($oldMessage !== null) {
+                    return $oldMessage;
+                }
+            }
+        }
+
+        try {
+            return $this->server->tree->getNodeForPath($req->getPath())->get();
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     /**

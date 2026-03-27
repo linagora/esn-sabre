@@ -325,6 +325,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         // Get the event from recipient's calendar (should exist now, created by schedule plugin)
         list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
 
+        // Track whether the event already existed in the recipient's calendar before delivery.
+        // Used below to choose between EVENT_CREATED and EVENT_UPDATED for search indexing.
+        $foundInCalendar = ($eventPath !== null);
+
         // If event not found (e.g., CANCEL deleted it, or external REQUEST), construct path manually
         if (!$eventPath) {
             $aclPlugin = $this->server->getPlugin('acl');
@@ -366,9 +370,14 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $upToDateEventIcs = $iTipMessage->message->serialize();
         }
 
+        // Normalize to relative path — getEventObjectFromAnotherPrincipalHome() returns an
+        // absolute path ('/calendars/...') but all downstream code assumes relative (no leading slash).
+        $eventPath = ltrim($eventPath, '/');
+
         $dataMessage = [
             'eventPath' => '/' . $eventPath,
-            'event' => VObject\Reader::read($upToDateEventIcs)
+            'event'     => VObject\Reader::read($upToDateEventIcs),
+            'rawEvent'  => $upToDateEventIcs,
         ];
 
         $this->createMessage(
@@ -420,6 +429,23 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         }
 
 
+        // scheduleLocalDelivery writes directly to the backend (bypassing the HTTP layer),
+        // so beforeCreateFile / beforeWriteContent never fire and the search index is never
+        // notified.  Emit the appropriate search-indexing event explicitly here.
+        //
+        // • REQUEST → created (new invite) or updated (re-invite / modification)
+        // • CANCEL  → deleted
+        // REPLY is intentionally omitted: the organiser's calendar is updated via a normal
+        // PUT on the attendee side which already triggers beforeWriteContent on the organiser.
+        if ($iTipMessage->method === 'REQUEST') {
+            $indexTopic = $foundInCalendar
+                ? $this->EVENT_TOPICS['EVENT_UPDATED']
+                : $this->EVENT_TOPICS['EVENT_CREATED'];
+            $this->createMessage($indexTopic, $dataMessage);
+        } elseif ($iTipMessage->method === 'CANCEL') {
+            $this->createMessage($this->EVENT_TOPICS['EVENT_DELETED'], $dataMessage);
+        }
+
         if($senderPrincipalUri && $iTipMessage->method === 'REPLY' && Utils::isResourceFromPrincipal($senderPrincipalUri)) {
             list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
 
@@ -460,6 +486,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             }
         }
 
+        $this->publishMessages();
         return true;
     }
 

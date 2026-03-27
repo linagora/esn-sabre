@@ -132,7 +132,19 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $privilege = 'schedule-deliver-invite';
         }
 
-        if (!$aclPlugin->checkPrivileges($inboxPath, $caldavNS . $privilege, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+        // On the ITIP path (POST /itip) the Twake Side Service is an internal trusted caller
+        // and assertRecipientIsConcernedByEvent() in ITipPlugin already validated the recipient.
+        // Skip the inbox ACL privilege check:
+        //   • The Side Service may authenticate via a token that does not map to a Sabre
+        //     principal, so getCurrentUserPrincipal() returns null.
+        //   • DAVACL\Plugin::checkPrivileges() ignores $throwExceptions=false when the user is
+        //     unauthenticated and allowUnauthenticatedAccess=true — it always throws
+        //     NotAuthenticated (401) in that branch (Plugin.php:208).
+        //   • This surfaces as a hard 401 for resource/room recipients whose inbox ACL does not
+        //     explicitly grant schedule-deliver-* to {DAV:}unauthenticated.
+        $req = $this->server->httpRequest;
+        $isItipPath = $req->getMethod() === 'ITIP' || $req->getPath() === 'itip';
+        if (!$isItipPath && !$aclPlugin->checkPrivileges($inboxPath, $caldavNS . $privilege, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
             $iTipMessage->scheduleStatus = '3.8;insufficient privileges: ' . $privilege . ' is required on the recipient schedule inbox.';
             return;
         }
@@ -155,6 +167,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $currentObject = \Sabre\VObject\Reader::read($oldICalendarData);
         } else {
             $isNewNode = true;
+        }
+
+        if ($iTipMessage->method === 'REPLY' && $currentObject) {
+            $this->normalizeReplyRecurrenceId($iTipMessage, $currentObject);
         }
 
         $broker = new ITip\Broker();
@@ -395,6 +411,26 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             }
         }
 
+        // Compare PARTSTAT for all attendees. A PARTSTAT-only change (e.g. an attendee
+        // accepting/declining) is invisible to the checks above because PARTSTAT is not in
+        // significantChangeProperties. Without this check, recurring-event attendees never see
+        // co-attendee PARTSTAT updates — inconsistent with the single-day-event behaviour
+        // (single-day events short-circuit at the $hasRecurrence guard above and always deliver).
+        $collectPartStats = function ($vevent): array {
+            $map = [];
+            if (isset($vevent->ATTENDEE)) {
+                foreach ($vevent->ATTENDEE as $attendee) {
+                    $email = strtolower($attendee->getNormalizedValue());
+                    $map[$email] = $attendee['PARTSTAT'] ? strtoupper((string)$attendee['PARTSTAT']) : 'NEEDS-ACTION';
+                }
+            }
+            ksort($map);
+            return $map;
+        };
+        if ($collectPartStats($oldVEvent) !== $collectPartStats($newVEvent)) {
+            return false; // An attendee's PARTSTAT changed, don't skip
+        }
+
         // Occurrence hasn't changed significantly, skip the message
         return true;
     }
@@ -438,6 +474,17 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 continue;
             }
 
+            // When a new attendee is added only to a RECURRENCE-ID override (not the master),
+            // the Broker iterates only $attendee['newInstances'] which contains no 'master' key,
+            // so it builds a message with just the override VEVENT. The attendee then receives
+            // an orphaned exception with no knowledge of the recurring series.
+            // Fix: inject the master VEVENT from $newObject so the attendee gets a complete
+            // iTIP payload. Also strip RRULE from override VEVENTs (RFC 5545 §3.8.5.3 forbids
+            // RRULE in a component that has RECURRENCE-ID; a misbehaving client may send it).
+            if ($message->method === 'REQUEST') {
+                $this->sanitizeOutgoingRequestMessage($message);
+            }
+
             $this->deliver($message);
 
             // Update schedule status for organizer or attendee
@@ -458,6 +505,115 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Correct a RECURRENCE-ID mismatch in incoming REPLY messages.
+     *
+     * Some CalDAV clients (e.g. Twake) create a new exception override when the
+     * attendee accepts a moved occurrence.  Because the stored DTSTART is already
+     * the moved time (e.g. 05:30 UTC), the client sets RECURRENCE-ID = DTSTART
+     * (05:30 UTC) rather than preserving the original occurrence time (05:00 UTC)
+     * that is the canonical RECURRENCE-ID in the organiser's calendar.
+     *
+     * Result: processMessageReply() receives RECURRENCE-ID:T053000Z but the
+     * organiser's exception has RECURRENCE-ID:T050000Z → no match → silent no-op.
+     *
+     * Heuristic fix: if the REPLY carries a RECURRENCE-ID that does not match any
+     * exception in the organiser's calendar, but that value equals the DTSTART of
+     * one of the organiser's exceptions, replace it with the canonical RECURRENCE-ID
+     * so the broker can route the update correctly.
+     */
+    private function normalizeReplyRecurrenceId(ITip\Message $iTipMessage, VCalendar $organizerCalendar): void {
+        foreach ($iTipMessage->message->VEVENT as $replyVevent) {
+            if (!isset($replyVevent->{'RECURRENCE-ID'})) {
+                continue;
+            }
+
+            $replyRecurTs = $replyVevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp();
+
+            // Check whether this RECURRENCE-ID already matches an exception.
+            foreach ($organizerCalendar->VEVENT as $orgVevent) {
+                if (isset($orgVevent->{'RECURRENCE-ID'}) &&
+                    $orgVevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp() === $replyRecurTs) {
+                    continue 2; // Exact match — no correction needed.
+                }
+            }
+
+            // No match by RECURRENCE-ID.  Try to find an exception whose DTSTART
+            // equals the REPLY's RECURRENCE-ID (the client used the moved time as key).
+            foreach ($organizerCalendar->VEVENT as $orgVevent) {
+                if (!isset($orgVevent->{'RECURRENCE-ID'})) {
+                    continue; // Skip master VEVENT.
+                }
+                if ($orgVevent->DTSTART->getDateTime()->getTimestamp() === $replyRecurTs) {
+                    // Correct: replace client's wrong RECURRENCE-ID with the canonical one.
+                    $replyVevent->{'RECURRENCE-ID'} = clone $orgVevent->{'RECURRENCE-ID'};
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Sanitises an outgoing REQUEST message that concerns a RECURRENCE-ID
+     * override whose attendee is not present in the master VEVENT.
+     *
+     * The Sabre ITip\Broker builds each attendee's message by iterating only
+     * the instances that attendee is invited to.  An attendee added exclusively
+     * to an override (not the master) therefore receives a message with only
+     * the override VEVENT — no master, no RRULE context.
+     *
+     * Two strategies are possible:
+     *  A) Inject the master VEVENT → the attendee sees the whole recurring
+     *     series in their calendar, including occurrences they are NOT part of.
+     *     This confuses most calendar frontends.
+     *  B) Strip RECURRENCE-ID (and any invalid RRULE) from the override VEVENT
+     *     → the attendee receives a clean, standalone event for the one
+     *     occurrence they were actually invited to.  If they are later invited
+     *     to the master, the subsequent iTIP will carry the full master VEVENT
+     *     and processMessage() will upgrade their entry naturally (same UID).
+     *
+     * Strategy B is applied here.
+     *
+     * As a secondary sanitisation, RRULE is stripped from any override VEVENT
+     * (RFC 5545 §3.8.5.3: RRULE MUST NOT appear in a component that has
+     * RECURRENCE-ID; some clients send it anyway).
+     */
+    private function sanitizeOutgoingRequestMessage(ITip\Message $message): void {
+        $hasMaster = false;
+        foreach ($message->message->VEVENT as $vevent) {
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                $hasMaster = true;
+                break;
+            }
+        }
+
+        if (!$hasMaster) {
+            // Override-only message: strip RRULE only (invalid per RFC 5545 §3.8.5.3
+            // in a component that has RECURRENCE-ID), but KEEP RECURRENCE-ID.
+            //
+            // RECURRENCE-ID must be preserved so that when the attendee replies
+            // (PARTSTAT change), the broker can route the REPLY back to the correct
+            // occurrence in the organiser's calendar.  Without it, processMessage()
+            // treats the REPLY as targeting the master VEVENT, propagating the
+            // PARTSTAT change to all occurrences — which is wrong.
+            //
+            // Calendar clients that receive a VEVENT with RECURRENCE-ID but no
+            // master VEVENT display it as a plain standalone event (the series
+            // context is absent), so the attendee sees exactly one occurrence.
+            foreach ($message->message->VEVENT as $vevent) {
+                unset($vevent->RRULE);
+            }
+            return;
+        }
+
+        // Master is present: only strip the invalid RRULE from override VEVENTs.
+        foreach ($message->message->VEVENT as $vevent) {
+            if (isset($vevent->{'RECURRENCE-ID'}) && isset($vevent->RRULE)) {
+                unset($vevent->RRULE);
             }
         }
     }
@@ -516,7 +672,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * @return array
      * @throws \Sabre\DAV\Exception\NotFound
      */
-    private function fetchCalendarOwnerAddresses($calendarPath): array {
+    protected function fetchCalendarOwnerAddresses($calendarPath): array {
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
 
         if ($calendarNode === null || !method_exists($calendarNode, 'getOwner')) {

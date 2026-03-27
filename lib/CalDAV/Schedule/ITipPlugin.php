@@ -16,6 +16,17 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
     {
         $this->server = $server;
         $server->on('method:ITIP', [$this, 'iTip'], 80);
+        // Also handle POST /itip — the Twake Calendar Side Service consumer
+        // uses standard POST rather than the custom ITIP verb.
+        $server->on('method:POST', [$this, 'handlePost'], 80);
+    }
+
+    function handlePost($request, $response)
+    {
+        if ($request->getPath() !== 'itip') {
+            return true;
+        }
+        return $this->iTip($request);
     }
 
     function getPluginName()

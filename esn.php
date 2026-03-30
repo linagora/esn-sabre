@@ -231,7 +231,6 @@ if (!empty($config['amqp']['host'])) {
         // Async scheduling: buffer recipients and publish a single AMQP message per PUT.
         // Twake Calendar Side Service fans out and submits individual ITIP calls back to Sabre.
         $server->addPlugin(new ESN\CalDAV\Schedule\AMQPSchedulePlugin($AMQPPublisher, $principalBackend));
-        $server->addPlugin(new ESN\CalDAV\Schedule\MinimalIMipPlugin($AMQPPublisher));
     } else {
         // Legacy synchronous scheduling + email notifications.
         $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));

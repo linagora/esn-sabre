@@ -4,6 +4,7 @@ namespace ESN\CalDAV\Schedule;
 use ESN\Utils\Utils;
 use Sabre\CalDAV\ICalendarObject;
 use Sabre\CalDAV\Schedule\ISchedulingObject;
+use Sabre\DAV\Exception\NotFound;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Component\VCalendar;
@@ -53,6 +54,8 @@ class AMQPSchedulePlugin extends Plugin {
     function scheduleLocalDelivery(ITip\Message $iTipMessage) {
         $req = $this->server->httpRequest;
         if ($req->getMethod() === 'ITIP' || $req->getPath() === 'itip') {
+            $this->assertCanAccessItipRequestPath($req);
+
             if (strtoupper((string)$iTipMessage->method) === 'COUNTER') {
                 $this->handleItipCounterLocalDelivery($iTipMessage, $req);
                 return;
@@ -87,6 +90,22 @@ class AMQPSchedulePlugin extends Plugin {
         // Exact '1.0' (no description text) — short-circuits EventRealTimePlugin.schedule()
         // which checks scheduleStatus with a strict string comparison against the constant.
         $iTipMessage->scheduleStatus = '1.0';
+    }
+
+    private function assertCanAccessItipRequestPath(RequestInterface $request): void {
+        // Internal callback from Twake side-service uses POST /itip.
+        if ($request->getPath() === 'itip') {
+            return;
+        }
+
+        $requestPath = $request->getPath();
+        try {
+            $this->server->tree->getNodeForPath($requestPath);
+        } catch (NotFound $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            throw new NotFound('ITIP request path is not accessible');
+        }
     }
 
     private function handleItipCounterLocalDelivery(ITip\Message $iTipMessage, RequestInterface $req): void {

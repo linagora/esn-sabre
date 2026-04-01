@@ -98,18 +98,9 @@ class AMQPSchedulePlugin extends Plugin {
             return;
         }
 
-        $aclPlugin = $this->server->getPlugin('acl');
-        if (!$aclPlugin) {
-            return;
-        }
-
         $requestPath = $request->getPath();
         try {
             $this->server->tree->getNodeForPath($requestPath);
-            $canWrite = $aclPlugin->checkPrivileges($requestPath, '{DAV:}write', \Sabre\DAVACL\Plugin::R_PARENT, false);
-            if (!$canWrite) {
-                throw new NotFound('ITIP request path is not accessible');
-            }
         } catch (NotFound $e) {
             throw $e;
         } catch (\Throwable $e) {

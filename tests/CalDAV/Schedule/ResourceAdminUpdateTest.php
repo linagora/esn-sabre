@@ -313,7 +313,7 @@ ICS;
         $authPlugin = new \Sabre\DAV\Auth\Plugin($authBackend);
         $this->server->addPlugin($authPlugin);
 
-        $aclPlugin = new \Sabre\DAVACL\Plugin();
+        $aclPlugin = new \ESN\DAVACL\ACLPlugin();
         $aclPlugin->principalCollectionSet = ['principals/users', 'principals/resources'];
         $this->server->addPlugin($aclPlugin);
 

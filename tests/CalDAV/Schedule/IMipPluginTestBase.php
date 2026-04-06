@@ -201,7 +201,7 @@ class IMipPluginTestBase extends \PHPUnit\Framework\TestCase {
         $authPlugin = new \Sabre\DAV\Auth\Plugin($authBackend);
         $this->server->addPlugin($authPlugin);
 
-        $aclPlugin = new \Sabre\DAVACL\Plugin();
+        $aclPlugin = new \ESN\DAVACL\ACLPlugin();
         $aclPlugin->principalCollectionSet = ['principals', 'principals/users'];
         $this->server->addPlugin($aclPlugin);
 

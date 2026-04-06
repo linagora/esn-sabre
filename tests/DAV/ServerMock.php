@@ -389,7 +389,7 @@ END:VCALENDAR'
         $authPlugin = new \ESN\DAV\Auth\PluginMock($this->authBackend);
         $this->server->addPlugin($authPlugin);
 
-        $aclPlugin = new \Sabre\DAVACL\Plugin();
+        $aclPlugin = new \ESN\DAVACL\ACLPlugin();
         $aclPlugin->principalCollectionSet = [
             PRINCIPALS_USERS,
             PRINCIPALS_RESOURCES,

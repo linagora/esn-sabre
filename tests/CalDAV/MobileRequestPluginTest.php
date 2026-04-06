@@ -20,7 +20,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
     function setUp(): void {
         parent::setUp();
 
-        $aclPlugin = new \Sabre\DAVACL\Plugin();
+        $aclPlugin = new \ESN\DAVACL\ACLPlugin();
         $aclPlugin->principalCollectionSet = ['principals/users'];
         $this->server->addPlugin($aclPlugin);
 

@@ -11,9 +11,19 @@ pipeline {
     }
 
     stages {
+      stage('Build Test Images') {
+          steps {
+              sh 'bash run_test.sh --skip-java --skip-php'
+          }
+      }
       stage('Compile and Test') {
           steps {
-              sh 'bash run_test.sh'
+              sh 'bash run_test.sh --skip-java --skip-build'
+          }
+       }
+       stage('Run Integration Test') {
+          steps {
+              sh 'bash run_test.sh --skip-php --skip-build'
           }
       }
       stage('Deliver Docker images') {

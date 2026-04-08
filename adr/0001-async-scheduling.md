@@ -383,7 +383,12 @@ For each recipient in `recipients[]`, re-publish to `calendar:itip:localDelivery
 
 #### Phase 2 — Processing (recipients.length === 1)
 
-**a. Local recipient — submit ITIP to Sabre** (impersonating the recipient)
+**a. Resolve recipient and submit ITIP (local recipient only)**
+
+- Resolve the recipient as a local principal first: local user or local resource.
+- Submit `POST /itip` **only when**:
+  - recipient is local, and
+  - `method != COUNTER`.
 
 ```text
 POST /itip
@@ -395,13 +400,14 @@ Content-Type: application/json
   "sender":    "<sender email, without mailto:>",
   "recipient": "<recipient email, without mailto:>",
   "ical":      "<message iCal string>",
-  "method":    "<REQUEST|CANCEL|REPLY>"
+  "method":    "<REQUEST|CANCEL|REPLY>",
+  "sequence":  "<optional integer, from VEVENT SEQUENCE>"
 }
 ```
 
 - `204` → success → proceed to email step.
-- `400` → recipient not locally known (external attendee) → skip ITIP, proceed to email step.
-- `5xx` → DLQ immediately.
+- `400` → recipient not locally known (defensive fallback) → skip ITIP and proceed to email step.
+- other statuses → ITIP submission failed → retry/DLQ policy applies.
 
 **b. Email notification** (conditional)
 - If `hasChange === true`:
@@ -421,23 +427,22 @@ Content-Type: application/json
 
 ```text
 Receives calendar:itip:localDelivery
-        │
-        ▼
+    │
+    ▼
 recipients.length > 1 ?
-        │ YES                              NO (single recipient)
-        ▼                                  ▼
-Re-publish N single-recipient      Is recipient local?
-messages to same exchange           │ YES              NO (external)
-Ack original.                       ▼                  ▼
-                               POST /itip          skip ITIP
-                                204 → ok            │
-                                400 → skip          │
-                                5xx → DLQ           │
-                                    │               │
-                                    └───────┬───────┘
-                                            ▼
-                                    [hasChange] → publishNotificationEmail(...)
-                                    Ack message.
+    ├─ YES
+    │   ├─ Re-publish N single-recipient messages to same exchange
+    │   └─ Ack original
+    └─ NO (single recipient)
+        ├─ Is recipient local AND method != COUNTER?
+        │   ├─ YES
+        │   │   ├─ POST /itip
+        │   │   ├─ 204 -> ok
+        │   │   └─ error -> retry/DLQ
+        │   └─ NO
+        │       └─ skip ITIP
+        └─ [hasChange] -> publishNotificationEmail(...)
+            └─ Ack message
 ```
 
 ---
@@ -523,21 +528,21 @@ Real-time notifications are **owned by the core** (`EventRealTimePlugin`), not b
 > Re-publish one message per recipient to the **same** `calendar:itip:localDelivery` exchange, each with `recipients` reduced to that single entry (all other fields identical). Ack the original message once all re-publishes succeed.
 >
 > **Phase 2 — Process** (`recipients.length === 1`):
-> 1. If the recipient is local: submit an HTTP `ITIP` request to Sabre **impersonating the recipient**:
+> 1. Resolve local recipient first (internal user/resource). Submit HTTP `ITIP` to Sabre **only if recipient is local and `method != COUNTER`** (impersonating the recipient):
 >    ```text
 >    POST /itip
 >    Authorization: Basic <recipient-credentials>
 >    Content-Type: application/json
 >    { "uid": "<uid>", "sender": "<sender, strip mailto:>", "recipient": "<recipient, strip mailto:>",
->      "ical": "<message verbatim>", "method": "<method>" }
+>      "ical": "<message verbatim>", "method": "<method>", "sequence": "<optional integer>" }
 >    ```
->    - `204` → success. `400` → recipient not locally known (external), skip ITIP. `5xx` → DLQ.
+>    - `204` → success. `400` → not locally known (defensive fallback). Other statuses → retry/DLQ.
 >    - Sabre handles calendar write, inbox, principal resolution, real-time notification natively.
 > 2. If `hasChange === true`: publish to `calendar:event:notificationEmail:send` (see payload spec section below) for **both local and external recipients**.
 >
 > **Constraints**:
 > - No direct MongoDB access — all persistence goes through Sabre's ITIP endpoint.
-> - Tests must cover: fan-out of N-recipient message, REQUEST (new event, local), REQUEST (update, local), REQUEST (external — no ITIP, email only), CANCEL, REPLY, `hasChange=false` (no email), HTTP 400 (skip ITIP, email still sent), HTTP 5xx (DLQ).
+> - Tests must cover: fan-out of N-recipient message, REQUEST (new event, local), REQUEST (update, local), REQUEST (external — no ITIP, email only), COUNTER (skip ITIP), CANCEL, REPLY, `hasChange=false` (no email), ITIP failure for local recipient (retry/DLQ).
 
 ---
 

@@ -575,3 +575,12 @@ Computed by diffing the `oldMessage` vs `message` fields from the `calendar:itip
   `isAllDay` is `true` when the iCal property has no time component (DATE value type).
 
 Only properties that actually changed are present in the `changes` object. An empty `changes` object means no tracked property changed (the change was on a non-tracked field such as attendee list).
+
+---
+
+## Legacy Bugs Fixed by Async Scheduling
+
+Compared to the legacy non-async path, async scheduling also resolves the following known issues:
+
+- Resource notification ICS could carry incorrect attendee `PARTSTAT`. Tracked in integration follow-up: [twake-calendar-integration-tests#182](https://github.com/linagora/twake-calendar-integration-tests/issues/182).
+- Recurring `CANCEL` ICS generated for excluded occurrences (`EXDATE`) could carry incorrect `DTEND`. Tracked in [esn-sabre#305](https://github.com/linagora/esn-sabre/issues/305).

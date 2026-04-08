@@ -97,6 +97,7 @@ AMQPSchedulePlugin.flushDeliveries()
 - Replaces `ESN\CalDAV\Schedule\Plugin` for the propagation path.
 - Listens to `calendarObjectChange`: reads the previous state, computes the iTIP diff via `ITip\Broker`, **buffers** recipients instead of writing directly to calendars.
 - Overrides `beforeUnbind` to buffer CANCEL recipients on DELETE and flush via AMQP — **without this override, the parent's synchronous `beforeUnbind` would fire and bypass the buffering**.
+- Enforces access checks for delegated ITIP paths in `scheduleLocalDelivery` (`assertCanAccessItipRequestPath`): revoked delegated URIs return `404`, while internal `POST /itip` callbacks remain allowed.
 - At the end of each hook, publishes **a single AMQP message** containing all recipients.
 - Sets `SCHEDULE-STATUS = 1.0` (pending) on each attendee property in Bob's vCal — semantically correct since delivery is asynchronous.
 - Performs **no additional MongoDB reads** beyond the single `$oldObj` read already needed for the iTIP diff.

@@ -77,7 +77,7 @@ AMQPSchedulePlugin.flushDeliveries()
   ├─ resolves principals (parallel)
   ├─ REQUEST/CANCEL → writes calendar + inbox
   ├─ REPLY → updates PARTSTAT in organizer's calendar only
-  └─ publishes email notification if hasChange
+  └─ publishes email notification using method-aware rules
 ```
 
 > **All recipients included**: Sabre's `deliver()` emits the `schedule` hook for every recipient, local or external. `AMQPSchedulePlugin.scheduleLocalDelivery()` therefore buffers all of them. For local recipients the consumer delivers via ITIP (calendar write). For external recipients the ITIP call finds no local principal and skips the calendar write, but the consumer still publishes `calendar:event:notificationEmail:send` so the external attendee receives an email.
@@ -355,7 +355,7 @@ calendar:itip:localDelivery { recipients: [alice, cedric, ... ] }   ← N recipi
                 │
                 ▼  Processing pass (recipients.length === 1)
                 ├─ POST /itip (impersonate recipient)
-                └─ [hasChange] → publishNotificationEmail(...)
+                └─ [method-aware rules] → publishNotificationEmail(...)
 ```
 
 **Benefits of this pattern:**
@@ -409,12 +409,28 @@ Content-Type: application/json
 - `400` → recipient not locally known (defensive fallback) → skip ITIP and proceed to email step.
 - other statuses → ITIP submission failed → retry/DLQ policy applies.
 
-**b. Email notification** (conditional)
-- If `hasChange === true`:
-  - Compute the diff between `oldMessage` and `message` (SUMMARY, LOCATION, DESCRIPTION, DTSTART, DTEND, attendees).
-  - Determine `isNewEvent` for this recipient (absent from `oldMessage` attendees?).
-  - Publish to `calendar:event:notificationEmail:send` (see payload spec section).
-- Applies to **both local and external recipients** — external recipients skip ITIP but still receive email.
+**b. Email notification** (method-aware)
+- Applies to all recipients (local and non-local), including cases where ITIP is skipped.
+- `REQUEST`: publish in the following cases:
+  - New event and recipient is invited.
+  - Existing event and recipient is newly added.
+  - Tracked fields changed (`SUMMARY`, `LOCATION`, `DESCRIPTION`, `DTSTART`, `DTEND`).
+  - Public Agenda event where organizer PARTSTAT transitions to accepted (`NEEDS-ACTION`/`DECLINED` -> `ACCEPTED`/`TENTATIVE`).
+- `CANCEL`: publish when:
+  - Event is cancelled for the recipient.
+  - Recipient is removed from attendee list.
+  - Recurring occurrence is excluded via new `EXDATE` (one `METHOD:CANCEL` per occurrence).
+- `REPLY`: always publish.
+- `COUNTER`: always publish, with `oldEvent`.
+
+Payload-rules:
+- `isNewEvent` determination:
+  - `true` for new events (`oldMessage` absent) when recipient is invited.
+  - `true` when recipient is not present in `oldMessage` attendees and present in current `message` attendees.
+  - `false` otherwise.
+- `eventPath` determination:
+  - If recipient is local, first try to resolve the recipient event href by UID.
+  - If not found (or on lookup error), use an empty path.
 
 #### What Twake Calendar Side Service does NOT do
 
@@ -441,7 +457,7 @@ recipients.length > 1 ?
         │   │   └─ error -> retry/DLQ
         │   └─ NO
         │       └─ skip ITIP
-        └─ [hasChange] -> publishNotificationEmail(...)
+        └─ [method-aware rules] -> publishNotificationEmail(...)
             └─ Ack message
 ```
 
@@ -519,8 +535,8 @@ Real-time notifications are **owned by the core** (`EventRealTimePlugin`), not b
 > }
 > ```
 > - `oldMessage` is absent on event creation.
-> - `recipients[]` contains **all attendees** — local (same Sabre instance) and external (different domain). The consumer distinguishes them: ITIP call for local (204 → calendar written), no ITIP for external; both receive a `calendar:event:notificationEmail:send` notification if `hasChange === true`.
-> - `hasChange` is `true` if the iTIP broker detected a significant change (SUMMARY, LOCATION, DESCRIPTION, DTSTART, DTEND, attendees list).
+> - `recipients[]` contains **all attendees** — local (same Sabre instance) and external (different domain). The consumer distinguishes them: ITIP call for local (204 → calendar written), no ITIP for external; email notification publishing follows the method-aware rules (REQUEST/CANCEL/REPLY/COUNTER and organizer transition handling).
+> - `hasChange` is set by the iTIP broker when it detects significant changes (SUMMARY, LOCATION, DESCRIPTION, DTSTART, DTEND, attendees list), but email publishing is decided by method-aware notification rules in the consumer.
 >
 > **Your task**: In the **Twake Calendar Side Service** (Java), implement a RabbitMQ listener that processes messages from `calendar:itip:localDelivery` using a **fan-out then process** pattern:
 >
@@ -538,17 +554,17 @@ Real-time notifications are **owned by the core** (`EventRealTimePlugin`), not b
 >    ```
 >    - `204` → success. `400` → not locally known (defensive fallback). Other statuses → retry/DLQ.
 >    - Sabre handles calendar write, inbox, principal resolution, real-time notification natively.
-> 2. If `hasChange === true`: publish to `calendar:event:notificationEmail:send` (see payload spec section below) for **both local and external recipients**.
+> 2. Publish to `calendar:event:notificationEmail:send` using method-aware rules (see payload spec/decision section), for **both local and external recipients**.
 >
 > **Constraints**:
 > - No direct MongoDB access — all persistence goes through Sabre's ITIP endpoint.
-> - Tests must cover: fan-out of N-recipient message, REQUEST (new event, local), REQUEST (update, local), REQUEST (external — no ITIP, email only), COUNTER (skip ITIP), CANCEL, REPLY, `hasChange=false` (no email), ITIP failure for local recipient (retry/DLQ).
+> - Tests must cover: fan-out of N-recipient message, REQUEST (new event, local), REQUEST (update with tracked changes), REQUEST (no tracked change and no new invite -> no email), REQUEST (external — no ITIP, email only), REQUEST (Public Agenda organizer transition -> email), COUNTER (skip ITIP, email with oldEvent), CANCEL, REPLY, and ITIP failure for local recipient (retry/DLQ).
 
 ---
 
 ## `calendar:event:notificationEmail:send` payload spec
 
-This topic is consumed by the email notification service. It is published by **Twake Calendar Side Service** for **all recipients** (local and external) whenever `hasChange === true`. One message per recipient per VEVENT occurrence — recurring events must be split into individual per-occurrence messages before publishing.
+This topic is consumed by the email notification service. It is published by **Twake Calendar Side Service** for **all recipients** (local and external) according to method-aware notification rules. One message per recipient per VEVENT occurrence — recurring events must be split into individual per-occurrence messages before publishing.
 
 ```json
 {
@@ -584,7 +600,7 @@ This topic is consumed by the email notification service. It is published by **T
 | `event`         | `string` | always        | Serialized iCal — **single VEVENT** (one occurrence per message) |
 | `notify`        | `bool`   | always        | Always `true` |
 | `calendarURI`   | `string` | always        | URI of the organizer's calendar (e.g. `events`) |
-| `eventPath`     | `string` | local only    | Path of the event in the recipient's calendar — `/calendars/<recipientUserId>/<calendarUri>/<uid>.ics`. Omit for external recipients (no local calendar). |
+| `eventPath`     | `string` | always        | Event path used in email payload. Prefer recipient event href (local recipient); otherwise fallback to empty. |
 | `isNewEvent`    | `bool`   | new attendee  | `true` if the recipient was not an attendee in `oldMessage` |
 | `changes`       | `object` | update only   | Per-property diff — only changed properties included |
 | `oldEvent`      | `string` | COUNTER only  | Serialized iCal of current state before the COUNTER proposal |

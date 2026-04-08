@@ -24,7 +24,7 @@ Both the legacy behaviour and the new async behaviour are **retained simultaneou
 | Value | Active plugins | Behaviour |
 |---|---|---|
 | `false` (default) | `ESN\CalDAV\Schedule\Plugin` + `ESN\CalDAV\Schedule\IMipPlugin` | Fully synchronous — current production behaviour, unchanged |
-| `true` | `AMQPSchedulePlugin` + `MinimalIMipPlugin` | Async via AMQP — new behaviour described in this document |
+| `true` | `AMQPSchedulePlugin` | Async via AMQP — new behaviour described in this document |
 
 Plugin registration in `esn.php`:
 
@@ -40,16 +40,13 @@ if (getenv('AMQP_SCHEDULING_ENABLED') === 'true') {
 }
 
 // ... further down; IMipPlugin branches follow the same pattern ...
-
-if (getenv('AMQP_SCHEDULING_ENABLED') === 'true') {
-    // Inside the if ($AMQPPublisher) guard.
-    $server->addPlugin(new ESN\CalDAV\Schedule\MinimalIMipPlugin($AMQPPublisher));
-} else {
+// In async mode, IMipPlugin is not registered.
+if (getenv('AMQP_SCHEDULING_ENABLED') !== 'true') {
     $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));
 }
 ```
 
-> **Placement note**: in the current `esn.php`, `ESN\CalDAV\Schedule\Plugin` is registered **outside** the `if ($AMQPPublisher)` block (line ~184) while `IMipPlugin` is **inside** it (line ~224). Only the `AMQPSchedulePlugin` and `MinimalIMipPlugin` branches require `$AMQPPublisher` — move only those into the guard. The legacy `Plugin` and `IMipPlugin` branches must remain reachable even when `$AMQPPublisher` is null. Verify that `$AMQPPublisher` is always available when `AMQP_SCHEDULING_ENABLED=true` — a missing publisher should fail fast at boot.
+> **Placement note**: in the current `esn.php`, `ESN\CalDAV\Schedule\Plugin` is registered **outside** the `if ($AMQPPublisher)` block (line ~184) while `IMipPlugin` is **inside** it (line ~224). Only `AMQPSchedulePlugin` requires `$AMQPPublisher` in this ADR path. The legacy `Plugin` and `IMipPlugin` branches must remain reachable even when `$AMQPPublisher` is null. Verify that `$AMQPPublisher` is always available when `AMQP_SCHEDULING_ENABLED=true` — a missing publisher should fail fast at boot.
 
 The legacy `ESN\CalDAV\Schedule\Plugin` and `IMipPlugin` are **not modified** except for changing `fetchCalendarOwnerAddresses` visibility from `private` to `protected` in `Plugin`. This flag is the sole switching mechanism — no logic is shared or entangled between the two paths.
 
@@ -77,12 +74,11 @@ AMQPSchedulePlugin.flushDeliveries()
   ├─ resolves principals (parallel)
   ├─ REQUEST/CANCEL → writes calendar + inbox
   ├─ REPLY → updates PARTSTAT in organizer's calendar only
+  ├─ COUNTER → skips ITIP delivery
   └─ publishes email notification using method-aware rules
 ```
 
 > **All recipients included**: Sabre's `deliver()` emits the `schedule` hook for every recipient, local or external. `AMQPSchedulePlugin.scheduleLocalDelivery()` therefore buffers all of them. For local recipients the consumer delivers via ITIP (calendar write). For external recipients the ITIP call finds no local principal and skips the calendar write, but the consumer still publishes `calendar:event:notificationEmail:send` so the external attendee receives an email.
->
-> `MinimalIMipPlugin` becomes a residual plugin handling only iTIP cases that arrive outside the standard PUT flow — specifically COUNTER messages received by email via the `ITipPlugin` `schedule` hook. It plays no role in the standard REQUEST/CANCEL/REPLY flow. Note: `ITipPlugin` also contains an intentional organizer-less REPLY fallback (`!$isConcerned && method === 'REPLY' && !$hasOrganizer && $senderIsAttendee`) for attendees replying to events without an ORGANIZER field; this is handled directly in `ITipPlugin` and is unrelated to `MinimalIMipPlugin`.
 
 ---
 
@@ -285,52 +281,6 @@ class AMQPSchedulePlugin extends Plugin {
 | `oldMessage` | `string?` | Serialized iCal — previous state (absent on creation) |
 | `hasChange`  | `bool`    | `true` if the iTIP broker detected a significant change |
 | `recipients` | `string[]`| List of attendee mailto URIs — local and external |
-
----
-
-## MinimalIMipPlugin
-
-### What is removed
-
-The entire `schedule()` method and its private helpers:
-- `checkPreconditions()` — principal resolution, mailto validation
-- `getEventFullPath()` / `getEventObjectFromAnotherPrincipalHome()` — per-attendee MongoDB reads
-- `splitItipMessageEvents()` / `computeModifiedEventMessages()` — diff logic delegated to the consumer
-- `testIfEventIsExpired()` — delegated to the consumer
-- `hasOwnSignificantChanges()` / `hasPropertyChanges()` / `hasAttendeesChanged()` — delegated to the consumer
-
-### What remains
-
-```php
-<?php
-namespace ESN\CalDAV\Schedule;
-
-use Sabre\DAV;
-
-/**
- * Residual plugin handling only cases outside the standard PUT flow:
- *  - COUNTER messages received by email via ITipPlugin (HTTP ITIP method)
- *
- * In the standard PUT/POST flow, AMQPSchedulePlugin handles all propagation
- * and notification. This plugin plays no role in that path.
- */
-class MinimalIMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
-
-    protected $amqpPublisher;
-
-    function __construct($amqpPublisher) {
-        $this->amqpPublisher = $amqpPublisher;
-    }
-
-    function initialize(DAV\Server $server) {
-        // Do not call parent::initialize() — we do not want to register
-        // the Sabre parent's 'schedule' listener.
-        $this->server = $server;
-        // No listeners registered: this plugin is inactive in the standard flow.
-        // Extend here to handle COUNTER if needed.
-    }
-}
-```
 
 ---
 

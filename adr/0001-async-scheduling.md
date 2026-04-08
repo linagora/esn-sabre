@@ -411,6 +411,7 @@ Content-Type: application/json
 
 **b. Email notification** (method-aware)
 - Applies to all recipients (local and non-local), including cases where ITIP is skipped.
+- For recurring events with overrides or `EXDATE`, split iTIP payloads into per-occurrence notifications (N VEVENTs -> N AMQP messages).
 - `REQUEST`: publish in the following cases:
   - New event and recipient is invited.
   - Existing event and recipient is newly added.
@@ -457,7 +458,7 @@ recipients.length > 1 ?
         │   │   └─ error -> retry/DLQ
         │   └─ NO
         │       └─ skip ITIP
-        └─ [method-aware rules] -> publishNotificationEmail(...)
+        └─ [method-aware rules + recurring override/EXDATE split] -> publishNotificationEmail(...)
             └─ Ack message
 ```
 
@@ -554,17 +555,17 @@ Real-time notifications are **owned by the core** (`EventRealTimePlugin`), not b
 >    ```
 >    - `204` → success. `400` → not locally known (defensive fallback). Other statuses → retry/DLQ.
 >    - Sabre handles calendar write, inbox, principal resolution, real-time notification natively.
-> 2. Publish to `calendar:event:notificationEmail:send` using method-aware rules (see payload spec/decision section), for **both local and external recipients**.
+> 2. Publish to `calendar:event:notificationEmail:send` using method-aware rules (see payload spec/decision section), for **both local and external recipients**. For recurring events with overrides or `EXDATE`, split into per-occurrence notifications before publishing.
 >
 > **Constraints**:
 > - No direct MongoDB access — all persistence goes through Sabre's ITIP endpoint.
-> - Tests must cover: fan-out of N-recipient message, REQUEST (new event, local), REQUEST (update with tracked changes), REQUEST (no tracked change and no new invite -> no email), REQUEST (external — no ITIP, email only), REQUEST (Public Agenda organizer transition -> email), COUNTER (skip ITIP, email with oldEvent), CANCEL, REPLY, and ITIP failure for local recipient (retry/DLQ).
+> - Tests must cover: fan-out of N-recipient message, recurring payload split into N per-occurrence AMQP email notifications for override/`EXDATE` cases, REQUEST (new event, local), REQUEST (update with tracked changes), REQUEST (no tracked change and no new invite -> no email), REQUEST (external — no ITIP, email only), REQUEST (Public Agenda organizer transition -> email), COUNTER (skip ITIP, email with oldEvent), CANCEL, REPLY, and ITIP failure for local recipient (retry/DLQ).
 
 ---
 
 ## `calendar:event:notificationEmail:send` payload spec
 
-This topic is consumed by the email notification service. It is published by **Twake Calendar Side Service** for **all recipients** (local and external) according to method-aware notification rules. One message per recipient per VEVENT occurrence — recurring events must be split into individual per-occurrence messages before publishing.
+This topic is consumed by the email notification service. It is published by **Twake Calendar Side Service** for **all recipients** (local and external) according to method-aware notification rules. For recurring events with overrides or `EXDATE`, publish per occurrence.
 
 ```json
 {

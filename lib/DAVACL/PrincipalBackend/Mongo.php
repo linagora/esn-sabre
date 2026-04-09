@@ -156,6 +156,27 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         return $user['_id'];
     }
 
+    function getPrincipalIdByResourceEmail($email) {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+
+        [$possibleId] = explode('@', $email, 2);
+
+        try {
+            $objectId = new \MongoDB\BSON\ObjectId($possibleId);
+        } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
+            return null;
+        }
+
+        $resource = $this->db->resources->findOne(
+            ['_id' => $objectId],
+            ['projection' => ['_id' => 1]]
+        );
+
+        return $resource ? $resource['_id'] : null;
+    }
+
     private function objectToPrincipal($obj, $type) {
         $principal = null;
         $principalUri = 'principals/' . $type . '/' . $obj['_id'];

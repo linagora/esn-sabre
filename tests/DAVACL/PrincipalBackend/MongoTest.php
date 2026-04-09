@@ -439,4 +439,32 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
         $this->assertNull($backend->getPrincipalIdByEmail('drogba'));
     }
+
+    function testGetPrincipalIdByResourceEmailWhenResourceExists() {
+        $backend = new Mongo(self::$esndb);
+        $resourceEmail = self::RESOURCE_ID . '@test.com';
+
+        $result = $backend->getPrincipalIdByResourceEmail($resourceEmail);
+
+        $this->assertEquals(self::RESOURCE_ID, (string)$result);
+    }
+
+    function testGetPrincipalIdByResourceEmailWhenResourceDoesNotExist() {
+        $backend = new Mongo(self::$esndb);
+        $nonExistentEmail = '000000000000000000000000@test.com';
+
+        $this->assertNull($backend->getPrincipalIdByResourceEmail($nonExistentEmail));
+    }
+
+    function testGetPrincipalIdByResourceEmailWhenLocalpartIsNotObjectId() {
+        $backend = new Mongo(self::$esndb);
+
+        $this->assertNull($backend->getPrincipalIdByResourceEmail('notanobjectid@test.com'));
+    }
+
+    function testGetPrincipalIdByResourceEmailWhenEmailIsNotValid() {
+        $backend = new Mongo(self::$esndb);
+
+        $this->assertNull($backend->getPrincipalIdByResourceEmail('notanemail'));
+    }
 }

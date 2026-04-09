@@ -28,6 +28,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     protected $server;
 
     protected $principalPrefix = 'principals/users/';
+    protected $currentPrincipalPrefix = 'principals/users/';
     protected $technicalPrincipal = 'principals/technicalUser';
     protected $technicalUserType = 'technical';
 
@@ -108,8 +109,14 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
                 }
                 $principalId = $this->principalBackend->getPrincipalIdByEmail($value);
                 if (!$principalId) {
-                    error_log("User not found for email: $value");
-                    return [false, "User not found"];
+                    $principalId = $this->principalBackend->getPrincipalIdByResourceEmail($value);
+                    if (!$principalId) {
+                        error_log("User not found for email: $value");
+                        return [false, "User not found"];
+                    }
+                    $this->currentPrincipalPrefix = 'principals/resources/';
+                } else {
+                    $this->currentPrincipalPrefix = 'principals/users/';
                 }
                 $this->currentUserId = $principalId;
                 return [true, $value];
@@ -221,7 +228,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     function getCurrentPrincipal() {
         $id = $this->currentUserId;
-        return $id ? "principals/users/" . $id : null;
+        return $id ? $this->currentPrincipalPrefix . $id : null;
     }
 
     function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {

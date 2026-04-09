@@ -420,6 +420,52 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals('Username or password was incorrect', $msg);
     }
 
+    function testAdminImpersonationWithResourceEmail() {
+        putenv('SABRE_IMPERSONATION_ENABLED=true');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $esnDb = $esnauth->getDb();
+        $resourceId = new \MongoDB\BSON\ObjectId('888888888888888888888888');
+        $esnDb->resources->insertOne([
+            '_id' => $resourceId,
+            'name' => 'Test Resource',
+            'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
+        ]);
+
+        $resourceEmail = '888888888888888888888888@example.com';
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'admin&' . $resourceEmail,
+            'PHP_AUTH_PW'   => 'test-admin-password',
+            'REQUEST_URI'   => '/',
+            'REQUEST_METHOD'=> 'GET',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        [$rv, $msg] = $esnauth->check($request, $response);
+
+        $this->assertTrue($rv);
+        $this->assertEquals('principals/resources/888888888888888888888888', $msg);
+    }
+
+    function testAdminImpersonationWithResourceEmailNotFound() {
+        putenv('SABRE_IMPERSONATION_ENABLED=true');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'admin&000000000000000000000000@example.com',
+            'PHP_AUTH_PW'   => 'test-admin-password',
+            'REQUEST_URI'   => '/',
+            'REQUEST_METHOD'=> 'GET',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        [$rv, $msg] = $esnauth->check($request, $response);
+
+        $this->assertFalse($rv);
+    }
+
     function testAdminImpersonationDisabled() {
         putenv('SABRE_IMPERSONATION_ENABLED=false');
 

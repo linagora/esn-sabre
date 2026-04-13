@@ -165,42 +165,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             }
 
             if ($data = Utils::getJsonValue($jsonData, 'dav:group-addressbook')) {
-                $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
-
-                // Check if this is a domain-members addressbook
-                $this->checkDomainMembersAddressBook($path);
-                
-                $supportMembersRights = [
-                    '{DAV:}read',
-                    '{DAV:}write',
-                    '{DAV:}bind',
-                    '{DAV:}unbind'
-                ];
-
-                $privileges = Utils::getJsonValue($data, 'privileges', false);
-
-                if (!is_array($privileges)) {
-                    throw new \Sabre\DAV\Exception\BadRequest('Privileges must be an array');
-                }
-
-                if (empty($privileges)) {
-                    throw new \Sabre\DAV\Exception\BadRequest('Privileges must not an empty array');
-                }
-
-                if (in_array('{DAV:}write', $privileges) && !in_array('{DAV:}read', $privileges)) {
-                    $privileges[] = '{DAV:}read';
-                }
-
-                foreach ($privileges as $privilege) {
-                    if (!in_array($privilege, $supportMembersRights)) {
-                        throw new \Sabre\DAV\Exception\BadRequest('Privilege is not supported. Supported privileges are ' . join(',', $supportMembersRights));
-                    }
-                }
-
-                $node->setMembersRight($privileges);
-
-                $code = 204;
-                return $this->send($code, $body);
+                return $this->handleGroupAddressBook($path, $node, $data);
             }
 
             // If this request handler could not deal with this POST request, it
@@ -257,14 +222,45 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         return $result;
     }
+    
+    private function handleGroupAddressBook($path, $node, $data) {
+        $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
 
-    /**
-     * Check if the path is a domain addressbook and prevent modifications
-     *
-     * @param string $path
-     * @throws \Sabre\DAV\Exception\MethodNotAllowed
-     * @return void
-     */
+        // Check if this is a domain-members addressbook
+        $this->checkDomainMembersAddressBook($path);
+
+        $supportMembersRights = [
+            '{DAV:}read',
+            '{DAV:}write',
+            '{DAV:}bind',
+            '{DAV:}unbind'
+        ];
+
+        $privileges = Utils::getJsonValue($data, 'privileges', false);
+
+        if (!is_array($privileges)) {
+            throw new \Sabre\DAV\Exception\BadRequest('Privileges must be an array');
+        }
+
+        if (empty($privileges)) {
+            throw new \Sabre\DAV\Exception\BadRequest('Privileges must not an empty array');
+        }
+
+        if (in_array('{DAV:}write', $privileges) && !in_array('{DAV:}read', $privileges)) {
+            $privileges[] = '{DAV:}read';
+        }
+
+        foreach ($privileges as $privilege) {
+            if (!in_array($privilege, $supportMembersRights)) {
+                throw new \Sabre\DAV\Exception\BadRequest('Privilege is not supported. Supported privileges are ' . join(',', $supportMembersRights));
+            }
+        }
+
+        $node->setMembersRight($privileges);
+
+        return $this->send(204, null);
+    }
+
     private function checkDomainMembersAddressBook($path) {
         // Get the node to check its properties
         $node = $this->server->tree->getNodeForPath($path);

@@ -114,10 +114,12 @@ $server->setBaseUri($config['webserver']['baseUri']);
 
 // Server Plugins
 $authPlugin = new Sabre\DAV\Auth\Plugin($authBackend);
+$authPlugin->autoRequireLogin = true;
 $server->addPlugin($authPlugin);
 
 $resourceDAO = new ESN\DAVACL\DAO\ResourceDAO($esnDb);
 $aclPlugin = new ESN\DAVACL\ACLPlugin($resourceDAO);
+$aclPlugin->allowUnauthenticatedAccess = false;
 $aclPlugin->principalCollectionSet = [
     PRINCIPALS_USERS,
     PRINCIPALS_RESOURCES,
@@ -125,6 +127,7 @@ $aclPlugin->principalCollectionSet = [
 ];
 $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
 $server->addPlugin($aclPlugin);
+$authPlugin->autoRequireLogin = true;
 
 // JSON api support for DAVACL plugin
 $esnAclPlugin = new ESN\DAVACL\Plugin();

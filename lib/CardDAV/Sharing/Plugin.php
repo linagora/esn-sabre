@@ -164,6 +164,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 return $this->send($code, $body);
             }
 
+            if ($data = Utils::getJsonValue($jsonData, 'dav:group-addressbook')) {
+                return $this->handleGroupAddressBook($path, $node, $data);
+            }
+
             // If this request handler could not deal with this POST request, it
             // will return 'null' and other plugins get a chance to handle the
             // request.
@@ -218,14 +222,45 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         return $result;
     }
+    
+    private function handleGroupAddressBook($path, $node, $data) {
+        $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
 
-    /**
-     * Check if the path is a domain addressbook and prevent modifications
-     *
-     * @param string $path
-     * @throws \Sabre\DAV\Exception\MethodNotAllowed
-     * @return void
-     */
+        // Check if this is a domain-members addressbook
+        $this->checkDomainMembersAddressBook($path);
+
+        $supportMembersRights = [
+            '{DAV:}read',
+            '{DAV:}write',
+            '{DAV:}bind',
+            '{DAV:}unbind'
+        ];
+
+        $privileges = Utils::getJsonValue($data, 'privileges', false);
+
+        if (!is_array($privileges)) {
+            throw new \Sabre\DAV\Exception\BadRequest('Privileges must be an array');
+        }
+
+        if (empty($privileges)) {
+            throw new \Sabre\DAV\Exception\BadRequest('Privileges must not an empty array');
+        }
+
+        if (in_array('{DAV:}write', $privileges) && !in_array('{DAV:}read', $privileges)) {
+            $privileges[] = '{DAV:}read';
+        }
+
+        foreach ($privileges as $privilege) {
+            if (!in_array($privilege, $supportMembersRights)) {
+                throw new \Sabre\DAV\Exception\BadRequest('Privilege is not supported. Supported privileges are ' . join(',', $supportMembersRights));
+            }
+        }
+
+        $node->setMembersRight($privileges);
+
+        return $this->send(204, null);
+    }
+
     private function checkDomainMembersAddressBook($path) {
         // Get the node to check its properties
         $node = $this->server->tree->getNodeForPath($path);
@@ -242,7 +277,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
                 // Block delegation/public rights for domain-members and dab (Domain Address Book)
                 // but allow for gab (Group Address Book) and other group addressbooks
-                if ($addressbookUri === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI || $addressbookUri === 'dab') {
+                if ($addressbookUri === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI) {
                     throw new \Sabre\DAV\Exception\MethodNotAllowed('Cannot update public rights or delegations for domain addressbook');
                 }
             }

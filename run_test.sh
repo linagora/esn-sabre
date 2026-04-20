@@ -15,6 +15,7 @@ FILTER=""
 SKIP_JAVA=false
 SKIP_PHP=false
 SKIP_BUILD=false
+MANUAL_MODE=false
 
 for arg in "$@"; do
   case $arg in
@@ -32,6 +33,10 @@ for arg in "$@"; do
       ;;
     --skip-build)
       SKIP_BUILD=true
+      shift
+      ;;
+    --manual-mode)
+      MANUAL_MODE=true
       shift
       ;;
     *)
@@ -90,4 +95,11 @@ exit_code_2=$?
 
 if [ $exit_code_2 -ne 0 ]; then
   exit 1
+fi
+
+if [ "$MANUAL_MODE" = true ]; then
+  echo "Do not cleanup (manual mode) please do when done"
+  echo "rm -rf it-tests"
+  echo "docker compose -f docker-compose.test.yaml down --volumes --remove-orphans"
+  trap - EXIT
 fi

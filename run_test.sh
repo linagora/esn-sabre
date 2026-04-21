@@ -54,52 +54,44 @@ cleanup() {
 }
 trap cleanup EXIT  # finally: sera exécuté *quoi qu'il arrive*
 
+javatest() {
+    git clone https://github.com/linagora/twake-calendar-integration-tests.git it-tests ||  exit 1
+    cd it-tests || exit 1
+    bash pre-build.sh esn_sabre_test || exit 1
+    mvn clean install -Dapi.version=1.43 -Dtest=com.linagora.dav.sabrev4_7.** || exit 1
+}
+
 # Pre Cleanup
 docker compose -f docker-compose.test.yaml down --volumes --remove-orphans || true
 
 # Build Docker images
 if [ "$SKIP_BUILD" = false ]; then
-  docker build -t esn-sabre-ldap-test -f Dockerfile.ldap .
-  docker build -t esn_sabre_test -f Dockerfile.test .
+  docker build -t esn-sabre-ldap-test -f Dockerfile.ldap . || exit 1
+  docker build -t esn_sabre_test -f Dockerfile.test . || exit 1
 fi
 
 # PHP tests
 if [ "$SKIP_PHP" = false ]; then
   if [ -n "$FILTER" ]; then
     echo "Running PHP tests with filter: $FILTER"
-    docker compose -f docker-compose.test.yaml run --rm esn_test bash -c "sleep 5 && make lint && vendor/bin/phpunit -c tests/phpunit.xml --filter=$FILTER tests"
+    docker compose -f docker-compose.test.yaml run --rm esn_test bash -c "sleep 5 && make lint && vendor/bin/phpunit -c tests/phpunit.xml --filter=$FILTER tests" || exit 1
   else
     echo "Running all PHP tests"
-    docker compose -f docker-compose.test.yaml run --rm esn_test bash -c "sleep 5 && make lint && make test"
-  fi
-  exit_code_1=$?
-
-  if [ $exit_code_1 -ne 0 ]; then
-    exit 1
+    docker compose -f docker-compose.test.yaml run --rm esn_test bash -c "sleep 5 && make lint && make test" || exit 1
   fi
 fi
 
 # Java integration tests
-if [ "$SKIP_JAVA" = true ]; then
+if [ ! "$SKIP_JAVA" = true ]; then
+  javatest
+else
   echo "Skipping Java integration tests"
-  exit 0
 fi
-
-(
-  git clone https://github.com/linagora/twake-calendar-integration-tests.git it-tests
-  cd it-tests
-  bash pre-build.sh esn_sabre_test
-  mvn clean install -Dapi.version=1.43 -Dtest=com.linagora.dav.sabrev4_7.**
-)
-exit_code_2=$?
-
-if [ $exit_code_2 -ne 0 ]; then
-  exit 1
-fi
-
+  
 if [ "$MANUAL_MODE" = true ]; then
   echo "Do not cleanup (manual mode) please do when done"
   echo "rm -rf it-tests"
   echo "docker compose -f docker-compose.test.yaml down --volumes --remove-orphans"
   trap - EXIT
+  docker compose -f docker-compose.test.yaml run
 fi

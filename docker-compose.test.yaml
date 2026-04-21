@@ -23,6 +23,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    environment:
+      - RABBITMQ_ERLANG_COOKIE=SUPERSECRETCOOKIE123456789
     networks:
       - esn-sabre-test-net
 
@@ -64,3 +68,5 @@ networks:
   esn-sabre-test-net:
     driver: bridge
 
+volumes:
+  rabbitmq_data:

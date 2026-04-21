@@ -442,4 +442,17 @@ class Utils {
         // This shouldn't happen in practice
         return @clone $component;
     }
+
+  static function getDatabaseName($dbKind, $connectionString, $dbConfig) {
+    $parsedUrl = parse_url($connectionString);
+    $pathSegments = explode("/", $parsedUrl['path']);
+    $lastSegment = array_pop($pathSegments);
+    if ($lastSegment) {
+        return $lastSegment;
+    } else {
+        // support old style database name
+        return $dbConfig[$dbKind]['db'];
+    }
+  }
+
 }

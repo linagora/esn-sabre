@@ -42,11 +42,11 @@ try {
     $sabreMongoConnectionString = $dbConfig['sabre']['connectionString'];
     $sabreMongoClient = new \MongoDB\Client($sabreMongoConnectionString, $dbConfig['sabre']['connectionOptions']);
 
-    $esnMongoDbName = getDatabaseName("esn", $esnMongoConnectionString, $dbConfig);
+    $esnMongoDbName = \ESN\Utils\Utils::getDatabaseName("esn", $esnMongoConnectionString, $dbConfig);
     if (!$esnMongoDbName) {
         throw new Exception("Unable to get ESN database name from configuration");
     }
-    $sabreMongoDbName = getDatabaseName("sabre", $sabreMongoConnectionString, $dbConfig);
+    $sabreMongoDbName =  \ESN\Utils\Utils::getDatabaseName("sabre", $sabreMongoConnectionString, $dbConfig);
     if (!$sabreMongoDbName) {
         throw new Exception("Unable to get SABRE database name from configuration");
     }
@@ -260,16 +260,3 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 
 // And off we go!
 $server->exec();
-
-
-function getDatabaseName($dbKind, $connectionString, $dbConfig) {
-    $parsedUrl = parse_url($connectionString);
-    $pathSegments = explode("/", $parsedUrl['path']);
-    $lastSegment = array_pop($pathSegments);
-    if ($lastSegment) {
-        return $lastSegment;
-    } else {
-        // support old style database name
-        return $dbConfig[$dbKind]['db'];
-    }
-}

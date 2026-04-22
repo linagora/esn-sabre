@@ -136,39 +136,43 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             error_log('Unable to connect to LDAP server');
             return [false, "Unable to connect to LDAP server"];
         }
-        ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
-        ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
-
-        # Try to authenticate
-        $safeUser = ldap_escape($user, '', 0);
-
         try {
-            $ldapBind = ldap_bind($ldapCon, "uid=$safeUser," . LDAP_BASE, $password);
-            if (!$ldapBind) {
-                error_log("Bad credentials for $user");
+            ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
+            ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
+
+            # Try to authenticate
+            $safeUser = ldap_escape($user, '', 0);
+
+            try {
+                $ldapBind = ldap_bind($ldapCon, "uid=$safeUser," . LDAP_BASE, $password);
+                if (!$ldapBind) {
+                    error_log("Bad credentials for $user");
+                    return [false, "Bad credentials"];
+                }
+            } catch (\ErrorException $e) {
+                error_log("LDAP bind user failed for $user: " . $e->getMessage());
                 return [false, "Bad credentials"];
             }
-        } catch (\ErrorException $e) {
-            error_log("LDAP bind user failed for $user: " . $e->getMessage());
-            return [false, "Bad credentials"];
+
+            $ldapBind2 = ldap_bind($ldapCon, LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD);
+
+            if (!$ldapBind2) {
+                error_log("Bad admin credentials");
+                return [false, "Bad admin credentials"];
+            }
+
+            # Get real mail
+            $searchResult = null;
+            if (LDAP_FILTER != null) {
+                $searchResult = ldap_search($ldapCon, LDAP_BASE, "(& (uid=$safeUser) " . LDAP_FILTER . ')');
+            } else {
+                $searchResult = ldap_search($ldapCon, LDAP_BASE, "(uid=$safeUser)");
+            }
+            $entries = ldap_get_entries($ldapCon, $searchResult);
         }
-
-        $ldapBind2 = ldap_bind($ldapCon, LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD);
-
-        if (!$ldapBind2) {
-            error_log("Bad admin credentials");
-            return [false, "Bad admin credentials"];
+        finally {
+            ldap_close($ldapCon);
         }
-
-        # Get real mail
-        $searchResult = null;
-        if (LDAP_FILTER != null) {
-            $searchResult = ldap_search($ldapCon, LDAP_BASE, "(& (uid=$safeUser) " . LDAP_FILTER . ')');
-        } else {
-            $searchResult = ldap_search($ldapCon, LDAP_BASE, "(uid=$safeUser)");
-        }
-        $entries = ldap_get_entries($ldapCon, $searchResult);
-
         if ($entries['count'] == 0) {
             error_log("Unable to find $username which is valid for auth!");
             return [false, "Unable to find $username which is valid for auth"];
@@ -181,7 +185,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             return [false, "$user has no mail attribute"];
         }
         $mail = $entries[0]['mail'][0];
-        ldap_close($ldapCon);
 
         $principalId = $this->principalBackend->getPrincipalIdByEmail($mail);
         if (!$principalId) {

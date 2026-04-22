@@ -185,6 +185,10 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             return [false, "$user has no mail attribute"];
         }
         $mail = $entries[0]['mail'][0];
+        if(!filter_var($mail, FILTER_VALIDATE_EMAIL)) {
+            error_log("validateUserPass: $user has incorrect mail attribute $mail");
+            return [false, "$user has incorrect mail attribute"];
+        }
 
         $principalId = $this->principalBackend->getPrincipalIdByEmail($mail);
         if (!$principalId) {

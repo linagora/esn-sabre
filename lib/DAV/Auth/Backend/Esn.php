@@ -271,9 +271,13 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             try {
                 // Try to decode the token with the public key
                 $user = JWT::decode($token, new Key($key, 'RS256'));
-
                 // Get the user Id associated with the identifier of the token ( email in sub field )
-                $principleId = $this->principalBackend->getPrincipalIdByEmail($user->sub);
+                if (!isset($user->sub))
+                    throw new \UnexpectedValueException("checkJWT: '$user->sub' is not valid");
+                $email = $user->sub;
+                if(!filter_var($email, FILTER_VALIDATE_EMAIL))
+                    throw new \UnexpectedValueException("checkJWT: email '$email' is not a valid mail");
+                $principleId = $this->principalBackend->getPrincipalIdByEmail($email);
                 // No user found by that email
                 if (!$principleId) return false;
                 // we set the userId to be used as the current principle

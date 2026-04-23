@@ -40,6 +40,22 @@ class AMQPSchedulePlugin extends Plugin {
         $this->amqpPublisher = $amqpPublisher;
     }
 
+    function initialize(\Sabre\DAV\Server $server) {
+        parent::initialize($server);
+        // Flush only after successful storage to avoid publishing on 500 errors.
+        $server->on('afterCreateFile',   [$this, 'afterWrite']);
+        $server->on('afterWriteContent', [$this, 'afterWrite']);
+        $server->on('afterUnbind',       [$this, 'afterUnbindFlush']);
+    }
+
+    function afterWrite() {
+        $this->flushDeliveries();
+    }
+
+    function afterUnbindFlush() {
+        $this->flushDeliveries();
+    }
+
     /**
      * Buffer recipients for AMQP publish on PUT/POST.
      *
@@ -190,8 +206,7 @@ class AMQPSchedulePlugin extends Plugin {
         }
 
         $this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
-
-        $this->flushDeliveries();
+        // flushDeliveries() is called in afterCreateFile/afterWriteContent.
     }
 
     /**
@@ -241,8 +256,7 @@ class AMQPSchedulePlugin extends Plugin {
         foreach ($messages as $message) {
             $this->deliver($message);
         }
-
-        $this->flushDeliveries();
+        // flushDeliveries() is called in afterUnbind.
     }
 
     /**

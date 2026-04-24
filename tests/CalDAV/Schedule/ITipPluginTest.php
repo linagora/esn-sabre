@@ -43,9 +43,23 @@ END:VCALENDAR'
     {
         $this->iTipPlugin = new ITipPlugin();
         $this->calDavPlugin = new CalDavPluginMock();
+        $this->authPlugin = new AuthPluginMock('principals/users/b');
+        $this->aclPlugin = new AclPluginMock([
+            'mailto:a@linagora.com' => 'principals/users/a',
+            'mailto:b@linagora.com' => 'principals/users/b',
+            'mailto:c@linagora.com' => 'principals/users/c',
+            'mailto:x@linagora.com' => 'principals/users/x',
+        ]);
         $this->server = new \Sabre\DAV\Server([]);
+        $this->server->addPlugin($this->authPlugin);
+        $this->server->addPlugin($this->aclPlugin);
         $this->server->addPlugin($this->iTipPlugin);
         $this->server->addPlugin($this->calDavPlugin);
+    }
+
+    private function setAuthenticatedPrincipal(string $principal): void
+    {
+        $this->authPlugin->setCurrentPrincipal($principal);
     }
 
     function makeRequest($body)
@@ -114,6 +128,7 @@ END:VCALENDAR'
     function testITipShouldReturn400IfRecipientIsNotConcernedByEvent()
     {
         $this->iTipRequestData['recipient'] = 'c@linagora.com';
+        $this->setAuthenticatedPrincipal('principals/users/c');
         $request = $this->makeRequest($this->iTipRequestData);
 
         $this->iTipPlugin->iTip($request);
@@ -166,6 +181,7 @@ END:VCALENDAR'
             $scheduleCalled = true;
         });
         $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
         $request = $this->makeRequest($this->iTipRequestData);
 
         $this->iTipPlugin->iTip($request);
@@ -210,6 +226,7 @@ END:VCALENDAR';
         $this->iTipRequestData['method'] = 'REPLY';
         $this->iTipRequestData['recipient'] = 'c@linagora.com';
         $this->iTipRequestData['sender'] = 'x@linagora.com';
+        $this->setAuthenticatedPrincipal('principals/users/c');
         $this->iTipRequestData['ical'] = 'BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
@@ -233,6 +250,42 @@ END:VCALENDAR';
         $this->assertEquals(400, $response->getStatus());
     }
 
+    function testITipShouldReturn403IfMethodIsNotCounterAndAuthenticatedIsNotRecipient()
+    {
+        $this->setAuthenticatedPrincipal('principals/users/a');
+        $request = $this->makeRequest($this->iTipRequestData);
+
+        $this->iTipPlugin->iTip($request);
+
+        $response = $this->server->httpResponse;
+        $this->assertEquals(403, $response->getStatus());
+    }
+
+    function testITipCounterShouldReturn403WhenAuthenticatedCannotActAsSender()
+    {
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $request = $this->makeRequest($this->iTipRequestData);
+
+        $this->iTipPlugin->iTip($request);
+
+        $response = $this->server->httpResponse;
+        $this->assertEquals(403, $response->getStatus());
+    }
+
+    function testITipCounterShouldReturn204WhenAuthenticatedHasWriteAccessToSender()
+    {
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->aclPlugin->setMemberships([
+            'principals/users/a/calendar-proxy-write' => ['principals/users/b'],
+        ]);
+        $request = $this->makeRequest($this->iTipRequestData);
+
+        $this->iTipPlugin->iTip($request);
+
+        $response = $this->server->httpResponse;
+        $this->assertEquals(204, $response->getStatus());
+    }
+
 }
 
 #[\AllowDynamicProperties]
@@ -253,4 +306,91 @@ class CalDavPluginMock extends ServerPlugin
         return;
     }
 
+}
+
+#[\AllowDynamicProperties]
+class AuthPluginMock extends ServerPlugin
+{
+    private $currentPrincipal;
+
+    function __construct(string $currentPrincipal)
+    {
+        $this->currentPrincipal = $currentPrincipal;
+    }
+
+    function getPluginName()
+    {
+        return 'auth';
+    }
+
+    function initialize(\Sabre\DAV\Server $server)
+    {
+        $this->server = $server;
+    }
+
+    function setCurrentPrincipal(string $principal): void
+    {
+        $this->currentPrincipal = $principal;
+    }
+
+    function getCurrentPrincipal(): string
+    {
+        return $this->currentPrincipal;
+    }
+}
+
+#[\AllowDynamicProperties]
+class AclPluginMock extends ServerPlugin
+{
+    private $principalMap;
+    private $writablePaths = [];
+    private $memberships = [];
+
+    function __construct(array $principalMap)
+    {
+        $this->principalMap = $principalMap;
+    }
+
+    function getPluginName()
+    {
+        return 'acl';
+    }
+
+    function initialize(\Sabre\DAV\Server $server)
+    {
+        $this->server = $server;
+    }
+
+    function setWritablePaths(array $paths): void
+    {
+        $this->writablePaths = $paths;
+    }
+
+    function setMemberships(array $memberships): void
+    {
+        $this->memberships = $memberships;
+    }
+
+    function getPrincipalByUri($uri)
+    {
+        if (!is_string($uri)) {
+            return null;
+        }
+
+        $normalized = strtolower($uri);
+        return $this->principalMap[$normalized] ?? null;
+    }
+
+    function principalMatchesPrincipal($candidate, $current): bool
+    {
+        $c = strtolower(trim((string)$candidate, '/'));
+        $p = strtolower(trim((string)$current, '/'));
+        if ($c === $p) return true;
+        return in_array($p, $this->memberships[$c] ?? [], true);
+    }
+
+    function checkPrivileges($path, $privilege, $recursion = null, $throwExceptions = null): bool
+    {
+        return in_array(ltrim((string)$path, '/'), $this->writablePaths, true);
+    }
 }

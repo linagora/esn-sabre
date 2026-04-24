@@ -3,14 +3,17 @@
 namespace ESN\DAVACL\PrincipalBackend;
 
 use \ESN\Utils\Utils as Utils;
+use \ESN\Utils\TenantContext as TenantContext;
 
 #[\AllowDynamicProperties]
 class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     protected $db;
     protected $collectionMap;
+    protected TenantContext $tenantContext;
 
-    function __construct($db) {
+    function __construct($db, TenantContext $tenantContext) {
         $this->db = $db;
+        $this->tenantContext = $tenantContext;
         $this->collectionMap = [
             'users' => $this->db->users,
             'resources' => $this->db->resources,

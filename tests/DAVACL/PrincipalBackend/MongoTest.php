@@ -2,9 +2,12 @@
 
 namespace ESN\DAVACL\PrincipalBackend;
 
+use \ESN\Utils\TenantContext as TenantContext;
+
 #[\AllowDynamicProperties]
 class MongoTest extends \PHPUnit\Framework\TestCase {
     protected static $esndb;
+    protected static $tenant;
     protected static $domainMembers;
 
     const USER_ID = '54313fcc398fef406b0041b6';
@@ -21,6 +24,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
     static function setUpBeforeClass(): void {
         $mc = new \MongoDB\Client(ESN_MONGO_ESNURI);
+        self::$tenant = new TenantContext();
         self::$esndb = $mc->{ESN_MONGO_ESNDB};
         self::$esndb->drop();
 
@@ -142,7 +146,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testInvalidPrincipal() {
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
         $principals = $backend->getPrincipalsByPrefix('unknown');
         $this->assertEquals(count($principals), 0);
 
@@ -160,7 +164,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testUserPrincipals() {
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
 
         $principals = $backend->getPrincipalsByPrefix('principals/users');
         $principal = $backend->getPrincipalByPath('principals/users/' . self::USER_ID);
@@ -295,7 +299,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testDomainPrincipalsByPrefix() {
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
 
         $principals = $backend->getPrincipalsByPrefix('principals/domains');
         $principal = $backend->getPrincipalByPath('principals/domains/' . self::DOMAIN_ID);
@@ -321,7 +325,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testResourcesPrincipalsByPrefix() {
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
 
         $principals = $backend->getPrincipalsByPrefix('principals/resources');
         $principal = $backend->getPrincipalByPath('principals/resources/' . self::RESOURCE_ID);
@@ -351,7 +355,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testGetGroupMemberSet() {
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
         $expected = array('principals/users/' . self::USER_ID);
 
         $expectedFromDomain = [
@@ -370,7 +374,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testGetGroupMembership() {
-        $backend  = new Mongo(self::$esndb);
+        $backend  = new Mongo(self::$esndb, self::$tenant);
 
         $expected = array(
             'principals/domains/' . self::DOMAIN_ID
@@ -380,12 +384,12 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
     function testSetGroupMemberSetPRoject() {
         $this->expectException(\Sabre\DAV\Exception\MethodNotAllowed::class);
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
         $backend->setGroupMemberSet('principals/' . self::PROJECT_ID, array());
     }
 
     function testSearchPrincipals() {
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
 
         $result = $backend->searchPrincipals('principals/users', array('{DAV:}blabla' => 'foo'));
         $this->assertEquals(array(), $result);
@@ -414,7 +418,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
     function testUpdatePrincipal() {
         $this->expectException(\Sabre\DAV\Exception\MethodNotAllowed::class);
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
         $propPatch = new \Sabre\DAV\PropPatch([
             '{DAV:}displayname' => 'pietje',
             '{http://sabredav.org/ns}vcard-url' => 'blabla',
@@ -423,25 +427,25 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testGetPrincipalIdByEmailWhenUserExists() {
-        $backend  = new Mongo(self::$esndb);
+        $backend  = new Mongo(self::$esndb, self::$tenant);
 
         $this->assertEquals(self::USER_ID, $backend->getPrincipalIdByEmail('user@example.com'));
     }
 
     function testGetPrincipalIdByEmailWhenUserDoesNotExist() {
-        $backend  = new Mongo(self::$esndb);
+        $backend  = new Mongo(self::$esndb, self::$tenant);
 
         $this->assertNull($backend->getPrincipalIdByEmail('drogba@nouri.com'));
     }
 
     function testGetPrincipalIdByEmailWhenEmailIsNotValid() {
-        $backend  = new Mongo(self::$esndb);
+        $backend  = new Mongo(self::$esndb, self::$tenant);
 
         $this->assertNull($backend->getPrincipalIdByEmail('drogba'));
     }
 
     function testGetPrincipalIdByResourceEmailWhenResourceExists() {
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
         $resourceEmail = self::RESOURCE_ID . '@test.com';
 
         $result = $backend->getPrincipalIdByResourceEmail($resourceEmail);
@@ -450,20 +454,20 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testGetPrincipalIdByResourceEmailWhenResourceDoesNotExist() {
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
         $nonExistentEmail = '000000000000000000000000@test.com';
 
         $this->assertNull($backend->getPrincipalIdByResourceEmail($nonExistentEmail));
     }
 
     function testGetPrincipalIdByResourceEmailWhenLocalpartIsNotObjectId() {
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
 
         $this->assertNull($backend->getPrincipalIdByResourceEmail('notanobjectid@test.com'));
     }
 
     function testGetPrincipalIdByResourceEmailWhenEmailIsNotValid() {
-        $backend = new Mongo(self::$esndb);
+        $backend = new Mongo(self::$esndb, self::$tenant);
 
         $this->assertNull($backend->getPrincipalIdByResourceEmail('notanemail'));
     }

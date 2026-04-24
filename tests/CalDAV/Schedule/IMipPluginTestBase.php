@@ -175,7 +175,8 @@ class IMipPluginTestBase extends \PHPUnit\Framework\TestCase {
 
     private function initServer(\MongoDB\Database $esndb, \MongoDB\Database $sabredb): array
     {
-        $principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($esndb);
+        $tenantContext = new \ESN\Utils\TenantContext();
+        $principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($esndb, $tenantContext);
         $caldavBackend = new \ESN\CalDAV\Backend\Mongo($sabredb);
 
         $tree[] = new \Sabre\DAV\SimpleCollection('principals', [

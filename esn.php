@@ -72,9 +72,12 @@ try {
     return;
 }
 
+// TenantContext
+$tenantContext = new ESN\Utils\TenantContext();
+
 // Backends
 $addressbookBackend = new ESN\CardDAV\Backend\Esn($sabreDb);
-$principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
+$principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb, $tenantContext);
 
 $schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 56;
 $calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend, $schedulingObjectTTLInDays);
@@ -99,10 +102,15 @@ $server->addPlugin($loggerPlugin);
 // Auth backend
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm'], $principalBackend, $server);
 
+
 // listener
 $authEmitter = $authBackend->getEventEmitter();
 $authEmitter->on("auth:success", [$addressbookBackend, "getAddressBooksForUser"]);
 $authEmitter->on("auth:success", [$calendarBackend, "getCalendarsForUser"]);
+$authEmitter->on("auth:success", function () use ($authBackend, $tenantContext) {
+    $tenantContext->domainId = $authBackend->getCurrentDomainId();
+});
+
 
 // Add stack trace to HTML response in dev mode
 if (SABRE_ENV === SABRE_ENV_DEV) {

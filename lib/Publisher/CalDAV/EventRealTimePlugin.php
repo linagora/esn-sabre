@@ -399,13 +399,35 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
 
-        // Only publish alarm events for REQUEST if it's a significant change
-        // (e.g., new event, alarm modified, not just another attendee's PARTSTAT change)
         if ($iTipMessage->method === 'REQUEST' && $iTipMessage->significantChange) {
-            $this->createMessage(
-                $this->EVENT_TOPICS['EVENT_ALARM_REQUEST'],
-                $dataMessage
-            );
+            // Only notify the alarm service if the recipient has accepted the event.
+            // The ICS in $dataMessage is fetched after scheduleLocalDelivery has merged
+            // the organizer's changes, so the recipient's PARTSTAT reflects the current state.
+            $vcalendar = $dataMessage['event'];
+            $recipientUri = strtolower($iTipMessage->recipient);
+            $masterVEvent = null;
+            foreach ($vcalendar->VEVENT as $vevent) {
+                if (!isset($vevent->{'RECURRENCE-ID'})) {
+                    $masterVEvent = $vevent;
+                    break;
+                }
+            }
+            if ($masterVEvent && isset($masterVEvent->ATTENDEE)) {
+                foreach ($masterVEvent->ATTENDEE as $attendee) {
+                    if (strtolower($attendee->getValue()) === $recipientUri) {
+                        $partstat = isset($attendee['PARTSTAT'])
+                            ? strtoupper(trim($attendee['PARTSTAT']->getValue()))
+                            : 'NEEDS-ACTION';
+                        if ($partstat === 'ACCEPTED') {
+                            $this->createMessage(
+                                $this->EVENT_TOPICS['EVENT_ALARM_UPDATED'],
+                                $dataMessage
+                            );
+                        }
+                        break;
+                    }
+                }
+            }
         } elseif ($iTipMessage->method === 'CANCEL') {
             $this->createMessage(
                 $this->EVENT_TOPICS['EVENT_ALARM_CANCEL'],

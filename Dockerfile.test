@@ -40,10 +40,9 @@ RUN apt-get update && \
     make \
     pkg-config \
     git && \
-  # Compile MongoDB extension
-  (pecl install mongodb-2.2.0 || pecl install mongodb) && \
-  echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
-  echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini 
+  # Compile MongoDB extension and enable it for all SAPIs via conf.d
+  pecl install mongodb-2.2.1 && \
+  echo "extension=mongodb.so" | tee /etc/php/${PHPVERSION}/fpm/conf.d/20-mongodb.ini /etc/php/${PHPVERSION}/cli/conf.d/20-mongodb.ini > /dev/null
 
 # Configure PHP (combine all sed commands)
 RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fpm/php.ini && \

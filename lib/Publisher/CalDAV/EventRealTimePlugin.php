@@ -232,6 +232,22 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 'calendarUri' => $calendarUri
             ];
 
+            // When a PUT replaces the content of an existing resource with a different UID
+            // (client reuses the same .ics filename for a completely different event), the
+            // old alarm must be cancelled before the new one is created, otherwise consumers
+            // are left with an orphaned alarm indexed on the old UID.
+            if ($action === 'UPDATED' && $old_event) {
+                $oldUid = isset($old_event->VEVENT->UID) ? (string)$old_event->VEVENT->UID : null;
+                $newUid = isset($event->VEVENT->UID) ? (string)$event->VEVENT->UID : null;
+                if ($oldUid && $newUid && $oldUid !== $newUid) {
+                    $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_CANCEL'], [
+                        'eventPath' => '/' . $calendarPathObject,
+                        'event'     => $old_event,
+                        'rawEvent'  => $old_event->serialize(),
+                    ]);
+                }
+            }
+
             $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_'.$action], $dataMessage);
             $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
             $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);

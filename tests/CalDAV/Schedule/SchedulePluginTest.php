@@ -66,6 +66,163 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame('', $message->recipient);
     }
 
+    function testShouldNotSkipMasterRequestWhenBrokerProjectsExdateForRecipientRemoval() {
+        $oldObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-300
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+RRULE:FREQ=DAILY;COUNT=5
+SUMMARY:Recurring Meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $newObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-300
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+RRULE:FREQ=DAILY;COUNT=5
+SUMMARY:Recurring Meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+BEGIN:VEVENT
+UID:event-300
+RECURRENCE-ID:20351006T090000Z
+DTSTART:20351006T090000Z
+DTEND:20351006T100000Z
+SUMMARY:Recurring Meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $message = new Message();
+        $message->method = 'REQUEST';
+        $message->recipient = 'mailto:cedric@example.org';
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:event-300
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+RRULE:FREQ=DAILY;COUNT=5
+EXDATE:20351006T090000Z
+SUMMARY:Recurring Meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $shouldSkip = $this->invokeShouldSkipUnchangedOccurrence($message, $oldObject, $newObject);
+        $this->assertFalse($shouldSkip);
+    }
+
+    function testShouldSkipUnchangedOccurrenceForRecurringRequest() {
+        $oldObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-152
+DTSTART:20260322T090000Z
+DTEND:20260322T100000Z
+RRULE:FREQ=DAILY;COUNT=3
+SUMMARY:Daily meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+END:VEVENT
+BEGIN:VEVENT
+UID:event-152
+RECURRENCE-ID:20260323T090000Z
+DTSTART:20260323T090000Z
+DTEND:20260323T100000Z
+SUMMARY:Daily meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $newObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-152
+DTSTART:20260322T090000Z
+DTEND:20260322T100000Z
+RRULE:FREQ=DAILY;COUNT=3
+SUMMARY:Daily meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+END:VEVENT
+BEGIN:VEVENT
+UID:event-152
+RECURRENCE-ID:20260323T090000Z
+DTSTART:20260323T090000Z
+DTEND:20260323T100000Z
+SUMMARY:Daily meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+BEGIN:VEVENT
+UID:event-152
+RECURRENCE-ID:20260324T090000Z
+DTSTART:20260324T090000Z
+DTEND:20260324T100000Z
+SUMMARY:Updated instance (day 3)
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $message = new Message();
+        $message->method = 'REQUEST';
+        $message->recipient = 'mailto:cedric@example.org';
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:event-152
+RECURRENCE-ID:20260323T090000Z
+DTSTART:20260323T090000Z
+DTEND:20260323T100000Z
+SUMMARY:Daily meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $shouldSkip = $this->invokeShouldSkipUnchangedOccurrence($message, $oldObject, $newObject);
+        $this->assertTrue($shouldSkip);
+    }
+
     private function newItipMessage($sequence) {
         $message = new Message();
         $ical = "BEGIN:VCALENDAR
@@ -111,5 +268,12 @@ ATTENDEE;PARTSTAT=NEEDS-ACTION;ROLE=REQ-PARTICIPANT:mailto:bob@example.org
 END:VEVENT
 END:VCALENDAR
 ";
+    }
+
+    private function invokeShouldSkipUnchangedOccurrence($message, $oldObject, $newObject) {
+        $method = new \ReflectionMethod(Plugin::class, 'shouldSkipUnchangedOccurrence');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $message, $oldObject, $newObject);
     }
 }

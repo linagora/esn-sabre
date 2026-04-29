@@ -322,10 +322,12 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false;
         }
 
-        // Public Agenda rule: organizer chair transition to ACCEPTED must trigger notification delivery.
-        if ($recurrenceId === self::MASTER_EVENT
-            && PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($oldObject, $newObject)) {
-            return false;
+        if ($recurrenceId === self::MASTER_EVENT) {
+            if ($this->masterExDatesDiffer($messageEvent, $newVEvent)
+                // Public Agenda rule: organizer chair transition to ACCEPTED must trigger notification delivery.
+                || PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($oldObject, $newObject)) {
+                return false;
+            }
         }
 
         // Check if recipient was attending this occurrence before
@@ -433,6 +435,27 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         // Occurrence hasn't changed significantly, skip the message
         return true;
+    }
+
+    private function masterExDatesDiffer($leftEvent, $rightEvent): bool {
+        return $this->extractExDateTimestamps($leftEvent) !== $this->extractExDateTimestamps($rightEvent);
+    }
+
+    private function extractExDateTimestamps($event): array {
+        $timestamps = [];
+
+        if (!isset($event->EXDATE)) {
+            return $timestamps;
+        }
+
+        foreach ($event->select('EXDATE') as $exDate) {
+            foreach ($exDate->getDateTimes() as $dateTime) {
+                $timestamps[] = $dateTime->getTimestamp();
+            }
+        }
+
+        sort($timestamps);
+        return array_values(array_unique($timestamps));
     }
 
     /*

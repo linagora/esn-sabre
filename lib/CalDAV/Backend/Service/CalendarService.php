@@ -89,8 +89,22 @@ class CalendarService {
 
         $calendarId = $this->calendarDAO->createCalendar($calendarObj);
 
-        // Create calendar instance
-        $instanceId = $this->createCalendarInstance($calendarId, $principalUri, $calendarUri, $properties);
+        // Guard against race condition: two concurrent requests can both pass
+        // checkIfCalendarInstanceExist and reach this point. The second insert hits
+        // the unique index on (principaluri, uri). Clean up the orphan calendar
+        // document and return the winner's instance without emitting calendarCreated.
+        try {
+            $instanceId = $this->createCalendarInstance($calendarId, $principalUri, $calendarUri, $properties);
+        } catch (\MongoDB\Driver\Exception\BulkWriteException $e) {
+            if ($e->getCode() === 11000) {
+                $this->calendarDAO->deleteById($calendarId);
+                $existing = $this->checkIfCalendarInstanceExist($principalUri, $calendarUri);
+                if ($existing) {
+                    return $existing;
+                }
+            }
+            throw $e;
+        }
 
         $this->eventEmitter->emit('esn:calendarCreated', [$this->getCalendarPath($principalUri, $calendarUri)]);
 

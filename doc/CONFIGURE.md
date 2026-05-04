@@ -1,6 +1,6 @@
 ## ENV variables
 
-`docker` packaging relies on ENV variables to generate configuration file throught [this script](../scripts/generate_config.sh).
+The Docker image relies on ENV variables to generate its configuration through [this script](../scripts/generate_config.sh).
 
 The following ENV variables needs to be set:
 
@@ -43,6 +43,23 @@ Feature flag to enable or disable admin impersonation.
    to prevent impersonation over the internet.
 
 Sabre being written in PHP, it supports per-request MongoDB indexes provisioning (defaults to `true`), which can be disabled by setting the SHOULD_CREATE_INDEX environment variable to `false`. This is recommended in production once indexes are provisioned.
+
+## Nginx rate limiting
+
+The embedded Nginx is configured with `ngx_http_limit_req_module` to protect the CalDAV server from request flooding. Three ENV variables control the behaviour:
+
+ - `NGINX_RATE_LIMIT` — sustained request rate per IP (default: `50r/s`)
+ - `NGINX_RATE_ZONE_SIZE` — size of the shared-memory tracking zone (default: `10m`, enough for ~160 000 IPs)
+ - `NGINX_RATE_BURST` — number of requests above the rate that are served immediately before returning 503 (default: `100`)
+
+Example — lower limits for a small deployment:
+
+```bash
+docker run -d -p 8001:80 \
+  -e NGINX_RATE_LIMIT=10r/s \
+  -e NGINX_RATE_BURST=30 \
+  linagora/esn-sabre
+```
 
 ## create the configuration file
 

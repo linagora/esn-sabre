@@ -43,6 +43,7 @@ RUN apt-get update && \
     php-apcu \
     supervisor \
     nginx \
+    gettext-base \
     ca-certificates \
     curl \
     # Build tools (temporary)
@@ -111,11 +112,11 @@ RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject' && 
 # Configure application
 RUN cp -v docker/prepare/set_nginx_htpasswd.sh /root/set_nginx_htpasswd.sh && \
     cp -v docker/config/nginx.conf /etc/nginx/nginx.conf && \
-    cp -v docker/config/default.conf /etc/nginx/sites-available/default && \
+    cp -v docker/config/default.conf.template /etc/nginx/sites-available/default.template && \
+    cp -v docker/config/rate_limit.conf.template /etc/nginx/conf.d/rate_limit.conf.template && \
     cp -v docker/supervisord.conf /etc/supervisor/conf.d/ && \
     rm -rf html && \
     chown -R www-data:www-data /var/www && \
-    /root/set_nginx_htpasswd.sh && \
     mkdir -p /var/run/php
 
 EXPOSE 80

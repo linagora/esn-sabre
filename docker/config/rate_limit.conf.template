@@ -1,0 +1,1 @@
+limit_req_zone $binary_remote_addr zone=davserver:${NGINX_RATE_ZONE_SIZE} rate=${NGINX_RATE_LIMIT};

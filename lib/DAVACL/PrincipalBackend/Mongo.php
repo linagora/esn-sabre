@@ -380,6 +380,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             }
         }
 
+        if ($this->tenantContext->domainId !== null) {
+            $query[] = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($this->tenantContext->domainId)];
+        }
+
         return $this->queryPrincipals('users', $this->db->users, $query, $test);
     }
 

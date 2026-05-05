@@ -27,7 +27,11 @@ class CalendarRoot extends \Sabre\DAV\Collection {
     public function getChildren() {
         //throw new \Sabre\DAV\Exception\MethodNotAllowed('Listing children in this collection has been disabled');
         $homes = [];
-        $res = $this->db->users->find([], [ 'projection' => ['_id' => 1 ]]);
+        $userQuery = [];
+        if ($this->tenantContext !== null && $this->tenantContext->domainId !== null) {
+            $userQuery = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($this->tenantContext->domainId)];
+        }
+        $res = $this->db->users->find($userQuery, [ 'projection' => ['_id' => 1 ]]);
         foreach ($res as $user) {
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $user['_id'] ];
             $homes[] = new CalendarHome($this->caldavBackend, $principal);

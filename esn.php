@@ -107,9 +107,6 @@ $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['
 $authEmitter = $authBackend->getEventEmitter();
 $authEmitter->on("auth:success", [$addressbookBackend, "getAddressBooksForUser"]);
 $authEmitter->on("auth:success", [$calendarBackend, "getCalendarsForUser"]);
-$authEmitter->on("auth:success", function () use ($authBackend, $tenantContext) {
-    $tenantContext->domainId = $authBackend->getCurrentDomainId();
-});
 
 
 // Add stack trace to HTML response in dev mode

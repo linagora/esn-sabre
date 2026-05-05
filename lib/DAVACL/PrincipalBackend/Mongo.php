@@ -52,8 +52,18 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             } else if ($parts[1] == 'users' && !empty($obj[ 'domains' ])) {
                 $domainIds = array_column((array) $obj[ 'domains' ], 'domain_id');
 
-                $domains = $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]);
-                $obj['domains'] = $domains;
+                $domainDocuments = iterator_to_array(
+                    $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]),
+                    false
+                );
+                $obj['domains'] = $domainDocuments;
+
+                if ($this->tenantContext->domainId !== null) {
+                    $principalDomainNames = array_map(fn($d) => (string)$d['name'], $domainDocuments);
+                    if (!in_array($this->tenantContext->domainId, $principalDomainNames, true)) {
+                        throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
+                    }
+                }
             }
 
             return $this->objectToPrincipal($obj, $parts[1]);

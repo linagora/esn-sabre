@@ -48,8 +48,14 @@ class CalendarRoot extends \Sabre\DAV\Collection {
             return null;
         }
 
-        $res = $this->db->users->findOne(['_id' => $mongoName]);
+        $res = $this->db->users->findOne(['_id' => $mongoName], ['projection' => ['domains.domain_id' => 1]]);
         if ($res) {
+            if ($this->tenantContext !== null && $this->tenantContext->domainId !== null && !empty($res['domains'])) {
+                $userDomainIds = array_map(fn($d) => (string)$d['domain_id'], (array)$res['domains']);
+                if (!in_array($this->tenantContext->domainId, $userDomainIds, true)) {
+                    throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed');
+                }
+            }
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $name ];
             return new CalendarHome($this->caldavBackend, $principal);
         }

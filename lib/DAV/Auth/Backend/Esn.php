@@ -50,7 +50,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     }
 
     public function getCurrentDomainId(): ?string {
-        assert($this->currentDomainId);
         return $this->currentDomainId;
     }
 
@@ -155,6 +154,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
                     $this->currentPrincipalPrefix = 'principals/resources/';
                 } else {
                     $this->currentPrincipalPrefix = 'principals/users/';
+                    $this->resolveDomainIdFromEmail($value);
                 }
                 $this->currentUserId = $principalId;
                 return [true, $value];

@@ -136,7 +136,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return null;
         }
 
-        $projection = ['_id' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1];
+        $projection = ['_id' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1, 'domains' => 1 ];
         $query = ['accounts.emails' => strtolower($email)];
 
         $user = $this->db->users->findOne($query, ['projection' => $projection]);
@@ -155,7 +155,18 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 }
             }
         }
+        if (!isset($user['domains'][0]['domain_id'])) {
+           return null;
+        }
+        $domainObjectId = $user['domains'][0]['domain_id'];
+        $domainFromMail = $parts = explode("@", $email)[1];
+        $domainProjection = [ '_id' => 1, 'name' => 1];
+        $domainQuery = [ '_id' => $domainObjectId, 'name' => $domainFromMail ];
+        $domainName = $this->db->domains->findOne($domainQuery, ['projection' => $domainProjection ]);
 
+        if(!$domainName) {
+            return null;
+        }
         return $user['_id'];
     }
 

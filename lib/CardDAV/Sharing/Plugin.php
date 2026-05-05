@@ -25,6 +25,14 @@ use \ESN\Utils\Utils as Utils;
 #[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
 
+    protected $tenantContext;
+    protected $esnDb;
+
+    function __construct(\ESN\Utils\TenantContext $tenantContext = null, \MongoDB\Database $esnDb = null) {
+        $this->tenantContext = $tenantContext;
+        $this->esnDb = $esnDb;
+    }
+
     /**
      * Returns a plugin name.
      *
@@ -109,7 +117,9 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 // Check if this is a domain-members addressbook
                 $this->checkDomainMembersAddressBook($path);
 
-                $sharees = $this->jsonToSharees(Utils::getJsonValue($data, 'dav:sharee', []));
+                $shareesData = Utils::getJsonValue($data, 'dav:sharee', []);
+                $this->validateShareesDomains($shareesData);
+                $sharees = $this->jsonToSharees($shareesData);
                 $this->assertNoSelfDelegation($node, $sharees);
                 $sharingPlugin = $this->server->getPlugin('sharing');
                 $sharingPlugin->shareResource($path, $sharees);
@@ -303,6 +313,31 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $node->setMembersRight($privileges);
 
         return $this->send(204, null);
+    }
+
+    private function validateShareesDomains(array $sharees) {
+        if ($this->tenantContext === null || $this->tenantContext->domainId === null || $this->esnDb === null) {
+            return;
+        }
+
+        foreach ($sharees as $sharee) {
+            $href = Utils::getJsonValue($sharee, 'dav:href');
+            if (!$href || !str_starts_with($href, 'mailto:')) {
+                continue;
+            }
+            $email = substr($href, 7);
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+            $emailDomain = explode('@', $email)[1];
+            $domain = $this->esnDb->domains->findOne(
+                ['_id' => new \MongoDB\BSON\ObjectId($this->tenantContext->domainId), 'name' => $emailDomain],
+                ['projection' => ['_id' => 1]]
+            );
+            if (!$domain) {
+                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain delegation is not allowed');
+            }
+        }
     }
 
     private function checkDomainMembersAddressBook($path) {

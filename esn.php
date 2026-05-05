@@ -90,7 +90,7 @@ $tree = [
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_TECHNICAL_USER),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_DOMAINS)
     ]),
-    new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $esnDb),
+    new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $esnDb, $tenantContext),
     new ESN\CardDAV\AddressBookRoot($principalBackend, $addressbookBackend),
 ];
 
@@ -173,7 +173,7 @@ $carddavSubscriptionPlugin = new ESN\CardDAV\Subscriptions\Plugin();
 $server->addPlugin($carddavSubscriptionPlugin);
 
 // CardDAV sharing support
-$carddavSharingPlugin = new ESN\CardDAV\Sharing\Plugin();
+$carddavSharingPlugin = new ESN\CardDAV\Sharing\Plugin($tenantContext, $esnDb);
 $server->addPlugin($carddavSharingPlugin);
 
 $carddavSharingListenerPlugin = new ESN\CardDAV\Sharing\ListenerPlugin($addressbookBackend);

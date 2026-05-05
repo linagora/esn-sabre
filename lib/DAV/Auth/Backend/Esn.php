@@ -31,7 +31,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     protected $currentPrincipalPrefix = 'principals/users/';
     protected $technicalPrincipal = 'principals/technicalUser';
     protected $technicalUserType = 'technical';
-    protected ?string $currentDomainId = null;
 
     function __construct($apiroot, $realm = null, $principalBackend, $server) {
         $this->apiroot = $apiroot;
@@ -47,23 +46,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
 
     public function getEventEmitter() {
         return $this->eventEmitter;
-    }
-
-    public function getCurrentDomainId(): ?string {
-        return $this->currentDomainId;
-    }
-
-    /* email is previously validated */
-    private function resolveDomainIdFromEmail(string $email): void {
-        $this->currentDomainId = null;
-
-        $parts = explode('@', $email, 2);
-        if (count($parts) !== 2 || $parts[1] === '') {
-            error_log("resolveDomainIdFromEmail: could not extract domain from email '$email'");
-            return;
-        }
-
-        $this->currentDomainId = $parts[1];
     }
 
     private function checkAuthByTCalendarToken($token) {
@@ -114,22 +96,16 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
         $this->currentUserId = $user->_id;
         if (isset($user->domain)) {
-            $domain = filter_var($user->domain, FILTER_VALIDATE_DOMAIN);
-            if(!$domain) {
-                error_log("decodeResponse: no domain valid property '$domain' for user '$user->_id'");
+            if (!filter_var($user->domain, FILTER_VALIDATE_DOMAIN)) {
+                error_log("decodeResponse: invalid domain '$user->domain' for user '$user->_id'");
                 return [false, null];
             }
-            $this->currentDomainId = $domain;
-        }
-        else if(isset($user->email)) {
-            $email = filter_var($user->email, FILTER_VALIDATE_EMAIL);
-            if(!$email) {
-                error_log("decodeResponse: no domain valid property '$email' for user '$user->_id'");
+        } else if (isset($user->email)) {
+            if (!filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
+                error_log("decodeResponse: invalid email '$user->email' for user '$user->_id'");
                 return [false, null];
             }
-            $this->resolveDomainIdFromEmail($email);
-        }
-        else {
+        } else {
             error_log("decodeResponse: no email and no domain property for user '$user->_id'");
         }
         return [true, $type];
@@ -154,7 +130,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
                     $this->currentPrincipalPrefix = 'principals/resources/';
                 } else {
                     $this->currentPrincipalPrefix = 'principals/users/';
-                    $this->resolveDomainIdFromEmail($value);
                 }
                 $this->currentUserId = $principalId;
                 return [true, $value];
@@ -227,8 +202,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
             error_log("validateUserPass: $user has incorrect mail attribute $mail");
             return [false, "$user has incorrect mail attribute"];
         }
-        $this->resolveDomainIdFromEmail($mail);
-
 
         $principalId = $this->principalBackend->getPrincipalIdByEmail($mail);
         if (!$principalId) {
@@ -326,8 +299,6 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
                 if (!$principleId) return false;
                 // we set the userId to be used as the current principle
                 $this->currentUserId = $principleId;
-                $this->resolveDomainIdFromEmail($email);
-
                 return true;
             } catch(\exception $e) {
                 // something wrong happened during decoding the JWT

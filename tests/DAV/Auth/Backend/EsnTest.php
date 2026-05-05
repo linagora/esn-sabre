@@ -84,6 +84,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         // Insert a user into the db with email that matches LDAP
         $esnDb = $esnauth->getDb();
         $userId = new \MongoDB\BSON\ObjectId('123456789012345678901234');
+        $domainId = new \MongoDB\BSON\ObjectId('098765432109876543210987');
         $esnDb->users->insertOne([
             '_id' => $userId,
             'firstname' => 'John',
@@ -92,7 +93,16 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
                 [ 'type' => 'email', 'emails' => [ 'johndoe@linagora.com' ] ]
             ],
             'domains' => [
-                [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]
+                [ 'domain_id' => $domainId ]
+            ]
+        ]);
+        $esnDb->domains->insertOne([
+            '_id' => $domainId,
+            'name' => 'linagora.com',
+            'administrators' => [
+                [
+                    'user_id' => $userId
+                ]
             ]
         ]);
 
@@ -177,6 +187,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         // Insert a user into the db with email that matches LDAP
         $esnDb = $esnauth->getDb();
         $userId = new \MongoDB\BSON\ObjectId('123456789012345678901234');
+        $domainId = new \MongoDB\BSON\ObjectId('098765432109876543210987');
         $esnDb->users->insertOne([
             '_id' => $userId,
             'firstname' => 'John',
@@ -185,9 +196,19 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
                 [ 'type' => 'email', 'emails' => [ 'johndoe@linagora.com' ] ]
             ],
             'domains' => [
-                [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]
+                [ 'domain_id' => $domainId ]
             ]
         ]);
+        $esnDb->domains->insertOne([
+            '_id' => $domainId,
+            'name' => 'linagora.com',
+            'administrators' => [
+                [
+                    'user_id' => $userId
+                ]
+            ]
+        ]);
+
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'PHP_AUTH_USER' => 'username',
@@ -220,17 +241,29 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
 
         // insert a user into the db
         $esnDb = $esnauth->getDb();
+        $userId = new \MongoDB\BSON\ObjectId(self::USER_ID);
+        $domainId = new \MongoDB\BSON\ObjectId(self::DOMAIN_ID);
         $esnDb->users->insertOne([
-            '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID),
+            '_id' => $userId,
             'firstname' => 'first',
             'lastname' => 'last',
             'accounts' => [
                 [ 'type' => 'email', 'emails' => [ 'user1@open-paas.org' ] ]
             ],
             'domains' => [
-                [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]
+                [ 'domain_id' => $domainId ]
             ]
         ]);
+        $esnDb->domains->insertOne([
+            '_id' => $domainId,
+            'name' => 'open-paas.org',
+            'administrators' => [
+                [
+                    'user_id' => $userId
+                ]
+            ]
+        ]);
+
         // make a request
         $request = new \Sabre\HTTP\Request('GET', '/foo/bar');
 
@@ -292,17 +325,6 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
 
         // insert a user into the db
         $esnDb = $esnauth->getDb();
-        $esnDb->users->insertOne([
-            '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID),
-            'firstname' => 'first',
-            'lastname' => 'last',
-            'accounts' => [
-                [ 'type' => 'email', 'emails' => [ 'user1@open-paas.org' ] ]
-            ],
-            'domains' => [
-                [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]
-            ]
-        ]);
         // make a request
         $request = new \Sabre\HTTP\Request('GET', '/foo/bar');
   
@@ -375,6 +397,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         // Insert a user into the db
         $esnDb = $esnauth->getDb();
         $userId = new \MongoDB\BSON\ObjectId('999999999999999999999999');
+        $domainId = new \MongoDB\BSON\ObjectId('888888888888888888888888');
         $esnDb->users->insertOne([
             '_id' => $userId,
             'firstname' => 'Test',
@@ -383,7 +406,16 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
                 [ 'type' => 'email', 'emails' => [ 'user@example.com' ] ]
             ],
             'domains' => [
-                [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]
+                [ 'domain_id' => $domainId ]
+            ]
+        ]);
+        $esnDb->domains->insertOne([
+            '_id' => $domainId,
+            'name' => 'example.com',
+            'administrators' => [
+                [
+                    'user_id' => $userId
+                ]
             ]
         ]);
 

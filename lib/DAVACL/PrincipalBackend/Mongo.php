@@ -50,20 +50,19 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     $obj['domain'] = $domain;
                 }
             } else if ($parts[1] == 'users' && !empty($obj[ 'domains' ])) {
-                $domainIds = array_column((array) $obj[ 'domains' ], 'domain_id');
-
-                $domainDocuments = iterator_to_array(
-                    $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]),
-                    false
-                );
-                $obj['domains'] = $domainDocuments;
-
                 if ($this->tenantContext->domainId !== null) {
-                    $principalDomainNames = array_map(fn($d) => (string)$d['name'], $domainDocuments);
-                    if (!in_array($this->tenantContext->domainId, $principalDomainNames, true)) {
+                    $userDomainIds = array_map(
+                        fn($d) => (string)$d['domain_id'],
+                        (array)$obj['domains']
+                    );
+                    if (!in_array($this->tenantContext->domainId, $userDomainIds, true)) {
                         throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
                     }
                 }
+
+                $domainIds = array_column((array) $obj[ 'domains' ], 'domain_id');
+                $domains = $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]);
+                $obj['domains'] = $domains;
             }
 
             return $this->objectToPrincipal($obj, $parts[1]);
@@ -166,17 +165,18 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             }
         }
         if (!isset($user['domains'][0]['domain_id'])) {
-           return null;
-        }
-        $domainObjectId = $user['domains'][0]['domain_id'];
-        $domainFromMail = $parts = explode("@", $email)[1];
-        $domainProjection = [ '_id' => 1, 'name' => 1];
-        $domainQuery = [ '_id' => $domainObjectId, 'name' => $domainFromMail ];
-        $domainName = $this->db->domains->findOne($domainQuery, ['projection' => $domainProjection ]);
-
-        if(!$domainName) {
             return null;
         }
+        $domainObjectId = $user['domains'][0]['domain_id'];
+        $domainFromMail = explode("@", $email)[1];
+        $domain = $this->db->domains->findOne(
+            [ '_id' => $domainObjectId, 'name' => $domainFromMail ],
+            [ 'projection' => [ '_id' => 1 ] ]
+        );
+        if (!$domain) {
+            return null;
+        }
+        $this->tenantContext->domainId = (string)$domainObjectId;
         return $user['_id'];
     }
 

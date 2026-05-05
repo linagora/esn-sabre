@@ -41,7 +41,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
         self::$esndb->domains->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
-            'name' => 'test',
+            'name' => 'example.com',
             'administrators' => [
                 [
                     'user_id' => self::USER_DOMAIN_ADMIN_ID
@@ -308,7 +308,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $expected = [
             'uri' => 'principals/domains/' . self::DOMAIN_ID,
             'id' => self::DOMAIN_ID,
-            '{DAV:}displayname' => 'test',
+            '{DAV:}displayname' => 'example.com',
             'groupPrincipals' => [],
             'administrators' => [
                 'principals/users/' . self::USER_DOMAIN_ADMIN_ID
@@ -335,7 +335,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             'uri' => 'principals/resources/' . self::RESOURCE_ID,
             'id' => self::RESOURCE_ID,
             '{DAV:}displayname' => 'resource',
-            '{http://sabredav.org/ns}email-address' => self::RESOURCE_ID . '@test',
+            '{http://sabredav.org/ns}email-address' => self::RESOURCE_ID . '@example.com',
             'groupPrincipals' => []
         ];
 
@@ -409,7 +409,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $result = $backend->searchPrincipals('principals/resources', array('{http://sabredav.org/ns}email-address' => 'resource@EXAMPLE.CoM'));
         $this->assertEquals([], $result);
 
-        $result = $backend->searchPrincipals('principals/domains', array('{DAV:}displayname' => 'test'));
+        $result = $backend->searchPrincipals('principals/domains', array('{DAV:}displayname' => 'example.com'));
         $this->assertEquals(array('principals/domains/' . self::DOMAIN_ID), $result);
 
         $result = $backend->searchPrincipals('principals/domains', array('{DAV:}displayname' => 'notexist'));

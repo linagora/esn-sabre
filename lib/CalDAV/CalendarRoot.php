@@ -11,11 +11,13 @@ class CalendarRoot extends \Sabre\DAV\Collection {
     protected $principalBackend;
     protected $caldavBackend;
     protected $db;
+    protected $tenantContext;
 
-    function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CalDAV\Backend\BackendInterface $caldavBackend, \MongoDB\Database $db) {
+    function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CalDAV\Backend\BackendInterface $caldavBackend, \MongoDB\Database $db, \ESN\Utils\TenantContext $tenantContext = null) {
         $this->principalBackend = $principalBackend;
         $this->caldavBackend = $caldavBackend;
         $this->db = $db;
+        $this->tenantContext = $tenantContext;
     }
 
     public function getName() {
@@ -52,8 +54,13 @@ class CalendarRoot extends \Sabre\DAV\Collection {
             return new CalendarHome($this->caldavBackend, $principal);
         }
 
-        $res = $this->db->resources->findOne(['_id' => $mongoName], [ 'projection' => []]);
+        $res = $this->db->resources->findOne(['_id' => $mongoName], ['projection' => ['domain' => 1]]);
         if ($res) {
+            if ($this->tenantContext !== null && $this->tenantContext->domainId !== null && isset($res['domain'])) {
+                if ((string)$res['domain'] !== $this->tenantContext->domainId) {
+                    throw new \Sabre\DAV\Exception\Forbidden('Cross-domain resource access is not allowed');
+                }
+            }
             $principal = [ 'uri' => self::RESOURCES_PREFIX . '/' . $name ];
             return new CalendarHome($this->caldavBackend, $principal);
         }

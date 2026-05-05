@@ -277,6 +277,31 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return false;
     }
 
+    private function validateShareesDomains(array $sharees) {
+        if ($this->tenantContext === null || $this->tenantContext->domainId === null || $this->esnDb === null) {
+            return;
+        }
+
+        foreach ($sharees as $sharee) {
+            $href = Utils::getJsonValue($sharee, 'dav:href');
+            if (!$href || !str_starts_with($href, 'mailto:')) {
+                continue;
+            }
+            $email = substr($href, 7);
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+            $emailDomain = explode('@', $email)[1];
+            $domain = $this->esnDb->domains->findOne(
+                ['_id' => new \MongoDB\BSON\ObjectId($this->tenantContext->domainId), 'name' => $emailDomain],
+                ['projection' => ['_id' => 1]]
+            );
+            if (!$domain) {
+                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain delegation is not allowed');
+            }
+        }
+    }
+
     private function handleGroupAddressBook($path, $node, $data) {
         $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
 
@@ -313,31 +338,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $node->setMembersRight($privileges);
 
         return $this->send(204, null);
-    }
-
-    private function validateShareesDomains(array $sharees) {
-        if ($this->tenantContext === null || $this->tenantContext->domainId === null || $this->esnDb === null) {
-            return;
-        }
-
-        foreach ($sharees as $sharee) {
-            $href = Utils::getJsonValue($sharee, 'dav:href');
-            if (!$href || !str_starts_with($href, 'mailto:')) {
-                continue;
-            }
-            $email = substr($href, 7);
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                continue;
-            }
-            $emailDomain = explode('@', $email)[1];
-            $domain = $this->esnDb->domains->findOne(
-                ['_id' => new \MongoDB\BSON\ObjectId($this->tenantContext->domainId), 'name' => $emailDomain],
-                ['projection' => ['_id' => 1]]
-            );
-            if (!$domain) {
-                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain delegation is not allowed');
-            }
-        }
     }
 
     private function checkDomainMembersAddressBook($path) {

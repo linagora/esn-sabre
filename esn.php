@@ -173,7 +173,7 @@ $carddavSubscriptionPlugin = new ESN\CardDAV\Subscriptions\Plugin();
 $server->addPlugin($carddavSubscriptionPlugin);
 
 // CardDAV sharing support
-$carddavSharingPlugin = new ESN\CardDAV\Sharing\Plugin($tenantContext, $esnDb);
+$carddavSharingPlugin = new ESN\CardDAV\Sharing\Plugin();
 $server->addPlugin($carddavSharingPlugin);
 
 $carddavSharingListenerPlugin = new ESN\CardDAV\Sharing\ListenerPlugin($addressbookBackend);
@@ -185,7 +185,7 @@ $server->addPlugin(
 );
 
 // Calendar sharing support
-$server->addPlugin(new ESN\DAV\Sharing\Plugin());
+$server->addPlugin(new ESN\DAV\Sharing\Plugin($tenantContext, $esnDb));
 $server->addPlugin(new Sabre\CalDAV\SharingPlugin());
 
 // Calendar scheduling support

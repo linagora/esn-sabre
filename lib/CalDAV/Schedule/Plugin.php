@@ -28,6 +28,7 @@ use
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private const MASTER_EVENT = 'master';
+    private const DEFAULT_REPLY_PROPAGATION_THRESHOLD = 200;
 
     private $logger;
     private $principalBackend;
@@ -193,12 +194,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $calendar->createFile($newFileName, $newObject->serialize());
         } else {
             if ($iTipMessage->method === 'REPLY') {
-                $this->processICalendarChange(
-                    $oldICalendarData,
-                    $newObject,
-                    [$iTipMessage->recipient],
-                    [$iTipMessage->sender]
-                );
+                if (!$this->shouldSkipReplyPropagation($oldICalendarData)) {
+                    $this->processICalendarChange(
+                        $oldICalendarData,
+                        $newObject,
+                        [$iTipMessage->recipient],
+                        [$iTipMessage->sender]
+                    );
+                }
             }
             $objectNode->put($newObject->serialize());
         }
@@ -530,6 +533,68 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 }
             }
         }
+    }
+
+    private function getReplyPropagationThreshold(): int {
+        $raw = getenv('TW_CAL_REPLY_PROPAGATION_THRESHOLD');
+
+        if ($raw === false || $raw === '') {
+            return self::DEFAULT_REPLY_PROPAGATION_THRESHOLD;
+        }
+
+        $threshold = (int)$raw;
+        if ($threshold < 0) {
+            return 0;
+        }
+
+        return $threshold;
+    }
+
+    private function shouldSkipReplyPropagation($oldObject): bool {
+        $threshold = $this->getReplyPropagationThreshold();
+        if ($threshold <= 0) {
+            return false;
+        }
+
+        return $this->countEventAttendees($oldObject) >= $threshold;
+    }
+
+    private function countEventAttendees($calendarObject): int {
+        if (!$calendarObject) {
+            return 0;
+        }
+
+        if (is_string($calendarObject)) {
+            try {
+                $calendarObject = \Sabre\VObject\Reader::read($calendarObject);
+            } catch (\Throwable $e) {
+                return 0;
+            }
+        }
+
+        if (!($calendarObject instanceof VCalendar)) {
+            return 0;
+        }
+
+        $masterEvent = null;
+        foreach ($calendarObject->select('VEVENT') as $vevent) {
+            $masterEvent = $masterEvent ?? $vevent;
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                $masterEvent = $vevent;
+                break;
+            }
+        }
+
+        if (!$masterEvent || !isset($masterEvent->ATTENDEE)) {
+            return 0;
+        }
+
+        $attendeeMap = [];
+        foreach ($masterEvent->ATTENDEE as $attendee) {
+            $attendeeMap[strtolower($attendee->getNormalizedValue())] = true;
+        }
+
+        return count($attendeeMap);
     }
 
     /**

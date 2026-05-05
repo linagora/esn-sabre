@@ -223,6 +223,75 @@ ICS
         $this->assertTrue($shouldSkip);
     }
 
+    function testShouldCountAttendeesForSingleEvent() {
+        $calendar = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-single-count
+DTSTART:20260322T090000Z
+DTEND:20260322T100000Z
+SUMMARY:Single meeting
+ATTENDEE:mailto:alice@example.org
+ATTENDEE:mailto:bob@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->assertSame(2, $this->invokeCountEventAttendees($calendar));
+    }
+
+    function testShouldCountOnlyMasterAttendeesForRecurringEvent() {
+        $calendar = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-recurring-count
+DTSTART:20260322T090000Z
+DTEND:20260322T100000Z
+RRULE:FREQ=DAILY;COUNT=3
+SUMMARY:Recurring meeting
+ATTENDEE:mailto:alice@example.org
+ATTENDEE:mailto:bob@example.org
+END:VEVENT
+BEGIN:VEVENT
+UID:event-recurring-count
+RECURRENCE-ID:20260323T090000Z
+DTSTART:20260323T090000Z
+DTEND:20260323T100000Z
+SUMMARY:Recurring meeting override
+ATTENDEE:mailto:alice@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+ATTENDEE:mailto:dina@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->assertSame(2, $this->invokeCountEventAttendees($calendar));
+    }
+
+    function testShouldDeduplicateMasterAttendeesByNormalizedValue() {
+        $calendar = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-dedupe-count
+DTSTART:20260322T090000Z
+DTEND:20260322T100000Z
+SUMMARY:Single meeting
+ATTENDEE:mailto:alice@example.org
+ATTENDEE:MAILTO:ALICE@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->assertSame(1, $this->invokeCountEventAttendees($calendar));
+    }
+
     private function newItipMessage($sequence) {
         $message = new Message();
         $ical = "BEGIN:VCALENDAR
@@ -275,5 +344,12 @@ END:VCALENDAR
         $method->setAccessible(true);
 
         return $method->invoke($this->plugin, $message, $oldObject, $newObject);
+    }
+
+    private function invokeCountEventAttendees($calendarObject) {
+        $method = new \ReflectionMethod(Plugin::class, 'countEventAttendees');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $calendarObject);
     }
 }

@@ -98,6 +98,9 @@ class CalendarRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 ];
             }
 
+            if (empty($instance['sharee']->principal)) {
+                continue;
+            }
             $calendarPath = Utils::calendarPathFromUri($instance['sharee']->principal,  $instance['uri']);
 
             $this->createMessage(

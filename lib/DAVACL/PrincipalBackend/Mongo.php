@@ -26,7 +26,11 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $principals = [];
         if (count($parts) == 2 && $parts[0] == 'principals' &&
               isset($this->collectionMap[$parts[1]])) {
-            $res = $this->collectionMap[$parts[1]]->find();
+            $query = [];
+            if ($parts[1] === 'users' && $this->tenantContext->domainId !== null) {
+                $query = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($this->tenantContext->domainId)];
+            }
+            $res = $this->collectionMap[$parts[1]]->find($query);
             foreach ($res as $obj) {
                 $principals[] = $this->objectToPrincipal($obj, $parts[1]);
             }
@@ -44,7 +48,11 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 return null;
             }
 
-            if ($parts[1] == 'resources') {
+            if ($parts[1] == 'domains') {
+                if ($this->tenantContext->domainId !== null && $parts[2] !== $this->tenantContext->domainId) {
+                    throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
+                }
+            } else if ($parts[1] == 'resources') {
                 if (isset($obj['domain'])) {
                     $domain = $this->db->domains->findOne([ '_id' => $obj[ 'domain' ]]);
                     $obj['domain'] = $domain;

@@ -11,6 +11,7 @@ use
     Sabre\HTTP\ResponseInterface,
     Sabre\VObject\Component\VCalendar,
     Sabre\VObject\ITip;
+use Sabre\VObject\Reader;
 
 // @codeCoverageIgnoreEnd
 
@@ -165,7 +166,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $objectPath = $homePath . '/' . $result;
             $objectNode = $this->server->tree->getNodeForPath($objectPath);
             $oldICalendarData = $objectNode->get();
-            $currentObject = \Sabre\VObject\Reader::read($oldICalendarData);
+            $currentObject = Reader::read($oldICalendarData);
         } else {
             $isNewNode = true;
         }
@@ -229,7 +230,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
-            $oldObj = \Sabre\VObject\Reader::read($node->get());
+            $oldObj = Reader::read($node->get());
         } else {
             $oldObj = null;
         }
@@ -257,7 +258,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         // Parse oldObject if it's a string (raw iCalendar data)
         if (is_string($oldObject)) {
-            $oldObject = \Sabre\VObject\Reader::read($oldObject);
+            $oldObject = Reader::read($oldObject);
         }
 
         // Ensure oldObject has VEVENT
@@ -560,37 +561,48 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     private function countEventAttendees($calendarObject): int {
+        $calendarObject = $this->readCalendarObject($calendarObject);
         if (!$calendarObject) {
             return 0;
         }
 
-        if (is_string($calendarObject)) {
-            try {
-                $calendarObject = \Sabre\VObject\Reader::read($calendarObject);
-            } catch (\Throwable $e) {
-                return 0;
-            }
-        }
-
-        if (!($calendarObject instanceof VCalendar)) {
-            return 0;
-        }
-
-        $masterEvent = null;
-        foreach ($calendarObject->select('VEVENT') as $vevent) {
-            $masterEvent = $masterEvent ?? $vevent;
-            if (!isset($vevent->{'RECURRENCE-ID'})) {
-                $masterEvent = $vevent;
-                break;
-            }
-        }
-
+        $masterEvent = $this->findMasterEvent($calendarObject);
         if (!$masterEvent || !isset($masterEvent->ATTENDEE)) {
             return 0;
         }
 
+        return $this->countUniqueAttendees($masterEvent->ATTENDEE);
+    }
+
+    private function readCalendarObject($calendarObject): ?VCalendar {
+        if ($calendarObject instanceof VCalendar) {
+            return $calendarObject;
+        }
+
+        try {
+            $parsedObject = \Sabre\VObject\Reader::read($calendarObject);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $parsedObject instanceof VCalendar ? $parsedObject : null;
+    }
+
+    private function findMasterEvent(VCalendar $calendarObject) {
+        $firstEvent = null;
+        foreach ($calendarObject->select('VEVENT') as $vevent) {
+            $firstEvent = $firstEvent ?? $vevent;
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                return $vevent;
+            }
+        }
+
+        return $firstEvent;
+    }
+
+    private function countUniqueAttendees($attendees): int {
         $attendeeMap = [];
-        foreach ($masterEvent->ATTENDEE as $attendee) {
+        foreach ($attendees as $attendee) {
             $attendeeMap[strtolower($attendee->getNormalizedValue())] = true;
         }
 

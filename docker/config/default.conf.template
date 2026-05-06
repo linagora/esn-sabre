@@ -6,6 +6,26 @@ server {
 
   server_name _;
 
+  location = /.well-known/caldav {
+    absolute_redirect off;
+    return 301 /calendars;
+  }
+
+  location = /.well-known/caldav/ {
+    absolute_redirect off;
+    return 301 /calendars;
+  }
+
+  location = /.well-known/carddav {
+    absolute_redirect off;
+    return 301 /addressbooks;
+  }
+
+  location = /.well-known/carddav/ {
+    absolute_redirect off;
+    return 301 /addressbooks;
+  }
+
   location / {
     limit_req zone=davserver burst=${NGINX_RATE_BURST} nodelay;
 

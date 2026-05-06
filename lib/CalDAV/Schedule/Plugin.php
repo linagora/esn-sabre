@@ -166,7 +166,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $objectPath = $homePath . '/' . $result;
             $objectNode = $this->server->tree->getNodeForPath($objectPath);
             $oldICalendarData = $objectNode->get();
-            $currentObject = Reader::read($oldICalendarData);
+            $currentObject = \Sabre\VObject\Reader::read($oldICalendarData);
         } else {
             $isNewNode = true;
         }

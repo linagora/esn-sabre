@@ -44,6 +44,16 @@ Feature flag to enable or disable admin impersonation.
 
 Sabre being written in PHP, it supports per-request MongoDB indexes provisioning (defaults to `true`), which can be disabled by setting the SHOULD_CREATE_INDEX environment variable to `false`. This is recommended in production once indexes are provisioned.
 
+## Scheduling
+
+`TW_CAL_REPLY_PROPAGATION_THRESHOLD` controls reply propagation fan-out after an attendee updates their participation status.
+
+When an attendee sends a `REPLY` such as accepting or declining an event, Sabre always updates the organizer calendar. It may also propagate that attendee `PARTSTAT` change to the other attendees. 
+If the event attendee count is greater than or equal to `TW_CAL_REPLY_PROPAGATION_THRESHOLD`, this propagation to the other attendees is skipped to avoid large fan-out work.
+
+- Default: `200`
+- Set to `0` or a negative value to disable this skip and always propagate replies.
+
 ## Nginx rate limiting
 
 The embedded Nginx is configured with `ngx_http_limit_req_module` to protect the CalDAV server from request flooding. Three ENV variables control the behaviour:

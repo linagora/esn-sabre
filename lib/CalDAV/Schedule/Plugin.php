@@ -11,6 +11,7 @@ use
     Sabre\HTTP\ResponseInterface,
     Sabre\VObject\Component\VCalendar,
     Sabre\VObject\ITip;
+use Sabre\VObject\Reader;
 
 // @codeCoverageIgnoreEnd
 
@@ -28,6 +29,7 @@ use
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private const MASTER_EVENT = 'master';
+    private const DEFAULT_REPLY_PROPAGATION_THRESHOLD = 200;
 
     private $logger;
     private $principalBackend;
@@ -193,12 +195,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $calendar->createFile($newFileName, $newObject->serialize());
         } else {
             if ($iTipMessage->method === 'REPLY') {
-                $this->processICalendarChange(
-                    $oldICalendarData,
-                    $newObject,
-                    [$iTipMessage->recipient],
-                    [$iTipMessage->sender]
-                );
+                if (!$this->shouldSkipReplyPropagation($oldICalendarData)) {
+                    $this->processICalendarChange(
+                        $oldICalendarData,
+                        $newObject,
+                        [$iTipMessage->recipient],
+                        [$iTipMessage->sender]
+                    );
+                }
             }
             $objectNode->put($newObject->serialize());
         }
@@ -226,7 +230,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
-            $oldObj = \Sabre\VObject\Reader::read($node->get());
+            $oldObj = Reader::read($node->get());
         } else {
             $oldObj = null;
         }
@@ -254,7 +258,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         // Parse oldObject if it's a string (raw iCalendar data)
         if (is_string($oldObject)) {
-            $oldObject = \Sabre\VObject\Reader::read($oldObject);
+            $oldObject = Reader::read($oldObject);
         }
 
         // Ensure oldObject has VEVENT
@@ -530,6 +534,79 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 }
             }
         }
+    }
+
+    private function getReplyPropagationThreshold(): int {
+        $raw = getenv('TW_CAL_REPLY_PROPAGATION_THRESHOLD');
+
+        if ($raw === false || $raw === '') {
+            return self::DEFAULT_REPLY_PROPAGATION_THRESHOLD;
+        }
+
+        $threshold = (int)$raw;
+        if ($threshold < 0) {
+            return 0;
+        }
+
+        return $threshold;
+    }
+
+    private function shouldSkipReplyPropagation($oldObject): bool {
+        $threshold = $this->getReplyPropagationThreshold();
+        if ($threshold <= 0) {
+            return false;
+        }
+
+        return $this->countEventAttendees($oldObject) >= $threshold;
+    }
+
+    private function countEventAttendees($calendarObject): int {
+        $calendarObject = $this->readCalendarObject($calendarObject);
+        if (!$calendarObject) {
+            return 0;
+        }
+
+        $masterEvent = $this->findMasterEvent($calendarObject);
+        if (!$masterEvent || !isset($masterEvent->ATTENDEE)) {
+            return 0;
+        }
+
+        return $this->countUniqueAttendees($masterEvent->ATTENDEE);
+    }
+
+    private function readCalendarObject($calendarObject): ?VCalendar {
+        if ($calendarObject instanceof VCalendar) {
+            return $calendarObject;
+        }
+
+        try {
+            $parsedObject = \Sabre\VObject\Reader::read($calendarObject);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $parsedObject instanceof VCalendar ? $parsedObject : null;
+    }
+
+    private function findMasterEvent(VCalendar $calendarObject) {
+        $firstEvent = null;
+        foreach ($calendarObject->select('VEVENT') as $vevent) {
+            $firstEvent = $firstEvent ?? $vevent;
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                return $vevent;
+            }
+        }
+
+        return $firstEvent;
+    }
+
+    private function countUniqueAttendees($attendees): int {
+        $attendeeMap = [];
+        foreach ($attendees as $attendee) {
+            $attendeeMap[strtolower($attendee->getNormalizedValue())] = true;
+        }
+
+        return count($attendeeMap);
     }
 
     /**

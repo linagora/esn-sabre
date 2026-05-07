@@ -30,6 +30,7 @@ use Sabre\VObject\Reader;
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private const MASTER_EVENT = 'master';
     private const DEFAULT_REPLY_PROPAGATION_THRESHOLD = 200;
+    private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES = ['VALARM', 'TRANSP'];
 
     private $logger;
     private $principalBackend;
@@ -204,9 +205,53 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                     );
                 }
             }
+            if ($iTipMessage->method === 'REQUEST') {
+                $this->preserveRecipientLocalProperties($oldICalendarData, $newObject);
+            }
             $objectNode->put($newObject->serialize());
         }
         $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
+    }
+
+    private function preserveRecipientLocalProperties(?string $oldICalendarData, VCalendar $newObject): void {
+        $oldObject = $this->readCalendarObject($oldICalendarData);
+        if (!$oldObject) {
+            return;
+        }
+
+        $oldEvents = [];
+        foreach ($oldObject->select('VEVENT') as $oldEvent) {
+            $oldEvents[$this->eventRecurrenceKey($oldEvent)] = $oldEvent;
+        }
+
+        foreach ($newObject->select('VEVENT') as $newEvent) {
+            $oldEvent = $oldEvents[$this->eventRecurrenceKey($newEvent)] ?? null;
+            if (!$oldEvent) {
+                continue;
+            }
+
+            foreach (self::PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES as $property) {
+                $newEvent->remove($property);
+
+                foreach ($oldEvent->select($property) as $oldProperty) {
+                    $newEvent->add(clone $oldProperty);
+                }
+            }
+        }
+
+        $oldObject->destroy();
+    }
+
+    private function eventRecurrenceKey($vevent): string {
+        if (!isset($vevent->{'RECURRENCE-ID'})) {
+            return self::MASTER_EVENT;
+        }
+
+        try {
+            return (string)$vevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp();
+        } catch (\Throwable) {
+            return (string)$vevent->{'RECURRENCE-ID'}->getValue();
+        }
     }
 
     /**

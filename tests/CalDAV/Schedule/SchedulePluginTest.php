@@ -292,7 +292,7 @@ ICS
         $this->assertSame(1, $this->invokeCountEventAttendees($calendar));
     }
 
-    function testShouldPreserveRecipientLocalValarmAndTranspByDefault() {
+    function testShouldPreserveRecipientLocalPropertiesByDefault() {
         $oldData = <<<'ICS'
 BEGIN:VCALENDAR
 VERSION:2.0
@@ -301,6 +301,7 @@ UID:event-local-properties
 DTSTART:20351005T090000Z
 DTEND:20351005T100000Z
 SUMMARY:Original meeting
+CLASS:PRIVATE
 TRANSP:TRANSPARENT
 ORGANIZER:mailto:bob@example.org
 ATTENDEE:mailto:alice@example.org
@@ -321,6 +322,7 @@ UID:event-local-properties
 DTSTART:20351005T090000Z
 DTEND:20351005T100000Z
 SUMMARY:Updated meeting
+CLASS:PUBLIC
 TRANSP:OPAQUE
 ORGANIZER:mailto:bob@example.org
 ATTENDEE:mailto:alice@example.org
@@ -337,6 +339,7 @@ ICS
         $this->invokePreserveRecipientLocalProperties($oldData, $newObject);
 
         $this->assertEquals('Updated meeting', $newObject->VEVENT->SUMMARY->getValue());
+        $this->assertEquals('PRIVATE', $newObject->VEVENT->CLASS->getValue());
         $this->assertEquals('TRANSPARENT', $newObject->VEVENT->TRANSP->getValue());
         $this->assertEquals('-PT5M', $newObject->VEVENT->VALARM->TRIGGER->getValue());
         $this->assertEquals('Local reminder', $newObject->VEVENT->VALARM->DESCRIPTION->getValue());

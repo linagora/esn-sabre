@@ -30,7 +30,7 @@ use Sabre\VObject\Reader;
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private const MASTER_EVENT = 'master';
     private const DEFAULT_REPLY_PROPAGATION_THRESHOLD = 200;
-    private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES = ['VALARM', 'TRANSP'];
+    private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES = ['VALARM', 'TRANSP', 'CLASS'];
 
     private $logger;
     private $principalBackend;

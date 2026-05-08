@@ -292,6 +292,59 @@ ICS
         $this->assertSame(1, $this->invokeCountEventAttendees($calendar));
     }
 
+    function testShouldPreserveRecipientLocalPropertiesByDefault() {
+        $oldData = <<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-local-properties
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+CLASS:PRIVATE
+TRANSP:TRANSPARENT
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT5M
+DESCRIPTION:Local reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $newObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-local-properties
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Updated meeting
+CLASS:PUBLIC
+TRANSP:OPAQUE
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT30M
+DESCRIPTION:Organizer reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->invokePreserveRecipientLocalProperties($oldData, $newObject);
+
+        $this->assertEquals('Updated meeting', $newObject->VEVENT->SUMMARY->getValue());
+        $this->assertEquals('PRIVATE', $newObject->VEVENT->CLASS->getValue());
+        $this->assertEquals('TRANSPARENT', $newObject->VEVENT->TRANSP->getValue());
+        $this->assertEquals('-PT5M', $newObject->VEVENT->VALARM->TRIGGER->getValue());
+        $this->assertEquals('Local reminder', $newObject->VEVENT->VALARM->DESCRIPTION->getValue());
+    }
+
     private function newItipMessage($sequence) {
         $message = new Message();
         $ical = "BEGIN:VCALENDAR
@@ -351,5 +404,12 @@ END:VCALENDAR
         $method->setAccessible(true);
 
         return $method->invoke($this->plugin, $calendarObject);
+    }
+
+    private function invokePreserveRecipientLocalProperties($oldICalendarData, $newObject) {
+        $method = new \ReflectionMethod(Plugin::class, 'preserveRecipientLocalProperties');
+        $method->setAccessible(true);
+
+        $method->invoke($this->plugin, $oldICalendarData, $newObject);
     }
 }

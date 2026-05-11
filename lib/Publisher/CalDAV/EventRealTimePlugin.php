@@ -99,10 +99,13 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     function afterMove($path, $destinationPath) {
-        $eventNode = $this->server->tree->getNodeForPath($destinationPath);
-        $eventPath = '/' . $destinationPath;
-
+        $eventPath = '/' . ltrim($destinationPath, '/');
         list($calendarNodePath, $eventURI) = Utils::splitEventPath($eventPath);
+        if ($calendarNodePath === null || $eventURI === null) {
+            return true;
+        }
+
+        $eventNode = $this->server->tree->getNodeForPath($destinationPath);
         $calendar = $this->server->tree->getNodeForPath($calendarNodePath);
 
         $parts = explode('/', $calendarNodePath);

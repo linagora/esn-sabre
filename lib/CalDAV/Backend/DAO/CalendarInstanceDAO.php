@@ -10,7 +10,7 @@ class CalendarInstanceDAO extends BaseDAO {
     }
 
     public function findByPrincipalUri($principalUri, array $fields = [], array $sort = []) {
-        $query = ['principaluri' => $principalUri];
+        $query = ['principaluri' => $principalUri, 'hidden' => ['$ne' => true]];
         $options = [];
 
         if (!empty($fields)) {
@@ -56,6 +56,40 @@ class CalendarInstanceDAO extends BaseDAO {
 
     public function deleteInstanceById($instanceId) {
         return $this->deleteOne(['_id' => new \MongoDB\BSON\ObjectId($instanceId)]);
+    }
+
+    public function hideInstanceById($instanceId) {
+        return $this->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($instanceId)],
+            ['$set' => ['hidden' => true]]
+        );
+    }
+
+    public function unhideInstanceById($instanceId) {
+        return $this->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($instanceId)],
+            ['$unset' => ['hidden' => '']]
+        );
+    }
+
+    public function restoreInstanceById($instanceId, array $properties = []) {
+        $update = ['$unset' => ['hidden' => '']];
+        if (!empty($properties)) {
+            $update['$set'] = $properties;
+        }
+        return $this->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($instanceId)],
+            $update
+        );
+    }
+
+    public function findHiddenDelegationByPrincipalUriAndCalendarId($principalUri, $calendarId) {
+        return $this->findOne([
+            'principaluri' => $principalUri,
+            'calendarid'   => new \MongoDB\BSON\ObjectId($calendarId),
+            'hidden'       => true,
+            'access'       => ['$gt' => Plugin::ACCESS_SHAREDOWNER],
+        ]);
     }
 
     public function deleteInstancesByCalendarId($calendarId) {

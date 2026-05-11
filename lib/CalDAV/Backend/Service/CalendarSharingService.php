@@ -304,4 +304,38 @@ class CalendarSharingService {
     public function prepareRequestForCalendarPublicRight($calendarId) {
         return $calendarId[0];
     }
+
+    /**
+     * Restore a hidden delegation for a user on a given calendar.
+     * Returns true if a hidden delegation was found and restored, false otherwise.
+     *
+     * @param string $principalUri       principal URI of delegated user
+     * @param string $ownerPrincipalUri  principal URI of owner of the source calendar
+     * @param string $calendarUri        calendarId in 'calendars/baseId/calendarId'
+     * @param array  $properties         optional fields to update on restore (e.g. displayname, calendarcolor)
+     * @return bool
+     */
+    public function restoreHiddenDelegation($principalUri, $ownerPrincipalUri, $calendarUri, array $properties = []) {
+        $ownerInstance = $this->calendarInstanceDAO->findInstanceByPrincipalUriAndUri(
+            $ownerPrincipalUri,
+            $calendarUri
+        );
+
+        if (!$ownerInstance) {
+            return false;
+        }
+
+        $row = $this->calendarInstanceDAO->findHiddenDelegationByPrincipalUriAndCalendarId(
+            $principalUri,
+            (string) $ownerInstance['calendarid']
+        );
+
+        if (!$row) {
+            return false;
+        }
+
+        $this->calendarInstanceDAO->restoreInstanceById((string) $row['_id'], $properties);
+
+        return true;
+    }
 }

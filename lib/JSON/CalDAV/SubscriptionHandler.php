@@ -55,6 +55,11 @@ class SubscriptionHandler {
             return [403, null];
         }
 
+        // Restore hidden delegation if one exists instead of creating a subscription
+        if ($this->restoreHiddenDelegationIfExists($sourcePath, $issetdef)) {
+            return [201, null];
+        }
+
         $rt = ['{DAV:}collection', '{http://calendarserver.org/ns/}subscribed'];
         $props = [
             '{DAV:}displayname' => $issetdef('dav:name'),
@@ -132,6 +137,19 @@ class SubscriptionHandler {
     public function isBodyForSubscription($jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
         return $issetdef('calendarserver:source');
+    }
+
+    private function restoreHiddenDelegationIfExists($sourcePath, $issetdef) {
+        $calendarId = basename($sourcePath);
+        $homeNode = $this->server->tree->getNodeForPath(dirname($sourcePath));
+        $backend = $homeNode->getCalDAVBackend();
+        $ownerPrincipalUri = $homeNode->getPrincipalUri();
+
+        $properties = array_filter([
+            'calendarcolor' => $issetdef('apple:color'),
+        ]);
+
+        return $backend->restoreHiddenDelegation($this->currentUser, $ownerPrincipalUri, $calendarId, $properties);
     }
 
     private function propertyOrDefault($jsonData) {

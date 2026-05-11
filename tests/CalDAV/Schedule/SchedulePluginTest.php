@@ -412,4 +412,120 @@ END:VCALENDAR
 
         $method->invoke($this->plugin, $oldICalendarData, $newObject);
     }
+
+    function testRecipientHasDeclinedInMessageReturnsTrueWhenDeclined() {
+        $message = new Message();
+        $message->method = 'REQUEST';
+        $message->recipient = 'mailto:alice@example.org';
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:event-declined
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:bob@example.org
+ATTENDEE;PARTSTAT=DECLINED:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->assertTrue($this->invokeRecipientHasDeclinedInMessage($message));
+    }
+
+    function testRecipientHasDeclinedInMessageReturnsFalseWhenNeedsAction() {
+        $message = new Message();
+        $message->method = 'REQUEST';
+        $message->recipient = 'mailto:alice@example.org';
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:event-pending
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:bob@example.org
+ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->assertFalse($this->invokeRecipientHasDeclinedInMessage($message));
+    }
+
+    function testRecipientHasDeclinedInMessageReturnsFalseWhenAccepted() {
+        $message = new Message();
+        $message->method = 'REQUEST';
+        $message->recipient = 'mailto:alice@example.org';
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:event-accepted
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:bob@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->assertFalse($this->invokeRecipientHasDeclinedInMessage($message));
+    }
+
+    function testRecipientHasDeclinedInMessageIgnoresOverrideVeventForRecurring() {
+        // Recipient is DECLINED in the override but not present in the master — should return false
+        // (override-only check; we only guard on master)
+        $message = new Message();
+        $message->method = 'REQUEST';
+        $message->recipient = 'mailto:alice@example.org';
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:event-recurring
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+RRULE:FREQ=DAILY;COUNT=3
+SUMMARY:Recurring
+ORGANIZER:mailto:bob@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:bob@example.org
+ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:alice@example.org
+END:VEVENT
+BEGIN:VEVENT
+UID:event-recurring
+RECURRENCE-ID:20351006T090000Z
+DTSTART:20351006T090000Z
+DTEND:20351006T100000Z
+SUMMARY:Recurring
+ORGANIZER:mailto:bob@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:bob@example.org
+ATTENDEE;PARTSTAT=DECLINED:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->assertFalse($this->invokeRecipientHasDeclinedInMessage($message));
+    }
+
+    private function invokeRecipientHasDeclinedInMessage(Message $message): bool {
+        $method = new \ReflectionMethod(Plugin::class, 'recipientHasDeclinedInMessage');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $message);
+    }
 }

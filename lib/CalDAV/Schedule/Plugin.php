@@ -192,6 +192,15 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         if ($isNewNode) {
+            // Do not re-create the event when the attendee already declined (issue-347).
+            // An attendee who deleted their copy sends REPLY DECLINED; the organizer's
+            // copy then reflects PARTSTAT=DECLINED.  Subsequent REQUEST messages (e.g.
+            // reschedule, new attendee added, partstat propagation) must not resurrect
+            // the event in the attendee's calendar.
+            if ($iTipMessage->method === 'REQUEST' && $this->recipientHasDeclinedInMessage($iTipMessage)) {
+                $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
+                return;
+            }
             $calendar = $this->server->tree->getNodeForPath($calendarPath);
             $calendar->createFile($newFileName, $newObject->serialize());
         } else {
@@ -211,6 +220,32 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $objectNode->put($newObject->serialize());
         }
         $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
+    }
+
+    /**
+     * Returns true when the iTIP message recipient already appears as DECLINED
+     * in the message's master VEVENT (no RECURRENCE-ID), indicating that they
+     * previously declined the event and the event must not be re-created.
+     */
+    private function recipientHasDeclinedInMessage(ITip\Message $iTipMessage): bool {
+        $recipient = strtolower($iTipMessage->recipient);
+
+        foreach ($iTipMessage->message->VEVENT as $vevent) {
+            if (isset($vevent->{'RECURRENCE-ID'})) {
+                continue; // skip overrides; check master only
+            }
+            if (!isset($vevent->ATTENDEE)) {
+                continue;
+            }
+            foreach ($vevent->ATTENDEE as $attendee) {
+                if (strtolower($attendee->getNormalizedValue()) === $recipient) {
+                    $partstat = isset($attendee['PARTSTAT']) ? strtoupper((string)$attendee['PARTSTAT']) : 'NEEDS-ACTION';
+                    return $partstat === 'DECLINED';
+                }
+            }
+        }
+
+        return false;
     }
 
     private function preserveRecipientLocalProperties(?string $oldICalendarData, VCalendar $newObject): void {

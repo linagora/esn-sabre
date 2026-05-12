@@ -32,6 +32,20 @@ class SubscriptionObject extends CalendarObject {
         $this->subscriptionOwner = $subscriptionOwner;
     }
 
+    function put($calendarData) {
+        $this->checkWriteAccess();
+
+        return parent::put($calendarData);
+    }
+
+    /**
+     * Deletes the calendar object from the subscription view.
+     */
+    function delete() {
+        $this->checkWriteAccess();
+        parent::delete();
+    }
+
     /**
      * Returns a list of ACE's for this node.
      *
@@ -74,5 +88,18 @@ class SubscriptionObject extends CalendarObject {
         // Check if the source calendar has public write right
         $publicRight = $this->caldavBackend->getCalendarPublicRight($this->calendarInfo['id']);
         return $publicRight === '{DAV:}write';
+    }
+
+    /**
+     * Ensures the subscription owner can modify objects in the source calendar.
+     *
+     * @throws \Sabre\DAV\Exception\Forbidden
+     */
+    protected function checkWriteAccess() {
+        if ($this->hasWriteAccess()) {
+            return;
+        }
+
+        throw new \Sabre\DAV\Exception\Forbidden('You do not have write access to this subscription');
     }
 }

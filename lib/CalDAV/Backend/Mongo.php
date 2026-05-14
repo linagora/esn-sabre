@@ -340,6 +340,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         throw new \Exception('Not implemented');
     }
 
+    function restoreHiddenDelegation($principalUri, $ownerPrincipalUri, $calendarUri, array $properties = []) {
+        return $this->calendarSharingService->restoreHiddenDelegation($principalUri, $ownerPrincipalUri, $calendarUri, $properties);
+    }
+
     protected function _assertIsArray($calendarId) {
         if (!is_array($calendarId)) {
             throw new \LogicException('The value passed to $calendarId is expected to be an array with a calendarId and an instanceId');

@@ -104,4 +104,8 @@ class CalendarHome extends \Sabre\CalDAV\CalendarHome {
     function getCalDAVBackend() {
         return $this->caldavBackend;
     }
+
+    function getPrincipalUri() {
+        return $this->principalInfo['uri'];
+    }
 }

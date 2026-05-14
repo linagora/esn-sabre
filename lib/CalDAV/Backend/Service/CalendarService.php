@@ -213,8 +213,8 @@ class CalendarService {
             $this->calendarInstanceDAO->deleteInstancesByCalendarId($calendarId);
             $this->calendarDAO->deleteById($calendarId);
         } else {
-            // Just delete the instance (shared calendar)
-            $this->calendarInstanceDAO->deleteInstanceById($instanceId);
+            // Hide the instance so delegation rights can be restored on re-subscription
+            $this->calendarInstanceDAO->hideInstanceById($instanceId);
         }
 
         $this->eventEmitter->emit('esn:calendarDeleted', [$this->getCalendarPath($row['principaluri'], $row['uri'])]);

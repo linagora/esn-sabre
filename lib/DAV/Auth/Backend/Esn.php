@@ -251,34 +251,56 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         return $id ? $this->currentPrincipalPrefix . $id : null;
     }
 
-    function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
-        $authorizationHeader = $request->getHeader("Authorization");
-        $tCalendarToken = $request->getHeader("TwakeCalendarToken");
-        $type = '';
-
-        if ($authorizationHeader && $this->checkJWT($authorizationHeader)) {
-            $rv = true;
-            $msg = 'jwt';
-            $type = 'user';
-        }
-        elseif ($tCalendarToken) {
-            list($rv, $type) = $this->checkAuthByTCalendarToken($tCalendarToken);
-            $msg = "Invalid Token";
-        } else {
-            list($rv, $msg) = $this->checkBasicAuth($request, $response);
-        }
-
-        if ($rv) {
-            $this->eventEmitter->emit("auth:success", [$this->getCurrentPrincipal()]);
-            $msg = ($type == $this->technicalUserType) ? $this->technicalPrincipal : $this->getCurrentPrincipal();
-        }
-
-        return [$rv, $msg];
+    private function checkSuccess(string $type) {
+        $this->eventEmitter->emit("auth:success", [$this->getCurrentPrincipal()]);
+        $msg = ($type == $this->technicalUserType) ? $this->technicalPrincipal : $this->getCurrentPrincipal();
+        return [true, $msg];
     }
 
+    function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
+        try {
+            $authorizationHeader = $request->getHeader("Authorization");
+            $tCalendarToken = $request->getHeader("TwakeCalendarToken");
+            $type = '';
+            $msg = '';
+            $rv = false;
+
+            if ($authorizationHeader) {
+                try {
+                    $this->checkJWT($authorizationHeader);
+                    return $this->checkSuccess('user');
+                } catch(AuthException $e) {
+                    // fallback to other authentification
+                }
+            }
+            if ($tCalendarToken) {
+                list($rv, $type) = $this->checkAuthByTCalendarToken($tCalendarToken);
+                $msg = "Invalid Token";
+            } else {
+                list($rv, $msg) = $this->checkBasicAuth($request, $response);
+            }
+            if($rv === false)
+                throw new AuthException($msg);
+        } catch(AuthException $e) {
+            return [false, $e->getMessage()];
+        } catch(\Exception $e) {
+            $msg = $e->getMessage();
+            $this->server->getLogger()->error(
+                'An unexpected error happened when check',
+                ['error' => $msg]
+            );
+            return [false, $msg];
+        }
+        return $this->checkSuccess($type);
+    }
+
+    /*
+     * @throw ESN\DAV\Auth\Backend\AuthException in case of authentification failure
+     */
     private function checkJWT($authorizationHeader) {
         // No public key = no jwt
-        if (!file_exists(ESN_PUBLIC_KEY)) return false;
+        if (!file_exists(ESN_PUBLIC_KEY))
+            throw new AuthException('no public key file used by checkJWT()');
 
         if (preg_match('/Bearer\s((.*)\.(.*)\.(.*))/', $authorizationHeader, $matches)) {
             $token = $matches[1];
@@ -296,21 +318,24 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
                     throw new \UnexpectedValueException("checkJWT: email '$email' is not a valid mail");
                 $principleId = $this->principalBackend->getPrincipalIdByEmail($email);
                 // No user found by that email
-                if (!$principleId) return false;
+                if (!$principleId)
+                    throw new AuthException('checkJWT: no user found by email');
                 // we set the userId to be used as the current principle
                 $this->currentUserId = $principleId;
                 return true;
-            } catch(\exception $e) {
+            } catch(AuthException $e) {
+                throw $e;
+            } catch(\Exception $e) {
                 // something wrong happened during decoding the JWT
                 // things like unsupported algorithm, expired token...
                 $this->server->getLogger()->error(
                     'An unexpected error happened when decoding the JWT',
                     ['error' => $e->getMessage()]
                 );
-                return false;
+                throw new AuthException($e->getMessage());
             }
         }
         // the JWT format is weird
-        return false;
+        throw new AuthException('checkJWT: weird format');
     }
 }

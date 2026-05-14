@@ -163,5 +163,7 @@ class CalendarInstanceDAO extends BaseDAO {
             ['principaluri' => 1, 'uri' => 1],
             ['unique' => true]
         );
+        $this->createIndex(['principaluri' => 1, 'hidden' => 1]);
+        $this->createIndex(['principaluri' => 1, 'calendarid' => 1]);
     }
 }

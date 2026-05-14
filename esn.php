@@ -117,8 +117,7 @@ $authPlugin = new Sabre\DAV\Auth\Plugin($authBackend);
 $authPlugin->autoRequireLogin = true;
 $server->addPlugin($authPlugin);
 
-$resourceDAO = new ESN\DAVACL\DAO\ResourceDAO($esnDb);
-$aclPlugin = new ESN\DAVACL\ACLPlugin($resourceDAO);
+$aclPlugin = new Sabre\DAVACL\Plugin();
 $aclPlugin->allowUnauthenticatedAccess = false;
 $aclPlugin->principalCollectionSet = [
     PRINCIPALS_USERS,

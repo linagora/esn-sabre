@@ -11,7 +11,7 @@ class ParticipationPluginTest extends \ESN\DAV\ServerMock {
     function setUp(): void {
         parent::setUp();
 
-        $aclPlugin = new \ESN\DAVACL\ACLPlugin();
+        $aclPlugin = new \Sabre\DAVACL\Plugin();
         $aclPlugin->principalCollectionSet = ['principals/users'];
         $this->server->addPlugin($aclPlugin);
 

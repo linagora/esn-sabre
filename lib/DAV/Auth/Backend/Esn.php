@@ -173,7 +173,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         $ldapCon = ldap_connect(LDAP_SERVER);
         if (!$ldapCon) {
             error_log('Unable to connect to LDAP server');
-            return [false, "Unable to connect to LDAP server"];
+            throw new AuthException('Unable to connect to LDAP server');
         }
         try {
             ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
@@ -184,20 +184,23 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
             try {
                 $ldapBind = ldap_bind($ldapCon, "uid=$safeUser," . LDAP_BASE, $password);
-                if (!$ldapBind) {
-                    error_log("Bad credentials for $user");
-                    return [false, "Bad credentials"];
-                }
             } catch (\ErrorException $e) {
                 error_log("LDAP bind user failed for $user: " . $e->getMessage());
-                return [false, "Bad credentials"];
+                throw new  AuthException("Bad credentials");
+            }
+            if (!$ldapBind) {
+                $code = ldap_errno($ldapCon);
+                $msg  = ldap_error($ldapCon);
+                error_log("Bad credentials for '$user'. LDAP bind failed: [$code] '$msg'");
+                throw new AuthException("Bad credentials");
             }
 
             $ldapBind2 = ldap_bind($ldapCon, LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD);
-
             if (!$ldapBind2) {
-                error_log("Bad admin credentials");
-                return [false, "Bad admin credentials"];
+                $code = ldap_errno($ldapCon);
+                $msg  = ldap_error($ldapCon);
+                error_log("Bad admin credentials. LDAP bind failed: [$code] '$msg'");
+                throw new AuthException("Bad admin credentials");
             }
 
             # Get real mail
@@ -214,25 +217,25 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         }
         if ($entries['count'] == 0) {
             error_log("Unable to find $username which is valid for auth!");
-            return [false, "Unable to find $username which is valid for auth"];
+            throw new  AuthException("Unable to find $username which is valid for auth");
         }
         if ($entries['count'] > 1) {
             error_log("More than one entry for $user");
         }
         if (!$entries[0]['mail']) {
             error_log("$user has no mail attribute");
-            return [false, "$user has no mail attribute"];
+            throw new  AuthException("$user has no mail attribute");
         }
         $mail = $entries[0]['mail'][0];
         if(!filter_var($mail, FILTER_VALIDATE_EMAIL)) {
             error_log("validateUserPass: $user has incorrect mail attribute $mail");
-            return [false, "$user has incorrect mail attribute"];
+            throw new  AuthException("$user has incorrect mail attribute");
         }
 
         $principalId = $this->principalBackend->getPrincipalIdByEmail($mail);
         if (!$principalId) {
             error_log("User not found for email: $mail");
-            return [false, "User not found"];
+            throw new  AuthException("User not found");
         }
         $this->currentUserId = $principalId;
         return [true, $mail];

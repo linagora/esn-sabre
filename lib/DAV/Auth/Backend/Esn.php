@@ -74,13 +74,6 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         return $this->eventEmitter;
     }
 
-    private function checkAuthByTCalendarToken($token) {
-        $url = $this->apiroot . '/api/technicalToken/introspect';
-        $headers = ['X-TECHNICAL-TOKEN' => $token];
-        $request = new HTTP\Request('GET', $url, $headers);
-        return $this->decodeResponse($this->httpClient->send($request));
-    }
-
     # <Added by xguimard>
     #  * copied from \Sabre\DAV\Auth\Backend\AbstractBasic
     #  * changes:
@@ -110,32 +103,40 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     # </Added>
 
     private function decodeResponse($response) {
-        if ($response->getStatus() != 200) {
-            return [false, null];
-        }
+        if ($response->getStatus() != 200)
+            throw new AuthException('decodeResponse(): bad status code');
 
         $user = json_decode($response->getBodyAsString());
-        if (!$user) {
-            return [false, null];
-        }
+        if (!$user)
+            throw new AuthException('decodeResponse(): no user found');
 
         $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
         $this->currentUserId = $user->_id;
         if (isset($user->domain)) {
             if (!filter_var($user->domain, FILTER_VALIDATE_DOMAIN)) {
                 error_log("decodeResponse: invalid domain '$user->domain' for user '$user->_id'");
-                return [false, null];
+                throw new AuthException('decodeResponse(): invalid domain');
             }
-        } else if (isset($user->email)) {
+            return [true, $type];
+        }
+        if (isset($user->email)) {
             if (!filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
                 error_log("decodeResponse: invalid email '$user->email' for user '$user->_id'");
-                return [false, null];
+                throw new AuthException('decodeResponse(): no user found');
             }
-        } else {
-            error_log("decodeResponse: no email and no domain property for user '$user->_id'");
+            return [true, $type];
         }
-        return [true, $type];
+        error_log("decodeResponse: no email and no domain property for user '$user->_id'");
+        throw new AuthException('decodeResponse(): no email and domain property');
     }
+
+    private function checkAuthByTCalendarToken($token) {
+        $url = $this->apiroot . '/api/technicalToken/introspect';
+        $headers = ['X-TECHNICAL-TOKEN' => $token];
+        $request = new HTTP\Request('GET', $url, $headers);
+        return $this->decodeResponse($this->httpClient->send($request));
+    }
+
 
     protected function validateUserPass($username, $password) {
         $user = trim($username);
@@ -326,8 +327,13 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 }
             }
             if ($tCalendarToken) {
-                list($rv, $type) = $this->checkAuthByTCalendarToken($tCalendarToken);
-                $msg = "Invalid Token";
+                try {
+                    list($rv, $type) = $this->checkAuthByTCalendarToken($tCalendarToken);
+                } catch(AuthException $e) {
+                    // clear exception message returned to user
+                    throw new AuthException('Invalid Token');
+                }
+                return $this->checkSuccess($type);
             } else {
                 list($rv, $msg) = $this->checkBasicAuth($request, $response);
             }

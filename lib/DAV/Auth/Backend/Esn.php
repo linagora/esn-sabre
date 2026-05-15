@@ -255,7 +255,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     private function checkSuccess(AuthTenant $tenant) {
         $principal = $tenant->getPrincipal();
-        $this->eventEmitter->emit("auth:success", [(string) $principal]);
+        $this->eventEmitter->emit("auth:success", [$tenant]);
         $this->currentPrincipal = $principal;
         $msg = $tenant->tenantType === TenantType::Technical ? $this->technicalPrincipal :(string) $principal;
         return [true, $msg];

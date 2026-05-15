@@ -21,7 +21,6 @@ define('SABRE_ADMIN_PASSWORD', getenv("SABRE_ADMIN_PASSWORD"));
 class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     protected $httpClient;
-    protected $currentUserId;
     protected ?Principal $currentPrincipal = null;
     protected $apiroot;
     protected $eventEmitter;
@@ -45,10 +44,8 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
      */
     protected string $principalPrefix = 'principals/users/';
     protected string $resourcesPrefix = 'principals/resources/';
-
-    protected $currentPrincipalPrefix = 'principals/users/';
-    protected $technicalPrincipal = 'principals/technicalUser';
-    protected $technicalUserType = 'technical';
+    protected string $technicalPrincipal = 'principals/technicalUser';
+    protected string $technicalUserType = 'technical';
 
     function __construct($apiroot, ?string $realm = null, $principalBackend, $server) {
         $this->apiroot = $apiroot;
@@ -103,7 +100,6 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             throw new AuthException('decodeResponse(): no user found');
 
         $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
-        $this->currentUserId = $user->_id;
         $principal = new Principal($this->principalPrefix, $user->_id);
         if (isset($user->domain)) {
             if (!filter_var($user->domain, FILTER_VALIDATE_DOMAIN)) {
@@ -138,12 +134,9 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 error_log("User not found for email: $impersonationResult");
                 throw new AuthException("User not found");
             }
-            $this->currentPrincipalPrefix = $this->resourcesPrefix;
-        } else {
-            $this->currentPrincipalPrefix = $this->principalPrefix;
+            return new Principal($this->resourcesPrefix, $principalId);
         }
-        $this->currentUserId = $principalId;
-        return new Principal($this->currentPrincipalPrefix, $this->currentUserId);
+        return new Principal($this->principalPrefix, $principalId);
     }
 
     protected function validateUserPass($username, $password): Principal {
@@ -229,7 +222,6 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             error_log("User not found for email: $mail");
             throw new  AuthException("User not found");
         }
-        $this->currentUserId = $principalId;
         return new Principal($this->principalPrefix, $principalId);
     }
 
@@ -368,9 +360,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 // No user found by that email
                 if (!$principleId)
                     throw new AuthException('checkJWT: no user found by email');
-                // we set the userId to be used as the current principle
-                $this->currentUserId = $principleId;
-                return new Principal($this->principalPrefix, $this->currentUserId);
+                return new Principal($this->principalPrefix, $principleId);
             } catch(AuthException $e) {
                 throw $e;
             } catch(\Exception $e) {

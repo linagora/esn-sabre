@@ -4,14 +4,17 @@ namespace ESN\DAV\Auth\Backend;
 
 final class Principal implements \Stringable
 {
+    private readonly string $principal;
+
     public function __construct(
-        private string $prefix,
-        private string $value
+        string $prefix,
+        string $value
     ) {
+        $this->principal = $prefix . $value;
     }
 
     public function __toString(): string
     {
-        return $this->prefix . $this->value;
+        return $this->principal;
     }
 }

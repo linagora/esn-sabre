@@ -18,7 +18,7 @@ define('SABRE_ADMIN_LOGIN', getenv("SABRE_ADMIN_LOGIN"));
 define('SABRE_ADMIN_PASSWORD', getenv("SABRE_ADMIN_PASSWORD"));
 
 #[\AllowDynamicProperties]
-class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
+class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     protected $httpClient;
     protected $currentUserId;
@@ -27,12 +27,28 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     protected $principalBackend;
     protected $server;
 
-    protected $principalPrefix = 'principals/users/';
+    /**
+     * Authentication Realm.
+     *
+     * The realm is often displayed by browser clients when showing the
+     * authentication dialog.
+     *
+     * @var string
+     */
+    protected string $realm = 'sabre/dav';
+
+    /**
+     * This is the prefix that will be used to generate principal urls.
+     *
+     * @var string
+     */
+    protected string $principalPrefix = 'principals/users/';
+
     protected $currentPrincipalPrefix = 'principals/users/';
     protected $technicalPrincipal = 'principals/technicalUser';
     protected $technicalUserType = 'technical';
 
-    function __construct($apiroot, $realm = null, $principalBackend, $server) {
+    function __construct($apiroot, ?string $realm = null, $principalBackend, $server) {
         $this->apiroot = $apiroot;
         $this->httpClient = new HTTP\Client();
         $this->eventEmitter = new EventEmitter();
@@ -42,6 +58,16 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         if (!is_null($realm)) {
             $this->realm = $realm;
         }
+    }
+
+    /**
+     * Sets the authentication realm for this backend.
+     *
+     * @param string $realm
+     */
+    public function setRealm(string $realm)
+    {
+        $this->realm = $realm;
     }
 
     public function getEventEmitter() {
@@ -257,7 +283,33 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         return [true, $msg];
     }
 
-    function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
+    /**
+     * When this method is called, the backend must check if authentication was
+     * successful.
+     *
+     * The returned value must be one of the following
+     *
+     * [true, "principals/username"]
+     * [false, "reason for failure"]
+     *
+     * If authentication was successful, it's expected that the authentication
+     * backend returns a so-called principal url.
+     *
+     * Examples of a principal url:
+     *
+     * principals/admin
+     * principals/user1
+     * principals/users/joe
+     * principals/uid/123457
+     *
+     * If you don't use WebDAV ACL (RFC3744) we recommend that you simply
+     * return a string such as:
+     *
+     * principals/users/[username]
+     *
+     * @return array
+     */
+    function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): array {
         try {
             $authorizationHeader = $request->getHeader("Authorization");
             $tCalendarToken = $request->getHeader("TwakeCalendarToken");
@@ -337,5 +389,33 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
         }
         // the JWT format is weird
         throw new AuthException('checkJWT: weird format');
+    }
+
+
+    /**
+     * This method is called when a user could not be authenticated, and
+     * authentication was required for the current request.
+     *
+     * This gives you the opportunity to set authentication headers. The 401
+     * status code will already be set.
+     *
+     * In this case of Basic Auth, this would for example mean that the
+     * following header needs to be set:
+     *
+     * $response->addHeader('WWW-Authenticate', 'Basic realm=SabreDAV');
+     *
+     * Keep in mind that in the case of multiple authentication backends, other
+     * WWW-Authenticate headers may already have been set, and you'll want to
+     * append your own WWW-Authenticate header instead of overwriting the
+     * existing one.
+     */
+    public function challenge(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response)
+    {
+        $auth = new HTTP\Auth\Basic(
+            $this->realm,
+            $request,
+            $response
+        );
+        $auth->requireLogin();
     }
 }

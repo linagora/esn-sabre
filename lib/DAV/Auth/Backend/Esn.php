@@ -22,6 +22,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     protected $httpClient;
     protected $currentUserId;
+    protected ?Principal $currentPrincipal = null;
     protected $apiroot;
     protected $eventEmitter;
     protected $principalBackend;
@@ -263,15 +264,15 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         return substr($username, strlen($adminPrefix));
     }
 
-    function getCurrentPrincipal() {
-        $id = $this->currentUserId;
-        return $id ? $this->currentPrincipalPrefix . $id : null;
+    function getCurrentPrincipal() : ?string {
+        return $this->currentPrincipal === null ? null : (string) $this->currentPrincipal;
     }
 
-    private function checkSuccess(string $principal, string $type = 'user') {
+    private function checkSuccess(Principal $principal, string $type = 'user') {
         $this->eventEmitter->emit("auth:success", [$principal]);
+        $this->currentPrincipal = $principal;
         $msg = ($type == $this->technicalUserType) ? $this->technicalPrincipal : $principal;
-        return [true, $msg];
+        return [true, (string) $msg];
     }
 
     /**
@@ -306,7 +307,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             if ($authorizationHeader) {
                 try {
                     $principal = $this->checkJWT($authorizationHeader);
-                    return $this->checkSuccess((string)$principal);
+                    return $this->checkSuccess($principal);
                 } catch(AuthException $e) {
                     // fallback to other authentification
                 }
@@ -324,7 +325,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             }
             try {
                 $principal = $this->checkBasicAuth($request, $response);
-                return $this->checkSuccess((string)$principal);
+                return $this->checkSuccess($principal);
             } catch(AuthException $e) {
                 // clear exception message returned to user
                 throw new AuthException("Username or password was incorrect");

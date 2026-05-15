@@ -114,6 +114,10 @@ class CalendarSharingService {
             return $this->removeSharee($calendarId, $sharee);
         }
 
+        if ($this->isSelfDelegation($sharee, $existingInstance, $currentInvites)) {
+            throw new \Sabre\DAV\Exception\BadRequest('Cannot delegate a calendar to yourself');
+        }
+
         $this->setShareeInviteStatus($sharee);
 
         // Check if sharee already exists (update case)
@@ -125,6 +129,25 @@ class CalendarSharingService {
 
         // New sharee (create case)
         return $this->createSharee($calendarId, $sharee, $existingInstance);
+    }
+
+    private function isSelfDelegation($sharee, $existingInstance, $currentInvites) {
+        if (is_null($sharee->principal)) {
+            return false;
+        }
+
+        if (!empty($existingInstance['principaluri']) && $sharee->principal === $existingInstance['principaluri']) {
+            return true;
+        }
+
+        foreach($currentInvites as $currentInvite) {
+            if ((int) $currentInvite->access === \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER &&
+                $sharee->principal === $currentInvite->principal) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

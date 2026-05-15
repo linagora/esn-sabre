@@ -1582,6 +1582,39 @@ END:VCALENDAR
         $this->assertEquals($sharees[2]->access, 2);
     }
 
+    function testCalendarUpdateShareesToOwnerReturnsBadRequest() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $sharees = [
+            'share' => [
+                'set' => [
+                    [
+                        'dav:href' => 'mailto:robertocarlos@realmadrid.com',
+                        'dav:read' => true
+                    ]
+                ]
+            ]
+        ];
+
+        $before = $this->caldavBackend->getInvites($this->cal['id']);
+
+        $request->setBody(json_encode($sharees));
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+
+        $after = $this->caldavBackend->getInvites($this->cal['id']);
+
+        $this->assertCount(count($before), $after);
+        $this->assertEquals('principals/users/54b64eadf6d7d8e41d263e0f', $after[0]->principal);
+        $this->assertEquals(\Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER, $after[0]->access);
+    }
+
     function testCalendarUpdateInviteStatus() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',

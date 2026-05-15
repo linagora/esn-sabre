@@ -93,7 +93,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     }
     # </Added>
 
-    private function decodeResponse($response) {
+    private function decodeResponse($response): array {
         if ($response->getStatus() != 200)
             throw new AuthException('decodeResponse(): bad status code');
 
@@ -103,25 +103,26 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
         $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
         $this->currentUserId = $user->_id;
+        $principal = new Principal($this->principalPrefix, $user->_id);
         if (isset($user->domain)) {
             if (!filter_var($user->domain, FILTER_VALIDATE_DOMAIN)) {
                 error_log("decodeResponse: invalid domain '$user->domain' for user '$user->_id'");
                 throw new AuthException('decodeResponse(): invalid domain');
             }
-            return [true, $type];
+            return [$principal, $type];
         }
         if (isset($user->email)) {
             if (!filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
                 error_log("decodeResponse: invalid email '$user->email' for user '$user->_id'");
                 throw new AuthException('decodeResponse(): no user found');
             }
-            return [true, $type];
+            return [$principal, $type];
         }
         error_log("decodeResponse: no email and no domain property for user '$user->_id'");
         throw new AuthException('decodeResponse(): no email and domain property');
     }
 
-    private function checkAuthByTCalendarToken($token) {
+    private function checkAuthByTCalendarToken($token): array {
         $url = $this->apiroot . '/api/technicalToken/introspect';
         $headers = ['X-TECHNICAL-TOKEN' => $token];
         $request = new HTTP\Request('GET', $url, $headers);
@@ -314,12 +315,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             $tCalendarToken = $request->getHeader("TwakeCalendarToken");
             if ($tCalendarToken) {
                 try {
-                    list($rv, $type) = $this->checkAuthByTCalendarToken($tCalendarToken);
+                    list($principal, $type) = $this->checkAuthByTCalendarToken($tCalendarToken);
                 } catch(AuthException $e) {
                     // clear exception message returned to user
                     throw new AuthException('Invalid Token');
                 }
-                return $this->checkSuccess($this->getCurrentPrincipal(), $type);
+                return $this->checkSuccess($principal, $type);
             }
             try {
                 $principal = $this->checkBasicAuth($request, $response);

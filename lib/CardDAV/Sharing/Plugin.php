@@ -110,7 +110,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 $this->checkDomainMembersAddressBook($path);
 
                 $sharees = $this->jsonToSharees(Utils::getJsonValue($data, 'dav:sharee', []));
-                $this->assertNoSelfDelegation($sharees);
+                $this->assertNoSelfDelegation($node, $sharees);
                 $sharingPlugin = $this->server->getPlugin('sharing');
                 $sharingPlugin->shareResource($path, $sharees);
 
@@ -224,7 +224,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return $result;
     }
 
-    private function assertNoSelfDelegation(array $sharees) {
+    private function assertNoSelfDelegation(ISharedAddressBook $node, array $sharees) {
         $authPlugin = $this->server->getPlugin('auth');
         $currentPrincipal = $authPlugin ? $authPlugin->getCurrentPrincipal() : null;
 
@@ -240,7 +240,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $principal = null;
             $this->server->emit('getPrincipalByUri', [$sharee->href, &$principal]);
 
-            if ($principal === $currentPrincipal) {
+            if ($principal === $currentPrincipal &&
+                !$this->isKeepingOwnExistingDelegation($node, $sharee, $currentPrincipal)) {
                 throw new BadRequest('Cannot delegate an address book to yourself');
             }
         }
@@ -252,6 +253,18 @@ class Plugin extends \ESN\JSON\BasePlugin {
             \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
             \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION
         ], true);
+    }
+
+    private function isKeepingOwnExistingDelegation(ISharedAddressBook $node, $sharee, $currentPrincipal) {
+        foreach ($node->getInvites() as $currentInvite) {
+            if ($currentInvite->principal === $currentPrincipal &&
+                $currentInvite->href === $sharee->href &&
+                (int) $currentInvite->access === (int) $sharee->access) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function handleGroupAddressBook($path, $node, $data) {

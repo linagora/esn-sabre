@@ -137,12 +137,24 @@ class CalendarSharingService {
         }
 
         if (!empty($existingInstance['principaluri']) && $sharee->principal === $existingInstance['principaluri']) {
-            return true;
+            return !$this->isKeepingOwnExistingDelegation($sharee, $currentInvites);
         }
 
         foreach($currentInvites as $currentInvite) {
             if ((int) $currentInvite->access === \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER &&
                 $sharee->principal === $currentInvite->principal) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isKeepingOwnExistingDelegation($sharee, $currentInvites) {
+        foreach($currentInvites as $currentInvite) {
+            if ($currentInvite->principal === $sharee->principal &&
+                $currentInvite->href === $sharee->href &&
+                (int) $currentInvite->access === (int) $sharee->access) {
                 return true;
             }
         }

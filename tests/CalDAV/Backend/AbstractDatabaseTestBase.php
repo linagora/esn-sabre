@@ -954,6 +954,68 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($expected, $result);
     }
 
+    function testDelegatedAdminCanKeepOwnDelegationWhenUpdatingInvites() {
+        $backend = $this->getBackend();
+
+        $backend->createCalendar('principals/user1/userID', 'somerandomid', []);
+        $ownerCalendar = $backend->getCalendarsForUser('principals/user1/userID')[0];
+
+        $backend->updateInvites(
+            $ownerCalendar['id'],
+            [
+                new Sharee([
+                    'href'         => 'mailto:user2@example.org',
+                    'principal'    => 'principals/user2/userID',
+                    'access'       => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
+                    'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+                ])
+            ]
+        );
+
+        $delegatedCalendar = $backend->getCalendarsForUser('principals/user2/userID')[0];
+
+        $backend->updateInvites(
+            $delegatedCalendar['id'],
+            [
+                new Sharee([
+                    'href'         => 'mailto:user3@example.org',
+                    'principal'    => 'principals/user3/userID',
+                    'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+                    'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+                ]),
+                new Sharee([
+                    'href'         => 'mailto:user2@example.org',
+                    'principal'    => 'principals/user2/userID',
+                    'access'       => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
+                    'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+                ])
+            ]
+        );
+
+        $result = $backend->getInvites($ownerCalendar['id']);
+
+        $this->assertEquals([
+            new Sharee([
+                'href'         => 'principals/user1/userID',
+                'principal'    => 'principals/user1/userID',
+                'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+            ]),
+            new Sharee([
+                'href'         => 'mailto:user2@example.org',
+                'principal'    => 'principals/user2/userID',
+                'access'       => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+            ]),
+            new Sharee([
+                'href'         => 'mailto:user3@example.org',
+                'principal'    => 'principals/user3/userID',
+                'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+            ])
+        ], $result);
+    }
+
     function testGetCalendarWithNoPublicRight() {
         $publicRight = 'my public right';
         $backend = $this->getBackend();

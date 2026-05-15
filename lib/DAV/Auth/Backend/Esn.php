@@ -37,13 +37,6 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
      */
     protected string $realm = 'sabre/dav';
 
-    /**
-     * This is the prefix that will be used to generate principal urls.
-     *
-     * @var string
-     */
-    protected string $principalPrefix = 'principals/users/';
-    protected string $resourcesPrefix = 'principals/resources/';
     protected string $technicalPrincipal = 'principals/technicalUser';
     protected string $technicalUserType = 'technical';
 
@@ -77,7 +70,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     #  * copied from \Sabre\DAV\Auth\Backend\AbstractBasic
     #  * changes:
     #    + get mail from validateUserPass instead of using $userpass[0]
-    protected function checkBasicAuth(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): Principal {
+    protected function checkBasicAuth(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): AuthTenant {
         $auth = new HTTP\Auth\Basic(
             $this->realm,
             $request,
@@ -91,7 +84,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     }
     # </Added>
 
-    private function decodeResponse($response): array {
+    private function decodeResponse($response): AuthTenant {
         if ($response->getStatus() != 200)
             throw new AuthException('decodeResponse(): bad status code');
 
@@ -100,33 +93,33 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             throw new AuthException('decodeResponse(): no user found');
 
         $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
-        $principal = new Principal($this->principalPrefix, $user->_id);
+        $tenant = new AuthTenant($user->_id, $type == $this->technicalUserType ? TenantType::Technical : TenantType::User);
         if (isset($user->domain)) {
             if (!filter_var($user->domain, FILTER_VALIDATE_DOMAIN)) {
                 error_log("decodeResponse: invalid domain '$user->domain' for user '$user->_id'");
                 throw new AuthException('decodeResponse(): invalid domain');
             }
-            return [$principal, $type];
+            return $tenant;
         }
         if (isset($user->email)) {
             if (!filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
                 error_log("decodeResponse: invalid email '$user->email' for user '$user->_id'");
                 throw new AuthException('decodeResponse(): no user found');
             }
-            return [$principal, $type];
+            return $tenant;
         }
         error_log("decodeResponse: no email and no domain property for user '$user->_id'");
         throw new AuthException('decodeResponse(): no email and domain property');
     }
 
-    private function checkAuthByTCalendarToken($token): array {
+    private function checkAuthByTCalendarToken($token): AuthTenant {
         $url = $this->apiroot . '/api/technicalToken/introspect';
         $headers = ['X-TECHNICAL-TOKEN' => $token];
         $request = new HTTP\Request('GET', $url, $headers);
         return $this->decodeResponse($this->httpClient->send($request));
     }
 
-    private function doImpersonatation(string $impersonationResult) : Principal {
+    private function doImpersonatation(string $impersonationResult) : AuthTenant {
         $principalId = $this->principalBackend->getPrincipalIdByEmail($impersonationResult);
         if (!$principalId) {
             $principalId = $this->principalBackend->getPrincipalIdByResourceEmail($impersonationResult);
@@ -134,12 +127,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 error_log("User not found for email: $impersonationResult");
                 throw new AuthException("User not found");
             }
-            return new Principal($this->resourcesPrefix, $principalId);
+            return new AuthTenant($principalId, TenantType::Resources);
         }
-        return new Principal($this->principalPrefix, $principalId);
+        return new AuthTenant($principalId);
     }
 
-    protected function validateUserPass($username, $password): Principal {
+    protected function validateUserPass($username, $password): AuthTenant {
         $user = trim($username);
         if ($this->impersonationEnabled()) {
             $impersonationResult = $this->attemptAdminImpersonation($user, $password);
@@ -222,7 +215,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             error_log("User not found for email: $mail");
             throw new  AuthException("User not found");
         }
-        return new Principal($this->principalPrefix, $principalId);
+        return new AuthTenant($principalId);
     }
 
     private function impersonationEnabled(): bool {
@@ -260,11 +253,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         return $this->currentPrincipal === null ? null : (string) $this->currentPrincipal;
     }
 
-    private function checkSuccess(Principal $principal, string $type = 'user') {
-        $this->eventEmitter->emit("auth:success", [$principal]);
+    private function checkSuccess(AuthTenant $tenant) {
+        $principal = $tenant->getPrincipal();
+        $this->eventEmitter->emit("auth:success", [(string) $principal]);
         $this->currentPrincipal = $principal;
-        $msg = ($type == $this->technicalUserType) ? $this->technicalPrincipal : $principal;
-        return [true, (string) $msg];
+        $msg = $tenant->tenantType === TenantType::Technical ? $this->technicalPrincipal :(string) $principal;
+        return [true, $msg];
     }
 
     /**
@@ -298,8 +292,8 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             $authorizationHeader = $request->getHeader("Authorization");
             if ($authorizationHeader) {
                 try {
-                    $principal = $this->checkJWT($authorizationHeader);
-                    return $this->checkSuccess($principal);
+                    $tenant = $this->checkJWT($authorizationHeader);
+                    return $this->checkSuccess($tenant);
                 } catch(AuthException $e) {
                     // fallback to other authentification
                 }
@@ -308,16 +302,16 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             $tCalendarToken = $request->getHeader("TwakeCalendarToken");
             if ($tCalendarToken) {
                 try {
-                    list($principal, $type) = $this->checkAuthByTCalendarToken($tCalendarToken);
+                    $tenant = $this->checkAuthByTCalendarToken($tCalendarToken);
                 } catch(AuthException $e) {
                     // clear exception message returned to user
                     throw new AuthException('Invalid Token');
                 }
-                return $this->checkSuccess($principal, $type);
+                return $this->checkSuccess($tenant);
             }
             try {
-                $principal = $this->checkBasicAuth($request, $response);
-                return $this->checkSuccess($principal);
+                $tenant = $this->checkBasicAuth($request, $response);
+                return $this->checkSuccess($tenant);
             } catch(AuthException $e) {
                 // clear exception message returned to user
                 throw new AuthException("Username or password was incorrect");
@@ -337,7 +331,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     /*
      * @throw ESN\DAV\Auth\Backend\AuthException in case of authentification failure
      */
-    private function checkJWT($authorizationHeader) : Principal {
+    private function checkJWT($authorizationHeader) : AuthTenant {
         // No public key = no jwt
         if (!file_exists(ESN_PUBLIC_KEY))
             throw new AuthException('no public key file used by checkJWT()');
@@ -360,7 +354,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 // No user found by that email
                 if (!$principleId)
                     throw new AuthException('checkJWT: no user found by email');
-                return new Principal($this->principalPrefix, $principleId);
+                return new AuthTenant($principleId);
             } catch(AuthException $e) {
                 throw $e;
             } catch(\Exception $e) {

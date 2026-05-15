@@ -43,6 +43,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
      * @var string
      */
     protected string $principalPrefix = 'principals/users/';
+    protected string $resourcesPrefix = 'principals/resources/';
 
     protected $currentPrincipalPrefix = 'principals/users/';
     protected $technicalPrincipal = 'principals/technicalUser';
@@ -137,30 +138,28 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         return $this->decodeResponse($this->httpClient->send($request));
     }
 
-
+    private function doImpersonatation(string $impersonationResult) {
+        $principalId = $this->principalBackend->getPrincipalIdByEmail($impersonationResult);
+        if (!$principalId) {
+            $principalId = $this->principalBackend->getPrincipalIdByResourceEmail($impersonationResult);
+            if (!$principalId) {
+                error_log("User not found for email: $impersonationResult");
+                throw new AuthException("User not found");
+            }
+            $this->currentPrincipalPrefix = $this->resourcesPrefix;
+        } else {
+            $this->currentPrincipalPrefix = $this->principalPrefix;
+        }
+        $this->currentUserId = $principalId;
+        return [true, $impersonationResult];
+    }
+ 
     protected function validateUserPass($username, $password) {
         $user = trim($username);
         if ($this->impersonationEnabled()) {
             $impersonationResult = $this->attemptAdminImpersonation($user, $password);
-            if ($impersonationResult !== null) {
-                [$success, $value] = $impersonationResult;
-                if (!$success) {
-                    return [false, $value];
-                }
-                $principalId = $this->principalBackend->getPrincipalIdByEmail($value);
-                if (!$principalId) {
-                    $principalId = $this->principalBackend->getPrincipalIdByResourceEmail($value);
-                    if (!$principalId) {
-                        error_log("User not found for email: $value");
-                        return [false, "User not found"];
-                    }
-                    $this->currentPrincipalPrefix = 'principals/resources/';
-                } else {
-                    $this->currentPrincipalPrefix = 'principals/users/';
-                }
-                $this->currentUserId = $principalId;
-                return [true, $value];
-            }
+            if ($impersonationResult !== null)
+                return $this->doImpersonatation($impersonationResult);
         }
 
         $env_ldap_username_mode = getenv('LDAP_USERNAME_MODE');
@@ -251,26 +250,23 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         return [SABRE_ADMIN_LOGIN, SABRE_ADMIN_PASSWORD];
     }
 
-    private function attemptAdminImpersonation(string $username, string $password): ?array {
+    private function attemptAdminImpersonation(string $username, string $password): ?string {
         $adminCredential = $this->getAdminCredential();
-        if ($adminCredential === null) {
+        if ($adminCredential === null)
             return null;
-        }
 
         [$adminLogin, $adminPassword] = $adminCredential;
 
         $adminPrefix = $adminLogin . '&';
-        if (!str_starts_with($username, $adminPrefix)) {
+        if (!str_starts_with($username, $adminPrefix))
             return null;
-        }
 
         if ($password !== $adminPassword) {
             error_log('Bad admin password.');
-            return [false, 'Bad admin password'];
+            throw new AuthException('Bad admin password');
         }
 
-        $impersonatedEmail = substr($username, strlen($adminPrefix));
-        return [true, $impersonatedEmail];
+        return substr($username, strlen($adminPrefix));
     }
 
     function getCurrentPrincipal() {
@@ -335,7 +331,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 }
                 return $this->checkSuccess($type);
             } else {
-                list($rv, $msg) = $this->checkBasicAuth($request, $response);
+                try {
+                    list($rv, $msg) = $this->checkBasicAuth($request, $response);
+                } catch(AuthException $e) {
+                     // clear exception message returned to user
+                    throw new AuthException("Username or password was incorrect");
+                }
             }
             if($rv === false)
                 throw new AuthException($msg);

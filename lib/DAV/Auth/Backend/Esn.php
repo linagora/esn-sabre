@@ -277,9 +277,9 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         return $id ? $this->currentPrincipalPrefix . $id : null;
     }
 
-    private function checkSuccess(string $type) {
-        $this->eventEmitter->emit("auth:success", [$this->getCurrentPrincipal()]);
-        $msg = ($type == $this->technicalUserType) ? $this->technicalPrincipal : $this->getCurrentPrincipal();
+    private function checkSuccess(string $principal, string $type = 'user') {
+        $this->eventEmitter->emit("auth:success", [$principal]);
+        $msg = ($type == $this->technicalUserType) ? $this->technicalPrincipal : $principal;
         return [true, $msg];
     }
 
@@ -312,19 +312,17 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): array {
         try {
             $authorizationHeader = $request->getHeader("Authorization");
-            $tCalendarToken = $request->getHeader("TwakeCalendarToken");
-            $type = '';
-            $msg = '';
-            $rv = false;
 
             if ($authorizationHeader) {
                 try {
-                    $this->checkJWT($authorizationHeader);
-                    return $this->checkSuccess('user');
+                    $principal = $this->checkJWT($authorizationHeader);
+                    return $this->checkSuccess((string)$principal);
                 } catch(AuthException $e) {
                     // fallback to other authentification
                 }
             }
+
+            $tCalendarToken = $request->getHeader("TwakeCalendarToken");
             if ($tCalendarToken) {
                 try {
                     list($rv, $type) = $this->checkAuthByTCalendarToken($tCalendarToken);
@@ -332,17 +330,17 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                     // clear exception message returned to user
                     throw new AuthException('Invalid Token');
                 }
-                return $this->checkSuccess($type);
-            } else {
-                try {
-                    list($rv, $msg) = $this->checkBasicAuth($request, $response);
-                } catch(AuthException $e) {
-                     // clear exception message returned to user
-                    throw new AuthException("Username or password was incorrect");
-                }
+                return $this->checkSuccess($this->getCurrentPrincipal(), $type);
+            }
+            try {
+                list($rv, $msg) = $this->checkBasicAuth($request, $response);
+            } catch(AuthException $e) {
+                // clear exception message returned to user
+                throw new AuthException("Username or password was incorrect");
             }
             if($rv === false)
                 throw new AuthException($msg);
+            return $this->checkSuccess($this->getCurrentPrincipal());
         } catch(AuthException $e) {
             return [false, $e->getMessage()];
         } catch(\Exception $e) {
@@ -352,14 +350,13 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 ['error' => $msg]
             );
             return [false, $msg];
-        }
-        return $this->checkSuccess($type);
+        } 
     }
 
     /*
      * @throw ESN\DAV\Auth\Backend\AuthException in case of authentification failure
      */
-    private function checkJWT($authorizationHeader) {
+    private function checkJWT($authorizationHeader) : Principal {
         // No public key = no jwt
         if (!file_exists(ESN_PUBLIC_KEY))
             throw new AuthException('no public key file used by checkJWT()');
@@ -384,7 +381,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                     throw new AuthException('checkJWT: no user found by email');
                 // we set the userId to be used as the current principle
                 $this->currentUserId = $principleId;
-                return true;
+                return new Principal($this->principalPrefix, $this->currentUserId);
             } catch(AuthException $e) {
                 throw $e;
             } catch(\Exception $e) {

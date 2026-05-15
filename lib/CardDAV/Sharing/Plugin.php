@@ -109,9 +109,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 // Check if this is a domain-members addressbook
                 $this->checkDomainMembersAddressBook($path);
 
-                $sharees = Utils::getJsonValue($data, 'dav:sharee', []);
+                $sharees = $this->jsonToSharees(Utils::getJsonValue($data, 'dav:sharee', []));
+                $this->assertNoSelfDelegation($sharees);
                 $sharingPlugin = $this->server->getPlugin('sharing');
-                $sharingPlugin->shareResource($path, $this->jsonToSharees($sharees));
+                $sharingPlugin->shareResource($path, $sharees);
 
                 $code = 204;
                 return $this->send($code, $body);
@@ -222,7 +223,37 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         return $result;
     }
-    
+
+    private function assertNoSelfDelegation(array $sharees) {
+        $authPlugin = $this->server->getPlugin('auth');
+        $currentPrincipal = $authPlugin ? $authPlugin->getCurrentPrincipal() : null;
+
+        if (is_null($currentPrincipal)) {
+            return;
+        }
+
+        foreach ($sharees as $sharee) {
+            if (!$this->isDelegationAccess($sharee->access)) {
+                continue;
+            }
+
+            $principal = null;
+            $this->server->emit('getPrincipalByUri', [$sharee->href, &$principal]);
+
+            if ($principal === $currentPrincipal) {
+                throw new BadRequest('Cannot delegate an address book to yourself');
+            }
+        }
+    }
+
+    private function isDelegationAccess($access) {
+        return in_array((int) $access, [
+            \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+            \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+            \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION
+        ], true);
+    }
+
     private function handleGroupAddressBook($path, $node, $data) {
         $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
 

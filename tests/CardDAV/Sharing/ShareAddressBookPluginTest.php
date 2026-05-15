@@ -67,7 +67,7 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertCount(0, $shareAddressBooks);
     }
 
-    function testShareAddressBookToOwnerDoesNothing() {
+    function testShareAddressBookToOwnerResponds400() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -86,7 +86,8 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         $request->setBody(json_encode($body));
 
         $response = $this->request($request);
-        $this->assertEquals(204, $response->status); // still responds 204 but does nothing, see below assertion
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('Cannot delegate an address book to yourself', $response->getBodyAsString());
 
         $shareAddressBooks = $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId1);
         $this->assertCount(0, $shareAddressBooks);
@@ -150,6 +151,39 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertCount(1, $shareAddressBooks);
         $this->assertEquals($shareAddressBooks[0]['share_access'], SPlugin::ACCESS_READ);
         $this->assertEquals($shareAddressBooks[0]['share_owner'], 'principals/users/' . $this->userTestId2); // owner is still user test 2
+    }
+
+    function testShareAddressBookOfOtherUserWithAdminAccessToSelfResponds400() {
+        $this->carddavBackend->updateInvites($this->user2Book1Id, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => 'mailto:' . $this->userTestEmail1,
+                'principal' => 'principals/users/' . $this->userTestId1,
+                'access' => SPlugin::ACCESS_ADMINISTRATION,
+                'inviteStatus' => SPlugin::INVITE_ACCEPTED,
+                'properties' => []
+            ])
+        ]);
+
+        $response = $this->makeRequest(
+            'POST',
+            '/addressbooks/' . $this->userTestId2 . '/user2book1.json',
+            array(
+                'dav:share-resource' => array(
+                    'dav:sharee' => array([
+                        'dav:href' => 'mailto:'.$this->userTestEmail1,
+                        'dav:share-access' => SPlugin::ACCESS_READ
+                    ])
+                )
+            )
+        );
+
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('Cannot delegate an address book to yourself', $response->getBodyAsString());
+
+        $shareAddressBooks = $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId1);
+        $this->assertCount(1, $shareAddressBooks);
+        $this->assertEquals(SPlugin::ACCESS_ADMINISTRATION, $shareAddressBooks[0]['share_access']);
+        $this->assertEquals('principals/users/' . $this->userTestId2, $shareAddressBooks[0]['share_owner']);
     }
 
     function testShareASharedAddressBookResponds403() {

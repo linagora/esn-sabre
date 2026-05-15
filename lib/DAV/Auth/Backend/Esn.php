@@ -89,10 +89,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         $userpass = $auth->getCredentials();
         if (!$userpass)
             throw new AuthException("No 'Authorization: Basic' header found. Either the client didn't send one, or the server is misconfigured");
-
-        $user = trim($userpass[0]);
-
-        return $this->validateUserPass($user, $userpass[1]);
+        return $this->validateUserPass($userpass[0], $userpass[1]);
     }
     # </Added>
 

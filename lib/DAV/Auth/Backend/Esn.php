@@ -79,7 +79,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     #  * copied from \Sabre\DAV\Auth\Backend\AbstractBasic
     #  * changes:
     #    + get mail from validateUserPass instead of using $userpass[0]
-    protected function checkBasicAuth(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): string {
+    protected function checkBasicAuth(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): Principal {
         $auth = new HTTP\Auth\Basic(
             $this->realm,
             $request,
@@ -92,9 +92,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
         $user = trim($userpass[0]);
 
-        $mail = $this->validateUserPass($user, $userpass[1]);
-        return $this->principalPrefix . $mail;
-
+        return $this->validateUserPass($user, $userpass[1]);
     }
     # </Added>
 
@@ -133,7 +131,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         return $this->decodeResponse($this->httpClient->send($request));
     }
 
-    private function doImpersonatation(string $impersonationResult) {
+    private function doImpersonatation(string $impersonationResult) : Principal {
         $principalId = $this->principalBackend->getPrincipalIdByEmail($impersonationResult);
         if (!$principalId) {
             $principalId = $this->principalBackend->getPrincipalIdByResourceEmail($impersonationResult);
@@ -146,10 +144,10 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             $this->currentPrincipalPrefix = $this->principalPrefix;
         }
         $this->currentUserId = $principalId;
-        return $impersonationResult;
+        return new Principal($this->currentPrincipalPrefix, $this->currentUserId);
     }
 
-    protected function validateUserPass($username, $password): string {
+    protected function validateUserPass($username, $password): Principal {
         $user = trim($username);
         if ($this->impersonationEnabled()) {
             $impersonationResult = $this->attemptAdminImpersonation($user, $password);
@@ -233,7 +231,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             throw new  AuthException("User not found");
         }
         $this->currentUserId = $principalId;
-        return $mail;
+        return new Principal($this->principalPrefix, $principalId);
     }
 
     private function impersonationEnabled(): bool {
@@ -327,14 +325,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 return $this->checkSuccess($this->getCurrentPrincipal(), $type);
             }
             try {
-                list($rv, $msg) = $this->checkBasicAuth($request, $response);
+                $principal = $this->checkBasicAuth($request, $response);
+                return $this->checkSuccess((string)$principal);
             } catch(AuthException $e) {
                 // clear exception message returned to user
                 throw new AuthException("Username or password was incorrect");
             }
-            if($rv === false)
-                throw new AuthException($msg);
-            return $this->checkSuccess($this->getCurrentPrincipal());
         } catch(AuthException $e) {
             return [false, $e->getMessage()];
         } catch(\Exception $e) {

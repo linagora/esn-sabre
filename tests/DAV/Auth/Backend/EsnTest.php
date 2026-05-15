@@ -235,8 +235,8 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $esnauth = new EsnMock('http://localhost:8080/');
         $client = $esnauth->getClient();
         $eventEmitter = $esnauth->getEventEmitter();
-        $eventEmitter->on("auth:success", function($principal) use (&$authNotificationResult) {
-            $authNotificationResult[] = $principal;
+        $eventEmitter->on("auth:success", function($tenant) use (&$authNotificationResult) {
+            $authNotificationResult[] = $tenant->getPrincipal();
         });
 
         // insert a user into the db
@@ -289,8 +289,8 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $esnauth = new EsnMock('http://localhost:8080/');
         $client = $esnauth->getClient();
         $eventEmitter = $esnauth->getEventEmitter();
-        $eventEmitter->on("auth:success", function($principal) use (&$authNotificationResult) {
-            $authNotificationResult[] = $principal;
+        $eventEmitter->on("auth:success", function($tenant) use (&$authNotificationResult) {
+            $authNotificationResult[] = $tenant->getPrincipal();
         });
 
         // make a request
@@ -319,8 +319,8 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $esnauth = new EsnMock('http://localhost:8080/');
         $client = $esnauth->getClient();
         $eventEmitter = $esnauth->getEventEmitter();
-        $eventEmitter->on("auth:success", function($principal) use (&$authNotificationResult) {
-            $authNotificationResult[] = $principal;
+        $eventEmitter->on("auth:success", function($tenant) use (&$authNotificationResult) {
+            $authNotificationResult[] = $tenant->getPrincipal();
         });
 
         // insert a user into the db

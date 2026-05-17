@@ -104,11 +104,10 @@ $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['
 
 
 // listener
-$authEmitter = $authBackend->getEventEmitter();
-$authEmitter->on("auth:success", function($authTenant) use ($addressbookBackend) {
+$server->on("auth:success", function($authTenant) use ($addressbookBackend) {
     return $addressbookBackend->getAddressBooksForUser($authTenant->getPrincipal());
 });
-$authEmitter->on("auth:success", function($authTenant) use ($calendarBackend) {
+$server->on("auth:success", function($authTenant) use ($calendarBackend) {
     return $calendarBackend->getCalendarsForUser($authTenant->getPrincipal());
 });
 

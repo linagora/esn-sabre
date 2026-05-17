@@ -23,7 +23,6 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     protected $httpClient;
     protected ?AuthTenant $currentTenant = null;
     protected $apiroot;
-    protected $eventEmitter;
     protected $principalBackend;
     protected $server;
 
@@ -43,7 +42,6 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     function __construct($apiroot, ?string $realm = null, $principalBackend, $server) {
         $this->apiroot = $apiroot;
         $this->httpClient = new HTTP\Client();
-        $this->eventEmitter = new EventEmitter();
         $this->principalBackend = $principalBackend;
         $this->server = $server;
 
@@ -60,10 +58,6 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     public function setRealm(string $realm)
     {
         $this->realm = $realm;
-    }
-
-    public function getEventEmitter() {
-        return $this->eventEmitter;
     }
 
     # <Added by xguimard>
@@ -260,7 +254,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     private function checkSuccess(AuthTenant $tenant) {
         $this->currentTenant = $tenant;
         $principal = $tenant->getPrincipal();
-        $this->eventEmitter->emit("auth:success", [$tenant]);
+        $this->server->emit("auth:success", [$tenant]);
         $msg = $tenant->tenantType === TenantType::Technical ? $this->technicalPrincipal : (string) $principal;
         return [true, $msg];
     }

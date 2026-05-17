@@ -21,7 +21,7 @@ define('SABRE_ADMIN_PASSWORD', getenv("SABRE_ADMIN_PASSWORD"));
 class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     protected $httpClient;
-    protected ?Principal $currentPrincipal = null;
+    protected ?AuthTenant $currentTenant = null;
     protected $apiroot;
     protected $eventEmitter;
     protected $principalBackend;
@@ -250,14 +250,18 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     }
 
     function getCurrentPrincipal() : ?string {
-        return $this->currentPrincipal === null ? null : (string) $this->currentPrincipal;
+        return $this->currentTenant === null ? null : (string) $this->currentTenant->getPrincipal();
+    }
+
+    function getCurrentTenant(): ?AuthTenant {
+        return $this->currentTenant;
     }
 
     private function checkSuccess(AuthTenant $tenant) {
+        $this->currentTenant = $tenant;
         $principal = $tenant->getPrincipal();
         $this->eventEmitter->emit("auth:success", [$tenant]);
-        $this->currentPrincipal = $principal;
-        $msg = $tenant->tenantType === TenantType::Technical ? $this->technicalPrincipal :(string) $principal;
+        $msg = $tenant->tenantType === TenantType::Technical ? $this->technicalPrincipal : (string) $principal;
         return [true, $msg];
     }
 

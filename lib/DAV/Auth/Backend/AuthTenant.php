@@ -6,6 +6,7 @@ class AuthTenant
 {
     public readonly TenantType $tenantType;
     public readonly string $userId;
+    protected readonly Principal $principal;
 
     protected $prefixes = [
         TenantType::User->value => 'principals/users/',
@@ -19,9 +20,10 @@ class AuthTenant
     ) {
         $this->tenantType = $tenantType;
         $this->userId = $userId;
+        $this->principal = new Principal($this->prefixes[$this->tenantType->value], $this->userId);
     }
 
     public function getPrincipal(): Principal {
-        return new Principal($this->prefixes[$this->tenantType->value], $this->userId);
+        return $this->principal;
     }
 }

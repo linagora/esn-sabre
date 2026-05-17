@@ -234,8 +234,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $authNotificationResult = [];
         $esnauth = new EsnMock('http://localhost:8080/');
         $client = $esnauth->getClient();
-        $eventEmitter = $esnauth->getEventEmitter();
-        $eventEmitter->on("auth:success", function($tenant) use (&$authNotificationResult) {
+        $esnauth->getServer()->on("auth:success", function($tenant) use (&$authNotificationResult) {
             $authNotificationResult[] = $tenant->getPrincipal();
         });
 
@@ -288,8 +287,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $authNotificationResult = [];
         $esnauth = new EsnMock('http://localhost:8080/');
         $client = $esnauth->getClient();
-        $eventEmitter = $esnauth->getEventEmitter();
-        $eventEmitter->on("auth:success", function($tenant) use (&$authNotificationResult) {
+        $esnauth->getServer()->on("auth:success", function($tenant) use (&$authNotificationResult) {
             $authNotificationResult[] = $tenant->getPrincipal();
         });
 
@@ -318,8 +316,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $authNotificationResult = [];
         $esnauth = new EsnMock('http://localhost:8080/');
         $client = $esnauth->getClient();
-        $eventEmitter = $esnauth->getEventEmitter();
-        $eventEmitter->on("auth:success", function($tenant) use (&$authNotificationResult) {
+        $esnauth->getServer()->on("auth:success", function($tenant) use (&$authNotificationResult) {
             $authNotificationResult[] = $tenant->getPrincipal();
         });
 
@@ -530,16 +527,20 @@ class EsnMock extends Esn {
         $logger = \ESN\Log\EsnLoggerFactory::initLogger(null);
         $loggerPlugin = new \ESN\Log\ExceptionLoggerPlugin($logger);
 
-        $server = new \Sabre\DAV\Server([]);
-        $server->addPlugin($loggerPlugin);
+        $this->server = new \Sabre\DAV\Server([]);
+        $this->server->addPlugin($loggerPlugin);
 
         require_once ESN_TEST_VENDOR . '/sabre/http/tests/HTTP/ClientTest.php';
-        parent::__construct($apiroot, "Realm", $this->principalBackend, $server);
+        parent::__construct($apiroot, "Realm", $this->principalBackend, $this->server);
         $this->httpClient = new \Sabre\HTTP\ClientMock();
     }
 
     function getClient() {
         return $this->httpClient;
+    }
+
+    function getServer() {
+       return $this->server;
     }
 
     function getDb() {

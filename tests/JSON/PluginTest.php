@@ -5,6 +5,8 @@ namespace ESN\JSON;
 use Sabre\DAV\ServerPlugin;
 use Sabre\VObject\Document;
 use Sabre\VObject\ITip\Message;
+use \ESN\DAV\Auth\Backend\TenantType;
+use \ESN\DAV\Auth\Backend\AuthTenant;
 
 require_once ESN_TEST_BASE. '/DAV/ServerMock.php';
 
@@ -565,7 +567,7 @@ END:VCALENDAR
     }
 
     function testGETAddressBookHomesWithTechnicalUser() {
-        $this->authBackend->setPrincipal('principals/technicalUser');
+        $this->authBackend->setAuthTenant(new AuthTenant('technicalUser', TenantType::Technical));
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
@@ -576,6 +578,7 @@ END:VCALENDAR
 
         $response = $this->request($request);
         $jsonResponse = json_decode($response->getBodyAsString(), true);
+        $this->assertEquals(200, $response->status);
 
         $this->assertEquals([
             // 4 users
@@ -586,8 +589,6 @@ END:VCALENDAR
             // 1 resource
             '62b64eadf6d7d8e41d263e0c' => []
         ], $jsonResponse);
-
-        $this->assertEquals(200, $response->status);
     }
 
     private function _testCalendarList($withRightsParam = null) {

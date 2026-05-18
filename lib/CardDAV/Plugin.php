@@ -5,9 +5,12 @@ use Sabre\DAV;
 use \Sabre\VObject;
 use \Sabre\DAV\Exception\Forbidden;
 use \ESN\Utils\Utils as Utils;
+use \ESN\DAV\Auth\Backend\TenantType;
+use \ESN\DAV\Auth\Backend\AuthTenant;
 
 #[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
+    protected ?AuthTenant $authTenant = null;
 
     function initialize(\Sabre\DAV\Server $server) {
         parent::initialize($server);
@@ -20,6 +23,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
         $server->on('method:POST', [$this, 'httpPost'], 80);
         $server->on('method:HEAD', [$this, 'httpHead'], 80);
+        $server->on('auth:success',
+                    function(AuthTenant $authTenant) {
+                        $this->authTenant = $authTenant;
+                    });
     }
 
     /**
@@ -94,18 +101,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $pathParts[2] === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI
         ) {
             // Only technical users can modify domain-members addressbook
-            $authPlugin = $this->server->getPlugin('auth');
-            if (!is_null($authPlugin)) {
-                $currentPrincipal = $authPlugin->getCurrentPrincipal();
-                $parts = explode('/', $currentPrincipal);
-                $type = isset($parts[1]) ? $parts[1] : null;
-
-                if ($type !== 'technicalUser') {
-                    throw new Forbidden('Only technical users can modify domain-members addressbook');
-                }
-            } else {
-                throw new Forbidden('Authentication plugin not available');
-            }
+            if ($this->authTenant?->tenantType !== TenantType::Technical)
+                throw new Forbidden('Only technical users can modify domain-members addressbook'.json_encode($this->authTenant));
         }
     }
 
@@ -142,15 +139,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $body = null;
 
         if ($node instanceof \ESN\CardDAV\AddressBookRoot) {
-            $authPlugin = $this->server->getPlugin('auth');
-            if (!is_null($authPlugin)) {
-                $currentPrincipal = $authPlugin->getCurrentPrincipal();
-                list(, $type) = explode('/', $currentPrincipal);
-
-                if ($type !== 'technicalUser') {
-                    throw new Forbidden();
-                }
-            }
+            if ($this->authTenant?->tenantType !== TenantType::Technical)
+                throw new Forbidden('Only technical users'.json_encode($this->authTenant));
 
             $children = [];
 

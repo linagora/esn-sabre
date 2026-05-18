@@ -4,6 +4,7 @@ namespace ESN\DAV;
 
 use Sabre\DAV\ServerPlugin;
 use Sabre\DAV\Xml\Property\Href;
+use \ESN\DAV\Auth\Backend\AuthTenant;
 
 require_once ESN_TEST_BASE . '/Sabre/HTTP/ResponseMock.php';
 require_once ESN_TEST_BASE . '/Sabre/HTTP/SapiMock.php';
@@ -13,6 +14,8 @@ require_once ESN_TEST_BASE . '/Sabre/CardDAV/Backend/Mock.php';
 require_once ESN_TEST_BASE . '/Sabre/DAVServerTestBase.php';
 require_once ESN_TEST_BASE . '/Sabre/DAV/Auth/Backend/Mock.php';
 require_once ESN_TEST_BASE . '/DAV/Auth/PluginMock.php';
+require_once ESN_TEST_BASE . '/DAV/Auth/Backend/Mock.php';
+
 
 define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
@@ -385,8 +388,8 @@ END:VCALENDAR'
         $this->server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
         $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
 
-        $this->authBackend = new \Sabre\DAV\Auth\Backend\Mock();
-        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0f');
+        $this->authBackend = new \ESN\DAV\Auth\Backend\Mock('', null, $this->principalBackend, $this->server);
+        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f'));
         $authPlugin = new \ESN\DAV\Auth\PluginMock($this->authBackend);
         $this->server->addPlugin($authPlugin);
 

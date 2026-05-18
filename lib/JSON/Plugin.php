@@ -10,6 +10,8 @@ use \Sabre\DAV\Exception\Forbidden;
 use \Sabre\VObject,
     \Sabre\DAV;
 use Sabre\VObject\ITip\Message;
+use \ESN\DAV\Auth\Backend\TenantType;
+use \ESN\DAV\Auth\Backend\AuthTenant;
 
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Plugin {
@@ -31,6 +33,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     protected $calendarObjectHandler;
     protected $subscriptionHandler;
 
+    protected ?AuthTenant $authTenant = null;
+
     function __construct($root) {
         $this->root = $root;
     }
@@ -47,6 +51,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $server->on('method:PROPFIND', [$this, 'findProperties'], 80);
         $server->on('method:ACL', [$this, 'changePublicRights'], 80);
         $server->on('afterMethod:REPORT', [$this, 'afterMethodReport']);
+        $server->on('auth:success',
+                    function(AuthTenant $authTenant) {
+                        $this->authTenant = $authTenant;
+                    });
     }
 
     protected function getCalendarHandler() {
@@ -345,15 +353,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     private function getCalendarRoot($node) {
-        $authPlugin = $this->server->getPlugin('auth');
-        if (!is_null($authPlugin)) {
-            $currentPrincipal = $authPlugin->getCurrentPrincipal();
-            list(, $type) = explode('/', $currentPrincipal);
-
-            if ($type !== 'technicalUser') {
-                throw new Forbidden();
-            }
-        }
+        if ($this->authTenant?->tenantType !== TenantType::Technical)
+                throw new Forbidden('Only technical users');
 
         $calendarHomes = $node->getChildren();
         $items = [];

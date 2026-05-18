@@ -627,7 +627,8 @@ END:VCALENDAR
 
         $calendars = $jsonResponse->{'_embedded'}->{'dav:calendar'};
 
-        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
+        $expectedCount = count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']);
+        $this->assertCount($expectedCount, $calendars);
 
         $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
         $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');

@@ -12,7 +12,7 @@ use Sabre\CalDAV\ICalendarObjectContainer;
  * This allows REPORT queries on subscriptions to return events from the source calendar.
  */
 #[\AllowDynamicProperties]
-class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements ICalendarObjectContainer {
+class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements ICalendarObjectContainer, \Sabre\CalDAV\ICalendar {
 
     /**
      * Cached source calendar info
@@ -183,6 +183,17 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
         }
 
         throw new \Sabre\DAV\Exception\Forbidden('You do not have write access to this subscription');
+    }
+
+    /**
+     * Returns the public right of the source calendar, or null if unavailable.
+     */
+    public function getSourcePublicRight(): ?string {
+        $sourceCalendarInfo = $this->getSourceCalendarInfo();
+        if (!$sourceCalendarInfo) {
+            return null;
+        }
+        return $this->caldavBackend->getCalendarPublicRight($sourceCalendarInfo['id']);
     }
 
     /**

@@ -7,6 +7,7 @@ use Sabre\CalDAV\Subscriptions\ISubscription;
 use Sabre\DAV\INode;
 use Sabre\DAV\PropFind;
 use Sabre\DAV\Server;
+use Sabre\DAVACL\Xml\Property\CurrentUserPrivilegeSet;
 
 /**
  * This plugin extends Sabre's calendar subscription support to properly expose
@@ -41,6 +42,8 @@ class Plugin extends \Sabre\CalDAV\Subscriptions\Plugin {
             return;
         }
 
+        $this->filterSubscriptionPrivileges($propFind, $node);
+
         $sccs = '{' . CalDAVPlugin::NS_CALDAV . '}supported-calendar-component-set';
 
         // For allprops requests or when the property hasn't been set yet,
@@ -53,6 +56,32 @@ class Plugin extends \Sabre\CalDAV\Subscriptions\Plugin {
             $propFind->handle($sccs, function() use ($node, $sccs) {
                 return $this->getSupportedCalendarComponentSet($node, $sccs);
             });
+        }
+    }
+
+    /**
+     * Filters write privileges from current-user-privilege-set when the source
+     * calendar's public right is read-only.
+     *
+     * @param PropFind $propFind
+     * @param INode $node
+     * @return void
+     */
+    private function filterSubscriptionPrivileges(PropFind $propFind, INode $node) {
+        if ($node->getSourcePublicRight() !== '{DAV:}read') {
+            return;
+        }
+
+        $prop = '{DAV:}current-user-privilege-set';
+        $excluded = ['{DAV:}write', '{DAV:}write-content', '{DAV:}write-properties', '{DAV:}all'];
+
+        if ($propFind->getStatus($prop) === 200) {
+            $currentSet = $propFind->get($prop);
+            $filtered = array_values(array_filter($currentSet->getValue(), function ($p) use ($excluded) {
+                return !in_array($p, $excluded);
+            }));
+            $propFind->set($prop, new CurrentUserPrivilegeSet($filtered), 200);
+
         }
     }
 

@@ -83,6 +83,7 @@ fi
 (
   git clone https://github.com/linagora/twake-calendar-integration-tests.git it-tests
   cd it-tests
+  git checkout Tests-for-sabre-ISSUE-343
   bash pre-build.sh esn_sabre_test
   mvn clean install -Dapi.version=1.43 -Dtest=com.linagora.dav.sabrev4_7.**
 )

@@ -5,6 +5,8 @@ namespace ESN\CardDAV;
 use Sabre\DAV\ServerPlugin;
 use Sabre\VObject\Document;
 use Sabre\VObject\ITip\Message;
+use \ESN\DAV\Auth\Backend\TenantType;
+use \ESN\DAV\Auth\Backend\AuthTenant;
 
 require_once ESN_TEST_BASE. '/CardDAV/PluginTestBase.php';
 
@@ -35,7 +37,7 @@ class PluginTest extends PluginTestBase {
     }
 
     function testGETAddressBookHomesWithTechnicalUser() {
-        $this->authBackend->setPrincipal('principals/technicalUser');
+        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', TenantType::Technical));
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
@@ -47,14 +49,13 @@ class PluginTest extends PluginTestBase {
         $response = $this->request($request);
         $jsonResponse = json_decode($response->getBodyAsString(), true);
 
+        $this->assertEquals(200, $response->status);
         $this->assertEquals([
             '54b64eadf6d7d8e41d263e0f',
             '54b64eadf6d7d8e41d263e0e',
             '54b64eadf6d7d8e41d263e0d',
             '54b64eadf6d7d8e41d263e0c'
         ], $jsonResponse);
-
-        $this->assertEquals(200, $response->status);
     }
 
     function testPropFindRequestAddressBook() {
@@ -547,6 +548,7 @@ class PluginTest extends PluginTestBase {
 
     function testCreateCardInDomainMembersAsTechnicalUserShouldSucceed() {
         $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', TenantType::Technical));
 
         // Create domain
         $this->esndb->domains->insertOne([
@@ -558,7 +560,6 @@ class PluginTest extends PluginTestBase {
         $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domain-members');
 
         // Set principal to technical user
-        $this->authBackend->setPrincipal('principals/technicalUser');
 
         // Try to create a card as technical user (should succeed)
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
@@ -575,6 +576,8 @@ class PluginTest extends PluginTestBase {
         $request->setBody($vcard);
         $response = $this->request($request);
 
+	if($response->status != 201)
+	    throw new \Exception(json_encode($response->body));
         $this->assertEquals(201, $response->status);
     }
 

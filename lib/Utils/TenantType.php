@@ -1,6 +1,6 @@
 <?php
 
-namespace ESN\DAV\Auth\Backend;
+namespace ESN\Utils;
 
 enum TenantType: int
 {

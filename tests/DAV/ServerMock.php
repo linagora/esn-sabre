@@ -4,7 +4,7 @@ namespace ESN\DAV;
 
 use Sabre\DAV\ServerPlugin;
 use Sabre\DAV\Xml\Property\Href;
-use \ESN\DAV\Auth\Backend\AuthTenant;
+use \ESN\Utils\AuthTenant;
 
 require_once ESN_TEST_BASE . '/Sabre/HTTP/ResponseMock.php';
 require_once ESN_TEST_BASE . '/Sabre/HTTP/SapiMock.php';

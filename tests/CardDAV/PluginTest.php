@@ -5,8 +5,8 @@ namespace ESN\CardDAV;
 use Sabre\DAV\ServerPlugin;
 use Sabre\VObject\Document;
 use Sabre\VObject\ITip\Message;
-use \ESN\DAV\Auth\Backend\TenantType;
-use \ESN\DAV\Auth\Backend\AuthTenant;
+use \ESN\Utils\TenantType;
+use \ESN\Utils\AuthTenant;
 
 require_once ESN_TEST_BASE. '/CardDAV/PluginTestBase.php';
 

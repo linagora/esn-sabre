@@ -6,6 +6,9 @@ use \Sabre\HTTP;
 use Sabre\Event\EventEmitter;
 use \Firebase\JWT\JWT;
 use \Firebase\JWT\Key;
+use \ESN\Utils\AuthTenant;
+use \ESN\Utils\Principal;
+use \ESN\Utils\TenantType;
 
 define('ESN_PUBLIC_KEY', __DIR__ . '/../../../../config/esn.key.pub');
 

@@ -5,8 +5,8 @@ use Sabre\DAV;
 use \Sabre\VObject;
 use \Sabre\DAV\Exception\Forbidden;
 use \ESN\Utils\Utils as Utils;
-use \ESN\DAV\Auth\Backend\TenantType;
-use \ESN\DAV\Auth\Backend\AuthTenant;
+use \ESN\Utils\TenantType;
+use \ESN\Utils\AuthTenant;
 
 #[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {

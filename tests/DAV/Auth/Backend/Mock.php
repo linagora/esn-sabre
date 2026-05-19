@@ -7,7 +7,7 @@ namespace ESN\DAV\Auth\Backend;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 
-use \ESN\DAV\Auth\Backend\AuthTenant;
+use \ESN\Utils\AuthTenant;
 
 class Mock implements \Sabre\DAV\Auth\Backend\BackendInterface
 {

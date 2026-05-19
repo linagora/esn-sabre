@@ -446,7 +446,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
     function testGetPrincipalIdByResourceEmailWhenResourceExists() {
         $backend = new Mongo(self::$esndb, self::$tenant);
-        $resourceEmail = self::RESOURCE_ID . '@test.com';
+        $resourceEmail = self::RESOURCE_ID . '@example.com';
 
         $result = $backend->getPrincipalIdByResourceEmail($resourceEmail);
 

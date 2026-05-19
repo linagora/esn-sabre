@@ -193,7 +193,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return null;
         }
 
-        [$possibleId] = explode('@', $email, 2);
+        [$possibleId, $domain] = explode('@', $email, 2);
 
         try {
             $objectId = new \MongoDB\BSON\ObjectId($possibleId);
@@ -203,9 +203,19 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
 
         $resource = $this->db->resources->findOne(
             ['_id' => $objectId],
-            ['projection' => ['_id' => 1]]
+            ['projection' => ['_id' => 1, 'domain' => 1]]
         );
-
+        if (!isset($resource['domain'])) {
+            return null;
+        }
+        $domainObjectId = $resource['domain'];
+        $domain = $this->db->domains->findOne(
+            [ '_id' => $domainObjectId, 'name' => $domain ],
+            [ 'projection' => [ '_id' => 1 ] ]
+        );
+        if (!$domain) {
+            return null;
+        }
         return $resource ? $resource['_id'] : null;
     }
 

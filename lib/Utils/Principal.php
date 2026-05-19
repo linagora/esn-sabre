@@ -1,6 +1,6 @@
 <?php
 
-namespace ESN\DAV\Auth\Backend;
+namespace ESN\Utils;
 
 final class Principal implements \Stringable
 {

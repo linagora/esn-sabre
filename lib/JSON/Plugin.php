@@ -10,8 +10,8 @@ use \Sabre\DAV\Exception\Forbidden;
 use \Sabre\VObject,
     \Sabre\DAV;
 use Sabre\VObject\ITip\Message;
-use \ESN\DAV\Auth\Backend\TenantType;
-use \ESN\DAV\Auth\Backend\AuthTenant;
+use \ESN\Utils\TenantType;
+use \ESN\Utils\AuthTenant;
 
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Plugin {

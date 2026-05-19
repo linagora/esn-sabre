@@ -456,11 +456,19 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
 
         $esnDb = $esnauth->getDb();
         $resourceId = new \MongoDB\BSON\ObjectId('888888888888888888888888');
+        $domainId = new \MongoDB\BSON\ObjectId('098765432109876543210987');
         $esnDb->resources->insertOne([
             '_id' => $resourceId,
             'name' => 'Test Resource',
-            'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
+            'domain' => $domainId
         ]);
+        $esnDb->domains->insertOne([
+            '_id' => $domainId,
+            'name' => 'example.com',
+            'administrators' => [
+            ]
+        ]);
+
 
         $resourceEmail = '888888888888888888888888@example.com';
         $request = \Sabre\HTTP\Sapi::createFromServerArray([

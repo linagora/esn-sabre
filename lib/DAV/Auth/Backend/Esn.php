@@ -337,39 +337,37 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         if (!file_exists(ESN_PUBLIC_KEY))
             throw new AuthException('no public key file used by checkJWT()');
 
-        if (preg_match('/Bearer\s((.*)\.(.*)\.(.*))/', $authorizationHeader, $matches)) {
-            $token = $matches[1];
+        $matchtoken = preg_match('/Bearer\s((.*)\.(.*)\.(.*))/', $authorizationHeader, $matches);
+        if (!$matchtoken)
+            throw new AuthException('checkJWT: weird format');
+        $token = $matches[1];
+        try {
             // Load esn's public key
             $key = file_get_contents(ESN_PUBLIC_KEY);
-
-            try {
-                // Try to decode the token with the public key
-                $user = JWT::decode($token, new Key($key, 'RS256'));
-                // Get the user Id associated with the identifier of the token ( email in sub field )
-                if (!isset($user->sub))
-                    throw new \UnexpectedValueException("checkJWT: '$user->sub' is not valid");
-                $email = $user->sub;
-                if(!filter_var($email, FILTER_VALIDATE_EMAIL))
-                    throw new \UnexpectedValueException("checkJWT: email '$email' is not a valid mail");
-                $principleId = $this->principalBackend->getPrincipalIdByEmail($email);
-                // No user found by that email
-                if (!$principleId)
-                    throw new AuthException('checkJWT: no user found by email');
-                return new AuthTenant($principleId);
-            } catch(AuthException $e) {
-                throw $e;
-            } catch(\Exception $e) {
-                // something wrong happened during decoding the JWT
-                // things like unsupported algorithm, expired token...
-                $this->server->getLogger()->error(
-                    'An unexpected error happened when decoding the JWT',
-                    ['error' => $e->getMessage()]
-                );
-                throw new AuthException($e->getMessage());
-            }
+            // Try to decode the token with the public key
+            $user = JWT::decode($token, new Key($key, 'RS256'));
+            // Get the user Id associated with the identifier of the token ( email in sub field )
+            if (!isset($user->sub))
+                throw new \UnexpectedValueException("checkJWT: '$user->sub' is not valid");
+            $email = $user->sub;
+            if(!filter_var($email, FILTER_VALIDATE_EMAIL))
+                throw new \UnexpectedValueException("checkJWT: email '$email' is not a valid mail");
+            $principleId = $this->principalBackend->getPrincipalIdByEmail($email);
+            // No user found by that email
+            if (!$principleId)
+                throw new AuthException('checkJWT: no user found by email');
+        } catch(AuthException $e) {
+            throw $e;
+        } catch(\Exception $e) {
+            // something wrong happened during decoding the JWT
+            // things like unsupported algorithm, expired token...
+            $this->server->getLogger()->error(
+                'An unexpected error happened when decoding the JWT',
+                ['error' => $e->getMessage()]
+            );
+            throw new AuthException($e->getMessage());
         }
-        // the JWT format is weird
-        throw new AuthException('checkJWT: weird format');
+        return new AuthTenant($principleId);
     }
 
 

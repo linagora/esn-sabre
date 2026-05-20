@@ -426,22 +426,22 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $backend->updatePrincipal('principals/users/' . self::USER_ID, $propPatch);
     }
 
-    function testGetPrincipalIdByEmailWhenUserExists() {
+    function testAuthTenantByEmailWhenUserExists() {
         $backend  = new Mongo(self::$esndb, self::$tenant);
 
-        $this->assertEquals(self::USER_ID, $backend->getPrincipalIdByEmail('user@example.com'));
+        $this->assertEquals(self::USER_ID, $backend->getAuthTenantByEmail('user@example.com')->userId);
     }
 
-    function testGetPrincipalIdByEmailWhenUserDoesNotExist() {
+    function testGetAuthTenantWhenUserDoesNotExist() {
         $backend  = new Mongo(self::$esndb, self::$tenant);
 
-        $this->assertNull($backend->getPrincipalIdByEmail('drogba@nouri.com'));
+        $this->assertNull($backend->getAuthTenantByEmail('drogba@nouri.com'));
     }
 
-    function testGetPrincipalIdByEmailWhenEmailIsNotValid() {
+    function tesGetAUthTenantByEmailWhenEmailIsNotValid() {
         $backend  = new Mongo(self::$esndb, self::$tenant);
 
-        $this->assertNull($backend->getPrincipalIdByEmail('drogba'));
+        $this->assertNull($backend->getAuthTenantByEmail('drogba'));
     }
 
     function testGetPrincipalIdByResourceEmailWhenResourceExists() {

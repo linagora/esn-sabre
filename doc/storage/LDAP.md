@@ -22,7 +22,7 @@
 2. Bind as admin (`LDAP_ADMIN_DN`) to perform the directory search.
 3. Search by `uid` (with `LDAP_FILTER` if set).
 4. Read `mail` from the first result.
-5. Resolve the Sabre principal via `getPrincipalIdByEmail($mail)`.
+5. Resolve the Sabre principal via `getAuthTenantByEmail($mail)`.
 
 ## Edge cases
 

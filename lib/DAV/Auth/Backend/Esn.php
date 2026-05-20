@@ -90,7 +90,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             throw new AuthException('decodeResponse(): no user found');
 
         $type = property_exists($user, 'user_type') ? $user->user_type : 'user';
-        $tenant = new AuthTenant($user->_id, $type == $this->technicalUserType ? TenantType::Technical : TenantType::User);
+        $tenant = new AuthTenant($user->_id, null, $type == $this->technicalUserType ? TenantType::Technical : TenantType::User);
         if (isset($user->domain)) {
             if (!filter_var($user->domain, FILTER_VALIDATE_DOMAIN)) {
                 error_log("decodeResponse: invalid domain '$user->domain' for user '$user->_id'");

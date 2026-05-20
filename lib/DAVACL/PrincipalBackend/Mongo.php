@@ -4,6 +4,8 @@ namespace ESN\DAVACL\PrincipalBackend;
 
 use \ESN\Utils\Utils as Utils;
 use \ESN\Utils\TenantContext as TenantContext;
+use \ESN\Utils\TenantType as TenantType;
+use \ESN\Utils\AuthTenant as AuthTenant;
 
 #[\AllowDynamicProperties]
 class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
@@ -148,7 +150,12 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         throw new \Sabre\DAV\Exception\MethodNotAllowed('Changing group membership is not permitted');
     }
 
-    function getPrincipalIdByEmail($email) {
+    function getPrincipalIdByEmail(string $email): ?string {
+        $tenant = $this->getAuthTenantByEmail($email);
+        return $tenant === null ? null : (string) $tenant->userId;
+    }
+
+    function getAuthTenantByEmail(string $email, TenantType $tenantType = TenantType::User): ?AuthTenant {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return null;
         }
@@ -185,7 +192,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return null;
         }
         $this->tenantContext->domainId = (string)$domainObjectId;
-        return $user['_id'];
+        return new AuthTenant($user['_id'], /* (string) $domainObjectId, */ $tenantType);
     }
 
     function getPrincipalIdByResourceEmail($email) {

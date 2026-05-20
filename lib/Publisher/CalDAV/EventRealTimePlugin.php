@@ -316,10 +316,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             // Use PrincipalBackend from CalDAV backend to find user by email
             if ($this->caldavBackend && method_exists($this->caldavBackend, 'getPrincipalBackend')) {
                 $principalBackend = $this->caldavBackend->getPrincipalBackend();
-                if ($principalBackend && method_exists($principalBackend, 'getPrincipalIdByEmail')) {
-                    $userId = $principalBackend->getPrincipalIdByEmail($recipientEmail);
-                    if ($userId) {
-                        $recipientPrincipalUri = 'principals/users/' . $userId;
+                if ($principalBackend && method_exists($principalBackend, 'getAuthTenantByEmail')) {
+                    $tenant = $principalBackend->getAuthTenantByEmail($recipientEmail);
+                    if ($tenant) {
+                        $recipientPrincipalUri = $tenant->getPrincipal();
                     }
                 }
             }

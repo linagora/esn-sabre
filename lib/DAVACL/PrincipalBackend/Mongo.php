@@ -188,7 +188,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return null;
         }
         $this->tenantContext->domainId = (string)$domainObjectId;
-        return new AuthTenant($user['_id'], /* (string) $domainObjectId, */ $tenantType);
+        return new AuthTenant($user['_id'], (string) $domainObjectId, $tenantType);
     }
 
     function getAuthTenantByResourceEmail($email, TenantType $tenantType = TenantType::Resources) {
@@ -221,7 +221,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         if (!$domain) {
             return null;
         }
-        return new AuthTenant($resource['_id'],/* not yet (string) $domainObjectId, */ $tenantType);
+        return new AuthTenant($resource['_id'], (string) $domainObjectId, $tenantType);
     }
 
     private function objectToPrincipal($obj, $type) {

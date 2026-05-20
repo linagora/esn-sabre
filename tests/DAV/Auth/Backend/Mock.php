@@ -8,6 +8,7 @@ use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 
 use \ESN\Utils\AuthTenant;
+use \ESN\Utils\TenantType;
 
 class Mock implements \Sabre\DAV\Auth\Backend\BackendInterface
 {
@@ -41,9 +42,11 @@ class Mock implements \Sabre\DAV\Auth\Backend\BackendInterface
 
     public function setAuthTenant($tenant)
     {
-       $this->tenant = $tenant;
-       $this->principal = (string) $tenant->getPrincipal();
-       $this->server->emit('auth:success',[$tenant]);
+        $this->tenant = $tenant;
+        $this->principal = $tenant->tenantType === TenantType::Technical
+            ? 'principals/technicalUser'
+            : (string) $tenant->getPrincipal();
+        $this->server->emit('auth:success', [$tenant]);
     }
     /**
      * When this method is called, the backend must check if authentication was

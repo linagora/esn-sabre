@@ -117,8 +117,8 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     }
 
     private function doImpersonatation(string $impersonationResult) : AuthTenant {
-        $principalId = $this->principalBackend->getPrincipalIdByEmail($impersonationResult);
-        if (!$principalId) {
+        $tenant = $this->principalBackend->getAuthTenantByEmail($impersonationResult);
+        if (!$tenant) {
             $principalId = $this->principalBackend->getPrincipalIdByResourceEmail($impersonationResult);
             if (!$principalId) {
                 error_log("User not found for email: $impersonationResult");
@@ -126,7 +126,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             }
             return new AuthTenant($principalId, TenantType::Resources);
         }
-        return new AuthTenant($principalId);
+        return $tenant;
     }
 
     protected function validateUserPass($username, $password): AuthTenant {
@@ -207,12 +207,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             throw new  AuthException("$user has incorrect mail attribute");
         }
 
-        $principalId = $this->principalBackend->getPrincipalIdByEmail($mail);
-        if (!$principalId) {
+        $tenant = $this->principalBackend->getAuthTenantByEmail($mail);
+        if (!$tenant) {
             error_log("User not found for email: $mail");
             throw new  AuthException("User not found");
         }
-        return new AuthTenant($principalId);
+        return $tenant;
     }
 
     private function impersonationEnabled(): bool {
@@ -352,9 +352,9 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             $email = $user->sub;
             if(!filter_var($email, FILTER_VALIDATE_EMAIL))
                 throw new \UnexpectedValueException("checkJWT: email '$email' is not a valid mail");
-            $principleId = $this->principalBackend->getPrincipalIdByEmail($email);
+            $tenant = $this->principalBackend->getAuthTenantByEmail($email);
             // No user found by that email
-            if (!$principleId)
+            if (!$tenant)
                 throw new AuthException('checkJWT: no user found by email');
         } catch(AuthException $e) {
             throw $e;
@@ -367,7 +367,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             );
             throw new AuthException($e->getMessage());
         }
-        return new AuthTenant($principleId);
+        return $tenant;
     }
 
 

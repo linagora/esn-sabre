@@ -444,31 +444,31 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertNull($backend->getAuthTenantByEmail('drogba'));
     }
 
-    function testGetPrincipalIdByResourceEmailWhenResourceExists() {
+    function testGetAuthTenantByResourceEmailWhenResourceExists() {
         $backend = new Mongo(self::$esndb, self::$tenant);
         $resourceEmail = self::RESOURCE_ID . '@example.com';
 
-        $result = $backend->getPrincipalIdByResourceEmail($resourceEmail);
+        $result = $backend->getAuthTenantByResourceEmail($resourceEmail);
 
-        $this->assertEquals(self::RESOURCE_ID, (string)$result);
+        $this->assertEquals(self::RESOURCE_ID, (string)$result->userId);
     }
 
-    function testGetPrincipalIdByResourceEmailWhenResourceDoesNotExist() {
+    function testGetAuthTenantByResourceEmailWhenResourceDoesNotExist() {
         $backend = new Mongo(self::$esndb, self::$tenant);
         $nonExistentEmail = '000000000000000000000000@test.com';
 
-        $this->assertNull($backend->getPrincipalIdByResourceEmail($nonExistentEmail));
+        $this->assertNull($backend->getAuthTenantByResourceEmail($nonExistentEmail));
     }
 
-    function testGetPrincipalIdByResourceEmailWhenLocalpartIsNotObjectId() {
+    function testAuthTenantByResourceEmailWhenLocalpartIsNotObjectId() {
         $backend = new Mongo(self::$esndb, self::$tenant);
 
-        $this->assertNull($backend->getPrincipalIdByResourceEmail('notanobjectid@test.com'));
+        $this->assertNull($backend->getAuthTenantByResourceEmail('notanobjectid@test.com'));
     }
 
-    function testGetPrincipalIdByResourceEmailWhenEmailIsNotValid() {
+    function testAuthTenantByResourceEmailWhenEmailIsNotValid() {
         $backend = new Mongo(self::$esndb, self::$tenant);
 
-        $this->assertNull($backend->getPrincipalIdByResourceEmail('notanemail'));
+        $this->assertNull($backend->getAuthTenantByResourceEmail('notanemail'));
     }
 }

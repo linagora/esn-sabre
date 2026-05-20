@@ -118,15 +118,15 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     private function doImpersonatation(string $impersonationResult) : AuthTenant {
         $tenant = $this->principalBackend->getAuthTenantByEmail($impersonationResult);
-        if (!$tenant) {
-            $principalId = $this->principalBackend->getPrincipalIdByResourceEmail($impersonationResult);
-            if (!$principalId) {
-                error_log("User not found for email: $impersonationResult");
-                throw new AuthException("User not found");
-            }
-            return new AuthTenant($principalId, TenantType::Resources);
-        }
-        return $tenant;
+        if ($tenant)
+            return $tenant;
+
+        $tenant = $this->principalBackend->getAuthTenantByResourceEmail($impersonationResult);
+        if($tenant)
+            return $tenant;
+
+        error_log("User not found for email: $impersonationResult");
+        throw new AuthException("User not found");
     }
 
     protected function validateUserPass($username, $password): AuthTenant {

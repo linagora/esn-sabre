@@ -150,10 +150,6 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         throw new \Sabre\DAV\Exception\MethodNotAllowed('Changing group membership is not permitted');
     }
 
-    function getPrincipalIdByEmail(string $email): ?string {
-        $tenant = $this->getAuthTenantByEmail($email);
-        return $tenant === null ? null : (string) $tenant->userId;
-    }
 
     function getAuthTenantByEmail(string $email, TenantType $tenantType = TenantType::User): ?AuthTenant {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -195,7 +191,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         return new AuthTenant($user['_id'], /* (string) $domainObjectId, */ $tenantType);
     }
 
-    function getPrincipalIdByResourceEmail($email) {
+    function getAuthTenantByResourceEmail($email, TenantType $tenantType = TenantType::Resources) {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return null;
         }
@@ -212,6 +208,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             ['_id' => $objectId],
             ['projection' => ['_id' => 1, 'domain' => 1]]
         );
+        if(!$resource)
+            return null;
         if (!isset($resource['domain'])) {
             return null;
         }
@@ -223,7 +221,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         if (!$domain) {
             return null;
         }
-        return $resource ? $resource['_id'] : null;
+        return new AuthTenant($resource['_id'],/* not yet (string) $domainObjectId, */ $tenantType);
     }
 
     private function objectToPrincipal($obj, $type) {

@@ -116,7 +116,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         return $this->decodeResponse($this->httpClient->send($request));
     }
 
-    private function doImpersonatation(string $impersonationResult) : AuthTenant {
+    private function doImpersonation(string $impersonationResult) : AuthTenant {
         $tenant = $this->principalBackend->getAuthTenantByEmail($impersonationResult);
         if ($tenant)
             return $tenant;
@@ -134,7 +134,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         if ($this->impersonationEnabled()) {
             $impersonationResult = $this->attemptAdminImpersonation($user, $password);
             if ($impersonationResult !== null)
-                return $this->doImpersonatation($impersonationResult);
+                return $this->doImpersonation($impersonationResult);
         }
 
         $env_ldap_username_mode = getenv('LDAP_USERNAME_MODE');

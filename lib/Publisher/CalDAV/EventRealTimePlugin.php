@@ -319,7 +319,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 if ($principalBackend && method_exists($principalBackend, 'getAuthTenantByEmail')) {
                     $tenant = $principalBackend->getAuthTenantByEmail($recipientEmail);
                     if ($tenant) {
-                        $recipientPrincipalUri = $tenant->getPrincipal();
+                        $recipientPrincipalUri = (string) $tenant->getPrincipal();
                     }
                 }
             }

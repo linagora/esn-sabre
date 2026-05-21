@@ -31,7 +31,7 @@ class Mock implements \Sabre\DAV\Auth\Backend\BackendInterface
         if (!is_null($realm)) {
             $this->realm = $realm;
         }
-        $this->tenant = new AuthTenant('admin');
+        $this->tenant = new AuthTenant('admin','example.com');
         $this->principal = (string) $this->tenant->getPrincipal();
     }
 

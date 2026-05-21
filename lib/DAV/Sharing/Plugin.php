@@ -3,6 +3,7 @@
 namespace ESN\DAV\Sharing;
 
 use Sabre\DAV\Exception\Forbidden;
+use \ESN\Utils\AuthTenant;
 
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\DAV\Sharing\Plugin {
@@ -10,16 +11,24 @@ class Plugin extends \Sabre\DAV\Sharing\Plugin {
     const ACCESS_ADMINISTRATION = 5;
     const ACCESS_FREEBUSY = 6;
 
-    protected $tenantContext;
+    protected ?AuthTenant $authTenant = null;
     protected $esnDb;
 
-    function __construct(\ESN\Utils\TenantContext $tenantContext = null, \MongoDB\Database $esnDb = null) {
-        $this->tenantContext = $tenantContext;
+    function initialize(\Sabre\DAV\Server $server) {
+        parent::initialize($server);
+        $server->on('auth:success',
+                    function(AuthTenant $authTenant) {
+                        $this->authTenant = $authTenant;
+                    });
+    }
+
+    function __construct(\MongoDB\Database $esnDb = null) {
         $this->esnDb = $esnDb;
     }
 
     function shareResource($path, array $sharees) {
-        if ($this->tenantContext !== null && $this->tenantContext->domainId !== null && $this->esnDb !== null) {
+        $domainId = $this->authTenant?->domainId;
+        if ($domainId !== null && $this->esnDb !== null) {
             foreach ($sharees as $sharee) {
                 if ($sharee->access === self::ACCESS_NOACCESS) {
                     continue;
@@ -33,7 +42,7 @@ class Plugin extends \Sabre\DAV\Sharing\Plugin {
                 }
                 $emailDomain = explode('@', $email)[1];
                 $domain = $this->esnDb->domains->findOne(
-                    ['_id' => new \MongoDB\BSON\ObjectId($this->tenantContext->domainId), 'name' => $emailDomain],
+                    ['_id' => new \MongoDB\BSON\ObjectId($domainId), 'name' => $emailDomain],
                     ['projection' => ['_id' => 1]]
                 );
                 if (!$domain) {

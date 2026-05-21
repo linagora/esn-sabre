@@ -347,8 +347,7 @@ END:VCALENDAR'
             'name' => 'cal resource'
         ]);
 
-        $this->tenant = new \ESN\Utils\TenantContext();
-        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb, $this->tenant);
+        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Esn($this->sabredb);
 
@@ -389,7 +388,7 @@ END:VCALENDAR'
         $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
 
         $this->authBackend = new \ESN\DAV\Auth\Backend\Mock('', null, $this->principalBackend, $this->server);
-        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f'));
+        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f','example.org'));
         $authPlugin = new \ESN\DAV\Auth\PluginMock($this->authBackend);
         $this->server->addPlugin($authPlugin);
 

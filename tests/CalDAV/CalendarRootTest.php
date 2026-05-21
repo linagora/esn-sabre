@@ -11,7 +11,6 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
     protected $sabredb;
     protected $principalBackend;
     protected $caldavBackend;
-    protected $tenantContext;
 
     function setUp(): void {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
@@ -23,8 +22,7 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
         $this->esndb->drop();
         $this->sabredb->drop();
 
-        $this->tenantContext = new \ESN\Utils\TenantContext();
-        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb, $this->tenantContext);
+        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
 
         $this->root = new CalendarRoot($this->principalBackend,

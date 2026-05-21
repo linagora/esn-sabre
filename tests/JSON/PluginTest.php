@@ -567,7 +567,7 @@ END:VCALENDAR
     }
 
     function testGETAddressBookHomesWithTechnicalUser() {
-        $this->authBackend->setAuthTenant(new AuthTenant('technicalUser', TenantType::Technical));
+        $this->authBackend->setAuthTenant(new AuthTenant('technicalUser', null, TenantType::Technical));
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',

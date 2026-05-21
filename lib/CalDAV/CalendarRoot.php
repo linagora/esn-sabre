@@ -1,6 +1,8 @@
 <?php
 
 namespace ESN\CalDAV;
+use \ESN\Utils\AuthTenant;
+
 
 #[\AllowDynamicProperties]
 class CalendarRoot extends \Sabre\DAV\Collection {
@@ -11,13 +13,16 @@ class CalendarRoot extends \Sabre\DAV\Collection {
     protected $principalBackend;
     protected $caldavBackend;
     protected $db;
-    protected $tenantContext;
+    protected ?AuthTenant $authTenant = null;
 
-    function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CalDAV\Backend\BackendInterface $caldavBackend, \MongoDB\Database $db, \ESN\Utils\TenantContext $tenantContext = null) {
+    function setAuthTenant(AuthTenant $authTenant) {
+        $this->authTenant = $authTenant;
+    }
+
+    function __construct(\Sabre\DAVACL\PrincipalBackend\BackendInterface $principalBackend,\Sabre\CalDAV\Backend\BackendInterface $caldavBackend, \MongoDB\Database $db) {
         $this->principalBackend = $principalBackend;
         $this->caldavBackend = $caldavBackend;
         $this->db = $db;
-        $this->tenantContext = $tenantContext;
     }
 
     public function getName() {
@@ -28,8 +33,9 @@ class CalendarRoot extends \Sabre\DAV\Collection {
         //throw new \Sabre\DAV\Exception\MethodNotAllowed('Listing children in this collection has been disabled');
         $homes = [];
         $userQuery = [];
-        if ($this->tenantContext !== null && $this->tenantContext->domainId !== null) {
-            $userQuery = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($this->tenantContext->domainId)];
+        $domainId = $this->authTenant?->domainId;
+        if ($domainId !== null) {
+            $userQuery = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
         }
         $res = $this->db->users->find($userQuery, [ 'projection' => ['_id' => 1 ]]);
         foreach ($res as $user) {
@@ -54,9 +60,10 @@ class CalendarRoot extends \Sabre\DAV\Collection {
 
         $res = $this->db->users->findOne(['_id' => $mongoName], ['projection' => ['domains.domain_id' => 1]]);
         if ($res) {
-            if ($this->tenantContext !== null && $this->tenantContext->domainId !== null && !empty($res['domains'])) {
+            $domainId = $this->authTenant?->domainId;
+            if ($domainId !== null && !empty($res['domains'])) {
                 $userDomainIds = array_map(fn($d) => (string)$d['domain_id'], (array)$res['domains']);
-                if (!in_array($this->tenantContext->domainId, $userDomainIds, true)) {
+                if (!in_array($domainId, $userDomainIds, true)) {
                     throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed');
                 }
             }
@@ -66,8 +73,9 @@ class CalendarRoot extends \Sabre\DAV\Collection {
 
         $res = $this->db->resources->findOne(['_id' => $mongoName], ['projection' => ['domain' => 1]]);
         if ($res) {
-            if ($this->tenantContext !== null && $this->tenantContext->domainId !== null && isset($res['domain'])) {
-                if ((string)$res['domain'] !== $this->tenantContext->domainId) {
+            $domainId = $this->authTenant?->domainId;
+            if ($domainId !== null && isset($res['domain'])) {
+                if ((string)$res['domain'] !== $domainId) {
                     throw new \Sabre\DAV\Exception\Forbidden('Cross-domain resource access is not allowed');
                 }
             }

@@ -2,7 +2,7 @@
 
 namespace ESN\DAVACL\PrincipalBackend;
 
-use \ESN\Utils\TenantContext as TenantContext;
+use \ESN\Utils\AuthTenant as AuthTenant;
 
 #[\AllowDynamicProperties]
 class MongoTest extends \PHPUnit\Framework\TestCase {
@@ -24,7 +24,6 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
     static function setUpBeforeClass(): void {
         $mc = new \MongoDB\Client(ESN_MONGO_ESNURI);
-        self::$tenant = new TenantContext();
         self::$esndb = $mc->{ESN_MONGO_ESNDB};
         self::$esndb->drop();
 

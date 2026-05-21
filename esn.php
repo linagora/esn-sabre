@@ -2,6 +2,8 @@
 
 require_once 'vendor/autoload.php';
 
+use \ESN\Utils\AuthTenant as AuthTenant;
+
 define('CONFIG_PATH', 'config.json');
 
 $config = json_decode(file_get_contents(CONFIG_PATH), true);
@@ -72,15 +74,14 @@ try {
     return;
 }
 
-// TenantContext
-$tenantContext = new ESN\Utils\TenantContext();
 
 // Backends
 $addressbookBackend = new ESN\CardDAV\Backend\Esn($sabreDb);
-$principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb, $tenantContext);
+$principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
 
 $schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 56;
 $calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend, $schedulingObjectTTLInDays);
+$calendarRoot = new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $esnDb);
 
 // Directory structure
 $tree = [
@@ -90,7 +91,7 @@ $tree = [
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_TECHNICAL_USER),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_DOMAINS)
     ]),
-    new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $esnDb, $tenantContext),
+    $calendarRoot,
     new ESN\CardDAV\AddressBookRoot($principalBackend, $addressbookBackend),
 ];
 
@@ -101,7 +102,10 @@ $server->addPlugin($loggerPlugin);
 
 // Auth backend
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm'], $principalBackend, $server);
-
+$server->on('auth:success',
+            function(AuthTenant $authTenant) use ($principalBackend) {
+                $principalBackend->setAuthTenant($authTenant);
+            });
 
 // listener
 $server->on("auth:success", function($authTenant) use ($addressbookBackend) {
@@ -110,7 +114,10 @@ $server->on("auth:success", function($authTenant) use ($addressbookBackend) {
 $server->on("auth:success", function($authTenant) use ($calendarBackend) {
     return $calendarBackend->getCalendarsForUser($authTenant->getPrincipal());
 });
-
+$server->on('auth:success',
+            function(AuthTenant $authTenant) use ($calendarRoot) {
+                $calendarRoot->setAuthTenant($authTenant);
+            });
 
 // Add stack trace to HTML response in dev mode
 if (SABRE_ENV === SABRE_ENV_DEV) {
@@ -188,7 +195,7 @@ $server->addPlugin(
 );
 
 // Calendar sharing support
-$server->addPlugin(new ESN\DAV\Sharing\Plugin($tenantContext, $esnDb));
+$server->addPlugin(new ESN\DAV\Sharing\Plugin($esnDb));
 $server->addPlugin(new Sabre\CalDAV\SharingPlugin());
 
 // Calendar scheduling support

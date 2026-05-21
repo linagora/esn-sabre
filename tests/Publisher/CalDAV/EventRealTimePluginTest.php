@@ -100,8 +100,7 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
             'END:VCALENDAR',
             '']);
 
-        $this->tenantContext = new \ESN\Utils\TenantContext();
-        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb, $this->tenantContext);
+        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
         $this->tree[] = new \Sabre\DAV\SimpleCollection('principals', [

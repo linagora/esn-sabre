@@ -529,8 +529,7 @@ class EsnMock extends Esn {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
         $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
         $this->esndb->drop();
-        $this->tenantContext = new \ESN\Utils\TenantContext();
-        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb, $this->tenantContext);
+        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
 
         $logger = \ESN\Log\EsnLoggerFactory::initLogger(null);
         $loggerPlugin = new \ESN\Log\ExceptionLoggerPlugin($logger);

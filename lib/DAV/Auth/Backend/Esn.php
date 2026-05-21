@@ -291,13 +291,13 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): array {
         try {
             $authorizationHeader = $request->getHeader("Authorization");
-            if ($authorizationHeader) {
-                try {
-                    $tenant = $this->checkJWT($authorizationHeader);
-                    return $this->checkSuccess($tenant);
-                } catch(AuthException $e) {
-                    // fallback to other authentification
-                }
+            $bearer = null;
+            if ($authorizationHeader)
+                if(preg_match('/^Bearer\s+(\S+)$/', $authorizationHeader, $matches))
+                      $bearer = $matches[1];
+            if ($bearer) {
+                $tenant = $this->checkJWT($bearer);
+                return $this->checkSuccess($tenant);
             }
 
             $tCalendarToken = $request->getHeader("TwakeCalendarToken");
@@ -332,15 +332,14 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     /*
      * @throw ESN\DAV\Auth\Backend\AuthException in case of authentification failure
      */
-    private function checkJWT($authorizationHeader) : AuthTenant {
+    private function checkJWT(string $token) : AuthTenant {
         // No public key = no jwt
         if (!file_exists(ESN_PUBLIC_KEY))
             throw new AuthException('no public key file used by checkJWT()');
 
-        $matchtoken = preg_match('/Bearer\s((.*)\.(.*)\.(.*))/', $authorizationHeader, $matches);
+        $matchtoken = preg_match('/^[A-Za-z0-9_-]{2,}(?:\.[A-Za-z0-9_-]{2,}){2}$/', $token);
         if (!$matchtoken)
             throw new AuthException('checkJWT: weird format');
-        $token = $matches[1];
         try {
             // Load esn's public key
             $key = file_get_contents(ESN_PUBLIC_KEY);

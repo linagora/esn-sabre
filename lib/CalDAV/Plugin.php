@@ -1,10 +1,37 @@
 <?php
 namespace ESN\CalDAV;
 
+use ESN\DAV\Sharing\Plugin as SPlugin;
+use Sabre\DAV\INode;
+use Sabre\DAV\PropFind;
+use Sabre\DAV\Server;
+use Sabre\DAVACL\Xml\Property\CurrentUserPrivilegeSet;
+
 /**
  * We can not directly use Sabre\CalDAV\Plugin because it's implementation of getCalendarHomeForPrincipal make a false assumption in the case of our DAV backend about the URL of users
  */
 class Plugin extends \Sabre\CalDAV\Plugin {
+
+    function initialize(Server $server) {
+        parent::initialize($server);
+        $server->on('propFind', [$this, 'propFindSharedCalendar'], 151);
+    }
+
+    function propFindSharedCalendar(PropFind $propFind, INode $node) {
+        if (!$node instanceof SharedCalendar || $node->getShareAccess() !== SPlugin::ACCESS_READ) {
+            return;
+        }
+
+        $prop = '{DAV:}current-user-privilege-set';
+
+        if ($propFind->getStatus($prop) === 200) {
+            $currentSet = $propFind->get($prop);
+            $filtered = array_values(array_filter($currentSet->getValue(), function ($p) {
+                return $p !== '{DAV:}write-properties';
+            }));
+            $propFind->set($prop, new CurrentUserPrivilegeSet($filtered), 200);
+        }
+    }
 
     /**
      * Returns the path to a principal's calendar home.

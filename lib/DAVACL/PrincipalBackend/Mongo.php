@@ -3,7 +3,6 @@
 namespace ESN\DAVACL\PrincipalBackend;
 
 use \ESN\Utils\Utils as Utils;
-use \ESN\Utils\TenantContext as TenantContext;
 use \ESN\Utils\TenantType as TenantType;
 use \ESN\Utils\AuthTenant as AuthTenant;
 
@@ -11,11 +10,14 @@ use \ESN\Utils\AuthTenant as AuthTenant;
 class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     protected $db;
     protected $collectionMap;
-    protected TenantContext $tenantContext;
+    protected ?AuthTenant $authTenant = null;
 
-    function __construct($db, TenantContext $tenantContext) {
+    function setAuthTenant(AuthTenant $authTenant) {
+        $this->authTenant = $authTenant;
+    }
+
+    function __construct($db) {
         $this->db = $db;
-        $this->tenantContext = $tenantContext;
         $this->collectionMap = [
             'users' => $this->db->users,
             'resources' => $this->db->resources,
@@ -29,8 +31,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         if (count($parts) == 2 && $parts[0] == 'principals' &&
               isset($this->collectionMap[$parts[1]])) {
             $query = [];
-            if ($parts[1] === 'users' && $this->tenantContext->domainId !== null) {
-                $query = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($this->tenantContext->domainId)];
+            $domainId = $this->authTenant?->domainId;
+            if ($parts[1] === 'users' && $domainId !== null) {
+                $query = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
             }
             $res = $this->collectionMap[$parts[1]]->find($query);
             foreach ($res as $obj) {
@@ -50,8 +53,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 return null;
             }
 
+            $domainId = $this->authTenant?->domainId;
             if ($parts[1] == 'domains') {
-                if ($this->tenantContext->domainId !== null && $parts[2] !== $this->tenantContext->domainId) {
+                if ($domainId !== null && $parts[2] !== $domainId) {
                     throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
                 }
             } else if ($parts[1] == 'resources') {
@@ -60,12 +64,12 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     $obj['domain'] = $domain;
                 }
             } else if ($parts[1] == 'users' && !empty($obj[ 'domains' ])) {
-                if ($this->tenantContext->domainId !== null) {
+                if ($domainId !== null) {
                     $userDomainIds = array_map(
                         fn($d) => (string)$d['domain_id'],
                         (array)$obj['domains']
                     );
-                    if (!in_array($this->tenantContext->domainId, $userDomainIds, true)) {
+                    if (!in_array($domainId, $userDomainIds, true)) {
                         throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
                     }
                 }
@@ -187,7 +191,6 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         if (!$domain) {
             return null;
         }
-        $this->tenantContext->domainId = (string)$domainObjectId;
         return new AuthTenant($user['_id'], (string) $domainObjectId, $tenantType);
     }
 
@@ -395,8 +398,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             }
         }
 
-        if ($this->tenantContext->domainId !== null) {
-            $query[] = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($this->tenantContext->domainId)];
+        $domainId = $this->authTenant?->domainId;
+        if ($domainId !== null) {
+            $query[] = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
         }
 
         return $this->queryPrincipals('users', $this->db->users, $query, $test);
@@ -418,5 +422,5 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         return $administrators;
-    }
-}
+    }}
+        

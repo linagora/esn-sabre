@@ -281,8 +281,7 @@ ICS;
     }
 
     private function initServer(): array {
-        $tenantContext = new \ESN\Utils\TenantContext();
-        $principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb, $tenantContext);
+        $principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
         $caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
 
         $tree[] = new \Sabre\DAV\SimpleCollection('principals', [

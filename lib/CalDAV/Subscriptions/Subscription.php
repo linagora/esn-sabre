@@ -108,10 +108,14 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
 
         $principalId = $parts[1];
         $calendarUri = $parts[2];
-        $principalUri = 'principals/users/' . $principalId;
 
-        // Get the source calendar
-        $calendars = $this->caldavBackend->getCalendarsForUser($principalUri);
+        $principalPrefix = 'principals/users/';
+        $principalBackend = $this->caldavBackend->getPrincipalBackend();
+        if ($principalBackend && $principalBackend->getPrincipalByPath('principals/resources/' . $principalId)) {
+            $principalPrefix = 'principals/resources/';
+        }
+
+        $calendars = $this->caldavBackend->getCalendarsForUser($principalPrefix . $principalId);
         foreach ($calendars as $calendar) {
             if ($calendar['uri'] === $calendarUri) {
                 $this->sourceCalendarInfo = $calendar;

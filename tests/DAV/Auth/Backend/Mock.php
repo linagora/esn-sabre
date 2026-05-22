@@ -23,7 +23,7 @@ class Mock implements \Sabre\DAV\Auth\Backend\BackendInterface
     public $principal = 'principals/admin';
     public $tenant = null;
 
-    function __construct($apiroot, ?string $realm = null, $principalBackend, $server) {
+    function __construct($apiroot, ?string $realm = null, $principalBackend, $server, $debug) {
         $this->apiroot = $apiroot;
         $this->principalBackend = $principalBackend;
         $this->server = $server;

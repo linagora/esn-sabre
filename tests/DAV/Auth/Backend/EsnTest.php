@@ -360,7 +360,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         list($rv, $msg) = $esnauth->check($request, $response);
 
         $this->assertFalse($rv);
-        $this->assertEquals("Username or password was incorrect", $msg);
+        $this->assertEquals("Bad credentials", $msg);
 
         $GLOBALS['__ldap_bind_behavior'] = 'default';
     }
@@ -380,7 +380,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         list($rv, $msg) = $esnauth->check($request, $response);
 
         $this->assertFalse($rv);
-        $this->assertEquals("Username or password was incorrect", $msg);
+        $this->assertEquals("Bad credentials", $msg);
 
         $GLOBALS['__ldap_bind_behavior'] = 'default';
     }
@@ -446,7 +446,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         [$rv, $msg] = $esnauth->check($request, $response);
 
         $this->assertFalse($rv);
-        $this->assertEquals('Username or password was incorrect', $msg);
+        $this->assertEquals('Bad admin password', $msg);
     }
 
     function testAdminImpersonationWithResourceEmail() {
@@ -519,7 +519,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         [$rv, $msg] = $esnauth->check($request, $response);
 
         $this->assertFalse($rv);
-        $this->assertEquals('Username or password was incorrect', $msg);
+        $this->assertEquals('Bad credentials', $msg);
     }
 
 }
@@ -538,7 +538,7 @@ class EsnMock extends Esn {
         $this->server->addPlugin($loggerPlugin);
 
         require_once ESN_TEST_VENDOR . '/sabre/http/tests/HTTP/ClientTest.php';
-        parent::__construct($apiroot, "Realm", $this->principalBackend, $this->server);
+        parent::__construct($apiroot, "Realm", $this->principalBackend, $this->server, true);
         $this->httpClient = new \Sabre\HTTP\ClientMock();
     }
 

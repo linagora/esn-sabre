@@ -101,7 +101,7 @@ $server = new Sabre\DAV\Server($tree);
 $server->addPlugin($loggerPlugin);
 
 // Auth backend
-$authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm'], $principalBackend, $server);
+$authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm'], $principalBackend, $server, SABRE_ENV === SABRE_ENV_DEV);
 $server->on('auth:success',
             function(AuthTenant $authTenant) use ($principalBackend) {
                 $principalBackend->setAuthTenant($authTenant);

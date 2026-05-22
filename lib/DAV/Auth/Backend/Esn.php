@@ -28,6 +28,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     protected $apiroot;
     protected $principalBackend;
     protected $server;
+    protected bool $debug;
 
     /**
      * Authentication Realm.
@@ -42,11 +43,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     protected string $technicalPrincipal = 'principals/technicalUser';
     protected string $technicalUserType = 'technical';
 
-    function __construct($apiroot, ?string $realm = null, $principalBackend, $server) {
+    function __construct($apiroot, ?string $realm = null, $principalBackend, $server, bool $debug = false) {
         $this->apiroot = $apiroot;
         $this->httpClient = new HTTP\Client();
         $this->principalBackend = $principalBackend;
         $this->server = $server;
+        $this->debug = $debug;
 
         if (!is_null($realm)) {
             $this->realm = $realm;
@@ -302,23 +304,16 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
             $tCalendarToken = $request->getHeader("TwakeCalendarToken");
             if ($tCalendarToken) {
-                try {
-                    $tenant = $this->checkAuthByTCalendarToken($tCalendarToken);
-                } catch(AuthException $e) {
-                    // clear exception message returned to user
-                    throw new AuthException('Invalid Token');
-                }
+                $tenant = $this->checkAuthByTCalendarToken($tCalendarToken);
                 return $this->checkSuccess($tenant);
             }
-            try {
-                $tenant = $this->checkBasicAuth($request, $response);
-                return $this->checkSuccess($tenant);
-            } catch(AuthException $e) {
-                // clear exception message returned to user
-                throw new AuthException("Username or password was incorrect");
-            }
+            $tenant = $this->checkBasicAuth($request, $response);
+            return $this->checkSuccess($tenant);
         } catch(AuthException $e) {
-            return [false, $e->getMessage()];
+            if($this->debug)
+                return [false, $e->getMessage()];
+            // clear exception message returned to user
+            return [false, "Authentification failure"];
         } catch(\Exception $e) {
             $msg = $e->getMessage();
             $this->server->getLogger()->error(

@@ -387,7 +387,7 @@ END:VCALENDAR'
         $this->server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
         $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
 
-        $this->authBackend = new \ESN\DAV\Auth\Backend\Mock('', null, $this->principalBackend, $this->server);
+        $this->authBackend = new \ESN\DAV\Auth\Backend\Mock('', null, $this->principalBackend, $this->server, true);
         $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f','example.org'));
         $authPlugin = new \ESN\DAV\Auth\PluginMock($this->authBackend);
         $this->server->addPlugin($authPlugin);

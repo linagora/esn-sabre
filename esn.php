@@ -109,10 +109,18 @@ $server->on('auth:success',
 
 // listener
 $server->on("auth:success", function($authTenant) use ($addressbookBackend) {
-    return $addressbookBackend->getAddressBooksForUser($authTenant->getPrincipal());
+    if ($authTenant->tenantType === \ESN\Utils\TenantType::Technical) {
+        return [];
+    }
+
+    return $addressbookBackend->getAddressBooksForUser((string) $authTenant->getPrincipal());
 });
 $server->on("auth:success", function($authTenant) use ($calendarBackend) {
-    return $calendarBackend->getCalendarsForUser($authTenant->getPrincipal());
+    if ($authTenant->tenantType === \ESN\Utils\TenantType::Technical) {
+        return [];
+    }
+
+    return $calendarBackend->getCalendarsForUser((string) $authTenant->getPrincipal());
 });
 $server->on('auth:success',
             function(AuthTenant $authTenant) use ($calendarRoot) {

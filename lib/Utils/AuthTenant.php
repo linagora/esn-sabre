@@ -6,7 +6,7 @@ class AuthTenant
 {
     public readonly TenantType $tenantType;
     public readonly string $userId;
-    public readonly ?string $domainId;
+    public readonly string $domainId;
     protected readonly Principal $principal;
 
     protected $prefixes = [
@@ -17,7 +17,7 @@ class AuthTenant
 
     public function __construct(
         string $userId,
-        ?string $domainId,
+        string $domainId,
         TenantType $tenantType = TenantType::User
     ) {
         $this->tenantType = $tenantType;

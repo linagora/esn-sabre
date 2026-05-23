@@ -95,7 +95,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         $domainId =  $user->domainId ?? null;
         if(!$domainId)
             throw new AuthException('decodeResponse(): unknown domainId');
-        $tenant = new AuthTenant($user->_id, null, $type == $this->technicalUserType ? TenantType::Technical : TenantType::User);
+        $tenant = new AuthTenant($user->_id, $domainId, $type == $this->technicalUserType ? TenantType::Technical : TenantType::User);
         if (isset($user->domain)) {
             if (!filter_var($user->domain, FILTER_VALIDATE_DOMAIN)) {
                 error_log("decodeResponse: invalid domain '$user->domain' for user '$user->_id'");

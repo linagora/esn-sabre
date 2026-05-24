@@ -567,7 +567,12 @@ END:VCALENDAR
     }
 
     function testGETAddressBookHomesWithTechnicalUser() {
-        $this->authBackend->setAuthTenant(new AuthTenant('technicalUser', null, TenantType::Technical));
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+        $this->esndb->users->updateMany(
+            [],
+            [ '$set' => [ 'domains' => [ [ 'domain_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID) ] ] ] ]
+        );
+        $this->authBackend->setAuthTenant(new AuthTenant('technicalUser', $DOMAIN_ID, TenantType::Technical));
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',

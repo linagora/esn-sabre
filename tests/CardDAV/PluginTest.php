@@ -37,7 +37,12 @@ class PluginTest extends PluginTestBase {
     }
 
     function testGETAddressBookHomesWithTechnicalUser() {
-        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', null, TenantType::Technical));
+        $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
+        $this->esndb->users->updateMany(
+            [],
+            [ '$set' => [ 'domains' => [ [ 'domain_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID) ] ] ] ]
+        );
+        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', $DOMAIN_ID, TenantType::Technical));
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
@@ -548,7 +553,7 @@ class PluginTest extends PluginTestBase {
 
     function testCreateCardInDomainMembersAsTechnicalUserShouldSucceed() {
         $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
-        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', null, TenantType::Technical));
+        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', $DOMAIN_ID, TenantType::Technical));
 
         // Create domain
         $this->esndb->domains->insertOne([

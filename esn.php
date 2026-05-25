@@ -74,7 +74,15 @@ try {
 
 // Backends
 $addressbookBackend = new ESN\CardDAV\Backend\Esn($sabreDb);
+$server = null;
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
+
+if (principalPrivacyEnabled()) {
+    $principalBackend = new ESN\DAVACL\PrincipalBackend\PrivatePrincipalBackend(
+        $principalBackend,
+        currentPrincipalProvider($server)
+    );
+}
 
 $schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 56;
 $calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend, $schedulingObjectTTLInDays);
@@ -271,4 +279,22 @@ function getDatabaseName($dbKind, $connectionString, $dbConfig) {
         // support old style database name
         return $dbConfig[$dbKind]['db'];
     }
+}
+
+function principalPrivacyEnabled() {
+    $value = getenv('PRINCIPAL_PRIVACY');
+
+    if ($value === false || trim($value) === '') {
+        // Principal privacy is a security opt-out: missing env keeps it enabled.
+        return true;
+    }
+
+    return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true;
+}
+
+function currentPrincipalProvider(&$server) {
+    return function() use (&$server) {
+        $authPlugin = $server ? $server->getPlugin('auth') : null;
+        return $authPlugin ? $authPlugin->getCurrentPrincipal() : null;
+    };
 }

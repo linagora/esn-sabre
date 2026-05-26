@@ -119,6 +119,24 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals([['uri' => $domainPrincipal]], $backend->getPrincipalsByPrefix('principals/domains'));
     }
 
+    function testFindByUriShouldDelegateExactLookup() {
+        $mongo = $this->getMockBuilder(Mongo::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['findByUri'])
+            ->getMock();
+
+        $mongo->expects($this->once())
+            ->method('findByUri')
+            ->with('mailto:user@example.com', 'principals/users')
+            ->willReturn('principals/users/123');
+
+        $backend = new PrivatePrincipalBackend($mongo, function() {
+            return 'principals/users/456';
+        });
+
+        $this->assertEquals('principals/users/123', $backend->findByUri('mailto:user@example.com', 'principals/users'));
+    }
+
     function testShouldExposeCustomMongoLookupMethods() {
         $mongo = $this->getMockBuilder(Mongo::class)
             ->disableOriginalConstructor()

@@ -23,6 +23,12 @@ class PrivatePrincipalBackend extends AbstractBackend {
         return $this->principalBackend->getPrincipalByPath($path);
     }
 
+    function findByUri($uri, $principalPrefix) {
+        // Principal privacy limits discovery, but Sabre still needs exact mailto
+        // resolution for authorized share and scheduling workflows.
+        return $this->principalBackend->findByUri($uri, $principalPrefix);
+    }
+
     function updatePrincipal($path, PropPatch $propPatch) {
         return $this->principalBackend->updatePrincipal($path, $propPatch);
     }

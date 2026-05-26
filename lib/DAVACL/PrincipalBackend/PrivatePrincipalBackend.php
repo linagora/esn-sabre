@@ -3,7 +3,10 @@
 namespace ESN\DAVACL\PrincipalBackend;
 
 // Keep Mongo as the DAO and apply principal privacy only when this backend is selected in esn.php.
-class PrivatePrincipalBackend extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
+use Sabre\DAV\PropPatch;
+use Sabre\DAVACL\PrincipalBackend\AbstractBackend;
+
+class PrivatePrincipalBackend extends AbstractBackend {
     const TECHNICAL_PRINCIPAL = 'principals/technicalUser';
     const DISPLAYNAME = '{DAV:}displayname';
     const EMAIL_ADDRESS = '{http://sabredav.org/ns}email-address';
@@ -16,48 +19,12 @@ class PrivatePrincipalBackend extends \Sabre\DAVACL\PrincipalBackend\AbstractBac
         $this->currentPrincipalProvider = $currentPrincipalProvider;
     }
 
-    function getPrincipalsByPrefix($prefixPath) {
-        if ($this->isTechnicalPrincipal()) {
-            return $this->principalBackend->getPrincipalsByPrefix($prefixPath);
-        }
-
-        $principals = [];
-
-        foreach ($this->visiblePrincipalPaths($prefixPath) as $principalPath) {
-            $principal = $this->principalBackend->getPrincipalByPath($principalPath);
-
-            if ($principal) {
-                $principals[] = $principal;
-            }
-        }
-
-        return $principals;
-    }
-
     function getPrincipalByPath($path) {
         return $this->principalBackend->getPrincipalByPath($path);
     }
 
-    function updatePrincipal($path, \Sabre\DAV\PropPatch $propPatch) {
+    function updatePrincipal($path, PropPatch $propPatch) {
         return $this->principalBackend->updatePrincipal($path, $propPatch);
-    }
-
-    function searchPrincipals($prefixPath, array $searchProperties, $test = 'allof') {
-        if ($this->isTechnicalPrincipal()) {
-            return $this->principalBackend->searchPrincipals($prefixPath, $searchProperties, $test);
-        }
-
-        $principals = [];
-
-        foreach ($this->visiblePrincipalPaths($prefixPath) as $principalPath) {
-            $principal = $this->principalBackend->getPrincipalByPath($principalPath);
-
-            if ($principal && $this->principalMatches($principal, $searchProperties, $test)) {
-                $principals[$principal['uri']] = $principal['uri'];
-            }
-        }
-
-        return array_values($principals);
     }
 
     function getGroupMemberSet($principal) {
@@ -78,6 +45,42 @@ class PrivatePrincipalBackend extends \Sabre\DAVACL\PrincipalBackend\AbstractBac
 
     function getPrincipalIdByResourceEmail($email) {
         return $this->principalBackend->getPrincipalIdByResourceEmail($email);
+    }
+
+    function getPrincipalsByPrefix($prefixPath) {
+        if ($this->isTechnicalPrincipal()) {
+            return $this->principalBackend->getPrincipalsByPrefix($prefixPath);
+        }
+
+        $principals = [];
+
+        foreach ($this->visiblePrincipalPaths($prefixPath) as $principalPath) {
+            $principal = $this->principalBackend->getPrincipalByPath($principalPath);
+
+            if ($principal) {
+                $principals[] = $principal;
+            }
+        }
+
+        return $principals;
+    }
+
+    function searchPrincipals($prefixPath, array $searchProperties, $test = 'allof') {
+        if ($this->isTechnicalPrincipal()) {
+            return $this->principalBackend->searchPrincipals($prefixPath, $searchProperties, $test);
+        }
+
+        $principals = [];
+
+        foreach ($this->visiblePrincipalPaths($prefixPath) as $principalPath) {
+            $principal = $this->principalBackend->getPrincipalByPath($principalPath);
+
+            if ($principal && $this->principalMatches($principal, $searchProperties, $test)) {
+                $principals[$principal['uri']] = $principal['uri'];
+            }
+        }
+
+        return array_values($principals);
     }
 
     private function visiblePrincipalPaths($prefixPath) {

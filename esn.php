@@ -78,10 +78,7 @@ $server = null;
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
 
 if (principalPrivacyEnabled()) {
-    $principalBackend = new ESN\DAVACL\PrincipalBackend\PrivatePrincipalBackend(
-        $principalBackend,
-        currentPrincipalProvider($server)
-    );
+    $principalBackend = new ESN\DAVACL\PrincipalBackend\PrivatePrincipalBackend($principalBackend, currentPrincipalProvider($server));
 }
 
 $schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 56;
@@ -282,14 +279,16 @@ function getDatabaseName($dbKind, $connectionString, $dbConfig) {
 }
 
 function principalPrivacyEnabled() {
-    $value = getenv('PRINCIPAL_PRIVACY');
+    $rawPrivacyEnv = getenv('PRINCIPAL_PRIVACY');
 
-    if ($value === false || trim($value) === '') {
-        // Principal privacy is a security opt-out: missing env keeps it enabled.
+    if ($rawPrivacyEnv === false || trim($rawPrivacyEnv) === '') {
+        // Missing or empty env keeps privacy enabled; only an explicit false disables it.
         return true;
     }
 
-    return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true;
+    $privacyEnabled = filter_var($rawPrivacyEnv, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+    return $privacyEnabled ?? true;
 }
 
 function currentPrincipalProvider(&$server) {

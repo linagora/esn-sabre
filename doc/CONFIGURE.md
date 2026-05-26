@@ -42,6 +42,14 @@ Feature flag to enable or disable admin impersonation.
    This flag allows disabling admin impersonation entirely on public Sabre deployments
    to prevent impersonation over the internet.
 
+Feature flag to restrict DAV principal discovery.
+ - PRINCIPAL_PRIVACY
+
+   - unset or `true`: restrict DAV principal discovery to the current principal and its domain principals (default)
+   - `false`: disable the restriction as a fast rollback path
+
+   This prevents DAV clients from enumerating other users or resources and leaking internal principal ids.
+
 Sabre being written in PHP, it supports per-request MongoDB indexes provisioning (defaults to `true`), which can be disabled by setting the SHOULD_CREATE_INDEX environment variable to `false`. This is recommended in production once indexes are provisioned.
 
 ## Scheduling

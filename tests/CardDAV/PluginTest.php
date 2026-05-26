@@ -240,6 +240,12 @@ class PluginTest extends PluginTestBase {
             ]
         ]);
 
+        $this->esndb->users->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($this->userTestId1)],
+            ['$addToSet' => ['domains' => ['domain_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID)]]]
+        );
+        $this->authBackend->setAuthTenant(new AuthTenant($this->userTestId1, $DOMAIN_ID));
+
         $domainBook1Id = $this->createAddressBook('principals/domains/' . $DOMAIN_ID, 'domainAB');
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(

@@ -64,7 +64,7 @@ class ShareGroupAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
     }
 
     function testShareGroupAddressBookForGroupAdministratorRespond405() {
-        $this->authBackend->setPrincipal('principals/users/' . self::ADMINISTRATOR_ID_1);
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant(self::ADMINISTRATOR_ID_1, self::DOMAIN_ID));
 
         $response = $this->makeRequest(
             'POST',
@@ -101,7 +101,7 @@ class ShareGroupAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
             'domains' => [ [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ] ]
         ]);
 
-        $this->authBackend->setPrincipal('principals/users/' . self::ADMINISTRATOR_ID_1);
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant(self::ADMINISTRATOR_ID_1, self::DOMAIN_ID));
 
         $response = $this->makeRequest(
             'POST',

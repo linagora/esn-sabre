@@ -109,7 +109,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
 
         $this->carddavBackend->createAddressBook('principals/domains/' . $DOMAIN_ID, 'gab', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
 
-        $this->authBackend->setPrincipal('principals/users/' . $USER_ID);
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant($USER_ID, $DOMAIN_ID));
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPFIND',
@@ -140,7 +140,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         foreach($xmlResponses as $index => $xmlResponse) {
             $responseProps = $xmlResponse->getResponseProperties();
             $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
-            
+
             if (isset($resourceType) && ($resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook"))) {
                 $displayNames[] = $responseProps[200]['{DAV:}displayname'];
             }
@@ -187,7 +187,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             '{DAV:}displayname' => 'Domain address book'
         ]);
 
-        $this->authBackend->setPrincipal('principals/users/' . $USER_ID);
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant($USER_ID, $DOMAIN_ID));
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPFIND',
@@ -263,7 +263,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             '{http://open-paas.org/contacts}state' => 'disabled'
         ]);
 
-        $this->authBackend->setPrincipal('principals/users/' . $USER_ID);
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant($USER_ID, $DOMAIN_ID));
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPFIND',

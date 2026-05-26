@@ -123,7 +123,6 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
         $domainID = '54313fcc398fef406b0041b8';
         $userID = '54313fcc398fef406b0041b7';
 
-        $this->authBackend->setPrincipal('principals/users/' . $userID);
         $this->esndb->domains->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId($domainID),
             'administrators' => [
@@ -144,6 +143,8 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
                     ],
             'domains' => [ [ 'domain_id' => $domainID] ]
         ]);
+
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant($userID, $domainID));
 
         $publicBookId = $this->carddavBackend->createAddressBook(
             'principals/domains/' . $domainID,

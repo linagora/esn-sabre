@@ -404,9 +404,25 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $domainId = $this->authTenant?->domainId;
         if (!$domainId)
             throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
-        $query[] = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
 
-        return $this->queryPrincipals('users', $this->db->users, $query, $test);
+        if (empty($query)) {
+            return [];
+        }
+
+        $domainFilter = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
+        if ($test === 'anyof') {
+            $finalQuery = ['$and' => [['$or' => $query], $domainFilter]];
+        } else {
+            $query[] = $domainFilter;
+            $finalQuery = ['$and' => $query];
+        }
+
+        $principals = [];
+        $res = $this->db->users->find($finalQuery, ['projection' => ['_id' => 1]]);
+        foreach ($res as $obj) {
+            $principals[] = 'principals/users/' . $obj['_id'];
+        }
+        return $principals;
     }
 
     private function getAdministratorsForGroup($principal) {
@@ -419,8 +435,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 [ 'projection' => [ 'administrators' => 1 ]]
             );
 
-            foreach ($domain['administrators'] as $administrator) {
-                $administrators[] = 'principals/users/' . (string)$administrator['user_id'];
+            if ($domain && isset($domain['administrators'])) {
+                foreach ($domain['administrators'] as $administrator) {
+                    $administrators[] = 'principals/users/' . (string)$administrator['user_id'];
+                }
             }
         }
 

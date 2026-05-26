@@ -2,6 +2,8 @@
 
 namespace ESN\CalDAV;
 
+use \ESN\Utils\AuthTenant;
+
 /**
  * @medium
  */
@@ -11,6 +13,9 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
     protected $sabredb;
     protected $principalBackend;
     protected $caldavBackend;
+
+    const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
+    const USER_ID = '54313fcc398fef406b0041b6';
 
     function setUp(): void {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
@@ -27,6 +32,7 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
 
         $this->root = new CalendarRoot($this->principalBackend,
                                        $this->caldavBackend, $this->esndb);
+        $this->root->setAuthTenant(new AuthTenant(self::USER_ID, self::DOMAIN_ID));
     }
 
     function testConstruct() {
@@ -36,7 +42,10 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testChildren() {
-        $this->esndb->users->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6') ]);
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6'),
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)]]
+        ]);
         $this->esndb->resources->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('82113fcc398fef406b0041b7') ]);
 
         $children = $this->root->getChildren();

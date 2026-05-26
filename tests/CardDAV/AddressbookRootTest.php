@@ -27,13 +27,14 @@ class AddressbookRootTest extends \PHPUnit\Framework\TestCase {
         $this->sabredb->drop();
 
         $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
+        $this->principalBackend->setAuthTenant(new \ESN\Utils\AuthTenant(self::USER_ID, self::DOMAIN_ID));
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
 
         $this->root = new AddressBookRoot($this->principalBackend, $this->carddavBackend);
 
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID),
-            'domains' => []
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)]]
         ]);
         $this->esndb->domains->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),

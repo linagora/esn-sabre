@@ -16,8 +16,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $this->authTenant = $authTenant;
     }
 
-    function __construct($db) {
+    function __construct($db, ?AuthTenant $authTenant = null) {
         $this->db = $db;
+        $this->authTenant = $authTenant;
         $this->collectionMap = [
             'users' => $this->db->users,
             'resources' => $this->db->resources,

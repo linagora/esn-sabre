@@ -10,11 +10,13 @@ require_once ESN_TEST_BASE . '/Sabre/CardDAV/Backend/Mock.php';
 require_once ESN_TEST_BASE . '/Sabre/DAVServerTestBase.php';
 require_once ESN_TEST_BASE . '/Sabre/DAV/Auth/Backend/Mock.php';
 use \ESN\Utils\Utils as Utils;
+use \ESN\Utils\AuthTenant;
 
 #[\AllowDynamicProperties]
 class IMipPluginTestBase extends \PHPUnit\Framework\TestCase {
     protected $amqpPublisher;
     const USER_1_CALENDAR_NAME = "calendar1";
+    const DOMAIN_ID = '54b64eadf6d7d8e41d263e7a';
 
     protected $iCalAttendees;
 
@@ -64,6 +66,7 @@ class IMipPluginTestBase extends \PHPUnit\Framework\TestCase {
 
         $this->user1Id = '54b64eadf6d7d8e41d263e0f';
         $this->user1Email = 'robertocarlos@realmadrid.com';
+        $domainObjectId = new \MongoDB\BSON\ObjectId(self::DOMAIN_ID);
         $user1 = [
             '_id' => new \MongoDB\BSON\ObjectId($this->user1Id),
             'firstname' => 'Roberto',
@@ -76,7 +79,7 @@ class IMipPluginTestBase extends \PHPUnit\Framework\TestCase {
                     ]
                 ]
             ],
-            'domains' => []
+            'domains' => [['domain_id' => $domainObjectId]]
         ];
         $this->user2Id = '54b64eadf6d7d8e41d263e0e';
         $this->user2Email = 'rudyvoller@om.com';
@@ -92,7 +95,7 @@ class IMipPluginTestBase extends \PHPUnit\Framework\TestCase {
                     ]
                 ]
             ],
-            'domains' => []
+            'domains' => [['domain_id' => $domainObjectId]]
         ];
 
         $esndb->users->insertOne($user1);
@@ -175,17 +178,16 @@ class IMipPluginTestBase extends \PHPUnit\Framework\TestCase {
 
     private function initServer(\MongoDB\Database $esndb, \MongoDB\Database $sabredb): array
     {
-        $principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($esndb);
+        $authTenant = new AuthTenant('54b64eadf6d7d8e41d263e0f', self::DOMAIN_ID);
+        $principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($esndb, $authTenant);
         $caldavBackend = new \ESN\CalDAV\Backend\Mongo($sabredb);
+        $calendarRoot = new \ESN\CalDAV\CalendarRoot($principalBackend, $caldavBackend, $esndb);
+        $calendarRoot->setAuthTenant($authTenant);
 
         $tree[] = new \Sabre\DAV\SimpleCollection('principals', [
             new \Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/users')
         ]);
-        $tree[] = new \ESN\CalDAV\CalendarRoot(
-            $principalBackend,
-            $caldavBackend,
-            $esndb
-        );
+        $tree[] = $calendarRoot;
 
         $this->server = new \Sabre\DAV\Server($tree);
         $this->server->sapi = new \Sabre\HTTP\SapiMock();

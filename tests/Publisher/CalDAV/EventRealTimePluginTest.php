@@ -16,6 +16,7 @@ require_once ESN_TEST_BASE . '/Sabre/DAV/Auth/Backend/Mock.php';
 class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "calendars/456456/123123/uid.ics";
+    const DOMAIN_ID = '54b64eadf6d7d8e41d263e7a';
     const PARENT = 'calendars/456456/123123';
     const ETAG = 'The etag';
 
@@ -49,6 +50,10 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->sabredb->drop();
         $this->esndb->drop();
 
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
+            'name' => 'example.com'
+        ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0f'),
             'firstname' => 'Roberto',
@@ -61,7 +66,7 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
                     ]
                 ]
             ],
-            'domains' => []
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)]]
         ]);
         $this->esndb->resources->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0e'),
@@ -100,7 +105,8 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
             'END:VCALENDAR',
             '']);
 
-        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
+        $authTenant = new \ESN\Utils\AuthTenant('54b64eadf6d7d8e41d263e0f', self::DOMAIN_ID);
+        $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb, $authTenant);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Mongo($this->sabredb);
         $this->tree[] = new \Sabre\DAV\SimpleCollection('principals', [
@@ -108,11 +114,13 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
           new \Sabre\CalDAV\Principal\Collection($this->principalBackend, 'principals/resources'),
           new \Sabre\CalDAV\Principal\Collection($this->principalBackend, 'principals/domains')
         ]);
-        $this->tree[] = new \ESN\CalDAV\CalendarRoot(
+        $calendarRoot = new \ESN\CalDAV\CalendarRoot(
             $this->principalBackend,
             $this->caldavBackend,
             $this->esndb
         );
+        $calendarRoot->setAuthTenant($authTenant);
+        $this->tree[] = $calendarRoot;
 
         $this->server = new \Sabre\DAV\Server($this->tree);
         $this->server->sapi = new \Sabre\HTTP\SapiMock();

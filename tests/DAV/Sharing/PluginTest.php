@@ -2,6 +2,8 @@
 
 namespace ESN\DAV\Sharing;
 
+use \ESN\Utils\AuthTenant;
+
 require_once ESN_TEST_BASE. '/DAV/ServerMock.php';
 
 class PluginTest extends \ESN\DAV\ServerMock {
@@ -14,6 +16,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->sharePlugin = new Plugin();
         $this->server->addPlugin($this->sharePlugin);
 
+        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', SERVER_MOCK_DOMAIN_ID));
 
         $this->aclMock = $this->getMockBuilder(\Sabre\DAVACL\Plugin::class)
                        ->onlyMethods(['checkPrivileges'])

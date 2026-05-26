@@ -27,6 +27,8 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         self::$esndb = $mc->{ESN_MONGO_ESNDB};
         self::$esndb->drop();
 
+        self::$tenant = new AuthTenant(self::USER_ID, self::DOMAIN_ID);
+
         self::$domainMembers = [
             'principals/users/' . self::USER_ID,
             'principals/users/' . self::USER_WITH_NO_LASTNAME,

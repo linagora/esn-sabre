@@ -37,6 +37,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
             if ($parts[1] === 'users') {
                 $query = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
+            } else if ($parts[1] === 'domains') {
+                $query = ['_id' => new \MongoDB\BSON\ObjectId($domainId)];
             }
             $res = $this->collectionMap[$parts[1]]->find($query);
             foreach ($res as $obj) {

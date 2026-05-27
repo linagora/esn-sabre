@@ -190,7 +190,8 @@ class IMipPluginTestBase extends \PHPUnit\Framework\TestCase {
         $calendarRoot->setAuthTenant($authTenant);
 
         $tree[] = new \Sabre\DAV\SimpleCollection('principals', [
-            new \Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/users')
+            new \Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/users'),
+            new \Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/domains')
         ]);
         $tree[] = $calendarRoot;
 

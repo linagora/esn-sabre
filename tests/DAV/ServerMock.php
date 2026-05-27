@@ -348,6 +348,11 @@ END:VCALENDAR'
             'name' => 'cal resource'
         ]);
 
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(SERVER_MOCK_DOMAIN_ID),
+            'name' => 'example.org'
+        ]);
+
         $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
         $this->caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
         $this->carddavBackend = new \ESN\CardDAV\Backend\Esn($this->sabredb);

@@ -55,7 +55,7 @@ cleanup() {
 trap cleanup EXIT  # finally: sera exécuté *quoi qu'il arrive*
 
 javatest() {
-    git clone -b tmp/forIssue358 https://github.com/vttranlina/twake-calendar-integration-tests.git it-tests ||  exit 1
+    git clone https://github.com/linagora/twake-calendar-integration-tests.git it-tests ||  exit 1
     cd it-tests || exit 1
     bash pre-build.sh esn_sabre_test || exit 1
     mvn clean install -Dapi.version=1.43 -Dtest=com.linagora.dav.sabrev4_7.** || exit 1

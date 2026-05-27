@@ -3,6 +3,8 @@
 namespace ESN\DAVACL\PrincipalBackend;
 
 // Keep Mongo as the DAO and apply principal privacy only when this backend is selected in esn.php.
+use ESN\Utils\AuthTenant;
+use ESN\Utils\TenantType;
 use Sabre\DAV\PropPatch;
 use Sabre\DAVACL\PrincipalBackend\AbstractBackend;
 
@@ -43,12 +45,16 @@ class PrivatePrincipalBackend extends AbstractBackend {
         return $this->principalBackend->setGroupMemberSet($principal, $members);
     }
 
-    function getPrincipalIdByEmail($email) {
-        return $this->principalBackend->getPrincipalIdByEmail($email);
+    function setAuthTenant(AuthTenant $authTenant) {
+        return $this->principalBackend->setAuthTenant($authTenant);
     }
 
-    function getPrincipalIdByResourceEmail($email) {
-        return $this->principalBackend->getPrincipalIdByResourceEmail($email);
+    function getAuthTenantByEmail(string $email, TenantType $tenantType = TenantType::User): ?AuthTenant {
+        return $this->principalBackend->getAuthTenantByEmail($email, $tenantType);
+    }
+
+    function getAuthTenantByResourceEmail($email, TenantType $tenantType = TenantType::Resources): ?AuthTenant {
+        return $this->principalBackend->getAuthTenantByResourceEmail($email, $tenantType);
     }
 
     function getPrincipalsByPrefix($prefixPath) {

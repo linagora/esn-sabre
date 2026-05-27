@@ -200,25 +200,32 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
     function testShouldExposeCustomMongoLookupMethods() {
         $mongo = $this->getMockBuilder(Mongo::class)
             ->disableOriginalConstructor()
-            ->onlyMethods(['getPrincipalIdByEmail', 'getPrincipalIdByResourceEmail'])
+            ->onlyMethods(['setAuthTenant', 'getAuthTenantByEmail', 'getAuthTenantByResourceEmail'])
             ->getMock();
 
+        $tenant = new \ESN\Utils\AuthTenant('123', 'domain-id');
+        $resourceTenant = new \ESN\Utils\AuthTenant('456', 'domain-id', \ESN\Utils\TenantType::Resources);
+
         $mongo->expects($this->once())
-            ->method('getPrincipalIdByEmail')
+            ->method('setAuthTenant')
+            ->with($tenant);
+        $mongo->expects($this->once())
+            ->method('getAuthTenantByEmail')
             ->with('user@example.com')
-            ->willReturn('123');
+            ->willReturn($tenant);
         $mongo->expects($this->once())
-            ->method('getPrincipalIdByResourceEmail')
+            ->method('getAuthTenantByResourceEmail')
             ->with('resource@example.com')
-            ->willReturn('456');
+            ->willReturn($resourceTenant);
 
         $backend = new PrivatePrincipalBackend($mongo, function() {
             return 'principals/users/123';
         });
 
-        $this->assertTrue(method_exists($backend, 'getPrincipalIdByEmail'));
-        $this->assertEquals('123', $backend->getPrincipalIdByEmail('user@example.com'));
-        $this->assertEquals('456', $backend->getPrincipalIdByResourceEmail('resource@example.com'));
+        $this->assertTrue(method_exists($backend, 'getAuthTenantByEmail'));
+        $this->assertNull($backend->setAuthTenant($tenant));
+        $this->assertSame($tenant, $backend->getAuthTenantByEmail('user@example.com'));
+        $this->assertSame($resourceTenant, $backend->getAuthTenantByResourceEmail('resource@example.com'));
     }
 
     private function newPrivateBackend($currentPrincipal) {

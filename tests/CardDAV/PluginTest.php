@@ -242,7 +242,7 @@ class PluginTest extends PluginTestBase {
 
         $this->esndb->users->updateOne(
             ['_id' => new \MongoDB\BSON\ObjectId($this->userTestId1)],
-            ['$addToSet' => ['domains' => ['domain_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID)]]]
+            ['$set' => ['domains' => [['domain_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID)]]]]
         );
         $this->authBackend->setAuthTenant(new AuthTenant($this->userTestId1, $DOMAIN_ID));
 

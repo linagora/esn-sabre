@@ -28,7 +28,9 @@ class Plugin extends \Sabre\DAV\Sharing\Plugin {
 
     function shareResource($path, array $sharees) {
         $domainId = $this->authTenant?->domainId;
-        if ($domainId !== null && $this->esnDb !== null) {
+        if(!$domainId)
+            throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
+        if ($this->esnDb !== null) {
             foreach ($sharees as $sharee) {
                 if ($sharee->access === self::ACCESS_NOACCESS) {
                     continue;

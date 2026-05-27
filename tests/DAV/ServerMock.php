@@ -21,6 +21,7 @@ define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
 define('PRINCIPALS_RESOURCES', 'principals/resources');
 define('PRINCIPALS_DOMAINS', 'principals/domains');
+define('SERVER_MOCK_DOMAIN_ID', '54b64eadf6d7d8e41d263e7a');
 
 /**
  * @medium
@@ -302,7 +303,7 @@ END:VCALENDAR'
                     ]
                 ]
                     ],
-            'domains' => []
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(SERVER_MOCK_DOMAIN_ID)]]
         ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0e'),
@@ -314,7 +315,7 @@ END:VCALENDAR'
                     ]
                 ]
             ],
-            'domains' => []
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(SERVER_MOCK_DOMAIN_ID)]]
         ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0d'),
@@ -326,7 +327,7 @@ END:VCALENDAR'
                     ]
                 ]
             ],
-            'domains' => []
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(SERVER_MOCK_DOMAIN_ID)]]
         ]);
         $this->esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0c'),
@@ -338,13 +339,18 @@ END:VCALENDAR'
                     ]
                 ]
             ],
-            'domains' => []
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(SERVER_MOCK_DOMAIN_ID)]]
         ]);
 
         $this->esndb->resources->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('62b64eadf6d7d8e41d263e0c'),
             'type' => 'calendar',
             'name' => 'cal resource'
+        ]);
+
+        $this->esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(SERVER_MOCK_DOMAIN_ID),
+            'name' => 'example.org'
         ]);
 
         $this->principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
@@ -359,15 +365,25 @@ END:VCALENDAR'
             $this->principalBackend,
             $this->carddavBackend
         );
-        $this->tree[] = new \ESN\CalDAV\CalendarRoot(
+        $this->calendarRoot = new \ESN\CalDAV\CalendarRoot(
             $this->principalBackend,
             $this->caldavBackend,
             $this->esndb
         );
+        $this->tree[] = $this->calendarRoot;
 
         $this->server = new \Sabre\DAV\Server($this->tree);
         $this->server->sapi = new \Sabre\HTTP\SapiMock();
         $this->server->debugExceptions = true;
+
+        $principalBackend = $this->principalBackend;
+        $calendarRoot = $this->calendarRoot;
+        $this->server->on('auth:success', function($authTenant) use ($principalBackend) {
+            $principalBackend->setAuthTenant($authTenant);
+        });
+        $this->server->on('auth:success', function($authTenant) use ($calendarRoot) {
+            $calendarRoot->setAuthTenant($authTenant);
+        });
 
         $davACLPlugin = new \ESN\DAVACL\Plugin();
         $this->server->addPlugin($davACLPlugin);
@@ -388,7 +404,7 @@ END:VCALENDAR'
         $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
 
         $this->authBackend = new \ESN\DAV\Auth\Backend\Mock('', null, $this->principalBackend, $this->server, true);
-        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f','example.org'));
+        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', SERVER_MOCK_DOMAIN_ID));
         $authPlugin = new \ESN\DAV\Auth\PluginMock($this->authBackend);
         $this->server->addPlugin($authPlugin);
 

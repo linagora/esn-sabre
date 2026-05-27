@@ -23,7 +23,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
           ],
           'principal-URL' => 'principals/users/54b64eadf6d7d8e41d263e0f/',
           'group-member-set' => [],
-          'group-membership' => []
+          'group-membership' => ['principals/domains/' . SERVER_MOCK_DOMAIN_ID . '/']
         ]);
     }
 }

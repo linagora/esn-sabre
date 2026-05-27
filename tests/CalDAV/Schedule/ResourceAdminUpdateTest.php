@@ -19,6 +19,7 @@ class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
     private $resourceId;
     private $adminId;
     private $adminEmail;
+    private $domainId;
     private $resourceCalendar;
 
     function setUp(): void
@@ -48,12 +49,13 @@ class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
                     ]
                 ]
             ],
-            'domains' => []
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0b')]]
         ];
         $this->esndb->users->insertOne($adminUser);
 
         // Create a domain for the resource
         $domainId = '54b64eadf6d7d8e41d263e0b';
+        $this->domainId = $domainId;
         $domain = [
             '_id' => new \MongoDB\BSON\ObjectId($domainId),
             'name' => 'linagora.com'
@@ -281,18 +283,21 @@ ICS;
     }
 
     private function initServer(): array {
-        $principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb);
+        $authTenant = new \ESN\Utils\AuthTenant($this->adminId, $this->domainId);
+        $principalBackend = new \ESN\DAVACL\PrincipalBackend\Mongo($this->esndb, $authTenant);
         $caldavBackend = new \ESN\CalDAV\Backend\Mongo($this->sabredb);
 
         $tree[] = new \Sabre\DAV\SimpleCollection('principals', [
             new \Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/users'),
             new \ESN\CalDAV\Principal\ResourceCollection($principalBackend, 'principals/resources')
         ]);
-        $tree[] = new \ESN\CalDAV\CalendarRoot(
+        $calendarRoot = new \ESN\CalDAV\CalendarRoot(
             $principalBackend,
             $caldavBackend,
             $this->esndb
         );
+        $calendarRoot->setAuthTenant($authTenant);
+        $tree[] = $calendarRoot;
 
         $this->server = new \Sabre\DAV\Server($tree);
         $this->server->httpRequest = new \Sabre\HTTP\Request('GET', '/');

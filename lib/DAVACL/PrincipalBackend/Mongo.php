@@ -16,8 +16,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $this->authTenant = $authTenant;
     }
 
-    function __construct($db) {
+    function __construct($db, ?AuthTenant $authTenant = null) {
         $this->db = $db;
+        $this->authTenant = $authTenant;
         $this->collectionMap = [
             'users' => $this->db->users,
             'resources' => $this->db->resources,
@@ -32,8 +33,12 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
               isset($this->collectionMap[$parts[1]])) {
             $query = [];
             $domainId = $this->authTenant?->domainId;
-            if ($parts[1] === 'users' && $domainId !== null) {
+            if (!$domainId)
+                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
+            if ($parts[1] === 'users') {
                 $query = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
+            } else if ($parts[1] === 'domains') {
+                $query = ['_id' => new \MongoDB\BSON\ObjectId($domainId)];
             }
             $res = $this->collectionMap[$parts[1]]->find($query);
             foreach ($res as $obj) {
@@ -54,8 +59,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             }
 
             $domainId = $this->authTenant?->domainId;
+            if (!$domainId)
+                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
             if ($parts[1] == 'domains') {
-                if ($domainId !== null && $parts[2] !== $domainId) {
+                if ($parts[2] !== $domainId) {
                     throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
                 }
             } else if ($parts[1] == 'resources') {
@@ -64,19 +71,17 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     $obj['domain'] = $domain;
                 }
             } else if ($parts[1] == 'users' && !empty($obj[ 'domains' ])) {
-                if ($domainId !== null) {
-                    $userDomainIds = array_map(
-                        fn($d) => (string)$d['domain_id'],
-                        (array)$obj['domains']
-                    );
-                    if (!in_array($domainId, $userDomainIds, true)) {
-                        throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
-                    }
+                $userDomainIds = array_map(
+                    fn($d) => (string)$d['domain_id'],
+                    (array)$obj['domains']
+                );
+                if (!in_array($domainId, $userDomainIds, true)) {
+                    throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
                 }
 
-                $domainIds = array_column((array) $obj[ 'domains' ], 'domain_id');
-                $domains = $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]);
-                $obj['domains'] = $domains;
+            $domainIds = array_column((array) $obj[ 'domains' ], 'domain_id');
+            $domains = $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]);
+            $obj['domains'] = $domains;
             }
 
             return $this->objectToPrincipal($obj, $parts[1]);
@@ -399,11 +404,27 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         $domainId = $this->authTenant?->domainId;
-        if ($domainId !== null) {
-            $query[] = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
+        if (!$domainId)
+            throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
+
+        if (empty($query)) {
+            return [];
         }
 
-        return $this->queryPrincipals('users', $this->db->users, $query, $test);
+        $domainFilter = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
+        if ($test === 'anyof') {
+            $finalQuery = ['$and' => [['$or' => $query], $domainFilter]];
+        } else {
+            $query[] = $domainFilter;
+            $finalQuery = ['$and' => $query];
+        }
+
+        $principals = [];
+        $res = $this->db->users->find($finalQuery, ['projection' => ['_id' => 1]]);
+        foreach ($res as $obj) {
+            $principals[] = 'principals/users/' . $obj['_id'];
+        }
+        return $principals;
     }
 
     private function getAdministratorsForGroup($principal) {
@@ -416,8 +437,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 [ 'projection' => [ 'administrators' => 1 ]]
             );
 
-            foreach ($domain['administrators'] as $administrator) {
-                $administrators[] = 'principals/users/' . (string)$administrator['user_id'];
+            if ($domain && isset($domain['administrators'])) {
+                foreach ($domain['administrators'] as $administrator) {
+                    $administrators[] = 'principals/users/' . (string)$administrator['user_id'];
+                }
             }
         }
 

@@ -34,9 +34,9 @@ class CalendarRoot extends \Sabre\DAV\Collection {
         $homes = [];
         $userQuery = [];
         $domainId = $this->authTenant?->domainId;
-        if ($domainId !== null) {
-            $userQuery = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
-        }
+        if (!$domainId)
+            throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authtenant');
+        $userQuery = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
         $res = $this->db->users->find($userQuery, [ 'projection' => ['_id' => 1 ]]);
         foreach ($res as $user) {
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $user['_id'] ];
@@ -61,7 +61,9 @@ class CalendarRoot extends \Sabre\DAV\Collection {
         $res = $this->db->users->findOne(['_id' => $mongoName], ['projection' => ['domains.domain_id' => 1]]);
         if ($res) {
             $domainId = $this->authTenant?->domainId;
-            if ($domainId !== null && !empty($res['domains'])) {
+            if (!$domainId)
+                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
+            if (!empty($res['domains'])) {
                 $userDomainIds = array_map(fn($d) => (string)$d['domain_id'], (array)$res['domains']);
                 if (!in_array($domainId, $userDomainIds, true)) {
                     throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed');
@@ -74,7 +76,9 @@ class CalendarRoot extends \Sabre\DAV\Collection {
         $res = $this->db->resources->findOne(['_id' => $mongoName], ['projection' => ['domain' => 1]]);
         if ($res) {
             $domainId = $this->authTenant?->domainId;
-            if ($domainId !== null && isset($res['domain'])) {
+            if (!$domainId)
+                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
+            if (isset($res['domain'])) {
                 if ((string)$res['domain'] !== $domainId) {
                     throw new \Sabre\DAV\Exception\Forbidden('Cross-domain resource access is not allowed');
                 }

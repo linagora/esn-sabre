@@ -4,6 +4,8 @@ namespace ESN\CalDAV;
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 
 use ESN\CalDAV\Validation\CalendarObjectValidator;
+use Sabre\DAV\Exception\BadRequest;
+use Sabre\DAV\Exception\UnsupportedMediaType;
 use Sabre\HTTP\Request;
 use Sabre\HTTP\Response;
 use Sabre\VObject\Component\VCalendar;
@@ -42,6 +44,34 @@ class PluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(0, $validator->calls);
     }
 
+    function testStrictICalendarValidationErrorsReturnBadRequest() {
+        $plugin = new PluginTestDouble();
+        $plugin->setHTTPPreferHandlingForTest('strict');
+
+        $this->expectException(BadRequest::class);
+        $this->expectExceptionMessage('Validation error in iCalendar: PRODID MUST appear exactly once in a VCALENDAR component');
+
+        $plugin->validateICalendarForTest(implode("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260515T090000Z',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]) . "\r\n");
+    }
+
+    function testICalendarParseErrorsStillReturnUnsupportedMediaType() {
+        $plugin = new PluginTestDouble();
+        $plugin->setHTTPPreferHandlingForTest('strict');
+
+        $this->expectException(UnsupportedMediaType::class);
+
+        $plugin->validateICalendarForTest('invalid calendar data');
+    }
+
     private function readCalendar() {
         return Reader::read(implode("\r\n", [
             'BEGIN:VCALENDAR',
@@ -67,6 +97,12 @@ class PluginTestDouble extends Plugin {
 
         $this->validateCalendarObjectBeforeScheduling(new Request('PUT', '/event.ics'), new Response(), $vCal, 'calendars/user/calendar', $modified, true);
     }
+
+    function validateICalendarForTest($data) {
+        $modified = false;
+
+        $this->validateICalendar($data, 'calendars/user/calendar/event.ics', $modified, new Request('PUT', '/event.ics'), new Response(), true);
+    }
 }
 
 class PluginServerTestDouble {
@@ -78,6 +114,13 @@ class PluginServerTestDouble {
 
     function getHTTPPrefer() {
         return ['handling' => $this->handling];
+    }
+
+    function getProperties() {
+        return [];
+    }
+
+    function emit() {
     }
 }
 

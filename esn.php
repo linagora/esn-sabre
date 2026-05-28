@@ -108,9 +108,10 @@ $server->addPlugin($loggerPlugin);
 // Auth backend
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm'], $principalBackend, $server, SABRE_ENV === SABRE_ENV_DEV);
 $server->on('auth:success',
-            function(AuthTenant $authTenant) use ($principalBackend) {
+            function(AuthTenant $authTenant) use ($principalBackend, $calendarRoot) {
                 $principalBackend->setAuthTenant($authTenant);
-            });
+                $calendarRoot->setAuthTenant($authTenant);
+            }, 1);
 
 // listener
 $server->on("auth:success", function($authTenant) use ($addressbookBackend) {
@@ -127,10 +128,6 @@ $server->on("auth:success", function($authTenant) use ($calendarBackend) {
 
     return $calendarBackend->getCalendarsForUser((string) $authTenant->getPrincipal());
 });
-$server->on('auth:success',
-            function(AuthTenant $authTenant) use ($calendarRoot) {
-                $calendarRoot->setAuthTenant($authTenant);
-            });
 
 // Add stack trace to HTML response in dev mode
 if (SABRE_ENV === SABRE_ENV_DEV) {

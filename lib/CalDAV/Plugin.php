@@ -1,20 +1,40 @@
 <?php
 namespace ESN\CalDAV;
 
+use ESN\CalDAV\Validation\CalendarObjectValidator;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 use Sabre\DAV\INode;
 use Sabre\DAV\PropFind;
 use Sabre\DAV\Server;
 use Sabre\DAVACL\Xml\Property\CurrentUserPrivilegeSet;
+use Sabre\HTTP\RequestInterface;
+use Sabre\HTTP\ResponseInterface;
+use Sabre\VObject\Component\VCalendar;
 
 /**
  * We can not directly use Sabre\CalDAV\Plugin because it's implementation of getCalendarHomeForPrincipal make a false assumption in the case of our DAV backend about the URL of users
  */
 class Plugin extends \Sabre\CalDAV\Plugin {
+    const PRIORITY_BEFORE_SCHEDULING = 80;
+
+    private $calendarObjectValidator;
+
+    function __construct(?CalendarObjectValidator $calendarObjectValidator = null) {
+        $this->calendarObjectValidator = $calendarObjectValidator ?: new CalendarObjectValidator();
+    }
 
     function initialize(Server $server) {
         parent::initialize($server);
+        $server->on('calendarObjectChange', [$this, 'validateCalendarObjectBeforeScheduling'], self::PRIORITY_BEFORE_SCHEDULING);
         $server->on('propFind', [$this, 'propFindSharedCalendar'], 151);
+    }
+
+    function validateCalendarObjectBeforeScheduling(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
+        if ($this->server->getHTTPPrefer()['handling'] !== 'strict') {
+            return;
+        }
+
+        $this->calendarObjectValidator->validate($vCal);
     }
 
     function propFindSharedCalendar(PropFind $propFind, INode $node) {

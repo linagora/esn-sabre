@@ -3,6 +3,8 @@ namespace ESN\CalDAV;
 
 use ESN\CalDAV\Validation\CalendarObjectValidator;
 use ESN\DAV\Sharing\Plugin as SPlugin;
+use Sabre\DAV\Exception\BadRequest;
+use Sabre\DAV\Exception\UnsupportedMediaType;
 use Sabre\DAV\INode;
 use Sabre\DAV\PropFind;
 use Sabre\DAV\Server;
@@ -27,6 +29,18 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         parent::initialize($server);
         $server->on('calendarObjectChange', [$this, 'validateCalendarObjectBeforeScheduling'], self::PRIORITY_BEFORE_SCHEDULING);
         $server->on('propFind', [$this, 'propFindSharedCalendar'], 151);
+    }
+
+    protected function validateICalendar(&$data, $path, &$modified, RequestInterface $request, ResponseInterface $response, $isNew) {
+        try {
+            parent::validateICalendar($data, $path, $modified, $request, $response, $isNew);
+        } catch (UnsupportedMediaType $e) {
+            if (str_starts_with($e->getMessage(), 'Validation error in iCalendar:')) {
+                throw new BadRequest($e->getMessage());
+            }
+
+            throw $e;
+        }
     }
 
     function validateCalendarObjectBeforeScheduling(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {

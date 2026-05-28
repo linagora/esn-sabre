@@ -77,7 +77,12 @@ try {
 
 // Backends
 $addressbookBackend = new ESN\CardDAV\Backend\Esn($sabreDb);
+$server = null;
 $principalBackend = new ESN\DAVACL\PrincipalBackend\Mongo($esnDb);
+
+if (principalPrivacyEnabled()) {
+    $principalBackend = new ESN\DAVACL\PrincipalBackend\PrivatePrincipalBackend($principalBackend, currentPrincipalProvider($server));
+}
 
 $schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 56;
 $calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend, $schedulingObjectTTLInDays);
@@ -282,3 +287,23 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 
 // And off we go!
 $server->exec();
+
+function principalPrivacyEnabled() {
+    $rawPrivacyEnv = getenv('PRINCIPAL_PRIVACY');
+
+    if ($rawPrivacyEnv === false || trim($rawPrivacyEnv) === '') {
+        // Missing or empty env keeps privacy enabled; only an explicit false disables it.
+        return true;
+    }
+
+    $privacyEnabled = filter_var($rawPrivacyEnv, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+    return $privacyEnabled ?? true;
+}
+
+function currentPrincipalProvider(&$server) {
+    return function() use (&$server) {
+        $authPlugin = $server ? $server->getPlugin('auth') : null;
+        return $authPlugin ? $authPlugin->getCurrentPrincipal() : null;
+    };
+}

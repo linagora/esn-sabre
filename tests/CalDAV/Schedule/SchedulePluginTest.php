@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV\Schedule;
 
+use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
 use Sabre\DAV\Server;
 use Sabre\VObject\ITip\Message;
 use Sabre\VObject\Reader;
@@ -345,6 +346,127 @@ ICS
         $this->assertEquals('Local reminder', $newObject->VEVENT->VALARM->DESCRIPTION->getValue());
     }
 
+    function testShouldRejectForbiddenAttendeeSchedulingObjectChanges() {
+        $forbiddenChanges = [
+            'DTSTART' => [
+                'originalLine' => 'DTSTART:20351005T090000Z',
+                'updatedLine' => 'DTSTART:20351005T093000Z',
+            ],
+            'DTEND' => [
+                'originalLine' => 'DTEND:20351005T100000Z',
+                'updatedLine' => 'DTEND:20351005T110000Z',
+            ],
+            'LOCATION' => [
+                'originalLine' => 'LOCATION:Room A',
+                'updatedLine' => 'LOCATION:Room B',
+            ],
+            'SUMMARY' => [
+                'originalLine' => 'SUMMARY:Original meeting',
+                'updatedLine' => 'SUMMARY:Updated by attendee',
+            ],
+            'ORGANIZER' => [
+                'originalLine' => 'ORGANIZER:mailto:bob@example.org',
+                'updatedLine' => 'ORGANIZER:mailto:mallory@example.org',
+            ],
+        ];
+
+        foreach ($forbiddenChanges as $propertyName => $change) {
+            $oldObject = Reader::read($this->newSchedulingObject());
+            $newObject = Reader::read(str_replace(
+                $change['originalLine'],
+                $change['updatedLine'],
+                $this->newSchedulingObject()
+            ));
+
+            try {
+                $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+                $this->fail($propertyName . ' should be rejected for attendee scheduling object changes');
+            } catch (ForbiddenAttendeeSchedulingObjectChange $e) {
+                $this->assertStringContainsString($propertyName, $e->getMessage());
+            }
+        }
+    }
+
+    function testShouldAllowOrganizerSchedulingObjectChanges() {
+        $oldObject = Reader::read($this->newSchedulingObject());
+        $newObject = Reader::read(str_replace(
+            'SUMMARY:Original meeting',
+            'SUMMARY:Updated by organizer',
+            $this->newSchedulingObject()
+        ));
+
+        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:bob@example.org']);
+
+        $this->assertEquals('Updated by organizer', $newObject->VEVENT->SUMMARY->getValue());
+    }
+
+    function testShouldAllowAttendeeLocalVALARMAndTRANSPChanges() {
+        $oldObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-allowed-attendee-local-properties
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+LOCATION:Room A
+TRANSP:OPAQUE
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT15M
+DESCRIPTION:Original reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+        $newObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-allowed-attendee-local-properties
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+LOCATION:Room A
+TRANSP:TRANSPARENT
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT5M
+DESCRIPTION:Local reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+
+        $this->assertEquals('TRANSPARENT', $newObject->VEVENT->TRANSP->getValue());
+        $this->assertEquals('-PT5M', $newObject->VEVENT->VALARM->TRIGGER->getValue());
+    }
+
+    function testForbiddenAttendeeSchedulingObjectChangeShouldSerializeCalDAVPrecondition() {
+        $server = new Server();
+        $document = new \DOMDocument('1.0', 'utf-8');
+        $errorNode = $document->createElementNS('DAV:', 'd:error');
+        $document->appendChild($errorNode);
+
+        (new ForbiddenAttendeeSchedulingObjectChange('SUMMARY'))->serialize($server, $errorNode);
+
+        $this->assertSame(
+            1,
+            $errorNode->getElementsByTagNameNS(
+                \Sabre\CalDAV\Schedule\Plugin::NS_CALDAV,
+                'allowed-attendee-scheduling-object-change'
+            )->length
+        );
+    }
+
     private function newItipMessage($sequence) {
         $message = new Message();
         $ical = "BEGIN:VCALENDAR
@@ -411,6 +533,30 @@ END:VCALENDAR
         $method->setAccessible(true);
 
         $method->invoke($this->plugin, $oldICalendarData, $newObject);
+    }
+
+    private function invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, array $addresses) {
+        $method = new \ReflectionMethod(Plugin::class, 'assertAllowedAttendeeSchedulingObjectChange');
+        $method->setAccessible(true);
+
+        $method->invoke($this->plugin, $oldObject, $newObject, $addresses);
+    }
+
+    private function newSchedulingObject(): string {
+        return "BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-forbidden-attendee-change
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+LOCATION:Room A
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+";
     }
 
     function testRecipientHasDeclinedInMessageReturnsTrueWhenDeclined() {

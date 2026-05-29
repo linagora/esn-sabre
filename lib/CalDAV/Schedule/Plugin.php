@@ -1,6 +1,7 @@
 <?php
 namespace ESN\CalDAV\Schedule;
 
+use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
 use ESN\Utils\Utils;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
@@ -31,6 +32,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private const MASTER_EVENT = 'master';
     private const DEFAULT_REPLY_PROPAGATION_THRESHOLD = 200;
     private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES = ['VALARM', 'TRANSP', 'CLASS'];
+    private const FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES = ['DTSTART', 'DTEND', 'LOCATION', 'SUMMARY', 'ORGANIZER'];
 
     private $logger;
     private $principalBackend;
@@ -315,7 +317,62 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $oldObj = null;
         }
 
+        if ($oldObj) {
+            // RFC 6638 permits attendee-local updates, but not organizer-controlled event fields.
+            $this->assertAllowedAttendeeSchedulingObjectChange($oldObj, $vCal, $addresses);
+        }
+
         $this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
+    }
+
+    private function assertAllowedAttendeeSchedulingObjectChange(VCalendar $oldObject, VCalendar $newObject, array $addresses): void {
+        if (!$this->isAttendeeSchedulingObject($oldObject, $addresses)) {
+            return;
+        }
+
+        $oldEvents = [];
+        foreach ($oldObject->select('VEVENT') as $oldEvent) {
+            $oldEvents[$this->eventRecurrenceKey($oldEvent)] = $oldEvent;
+        }
+
+        foreach ($newObject->select('VEVENT') as $newEvent) {
+            $oldEvent = $oldEvents[$this->eventRecurrenceKey($newEvent)] ?? null;
+            if (!$oldEvent) {
+                continue;
+            }
+            foreach (self::FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES as $propertyName) {
+                if ($this->eventPropertySignatures($oldEvent, $propertyName) !== $this->eventPropertySignatures($newEvent, $propertyName)) {
+                    throw new ForbiddenAttendeeSchedulingObjectChange($propertyName);
+                }
+            }
+        }
+    }
+
+    private function isAttendeeSchedulingObject(VCalendar $calendarObject, array $addresses): bool {
+        $normalizedAddresses = array_map('strtolower', $addresses);
+        $isAttendee = false;
+
+        foreach ($calendarObject->select('VEVENT') as $event) {
+            if (isset($event->ORGANIZER) && in_array(strtolower($event->ORGANIZER->getNormalizedValue()), $normalizedAddresses, true)) {
+                return false;
+            }
+            foreach ($event->select('ATTENDEE') as $attendee) {
+                if (in_array(strtolower($attendee->getNormalizedValue()), $normalizedAddresses, true)) {
+                    $isAttendee = true;
+                }
+            }
+        }
+
+        return $isAttendee;
+    }
+
+    private function eventPropertySignatures($event, string $propertyName): array {
+        $signatures = [];
+        foreach ($event->select($propertyName) as $property) {
+            $signatures[] = $property->serialize();
+        }
+        sort($signatures);
+        return $signatures;
     }
 
     /**

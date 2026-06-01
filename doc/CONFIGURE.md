@@ -62,6 +62,11 @@ If the event attendee count is greater than or equal to `TW_CAL_REPLY_PROPAGATIO
 - Default: `200`
 - Set to `0` or a negative value to disable this skip and always propagate replies.
 
+`SABRE_ENFORCE_RFC_6638` controls whether Sabre rejects attendee updates to scheduling fields that must remain organizer-controlled.
+
+- Default: enabled. Unset, empty, or invalid values are treated as enabled.
+- Set to `false`, `0`, `off`, or `no` to disable.
+
 ## Nginx rate limiting
 
 The embedded Nginx is configured with `ngx_http_limit_req_module` to protect the CalDAV server from request flooding. Three ENV variables control the behaviour:

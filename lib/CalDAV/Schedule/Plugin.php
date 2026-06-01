@@ -33,6 +33,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private const DEFAULT_REPLY_PROPAGATION_THRESHOLD = 200;
     private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES = ['VALARM', 'TRANSP', 'CLASS'];
     private const FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES = ['DTSTART', 'DTEND', 'LOCATION', 'SUMMARY', 'ORGANIZER'];
+    private const ENFORCE_RFC_6638_ENV = 'SABRE_ENFORCE_RFC_6638';
 
     private $logger;
     private $principalBackend;
@@ -326,7 +327,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     private function assertAllowedAttendeeSchedulingObjectChange(VCalendar $oldObject, VCalendar $newObject, array $addresses): void {
-        if (!$this->isAttendeeSchedulingObject($oldObject, $addresses)) {
+        if (!$this->shouldEnforceRfc6638() || !$this->isAttendeeSchedulingObject($oldObject, $addresses)) {
             return;
         }
 
@@ -351,10 +352,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private function isAttendeeSchedulingObject(VCalendar $calendarObject, array $addresses): bool {
         $normalizedAddresses = array_map('strtolower', $addresses);
         $isAttendee = false;
+        $hasOrganizer = false;
 
         foreach ($calendarObject->select('VEVENT') as $event) {
-            if (isset($event->ORGANIZER) && in_array(strtolower($event->ORGANIZER->getNormalizedValue()), $normalizedAddresses, true)) {
-                return false;
+            if (isset($event->ORGANIZER)) {
+                $hasOrganizer = true;
+                if (in_array(strtolower($event->ORGANIZER->getNormalizedValue()), $normalizedAddresses, true)) {
+                    return false;
+                }
             }
             foreach ($event->select('ATTENDEE') as $attendee) {
                 if (in_array(strtolower($attendee->getNormalizedValue()), $normalizedAddresses, true)) {
@@ -363,7 +368,16 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             }
         }
 
-        return $isAttendee;
+        return $hasOrganizer && $isAttendee;
+    }
+
+    private function shouldEnforceRfc6638(): bool {
+        $value = getenv(self::ENFORCE_RFC_6638_ENV);
+        if ($value === false || trim($value) === '') {
+            return true;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true;
     }
 
     private function eventPropertySignatures($event, string $propertyName): array {

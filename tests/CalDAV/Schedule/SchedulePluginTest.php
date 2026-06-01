@@ -370,21 +370,66 @@ ICS
             ],
         ];
 
-        foreach ($forbiddenChanges as $propertyName => $change) {
-            $oldObject = Reader::read($this->newSchedulingObject());
-            $newObject = Reader::read(str_replace(
-                $change['originalLine'],
-                $change['updatedLine'],
-                $this->newSchedulingObject()
-            ));
+        $this->withRfc6638EnforcementEnv(null, function () use ($forbiddenChanges) {
+            foreach ($forbiddenChanges as $propertyName => $change) {
+                $oldObject = Reader::read($this->newSchedulingObject());
+                $newObject = Reader::read(str_replace(
+                    $change['originalLine'],
+                    $change['updatedLine'],
+                    $this->newSchedulingObject()
+                ));
 
-            try {
-                $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
-                $this->fail($propertyName . ' should be rejected for attendee scheduling object changes');
-            } catch (ForbiddenAttendeeSchedulingObjectChange $e) {
-                $this->assertStringContainsString($propertyName, $e->getMessage());
+                try {
+                    $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+                    $this->fail($propertyName . ' should be rejected for attendee scheduling object changes');
+                } catch (ForbiddenAttendeeSchedulingObjectChange $e) {
+                    $this->assertStringContainsString($propertyName, $e->getMessage());
+                }
             }
-        }
+        });
+    }
+
+    function testShouldAllowForbiddenAttendeeSchedulingObjectChangesWhenRfc6638EnforcementDisabled() {
+        $oldObject = Reader::read($this->newSchedulingObject());
+        $newObject = Reader::read(str_replace(
+            'SUMMARY:Original meeting',
+            'SUMMARY:Updated while enforcement disabled',
+            $this->newSchedulingObject()
+        ));
+
+        $this->withRfc6638EnforcementEnv('false', function () use ($oldObject, $newObject) {
+            $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+        });
+
+        $this->assertEquals('Updated while enforcement disabled', $newObject->VEVENT->SUMMARY->getValue());
+    }
+
+    function testShouldAllowOrganizerLessSchedulingObjectChanges() {
+        $oldObject = Reader::read($this->newOrganizerLessSchedulingObject());
+        $newObject = Reader::read(str_replace(
+            [
+                'DTSTART:20351005T090000Z',
+                'DTEND:20351005T100000Z',
+                'LOCATION:Room A',
+                'SUMMARY:Original meeting',
+            ],
+            [
+                'DTSTART:20351005T093000Z',
+                'DTEND:20351005T110000Z',
+                'LOCATION:Room B',
+                'SUMMARY:Updated organizer-less meeting',
+            ],
+            $this->newOrganizerLessSchedulingObject()
+        ));
+
+        $this->withRfc6638EnforcementEnv(null, function () use ($oldObject, $newObject) {
+            $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+        });
+
+        $this->assertEquals('20351005T093000Z', $newObject->VEVENT->DTSTART->getValue());
+        $this->assertEquals('20351005T110000Z', $newObject->VEVENT->DTEND->getValue());
+        $this->assertEquals('Room B', $newObject->VEVENT->LOCATION->getValue());
+        $this->assertEquals('Updated organizer-less meeting', $newObject->VEVENT->SUMMARY->getValue());
     }
 
     function testShouldAllowOrganizerSchedulingObjectChanges() {
@@ -542,6 +587,26 @@ END:VCALENDAR
         $method->invoke($this->plugin, $oldObject, $newObject, $addresses);
     }
 
+    private function withRfc6638EnforcementEnv(?string $value, callable $callback) {
+        $previousValue = getenv('SABRE_ENFORCE_RFC_6638');
+
+        try {
+            if ($value === null) {
+                putenv('SABRE_ENFORCE_RFC_6638');
+            } else {
+                putenv('SABRE_ENFORCE_RFC_6638=' . $value);
+            }
+
+            return $callback();
+        } finally {
+            if ($previousValue === false) {
+                putenv('SABRE_ENFORCE_RFC_6638');
+            } else {
+                putenv('SABRE_ENFORCE_RFC_6638=' . $previousValue);
+            }
+        }
+    }
+
     private function newSchedulingObject(): string {
         return "BEGIN:VCALENDAR
 VERSION:2.0
@@ -552,6 +617,22 @@ DTEND:20351005T100000Z
 SUMMARY:Original meeting
 LOCATION:Room A
 ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+";
+    }
+
+    private function newOrganizerLessSchedulingObject(): string {
+        return "BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-organizer-less-change
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+LOCATION:Room A
 ATTENDEE:mailto:bob@example.org
 ATTENDEE:mailto:alice@example.org
 END:VEVENT

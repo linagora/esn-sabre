@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV\Schedule;
 
+use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
 use Sabre\DAV\Server;
 use Sabre\VObject\ITip\Message;
 use Sabre\VObject\Reader;
@@ -345,6 +346,172 @@ ICS
         $this->assertEquals('Local reminder', $newObject->VEVENT->VALARM->DESCRIPTION->getValue());
     }
 
+    function testShouldRejectForbiddenAttendeeSchedulingObjectChanges() {
+        $forbiddenChanges = [
+            'DTSTART' => [
+                'originalLine' => 'DTSTART:20351005T090000Z',
+                'updatedLine' => 'DTSTART:20351005T093000Z',
+            ],
+            'DTEND' => [
+                'originalLine' => 'DTEND:20351005T100000Z',
+                'updatedLine' => 'DTEND:20351005T110000Z',
+            ],
+            'LOCATION' => [
+                'originalLine' => 'LOCATION:Room A',
+                'updatedLine' => 'LOCATION:Room B',
+            ],
+            'SUMMARY' => [
+                'originalLine' => 'SUMMARY:Original meeting',
+                'updatedLine' => 'SUMMARY:Updated by attendee',
+            ],
+            'ORGANIZER' => [
+                'originalLine' => 'ORGANIZER:mailto:bob@example.org',
+                'updatedLine' => 'ORGANIZER:mailto:mallory@example.org',
+            ],
+        ];
+
+        $this->withRfc6638EnforcementEnv(null, function () use ($forbiddenChanges) {
+            foreach ($forbiddenChanges as $propertyName => $change) {
+                $oldObject = Reader::read($this->newSchedulingObject());
+                $newObject = Reader::read(str_replace(
+                    $change['originalLine'],
+                    $change['updatedLine'],
+                    $this->newSchedulingObject()
+                ));
+
+                try {
+                    $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+                    $this->fail($propertyName . ' should be rejected for attendee scheduling object changes');
+                } catch (ForbiddenAttendeeSchedulingObjectChange $e) {
+                    $this->assertStringContainsString($propertyName, $e->getMessage());
+                }
+            }
+        });
+    }
+
+    function testShouldAllowForbiddenAttendeeSchedulingObjectChangesWhenRfc6638EnforcementDisabled() {
+        $oldObject = Reader::read($this->newSchedulingObject());
+        $newObject = Reader::read(str_replace(
+            'SUMMARY:Original meeting',
+            'SUMMARY:Updated while enforcement disabled',
+            $this->newSchedulingObject()
+        ));
+
+        $this->withRfc6638EnforcementEnv('false', function () use ($oldObject, $newObject) {
+            $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+        });
+
+        $this->assertEquals('Updated while enforcement disabled', $newObject->VEVENT->SUMMARY->getValue());
+    }
+
+    function testShouldAllowOrganizerLessSchedulingObjectChanges() {
+        $oldObject = Reader::read($this->newOrganizerLessSchedulingObject());
+        $newObject = Reader::read(str_replace(
+            [
+                'DTSTART:20351005T090000Z',
+                'DTEND:20351005T100000Z',
+                'LOCATION:Room A',
+                'SUMMARY:Original meeting',
+            ],
+            [
+                'DTSTART:20351005T093000Z',
+                'DTEND:20351005T110000Z',
+                'LOCATION:Room B',
+                'SUMMARY:Updated organizer-less meeting',
+            ],
+            $this->newOrganizerLessSchedulingObject()
+        ));
+
+        $this->withRfc6638EnforcementEnv(null, function () use ($oldObject, $newObject) {
+            $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+        });
+
+        $this->assertEquals('20351005T093000Z', $newObject->VEVENT->DTSTART->getValue());
+        $this->assertEquals('20351005T110000Z', $newObject->VEVENT->DTEND->getValue());
+        $this->assertEquals('Room B', $newObject->VEVENT->LOCATION->getValue());
+        $this->assertEquals('Updated organizer-less meeting', $newObject->VEVENT->SUMMARY->getValue());
+    }
+
+    function testShouldAllowOrganizerSchedulingObjectChanges() {
+        $oldObject = Reader::read($this->newSchedulingObject());
+        $newObject = Reader::read(str_replace(
+            'SUMMARY:Original meeting',
+            'SUMMARY:Updated by organizer',
+            $this->newSchedulingObject()
+        ));
+
+        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:bob@example.org']);
+
+        $this->assertEquals('Updated by organizer', $newObject->VEVENT->SUMMARY->getValue());
+    }
+
+    function testShouldAllowAttendeeLocalVALARMAndTRANSPChanges() {
+        $oldObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-allowed-attendee-local-properties
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+LOCATION:Room A
+TRANSP:OPAQUE
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT15M
+DESCRIPTION:Original reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+        $newObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-allowed-attendee-local-properties
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+LOCATION:Room A
+TRANSP:TRANSPARENT
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT5M
+DESCRIPTION:Local reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+
+        $this->assertEquals('TRANSPARENT', $newObject->VEVENT->TRANSP->getValue());
+        $this->assertEquals('-PT5M', $newObject->VEVENT->VALARM->TRIGGER->getValue());
+    }
+
+    function testForbiddenAttendeeSchedulingObjectChangeShouldSerializeCalDAVPrecondition() {
+        $server = new Server();
+        $document = new \DOMDocument('1.0', 'utf-8');
+        $errorNode = $document->createElementNS('DAV:', 'd:error');
+        $document->appendChild($errorNode);
+
+        (new ForbiddenAttendeeSchedulingObjectChange('SUMMARY'))->serialize($server, $errorNode);
+
+        $this->assertSame(
+            1,
+            $errorNode->getElementsByTagNameNS(
+                \Sabre\CalDAV\Schedule\Plugin::NS_CALDAV,
+                'allowed-attendee-scheduling-object-change'
+            )->length
+        );
+    }
+
     private function newItipMessage($sequence) {
         $message = new Message();
         $ical = "BEGIN:VCALENDAR
@@ -411,6 +578,66 @@ END:VCALENDAR
         $method->setAccessible(true);
 
         $method->invoke($this->plugin, $oldICalendarData, $newObject);
+    }
+
+    private function invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, array $addresses) {
+        $method = new \ReflectionMethod(Plugin::class, 'assertAllowedAttendeeSchedulingObjectChange');
+        $method->setAccessible(true);
+
+        $method->invoke($this->plugin, $oldObject, $newObject, $addresses);
+    }
+
+    private function withRfc6638EnforcementEnv(?string $value, callable $callback) {
+        $previousValue = getenv('SABRE_ENFORCE_RFC_6638');
+
+        try {
+            if ($value === null) {
+                putenv('SABRE_ENFORCE_RFC_6638');
+            } else {
+                putenv('SABRE_ENFORCE_RFC_6638=' . $value);
+            }
+
+            return $callback();
+        } finally {
+            if ($previousValue === false) {
+                putenv('SABRE_ENFORCE_RFC_6638');
+            } else {
+                putenv('SABRE_ENFORCE_RFC_6638=' . $previousValue);
+            }
+        }
+    }
+
+    private function newSchedulingObject(): string {
+        return "BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-forbidden-attendee-change
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+LOCATION:Room A
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+";
+    }
+
+    private function newOrganizerLessSchedulingObject(): string {
+        return "BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-organizer-less-change
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+LOCATION:Room A
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+";
     }
 
     function testRecipientHasDeclinedInMessageReturnsTrueWhenDeclined() {

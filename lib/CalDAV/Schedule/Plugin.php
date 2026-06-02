@@ -326,7 +326,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
     }
 
-    private function assertAllowedAttendeeSchedulingObjectChange(VCalendar $oldObject, VCalendar $newObject, array $addresses): void {
+    protected function assertAllowedAttendeeSchedulingObjectChange(VCalendar $oldObject, VCalendar $newObject, array $addresses): void {
         if (!$this->shouldEnforceRfc6638() || !$this->isAttendeeSchedulingObject($oldObject, $addresses)) {
             return;
         }

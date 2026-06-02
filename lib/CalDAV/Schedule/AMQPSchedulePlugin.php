@@ -205,6 +205,10 @@ class AMQPSchedulePlugin extends Plugin {
             $oldObj = \Sabre\VObject\Reader::read($this->currentOldMessage);
         }
 
+        if ($oldObj) {
+            $this->assertAllowedAttendeeSchedulingObjectChange($oldObj, $vCal, $addresses);
+        }
+
         $this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
         // flushDeliveries() is called in afterCreateFile/afterWriteContent.
     }

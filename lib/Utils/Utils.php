@@ -201,6 +201,10 @@ class Utils {
                 $dtstart = isset($vevent->DTSTART) ? clone $vevent->DTSTART : null;
                 $dtend = isset($vevent->DTEND) ? clone $vevent->DTEND : null;
                 $duration = isset($vevent->DURATION) ? clone $vevent->DURATION : null;
+                $rrule = isset($vevent->RRULE) ? clone $vevent->RRULE : null;
+                $rdate = isset($vevent->RDATE) ? clone $vevent->RDATE : null;
+                $exdate = isset($vevent->EXDATE) ? clone $vevent->EXDATE : null;
+                $recurrenceId = isset($vevent->{'RECURRENCE-ID'}) ? clone $vevent->{'RECURRENCE-ID'} : null;
 
                 // Get list of all properties to remove
                 $propertiesToRemove = [];
@@ -232,6 +236,18 @@ class Utils {
                 }
                 if ($duration) {
                     $vevent->add($duration);
+                }
+                if ($rrule) {
+                    $vevent->add($rrule);
+                }
+                if ($rdate) {
+                    $vevent->add($rdate);
+                }
+                if ($exdate) {
+                    $vevent->add($exdate);
+                }
+                if ($recurrenceId) {
+                    $vevent->add($recurrenceId);
                 }
             }
         }

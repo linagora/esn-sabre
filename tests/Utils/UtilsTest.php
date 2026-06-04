@@ -486,6 +486,74 @@ ICS;
     }
 
     /**
+     * Test that hidePrivateEventInfoForUser preserves recurrence timing while masking private details
+     */
+    function testHidePrivateEventInfoForUserPreservesPrivateRecurringTiming() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:private-recurring-event-test',
+            'DTSTART:20300601T090000Z',
+            'DTEND:20300601T100000Z',
+            'SUMMARY:Secret recurring meeting',
+            'DESCRIPTION:Very secret recurring details',
+            'LOCATION:Secret recurring location',
+            'CLASS:PRIVATE',
+            'ORGANIZER:mailto:boss@example.com',
+            'RRULE:FREQ=DAILY;COUNT=3',
+            'EXDATE:20300602T090000Z',
+            'RDATE:20300605T090000Z',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:private-recurring-event-test',
+            'RECURRENCE-ID:20300603T090000Z',
+            'DTSTART:20300603T110000Z',
+            'DTEND:20300603T120000Z',
+            'SUMMARY:Secret moved occurrence',
+            'DESCRIPTION:Very secret moved occurrence details',
+            'LOCATION:Secret moved occurrence location',
+            'CLASS:PRIVATE',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $userPrincipal = 'principals/users/other';
+
+        $result = Utils::hidePrivateEventInfoForUser($vcalendar, $node, $userPrincipal);
+        $vevents = $result->select('VEVENT');
+
+        $this->assertCount(2, $vevents);
+
+        $master = $vevents[0];
+        $this->assertEquals('Busy', $master->SUMMARY->getValue());
+        $this->assertEquals('PRIVATE', $master->CLASS->getValue());
+        $this->assertEquals('FREQ=DAILY;COUNT=3', $master->RRULE->getValue());
+        $this->assertEquals('20300602T090000Z', $master->EXDATE->getValue());
+        $this->assertEquals('20300605T090000Z', $master->RDATE->getValue());
+        $this->assertFalse(isset($master->DESCRIPTION));
+        $this->assertFalse(isset($master->LOCATION));
+
+        $override = $vevents[1];
+        $this->assertEquals('Busy', $override->SUMMARY->getValue());
+        $this->assertEquals('PRIVATE', $override->CLASS->getValue());
+        $this->assertEquals('20300603T090000Z', $override->{'RECURRENCE-ID'}->getValue());
+        $this->assertEquals('20300603T110000Z', $override->DTSTART->getValue());
+        $this->assertEquals('20300603T120000Z', $override->DTEND->getValue());
+        $this->assertFalse(isset($override->DESCRIPTION));
+        $this->assertFalse(isset($override->LOCATION));
+    }
+
+    /**
      * Test that hidePrivateEventInfoForUser does not mask events for owners
      */
     function testHidePrivateEventInfoForUserDoesNotMaskForOwner() {

@@ -125,6 +125,7 @@ This plugin handle:
  - Authentication via JWT token, which is still relied upon by legacy OpenPaaS SPAs (deprecated). This token can be generated on the side
  service by calling `/token` endpoint.
  - Authentication via `TwakeCalendarToken`. Used by the side service to perform automated actions like consolidating `domain member address book`. 
+   See [Technical Token Authentication](TECHNICAL_TOKEN.md).
 
 
 ### ESN\DAV\CorsPlugin

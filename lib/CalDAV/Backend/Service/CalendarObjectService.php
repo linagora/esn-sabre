@@ -404,6 +404,17 @@ class CalendarObjectService {
      */
     private function validateFilterForObjectWithVObject($vObject, array $filters) {
         $validator = new \Sabre\CalDAV\CalendarQueryValidator();
-        return $validator->validate($vObject, $filters);
+
+        try {
+            return $validator->validate($vObject, $filters);
+        } catch (\Exception $e) {
+            // Be lenient on read: a single malformed event (e.g. an invalid RRULE UNTIL value)
+            // must not make the whole time-range REPORT fail with a 500. We log it and filter the
+            // broken object out of the result instead of crashing.
+            error_log('CalendarObjectService: skipping malformed calendar object during filtering: '
+                . $e->getMessage());
+
+            return false;
+        }
     }
 }

@@ -454,13 +454,20 @@ class CalendarObjectHandler {
 
         $propertyList = [];
         foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
-            $vObject = VObject\Reader::read($objProps[200][$props[0]]);
-            $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
-            $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
-            $objProps[200][$props[0]] = $vObject->jsonSerialize();
-            $vObject->destroy();
+            try {
+                $vObject = VObject\Reader::read($objProps[200][$props[0]]);
+                $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
+                $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+                $objProps[200][$props[0]] = $vObject->jsonSerialize();
+                $vObject->destroy();
 
-            $propertyList[] = $objProps;
+                $propertyList[] = $objProps;
+            } catch (\Exception $e) {
+                // Be lenient on read: a single malformed event (e.g. an invalid RRULE UNTIL value)
+                // must not make the whole report fail. Log it and filter it out of the result.
+                error_log('CalendarObjectHandler: skipping malformed calendar object during expansion: '
+                    . $e->getMessage());
+            }
         }
 
         $embedded = [
@@ -512,23 +519,30 @@ class CalendarObjectHandler {
         $backend = $parentNode->getBackend();
         $id = $parentNode->getFullCalendarId();
         foreach ($backend->calendarQueryWithAllData($id, $filters) as $calendarObject) {
-            // Use pre-parsed VObject if available (from requirePostFilter), otherwise parse now
-            $vObject = $calendarObject['vObject'] ?? VObject\Reader::read($calendarObject['calendardata']);
-            $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
-            $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+            try {
+                // Use pre-parsed VObject if available (from requirePostFilter), otherwise parse now
+                $vObject = $calendarObject['vObject'] ?? VObject\Reader::read($calendarObject['calendardata']);
+                $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
+                $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
 
-            // Build the property list in the same format as getPropertiesForMultiplePaths would return
-            $objProps = [
-                200 => [
-                    $props[0] => $vObject->jsonSerialize(),
-                    $props[1] => $calendarObject['etag']
-                ],
-                404 => [],  // Required by Utils::generateJSONMultiStatus
-                'href' => $parentNodePath . '/' . $calendarObject['uri']
-            ];
-            $vObject->destroy();
+                // Build the property list in the same format as getPropertiesForMultiplePaths would return
+                $objProps = [
+                    200 => [
+                        $props[0] => $vObject->jsonSerialize(),
+                        $props[1] => $calendarObject['etag']
+                    ],
+                    404 => [],  // Required by Utils::generateJSONMultiStatus
+                    'href' => $parentNodePath . '/' . $calendarObject['uri']
+                ];
+                $vObject->destroy();
 
-            $propertyList[] = $objProps;
+                $propertyList[] = $objProps;
+            } catch (\Exception $e) {
+                // Be lenient on read: a single malformed event (e.g. an invalid RRULE UNTIL value)
+                // must not make the whole report fail. Log it and filter it out of the result.
+                error_log('CalendarObjectHandler: skipping malformed calendar object during expansion: '
+                    . $e->getMessage());
+            }
         }
 
         $embedded = [

@@ -145,14 +145,25 @@ class CalendarDataNormalizer {
      * @return int End timestamp
      */
     private function calculateRecurringEndDate($component, $vObject) {
-        $it = new VObject\Recur\EventIterator($vObject, (string) $component->UID);
         $maxDate = new \DateTime(self::MAX_DATE);
 
-        if ($it->isInfinite()) {
+        try {
+            $it = new VObject\Recur\EventIterator($vObject, (string) $component->UID);
+
+            if ($it->isInfinite()) {
+                return $maxDate->getTimeStamp();
+            }
+
+            return $this->findLastRecurrenceDate($it, $maxDate);
+        } catch (\Exception $e) {
+            // Be lenient: a malformed recurrence (e.g. an invalid RRULE UNTIL value) must not
+            // crash the whole request. We log the problem and fall back to treating the event as
+            // open-ended so it stays discoverable by time-range queries instead of being lost.
+            error_log('CalendarDataNormalizer: could not expand recurrence for UID '
+                . (string) $component->UID . ', falling back to open-ended: ' . $e->getMessage());
+
             return $maxDate->getTimeStamp();
         }
-
-        return $this->findLastRecurrenceDate($it, $maxDate);
     }
 
     /**

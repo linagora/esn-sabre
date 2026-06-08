@@ -38,8 +38,16 @@ abstract class RealTimePlugin extends ServerPlugin {
 
     public function publishMessages() {
         foreach($this->messages as $message) {
-            $message['data'] = $this->buildData($message['data']);
-            $this->client->publish($message['topic'], json_encode($message['data']));
+            try {
+                $message['data'] = $this->buildData($message['data']);
+                $this->client->publish($message['topic'], json_encode($message['data']));
+            } catch (\Exception $e) {
+                // Be lenient: a malformed event (e.g. an invalid RRULE UNTIL value) that cannot be
+                // serialized must not crash the request that triggered the notification. The event
+                // has already been persisted; we log and skip its realtime message.
+                error_log('RealTimePlugin: skipping realtime message on topic ' . $message['topic']
+                    . ' due to serialization error: ' . $e->getMessage());
+            }
         }
 
         $this->messages = array();

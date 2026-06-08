@@ -133,25 +133,10 @@ class BinaryAttachmentPlugin extends ServerPlugin {
         foreach ($component->children() as $child) {
             if ($child instanceof VObject\Component) {
                 $this->applyPolicy($child, $filtered);
-                continue;
+            } elseif ($this->isBinaryAttachment($child)) {
+                $this->rejectIfConfigured();
+                $toRemove[] = $child;
             }
-
-            if (!($child instanceof VObject\Property) || strtoupper($child->name) !== 'ATTACH') {
-                continue;
-            }
-
-            if (!$this->isBinaryAttachment($child)) {
-                continue;
-            }
-
-            if ($this->mode === self::MODE_REJECT) {
-                throw new \Sabre\DAV\Exception\Forbidden(
-                    'Inline binary attachments (ATTACH;VALUE=BINARY) are not allowed on this server.'
-                );
-            }
-
-            // MODE_FILTER
-            $toRemove[] = $child;
         }
 
         foreach ($toRemove as $property) {
@@ -161,15 +146,31 @@ class BinaryAttachmentPlugin extends ServerPlugin {
     }
 
     /**
-     * An ATTACH is considered binary when it carries an inline base64 payload,
-     * i.e. ENCODING=BASE64 or VALUE=BINARY. URI attachments are not.
+     * Throws when the plugin is configured to reject binary attachments.
+     */
+    private function rejectIfConfigured() {
+        if ($this->mode === self::MODE_REJECT) {
+            throw new \Sabre\DAV\Exception\Forbidden(
+                'Inline binary attachments (ATTACH;VALUE=BINARY) are not allowed on this server.'
+            );
+        }
+    }
+
+    /**
+     * A child is a binary attachment when it is an ATTACH property carrying an
+     * inline base64 payload, i.e. ENCODING=BASE64 or VALUE=BINARY. URI
+     * attachments (and any other node) are not.
      *
-     * @param VObject\Property $attach
+     * @param mixed $child
      * @return bool
      */
-    protected function isBinaryAttachment(VObject\Property $attach) {
-        $value = isset($attach['VALUE']) ? strtoupper((string) $attach['VALUE']) : null;
-        $encoding = isset($attach['ENCODING']) ? strtoupper((string) $attach['ENCODING']) : null;
+    protected function isBinaryAttachment($child) {
+        if (!($child instanceof VObject\Property) || strtoupper($child->name) !== 'ATTACH') {
+            return false;
+        }
+
+        $value = isset($child['VALUE']) ? strtoupper((string) $child['VALUE']) : null;
+        $encoding = isset($child['ENCODING']) ? strtoupper((string) $child['ENCODING']) : null;
 
         return $value === 'BINARY' || $encoding === 'BASE64';
     }

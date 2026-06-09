@@ -139,7 +139,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         // On the ITIP path (POST /itip) the Twake Side Service is an internal trusted caller
-        // and assertRecipientIsConcernedByEvent() in ITipPlugin already validated the recipient.
+        // and recipientMatchesCurrentUser() in ITipPlugin already validated the recipient.
         // Skip the inbox ACL privilege check:
         //   • The Side Service may authenticate via a token that does not map to a Sabre
         //     principal, so getCurrentUserPrincipal() returns null.

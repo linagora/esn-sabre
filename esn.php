@@ -177,6 +177,14 @@ $server->addPlugin($caldavPlugin);
 $privateEventPlugin = new ESN\CalDAV\PrivateEventPlugin();
 $server->addPlugin($privateEventPlugin);
 
+// Inline binary attachment policy (ATTACH;VALUE=BINARY)
+// CALDAV_BINARY_ATTACHMENT_MODE = allow | reject | filter (default: filter)
+$binaryAttachmentMode = getenv('CALDAV_BINARY_ATTACHMENT_MODE');
+$binaryAttachmentPlugin = new ESN\CalDAV\BinaryAttachmentPlugin(
+    $binaryAttachmentMode !== false ? $binaryAttachmentMode : ESN\CalDAV\BinaryAttachmentPlugin::MODE_FILTER
+);
+$server->addPlugin($binaryAttachmentPlugin);
+
 // CardDAV support
 $carddavPlugin = new Sabre\CardDAV\Plugin();
 $server->addPlugin($carddavPlugin);

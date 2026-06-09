@@ -52,6 +52,15 @@ Feature flag to restrict DAV principal discovery.
 
 Sabre being written in PHP, it supports per-request MongoDB indexes provisioning (defaults to `true`), which can be disabled by setting the SHOULD_CREATE_INDEX environment variable to `false`. This is recommended in production once indexes are provisioned.
 
+Feature flag to control how inline binary attachments (`ATTACH;ENCODING=BASE64;VALUE=BINARY`) are handled on calendar object creation and update. URI attachments (`ATTACH:https://...`) are always preserved.
+ - CALDAV_BINARY_ATTACHMENT_MODE
+
+   - `filter` : silently strip inline binary attachments from the stored object (default)
+   - `reject` : reject any request carrying an inline binary attachment with `403 Forbidden`
+   - `allow`  : store the object as-is, inline binary attachments included
+
+   Inline binaries can significantly bloat calendar objects; the default `filter` keeps them out of storage while still accepting the request. Use `allow` to opt back into the historical behaviour, or `reject` to surface an explicit error to clients.
+
 ## Scheduling
 
 `TW_CAL_REPLY_PROPAGATION_THRESHOLD` controls reply propagation fan-out after an attendee updates their participation status.

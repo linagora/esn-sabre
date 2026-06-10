@@ -303,10 +303,16 @@ $server->on('exception', function ($e) use ($server, $aclPlugin) {
         $nodeAcl = 'unavailable: ' . $aclException->getMessage();
     }
 
+    try {
+        $currentPrincipals = json_encode($aclPlugin->getCurrentUserPrincipals());
+    } catch (\Exception $principalException) {
+        $currentPrincipals = 'unavailable: ' . $principalException->getMessage();
+    }
+
     error_log('ACL DENY method=' . $server->httpRequest->getMethod()
         . ' uri=' . $path
         . ' currentPrincipal=' . var_export($aclPlugin->getCurrentUserPrincipal(), true)
-        . ' currentPrincipals=' . json_encode($aclPlugin->getCurrentUserPrincipals())
+        . ' currentPrincipals=' . $currentPrincipals
         . ' nodeACL=' . json_encode($nodeAcl));
 });
 

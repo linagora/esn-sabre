@@ -18,9 +18,11 @@ class AuthTenant
     public function __construct(
         string $userId,
         string $domainId,
-        TenantType $tenantType = TenantType::User
+        // Nullable + in-body default: the CodeScene parser chokes on enum
+        // constants used as parameter defaults.
+        ?TenantType $tenantType = null
     ) {
-        $this->tenantType = $tenantType;
+        $this->tenantType = $tenantType ?? TenantType::User;
         $this->userId = $userId;
         $this->domainId = $domainId;
         $this->principal = new Principal($this->prefixes[$this->tenantType->value], $this->userId);

@@ -290,6 +290,26 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
     $server->addPlugin($requestLoggerPlugin);
 }
 
+// Temporary diagnostic: log the evaluated principal and node ACL on each ACL denial
+$server->on('exception', function ($e) use ($server, $aclPlugin) {
+    if (!($e instanceof \Sabre\DAVACL\Exception\NeedPrivileges)) {
+        return;
+    }
+
+    $path = $server->httpRequest->getPath();
+    try {
+        $nodeAcl = $aclPlugin->getAcl($server->tree->getNodeForPath($path));
+    } catch (\Exception $aclException) {
+        $nodeAcl = 'unavailable: ' . $aclException->getMessage();
+    }
+
+    error_log('ACL DENY method=' . $server->httpRequest->getMethod()
+        . ' uri=' . $path
+        . ' currentPrincipal=' . var_export($aclPlugin->getCurrentUserPrincipal(), true)
+        . ' currentPrincipals=' . json_encode($aclPlugin->getCurrentUserPrincipals())
+        . ' nodeACL=' . json_encode($nodeAcl));
+});
+
 // And off we go!
 $server->exec();
 

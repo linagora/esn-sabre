@@ -19,6 +19,19 @@ use \Sabre\VObject,
 class CalendarHandler {
     use ValidatesResourceIds;
 
+    private const CALENDAR_JSON_PROPERTIES = [
+        '{DAV:}displayname' => 'dav:name',
+        '{urn:ietf:params:xml:ns:caldav}calendar-description' => 'caldav:description',
+        '{http://calendarserver.org/ns/}getctag' => 'calendarserver:ctag',
+        '{http://apple.com/ns/ical/}calendar-color' => 'apple:color',
+        '{http://apple.com/ns/ical/}calendar-order' => 'apple:order'
+    ];
+
+    private const SUBSCRIPTION_JSON_PROPERTIES = [
+        '{http://apple.com/ns/ical/}calendar-color' => 'apple:color',
+        '{http://apple.com/ns/ical/}calendar-order' => 'apple:order'
+    ];
+
     protected $server;
     protected $currentUser;
 
@@ -72,15 +85,17 @@ class CalendarHandler {
 
         $result = $this->server->updateProperties($nodePath, $davProps);
 
-        $returncode = 204;
+        return [$this->statusCodeFromUpdateResult($result), null];
+    }
+
+    private function statusCodeFromUpdateResult($result): int {
         foreach ($result as $code) {
             if ((int)$code > 299) {
-                $returncode = (int)$code;
-                break;
+                return (int)$code;
             }
         }
 
-        return [$returncode, null];
+        return 204;
     }
 
     public function listCalendarHomes($nodePath, $node, $withRights, $calendarTypeOptions) {
@@ -131,40 +146,68 @@ class CalendarHandler {
     }
 
     public function listAllCalendarsWithReadRight($nodePath, $node, $withRights, $calendarTypeOptions, $withFreeBusy) {
-        $right = $withFreeBusy ? '{urn:ietf:params:xml:ns:caldav}read-free-busy' : '{DAV:}read';
-
-        $calendars = $node->getChildren();
+        $listingContext = [
+            'right' => $withFreeBusy ? '{urn:ietf:params:xml:ns:caldav}read-free-busy' : '{DAV:}read',
+            'withRights' => $withRights,
+            'typeOptions' => $calendarTypeOptions
+        ];
 
         $items = [];
-        foreach ($calendars as $calendar) {
-            if ($calendar instanceof \Sabre\CalDAV\Calendar) {
-                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), $right, \Sabre\DAVACL\Plugin::R_PARENT, false) &&
-                  ($calendar instanceof \ESN\CalDAV\SharedCalendar)) {
-                    //Personnal Calendars
-                    if (!$calendar->isSharedInstance() && !empty($calendarTypeOptions['includePersonal'])) {
-                        $items[] = $this->calendarToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
-                    }
+        foreach ($node->getChildren() as $calendar) {
+            $item = $this->calendarChildToJson($calendar, $nodePath . '/' . $calendar->getName(), $listingContext);
 
-                    //Shared Calendars
-                    if ($calendar->isSharedInstance() && !empty($calendarTypeOptions['includeShared']) && (!isset($calendarTypeOptions['sharedDelegationStatus']) || $calendar->getInviteStatus() === $calendarTypeOptions['sharedDelegationStatus'] )) {
-                        $items[] = $this->calendarToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
-                    }
-                }
-            }
-
-            // Subscriptions
-            if ($calendar instanceof \Sabre\CalDAV\Subscriptions\Subscription && !empty($calendarTypeOptions['includeSharedPublicSubscription'])) {
-                if ($this->server->getPlugin('acl')->checkPrivileges($nodePath . '/' . $calendar->getName(), $right, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
-                    $subscription = $this->subscriptionToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
-
-                    if(isset($subscription)) {
-                        $items[] = $subscription;
-                    }
-                }
+            if ($item !== null) {
+                $items[] = $item;
             }
         }
 
         return $items;
+    }
+
+    /**
+     * Renders a calendar home child as JSON when the listing options select
+     * it, or returns null when it must be excluded.
+     */
+    private function calendarChildToJson($calendar, string $calendarPath, array $listingContext): ?array {
+        if ($this->shouldIncludeCalendar($calendar, $calendarPath, $listingContext['right'], $listingContext['typeOptions'])) {
+            return $this->calendarToJson($calendarPath, $calendar, $listingContext['withRights']);
+        }
+
+        if ($this->shouldIncludeSubscription($calendar, $calendarPath, $listingContext['right'], $listingContext['typeOptions'])) {
+            return $this->subscriptionToJson($calendarPath, $calendar, $listingContext['withRights']);
+        }
+
+        return null;
+    }
+
+    private function hasRightOn(string $calendarPath, string $right): bool {
+        return $this->server->getPlugin('acl')->checkPrivileges($calendarPath, $right, \Sabre\DAVACL\Plugin::R_PARENT, false);
+    }
+
+    private function shouldIncludeCalendar($calendar, string $calendarPath, string $right, $calendarTypeOptions): bool {
+        if (!($calendar instanceof \ESN\CalDAV\SharedCalendar) || !$this->hasRightOn($calendarPath, $right)) {
+            return false;
+        }
+
+        //Personnal Calendars
+        if (!$calendar->isSharedInstance()) {
+            return !empty($calendarTypeOptions['includePersonal']);
+        }
+
+        //Shared Calendars
+        return !empty($calendarTypeOptions['includeShared'])
+            && $this->matchesDelegationStatus($calendar, $calendarTypeOptions);
+    }
+
+    private function matchesDelegationStatus($calendar, $calendarTypeOptions): bool {
+        return !isset($calendarTypeOptions['sharedDelegationStatus'])
+            || $calendar->getInviteStatus() === $calendarTypeOptions['sharedDelegationStatus'];
+    }
+
+    private function shouldIncludeSubscription($calendar, string $calendarPath, string $right, $calendarTypeOptions): bool {
+        return $calendar instanceof \Sabre\CalDAV\Subscriptions\Subscription
+            && !empty($calendarTypeOptions['includeSharedPublicSubscription'])
+            && $this->hasRightOn($calendarPath, $right);
     }
 
     public function listAllPersonalCalendars($calendarHomeNode) {
@@ -187,12 +230,18 @@ class CalendarHandler {
 
         $items = [];
         foreach ($calendars as $calendar) {
-            if ($calendar instanceof \ESN\CalDAV\SharedCalendar && !$calendar->isSharedInstance() && $calendar->isPublic()) {
+            if ($this->isPublicPersonalCalendar($calendar)) {
                 $items[] = $this->calendarToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
             }
         }
 
         return $items;
+    }
+
+    private function isPublicPersonalCalendar($calendar): bool {
+        return $calendar instanceof \ESN\CalDAV\SharedCalendar
+            && !$calendar->isSharedInstance()
+            && $calendar->isPublic();
     }
 
     public function getCalendarInformation($nodePath, $node, $withRights) {
@@ -202,83 +251,103 @@ class CalendarHandler {
     public function calendarToJson($nodePath, $calendar, $withRights = null) {
         $baseUri = $this->server->getBaseUri();
         $calprops = $calendar->getProperties([]);
-        $node = $calendar;
 
-        if ($calendar instanceof \ESN\CalDAV\SharedCalendar && $calendar->isSharedInstance()) {
-            $calendarid = $calendar->getCalendarId();
-            $invites = $calendar->getInvites();
-
-            foreach($invites as $user) {
-                if ($user->access == \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER) {
-                    // Skip if principal is null or malformed
-                    if ($user->principal === null) {
-                        continue;
-                    }
-                    $uriExploded = explode('/', $user->principal);
-                    if (count($uriExploded) < 3) {
-                        continue;
-                    }
-                    $sourceCalendarOwner = $uriExploded[2];
-                    if ($sourceCalendarOwner === null || $sourceCalendarOwner === '') {
-                        continue;
-                    }
-                    $ownerHomePath = '/calendars/' . $sourceCalendarOwner;
-
-                    $myNode = $this->server->tree->getNodeForPath($ownerHomePath);
-                    $ownerCalendars = $myNode->getChildren();
-
-                    foreach($ownerCalendars as $ownerCalendar) {
-                        if ($ownerCalendar instanceof \ESN\CalDAV\SharedCalendar && $ownerCalendar->getCalendarId() == $calendarid) {
-                            $sourceCalendarUri = $ownerCalendar->getName();
-
-                            break 2;
-                        }
-                    }
-                }
-            }
-        }
-
-        $calendar = [
+        $json = [
             '_links' => [
                 'self' => [ 'href' => $baseUri . $nodePath . '.json' ],
             ]
         ];
 
-        if (isset($sourceCalendarUri)) {
-            $calendar['calendarserver:delegatedsource'] = $baseUri . 'calendars/' . $sourceCalendarOwner . '/' . $sourceCalendarUri . '.json';
+        $delegatedSourcePath = $this->resolveDelegatedSourcePath($calendar);
+        if ($delegatedSourcePath !== null) {
+            $json['calendarserver:delegatedsource'] = $baseUri . $delegatedSourcePath;
         }
 
-        if (isset($calprops['{DAV:}displayname'])) {
-            $calendar['dav:name'] = $calprops['{DAV:}displayname'];
-        }
-
-        if (isset($calprops['{urn:ietf:params:xml:ns:caldav}calendar-description'])) {
-            $calendar['caldav:description'] = $calprops['{urn:ietf:params:xml:ns:caldav}calendar-description'];
-        }
-
-        if (isset($calprops['{http://calendarserver.org/ns/}getctag'])) {
-            $calendar['calendarserver:ctag'] = $calprops['{http://calendarserver.org/ns/}getctag'];
-        }
-
-        if (isset($calprops['{http://apple.com/ns/ical/}calendar-color'])) {
-            $calendar['apple:color'] = $calprops['{http://apple.com/ns/ical/}calendar-color'];
-        }
-
-        if (isset($calprops['{http://apple.com/ns/ical/}calendar-order'])) {
-            $calendar['apple:order'] = $calprops['{http://apple.com/ns/ical/}calendar-order'];
-        }
+        $this->mapDavProperties($json, $calprops, self::CALENDAR_JSON_PROPERTIES);
 
         if ($withRights) {
-            if (method_exists($node, 'getInvites') && $node->getInvites()) {
-                $calendar['invite'] = $node->getInvites();
+            $this->appendRights($json, $calendar);
+        }
+
+        return $json;
+    }
+
+    /**
+     * For a shared (delegated) calendar instance, finds the path of the source
+     * calendar in the share owner's home. Returns null for non-delegated
+     * calendars or when the source cannot be located.
+     */
+    private function resolveDelegatedSourcePath($calendar): ?string {
+        if (!($calendar instanceof \ESN\CalDAV\SharedCalendar) || !$calendar->isSharedInstance()) {
+            return null;
+        }
+
+        foreach ($calendar->getInvites() as $user) {
+            if ($user->access != \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER) {
+                continue;
             }
 
-            if (method_exists($node, 'getACL') && $node->getACL()) {
-                $calendar['acl'] = $node->getACL();
+            $sourceCalendarOwner = $this->ownerIdFromPrincipal($user->principal);
+            if ($sourceCalendarOwner === null) {
+                continue;
+            }
+
+            $sourceCalendarUri = $this->findOwnerCalendarUri($sourceCalendarOwner, $calendar->getCalendarId());
+            if ($sourceCalendarUri !== null) {
+                return 'calendars/' . $sourceCalendarOwner . '/' . $sourceCalendarUri . '.json';
             }
         }
 
-        return $calendar;
+        return null;
+    }
+
+    /**
+     * Extracts the owner id from a principal URI, returning null when the
+     * principal is null or malformed.
+     */
+    private function ownerIdFromPrincipal($principal): ?string {
+        if ($principal === null) {
+            return null;
+        }
+
+        $uriExploded = explode('/', $principal);
+        if (count($uriExploded) < 3) {
+            return null;
+        }
+
+        $ownerId = $uriExploded[2];
+
+        return ($ownerId === null || $ownerId === '') ? null : $ownerId;
+    }
+
+    private function findOwnerCalendarUri(string $ownerId, $calendarid): ?string {
+        $ownerHome = $this->server->tree->getNodeForPath('/calendars/' . $ownerId);
+
+        foreach ($ownerHome->getChildren() as $ownerCalendar) {
+            if ($ownerCalendar instanceof \ESN\CalDAV\SharedCalendar && $ownerCalendar->getCalendarId() == $calendarid) {
+                return $ownerCalendar->getName();
+            }
+        }
+
+        return null;
+    }
+
+    private function mapDavProperties(array &$json, $props, array $propertyMap): void {
+        foreach ($propertyMap as $davProperty => $jsonKey) {
+            if (isset($props[$davProperty])) {
+                $json[$jsonKey] = $props[$davProperty];
+            }
+        }
+    }
+
+    private function appendRights(array &$json, $node): void {
+        if (method_exists($node, 'getInvites') && $node->getInvites()) {
+            $json['invite'] = $node->getInvites();
+        }
+
+        if (method_exists($node, 'getACL') && $node->getACL()) {
+            $json['acl'] = $node->getACL();
+        }
     }
 
     public function subscriptionToJson($nodePath, $subscription, $withRights = null) {
@@ -290,68 +359,67 @@ class CalendarHandler {
             '{http://apple.com/ns/ical/}calendar-order'
         ];
         $subprops = $subscription->getProperties($propertiesList);
-        $node = $subscription;
 
-        $subscription = [
+        $json = [
             '_links' => [
                 'self' => [ 'href' => $baseUri . $nodePath . '.json' ],
             ]
         ];
 
         if (isset($subprops['{DAV:}displayname'])) {
-            $subscription['dav:name'] = $subprops['{DAV:}displayname'];
+            $json['dav:name'] = $subprops['{DAV:}displayname'];
         }
 
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
-            $sourceHref = $subprops['{http://calendarserver.org/ns/}source']->getHref();
+            $source = $this->subscriptionSourceToJson($subprops['{http://calendarserver.org/ns/}source']->getHref());
 
-            // Skip if source href is null or empty
-            if ($sourceHref === null || $sourceHref === '') {
+            // Skip the whole subscription when its source is invalid or gone
+            if ($source === null) {
                 return null;
             }
 
-            // Normalize href: extract path component
-            // parse_url can return null (component absent) or false (malformed URL)
-            $path = parse_url($sourceHref, PHP_URL_PATH);
-
-            // Skip if path extraction failed or returned null/false
-            if (!is_string($path) || $path === '') {
-                return null;
-            }
-
-            // Normalize: remove leading slashes, collapse multiple slashes, remove trailing slashes
-            $sourcePath = ltrim($path, '/');
-            $sourcePath = preg_replace('#/+#', '/', $sourcePath);
-            $sourcePath = rtrim($sourcePath, '/');
-
-            // Skip if source path is empty after normalization
-            if ($sourcePath === '') {
-                return null;
-            }
-
-            if (!$this->server->tree->nodeExists($sourcePath)) {
-                return null;
-            }
-
-            $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
-            $subscription['calendarserver:source'] = $this->calendarToJson($sourcePath, $sourceNode, true);
+            $json['calendarserver:source'] = $source;
         }
 
-        if (isset($subprops['{http://apple.com/ns/ical/}calendar-color'])) {
-            $subscription['apple:color'] = $subprops['{http://apple.com/ns/ical/}calendar-color'];
-        }
-
-        if (isset($subprops['{http://apple.com/ns/ical/}calendar-order'])) {
-            $subscription['apple:order'] = $subprops['{http://apple.com/ns/ical/}calendar-order'];
-        }
+        $this->mapDavProperties($json, $subprops, self::SUBSCRIPTION_JSON_PROPERTIES);
 
         if ($withRights) {
-            if (method_exists($node, 'getACL') && $node->getACL()) {
-                $subscription['acl'] = $node->getACL();
-            }
+            $this->appendRights($json, $subscription);
         }
 
-        return $subscription;
+        return $json;
+    }
+
+    private function subscriptionSourceToJson($sourceHref): ?array {
+        $sourcePath = $this->normalizeSourcePath($sourceHref);
+
+        if ($sourcePath === null || !$this->server->tree->nodeExists($sourcePath)) {
+            return null;
+        }
+
+        return $this->calendarToJson($sourcePath, $this->server->tree->getNodeForPath($sourcePath), true);
+    }
+
+    /**
+     * Extracts and normalizes the path component of a subscription source
+     * href. Returns null when the href is empty, malformed, or normalizes to
+     * an empty path.
+     */
+    private function normalizeSourcePath($sourceHref): ?string {
+        if ($sourceHref === null || $sourceHref === '') {
+            return null;
+        }
+
+        // parse_url can return null (component absent) or false (malformed URL)
+        $path = parse_url($sourceHref, PHP_URL_PATH);
+        if (!is_string($path) || $path === '') {
+            return null;
+        }
+
+        // Remove leading slashes, collapse multiple slashes, remove trailing slashes
+        $sourcePath = rtrim(preg_replace('#/+#', '/', ltrim($path, '/')), '/');
+
+        return $sourcePath === '' ? null : $sourcePath;
     }
 
     public function getSubscriptionInformation($nodePath, $node, $withRights) {
@@ -366,45 +434,11 @@ class CalendarHandler {
 
     public function updateSharees($path, $jsonData) {
         $sharingPlugin = $this->server->getPlugin('sharing');
-        $sharees = [];
 
-        if (isset($jsonData->share->set)) {
-            foreach ($jsonData->share->set as $sharee) {
-                $properties = [];
-                if (isset($sharee->{'common-name'})) {
-                    $properties['{DAV:}displayname'] = $sharee->{'common-name'};
-                }
-
-                if(isset($sharee->{'dav:administration'})) {
-                    $access = \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION;
-                } else if (isset($sharee->{'dav:read-write'})) {
-                    $access = \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE;
-                } else if (isset($sharee->{'dav:read'})) {
-                    $access = \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
-                } else if (isset($sharee->{'dav:freebusy'})) {
-                    $access = \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY;
-                } else {
-                    // Skip this sharee if no valid access level is found
-                    continue;
-                }
-
-                $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([
-                    'href'       => $sharee->{'dav:href'},
-                    'properties' => $properties,
-                    'access'     => $access,
-                    'comment'    => isset($sharee->summary) ? $sharee->summary : null
-                ]);
-            }
-        }
-
-        if (isset($jsonData->share->remove)) {
-            foreach ($jsonData->share->remove as $sharee) {
-                $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([
-                    'href'   => $sharee->{'dav:href'},
-                    'access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS
-                ]);
-            }
-        }
+        $sharees = array_merge(
+            $this->buildShareesToSet($jsonData->share->set ?? []),
+            $this->buildShareesToRemove($jsonData->share->remove ?? [])
+        );
 
         $sharingPlugin->shareResource($path, $sharees);
 
@@ -412,6 +446,63 @@ class CalendarHandler {
         $this->server->httpResponse->setHeader('X-Sabre-Status', 'everything-went-well');
 
         return [200, null];
+    }
+
+    private function buildShareesToSet($shareesToSet): array {
+        $sharees = [];
+
+        foreach ($shareesToSet as $sharee) {
+            $access = $this->shareeAccessLevel($sharee);
+
+            // Skip this sharee if no valid access level is found
+            if ($access === null) {
+                continue;
+            }
+
+            $properties = [];
+            if (isset($sharee->{'common-name'})) {
+                $properties['{DAV:}displayname'] = $sharee->{'common-name'};
+            }
+
+            $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([
+                'href'       => $sharee->{'dav:href'},
+                'properties' => $properties,
+                'access'     => $access,
+                'comment'    => isset($sharee->summary) ? $sharee->summary : null
+            ]);
+        }
+
+        return $sharees;
+    }
+
+    private function shareeAccessLevel($sharee): ?int {
+        if (isset($sharee->{'dav:administration'})) {
+            return \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION;
+        }
+        if (isset($sharee->{'dav:read-write'})) {
+            return \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE;
+        }
+        if (isset($sharee->{'dav:read'})) {
+            return \Sabre\DAV\Sharing\Plugin::ACCESS_READ;
+        }
+        if (isset($sharee->{'dav:freebusy'})) {
+            return \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY;
+        }
+
+        return null;
+    }
+
+    private function buildShareesToRemove($shareesToRemove): array {
+        $sharees = [];
+
+        foreach ($shareesToRemove as $sharee) {
+            $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([
+                'href'   => $sharee->{'dav:href'},
+                'access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS
+            ]);
+        }
+
+        return $sharees;
     }
 
     public function updateInviteStatus($node, $jsonData) {
@@ -447,36 +538,53 @@ class CalendarHandler {
         $path = $request->getPath();
         $node = $this->server->tree->getNodeForPath($path);
 
-        if ($node instanceof \ESN\CalDAV\SharedCalendar) {
-            // Check that the user has the {DAV:}share privilege before modifying public rights
-            // Only ADMINISTRATION access level grants this privilege
-            $aclPlugin = $this->server->getPlugin('acl');
-            if (!$aclPlugin->checkPrivileges($path, '{DAV:}share', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
-                throw new Forbidden('You do not have permission to modify public rights on this calendar');
-            }
-
-            $jsonData = json_decode($request->getBodyAsString());
-
-            if ($jsonData === null || !is_object($jsonData)) {
-                throw new DAV\Exception\BadRequest('Invalid JSON in request body');
-            }
-
-            if (!isset($jsonData->public_right)) {
-                throw new DAV\Exception\BadRequest('Missing public_right property in JSON request');
-            }
-
-            $supportedPrivileges = $this->server->getPlugin('acl')->getFlatPrivilegeSet($node);
-            $supportedPrivileges[""] = "Private";
-            if (!isset($supportedPrivileges[$jsonData->public_right])) {
-                throw new \Sabre\DAVACL\Exception\NotSupportedPrivilege('The privilege you specified (' . $jsonData->public_right . ') is not recognized by this server');
-            }
-
-            $node->savePublicRight($jsonData->public_right);
-
-            return [200, $node->getACL()];
+        if (!($node instanceof \ESN\CalDAV\SharedCalendar)) {
+            return null;
         }
 
-        return null;
+        $this->assertCanModifyPublicRights($path);
+
+        $publicRight = $this->decodePublicRightPayload($request);
+
+        $this->assertSupportedPublicRight($node, $publicRight);
+
+        $node->savePublicRight($publicRight);
+
+        return [200, $node->getACL()];
+    }
+
+    /**
+     * Checks that the user has the {DAV:}share privilege before modifying
+     * public rights. Only ADMINISTRATION access level grants this privilege.
+     */
+    private function assertCanModifyPublicRights($path): void {
+        $aclPlugin = $this->server->getPlugin('acl');
+        if (!$aclPlugin->checkPrivileges($path, '{DAV:}share', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+            throw new Forbidden('You do not have permission to modify public rights on this calendar');
+        }
+    }
+
+    private function decodePublicRightPayload($request) {
+        $jsonData = json_decode($request->getBodyAsString());
+
+        if ($jsonData === null || !is_object($jsonData)) {
+            throw new DAV\Exception\BadRequest('Invalid JSON in request body');
+        }
+
+        if (!isset($jsonData->public_right)) {
+            throw new DAV\Exception\BadRequest('Missing public_right property in JSON request');
+        }
+
+        return $jsonData->public_right;
+    }
+
+    private function assertSupportedPublicRight($node, $publicRight): void {
+        $supportedPrivileges = $this->server->getPlugin('acl')->getFlatPrivilegeSet($node);
+        $supportedPrivileges[""] = "Private";
+
+        if (!isset($supportedPrivileges[$publicRight])) {
+            throw new \Sabre\DAVACL\Exception\NotSupportedPrivilege('The privilege you specified (' . $publicRight . ') is not recognized by this server');
+        }
     }
 
     public function isOldDefaultCalendarUriNotFound($url) {
@@ -494,33 +602,45 @@ class CalendarHandler {
         $homePath = substr($path, 0, $eventUriPos);
         $node = $this->server->tree->getNodeForPath($homePath);
 
-        $calendars = $node->getChildren();
-
-        foreach ($calendars as $calendar) {
-            $name = $calendar->getName();
-
-            if ($name === \ESN\CalDAV\Backend\Esn::EVENTS_URI || $name === $userId ) {
-                return $name;
-            }
+        $existingDefaultCalendarUri = $this->findExistingDefaultCalendarUri($node, $userId);
+        if ($existingDefaultCalendarUri !== null) {
+            return $existingDefaultCalendarUri;
         }
 
         // No default calendar found - create it
         // This handles the case where a user has delegated calendars but no personal default calendar yet (issue #206)
-        $backend = $node->getCalDAVBackend();
-        if ($backend instanceof \ESN\CalDAV\Backend\Esn) {
-            $properties = [];
-            if (Utils::isResourceFromPrincipal($user)) {
-                $principalBackend = $backend->getPrincipalBackend();
-                $principal = $principalBackend->getPrincipalByPath($user);
-                if ($principal) {
-                    $properties['{DAV:}displayname'] = $principal['{DAV:}displayname'];
-                }
+        return $this->createDefaultCalendar($node, $user, $userId);
+    }
+
+    private function findExistingDefaultCalendarUri($node, $userId): ?string {
+        foreach ($node->getChildren() as $calendar) {
+            $name = $calendar->getName();
+
+            if ($name === \ESN\CalDAV\Backend\Esn::EVENTS_URI || $name === $userId) {
+                return $name;
             }
-            $backend->createCalendar($user, $userId, $properties);
-            return $userId;
         }
 
-        throw new DAV\Exception\NotFound('Unable to find or create user default calendar');
+        return null;
+    }
+
+    private function createDefaultCalendar($node, $user, $userId): string {
+        $backend = $node->getCalDAVBackend();
+
+        if (!($backend instanceof \ESN\CalDAV\Backend\Esn)) {
+            throw new DAV\Exception\NotFound('Unable to find or create user default calendar');
+        }
+
+        $properties = [];
+        if (Utils::isResourceFromPrincipal($user)) {
+            $principal = $backend->getPrincipalBackend()->getPrincipalByPath($user);
+            if ($principal) {
+                $properties['{DAV:}displayname'] = $principal['{DAV:}displayname'];
+            }
+        }
+        $backend->createCalendar($user, $userId, $properties);
+
+        return $userId;
     }
 
     private function propertyOrDefault($jsonData) {

@@ -3,7 +3,6 @@
 namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\SharedCalendar;
-use \Sabre\DAV\Exception;
 use \Sabre\VObject;
 use \Sabre\VObject\ITip\Message;
 use \Sabre\DAV;
@@ -81,15 +80,13 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
             return $this->send(403, null);
         }
 
-        // we need to check that the current user ($message->recipient) is related to the event,
-        // because he's either organizer, or attendee, or both.
-        //
-        // Some use cases, like a user forwarding an invite email to another user, brings a recipient
-        // that is not, at all, in the event. We ignore it
-        if (!$this->assertRecipientIsConcernedByEvent($message)) {
-            $this->server->getLogger()->error("Recipient ". $message->recipient ." is not organizer, not attendee of event ". (string)$message->message->VEVENT->UID .": skipping");
-            return $this->send(400, null);
-        }
+        // The target calendar is decided upstream by the mail layer: the request explicitly
+        // targets the recipient's calendar, and recipientMatchesCurrentUser() above already
+        // asserts the authenticated principal owns it. We deliberately do NOT re-derive
+        // participation by string-matching the recipient address against the ICS
+        // ORGANIZER/ATTENDEE: that address can legitimately be an alias, a group/list address
+        // or any address the mail layer resolved to this user. The routing decision (the URL)
+        // is authoritative, so we honor it and deliver onto the targeted calendar.
 
         if($message->method !== 'COUNTER'){
             $this->server->getPlugin('caldav-schedule')->scheduleLocalDelivery($message);
@@ -260,42 +257,5 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         }
 
         return ltrim($principal, '/');
-    }
-
-    private function assertRecipientIsConcernedByEvent(Message $message): bool
-    {
-        $vevent = $message->message->VEVENT;
-        $recipient = $message->recipient;
-
-        $isConcerned = false;
-        $hasOrganizer = false;
-        $senderIsAttendee = false;
-        try {
-            $organizer = (string)$vevent->ORGANIZER;
-            $hasOrganizer = trim((string)$organizer) !== '';
-            if (strtolower($organizer) === strtolower($recipient)) {
-                $isConcerned = true;
-            }
-        } catch (Exception $e) {
-            error_log("Error while trying to fetch event organizer: " . (string)$e);
-        }
-        if ($vevent->ATTENDEE) {
-            foreach ($vevent->ATTENDEE as $attendee) {
-                if (strtolower((string)$attendee) === strtolower($recipient)) {
-                    $isConcerned = true;
-                } else if (strtolower((string)$attendee) === strtolower((string)$message->sender)) {
-                    $senderIsAttendee = true;
-                }
-            }
-        }
-
-        if (!$isConcerned
-            && strtoupper((string)$message->method) === 'REPLY'
-            && !$hasOrganizer
-            && $senderIsAttendee) {
-            $isConcerned = true;
-        }
-
-        return $isConcerned;
     }
 }

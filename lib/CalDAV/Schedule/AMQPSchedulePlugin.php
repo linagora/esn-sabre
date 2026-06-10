@@ -86,8 +86,8 @@ class AMQPSchedulePlugin extends Plugin {
 
         // Key includes recipient: CANCEL (and other methods) generate a personalized ICS per
         // attendee (only that attendee in the ATTENDEE field). Grouping by method|uid only would
-        // store the first attendee's ICS and discard the rest, causing assertRecipientIsConcernedByEvent
-        // to reject delivery for all subsequent attendees (their email not in the stored ATTENDEE list).
+        // store the first attendee's ICS and discard the rest, delivering the wrong (or an
+        // incomplete) ICS to every subsequent attendee.
         $key = $iTipMessage->method . '|' . $iTipMessage->uid . '|' . $iTipMessage->recipient;
 
         if (!isset($this->pendingDeliveries[$key])) {

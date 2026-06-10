@@ -125,8 +125,13 @@ END:VCALENDAR'
         $this->assertEquals(400, $response->getStatus());
     }
 
-    function testITipShouldReturn400IfRecipientIsNotConcernedByEvent()
+    function testITipRequestShouldReturn204WhenAttendeeAddressDiffersFromRecipient()
     {
+        // The ICS carries an arbitrary participant address (organizer b, attendees b/a) that
+        // does not string-match the targeted recipient c. The routing decision (the URL /
+        // recipient resolving to the authenticated principal) is authoritative, so the iTIP
+        // must still be delivered onto c's calendar rather than rejected with a 400.
+        $this->iTipRequestData['method'] = 'REQUEST';
         $this->iTipRequestData['recipient'] = 'c@linagora.com';
         $this->setAuthenticatedPrincipal('principals/users/c');
         $request = $this->makeRequest($this->iTipRequestData);
@@ -135,7 +140,7 @@ END:VCALENDAR'
 
         $response = $this->server->httpResponse;
 
-        $this->assertEquals(400, $response->getStatus());
+        $this->assertEquals(204, $response->getStatus());
     }
     
     function testITipShouldReturn204IfRecipientIsConcernedByEvent()
@@ -221,8 +226,11 @@ END:VCALENDAR';
         $this->assertEquals(204, $response->getStatus());
     }
 
-    function testITipReplyWithoutOrganizerShouldReturn400WhenSenderIsNotAttendee()
+    function testITipReplyShouldReturn204WhenOrganizerAddressDiffersFromRecipient()
     {
+        // REPLY whose ORGANIZER (b) is an arbitrary address that does not match the targeted
+        // recipient c. Participant-identity string matching must not cause a rejection: the
+        // request targets c's calendar, so it is delivered.
         $this->iTipRequestData['method'] = 'REPLY';
         $this->iTipRequestData['recipient'] = 'c@linagora.com';
         $this->iTipRequestData['sender'] = 'x@linagora.com';
@@ -238,6 +246,7 @@ SUMMARY:Monday 0h
 DTSTART;TZID=Europe/Berlin:20120227T000000
 DTSTAMP:20120313T142416Z
 SEQUENCE:4
+ORGANIZER;CN=B:mailto:b@linagora.com
 ATTENDEE:mailto:b@linagora.com
 ATTENDEE:mailto:a@linagora.com
 END:VEVENT
@@ -247,7 +256,7 @@ END:VCALENDAR';
         $this->iTipPlugin->iTip($request);
 
         $response = $this->server->httpResponse;
-        $this->assertEquals(400, $response->getStatus());
+        $this->assertEquals(204, $response->getStatus());
     }
 
     function testITipShouldReturn403IfMethodIsNotCounterAndAuthenticatedIsNotRecipient()

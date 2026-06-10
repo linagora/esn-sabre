@@ -69,28 +69,11 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
      */
     function schedule(ITip\Message $iTipMessage) {
         $matched = preg_match("|/(calendars/.*/.*)/|", $_SERVER["REQUEST_URI"], $matches);
+        // TODO Handle unmatched calendar error
+        $calendarPath = $matched ? $matches[1] : null;
 
         if ($matched) {
-            $calendarPath = $matches[1];
-            // TODO Handle unmatched calendar error
-        }
-
-        // Issue #242: Handle malformed events missing ORGANIZER property
-        // If sender is null (no ORGANIZER), infer it from the calendar owner
-        if (($iTipMessage->sender === null || $iTipMessage->sender === '') && $matched) {
-            try {
-                $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
-                $ownerPrincipal = $calendarNode->getOwner();
-                if ($ownerPrincipal) {
-                    $ownerEmail = Utils::getPrincipalEmail($ownerPrincipal, $this->server);
-                    if ($ownerEmail) {
-                        $iTipMessage->sender = $ownerEmail;
-                        error_log("iTip message missing ORGANIZER, inferred from calendar owner: $ownerEmail");
-                    }
-                }
-            } catch (\Exception $e) {
-                error_log("Failed to infer organizer from calendar owner: " . $e->getMessage());
-            }
+            $this->inferSenderFromCalendarOwnerIfMissing($iTipMessage, $calendarPath);
         }
 
         $recipientPrincipalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
@@ -99,18 +82,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
             return;
         }
 
-        // No need to split iTip message for Sabre User
-        // Sabre can handle multiple event iTip message
-        if ($iTipMessage->method === 'COUNTER') {
-            $eventMessages = [['message' => $iTipMessage->message]];
-        } else {
-            if ($this->isNewEvent || $iTipMessage->method !== 'REQUEST') {
-                $eventMessages = $this->splitItipMessageEvents($iTipMessage->message, $this->isNewEvent);
-            } else {
-                $formerEvent = Reader::read($this->formerEventICal);
-                $eventMessages = $this->computeModifiedEventMessages($iTipMessage->message, $formerEvent, $iTipMessage->recipient);
-            }
-        }
+        $eventMessages = $this->buildEventMessages($iTipMessage);
 
         $fullEventPath = $this->getEventFullPath($recipientPrincipalUri, $iTipMessage, $calendarPath);
         $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
@@ -120,34 +92,84 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
                 continue;
             }
 
-            $message = [
-                'senderEmail' => substr($iTipMessage->sender, 7),
-                'recipientEmail' => substr($iTipMessage->recipient, 7),
-                'method' => $eventMessage['message']->METHOD->getValue(),
-                'event' => $eventMessage['message']->serialize(),
-                'notify' => true,
-                'calendarURI' => $calendarNode->getName(),
-                'eventPath' => $fullEventPath
-            ];
-
-            if ($message['method'] === 'COUNTER') {
-                $formerEventICal = $this->server->tree->getNodeForPath($fullEventPath)->get();
-
-                $message['oldEvent'] = $formerEventICal;
-            }
-
-            if (isset($eventMessage['newEvent'])) {
-                $message['isNewEvent'] = true;
-            }
-
-            if (isset($eventMessage['changes']) && !empty($eventMessage['changes'])) {
-                $message['changes'] = $eventMessage['changes'];
-            }
+            $message = $this->buildNotificationPayload($iTipMessage, $eventMessage, $calendarNode->getName(), $fullEventPath);
 
             $this->amqpPublisher->publish(self::SEND_NOTIFICATION_EMAIL_TOPIC, json_encode($message));
 
         }
         $iTipMessage->scheduleStatus = self::SCHEDSTAT_SUCCESS_UNKNOWN;
+    }
+
+    /**
+     * Issue #242: Handle malformed events missing ORGANIZER property
+     * If sender is null (no ORGANIZER), infer it from the calendar owner
+     */
+    private function inferSenderFromCalendarOwnerIfMissing(ITip\Message $iTipMessage, string $calendarPath): void {
+        // (string) cast: sender is either null or a string
+        if ((string)$iTipMessage->sender !== '') {
+            return;
+        }
+
+        try {
+            $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+            $ownerPrincipal = $calendarNode->getOwner();
+            if (!$ownerPrincipal) {
+                return;
+            }
+
+            $ownerEmail = Utils::getPrincipalEmail($ownerPrincipal, $this->server);
+            if ($ownerEmail) {
+                $iTipMessage->sender = $ownerEmail;
+                error_log("iTip message missing ORGANIZER, inferred from calendar owner: $ownerEmail");
+            }
+        } catch (\Exception $e) {
+            error_log("Failed to infer organizer from calendar owner: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Builds the per-event messages to notify for the scheduled iTip message.
+     */
+    private function buildEventMessages(ITip\Message $iTipMessage): array {
+        // No need to split iTip message for Sabre User
+        // Sabre can handle multiple event iTip message
+        if ($iTipMessage->method === 'COUNTER') {
+            return [['message' => $iTipMessage->message]];
+        }
+
+        if ($this->isNewEvent || $iTipMessage->method !== 'REQUEST') {
+            return $this->splitItipMessageEvents($iTipMessage->message, $this->isNewEvent);
+        }
+
+        $formerEvent = Reader::read($this->formerEventICal);
+
+        return $this->computeModifiedEventMessages($iTipMessage->message, $formerEvent, $iTipMessage->recipient);
+    }
+
+    private function buildNotificationPayload(ITip\Message $iTipMessage, array $eventMessage, string $calendarURI, string $fullEventPath): array {
+        $message = [
+            'senderEmail' => substr($iTipMessage->sender, 7),
+            'recipientEmail' => substr($iTipMessage->recipient, 7),
+            'method' => $eventMessage['message']->METHOD->getValue(),
+            'event' => $eventMessage['message']->serialize(),
+            'notify' => true,
+            'calendarURI' => $calendarURI,
+            'eventPath' => $fullEventPath
+        ];
+
+        if ($message['method'] === 'COUNTER') {
+            $message['oldEvent'] = $this->server->tree->getNodeForPath($fullEventPath)->get();
+        }
+
+        if (isset($eventMessage['newEvent'])) {
+            $message['isNewEvent'] = true;
+        }
+
+        if (!empty($eventMessage['changes'])) {
+            $message['changes'] = $eventMessage['changes'];
+        }
+
+        return $message;
     }
 
 
@@ -358,6 +380,7 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
     private function computeModifiedEventMessages(Document $scheduledEvent, Document $formerEvent, string $recipient) {
         $modifiedInstances = [];
         $cancelledEvents = [];
+        $cancelledInstancesId = [];
         $isChairAcceptedTransition = PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($formerEvent, $scheduledEvent);
 
         $previousEventVEvents = $this->getSequencePerVEvent($formerEvent);
@@ -366,66 +389,33 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         // Clone the scheduled event once before the loop for better performance
         $clonedScheduledEvent = Utils::safeCloneVObject($scheduledEvent);
 
-        foreach ($currentEventVEvents as $recurrenceId => $sequence) {
-            $isAcceptedTransitionForInstance = $isChairAcceptedTransition && $recurrenceId === self::MASTER_EVENT;
-            if ($recurrenceId == self::MASTER_EVENT && isset($currentEventVEvents[$recurrenceId]->RRULE)) {
+        foreach ($currentEventVEvents as $recurrenceId => $currentVEvent) {
+            if ($this->isRecurringMaster($recurrenceId, $currentVEvent)) {
                 // TODO Add RRULE checking to avoid processing non-recurring event
                 list($cancelledEvents, $cancelledInstancesId) = $this->computeMasterEventExDateMessage($previousEventVEvents, $currentEventVEvents, $scheduledEvent);
             }
 
-            // Create message if instance have been created or modified
-            $shouldIncludeCurrentInstance = !isset($cancelledInstancesId[$recurrenceId]) && (!isset($previousEventVEvents[$recurrenceId]) ||
-                $this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentEventVEvents[$recurrenceId]) ||
-                $isAcceptedTransitionForInstance);
-            if ($shouldIncludeCurrentInstance) {
-
-                // Check if recipient was attending this occurrence before
-                $isNewOccurrenceException = !isset($previousEventVEvents[$recurrenceId]);
-                $previousVEvent = null;
-
-                if ($isNewOccurrenceException) {
-                    // For new exceptions, check master event to detect removed attendees
-                    $previousVEvent = $previousEventVEvents[self::MASTER_EVENT] ?? null;
-                } else {
-                    // For existing exceptions, check the previous version of this occurrence
-                    $previousVEvent = $previousEventVEvents[$recurrenceId];
-                }
-
-                $wasAttendingBefore = isset($previousVEvent) && $this->isAttending($recipient, $previousVEvent);
-                $isAttendingNow = $this->isAttending($recipient, $currentEventVEvents[$recurrenceId]);
-
-                // Fix for issue #152: Skip AMQP notification if recipient is not and was not attending
-                if (!$isAttendingNow && !$wasAttendingBefore) {
-                    continue;
-                }
-
-                // Clone the already-cloned message for this specific instance
-                $currentMessage = clone $clonedScheduledEvent;
-                $modifiedInstance = [];
-
-                $currentMessage->remove('VEVENT');
-                $currentMessage->add($currentEventVEvents[$recurrenceId]);
-
-                $modifiedInstance['message'] = $currentMessage;
-
-                // Mark as new event if recipient wasn't attending before
-                if (!$wasAttendingBefore) {
-                    $modifiedInstance['newEvent'] = 1;
-                }
-
-                // Can't find the previous vEvent associated with the recurrence id,
-                // which means we're dealing with a newly added recurrence exception here.
-                if (!isset($previousEventVEvents[$recurrenceId])) {
-                    $previousVEvent = $previousVEvent ?? $previousEventVEvents[self::MASTER_EVENT] ?? null;
-                    if ($previousVEvent) {
-                        $previousVEvent = $this->getRecurrenceInstance($previousVEvent, $recurrenceId);
-                    }
-                }
-
-                $modifiedInstance['changes'] = $this->getPropertyChanges($previousVEvent, $currentEventVEvents[$recurrenceId]);
-
-                $modifiedInstances[] = $modifiedInstance;
+            if (isset($cancelledInstancesId[$recurrenceId])) {
+                continue;
             }
+
+            // Create message if instance have been created or modified
+            if (!$this->instanceRequiresNotification($previousEventVEvents, $currentVEvent, $recurrenceId, $isChairAcceptedTransition)) {
+                continue;
+            }
+
+            // Check if recipient was attending this occurrence before
+            $previousVEvent = $this->resolvePreviousVEvent($previousEventVEvents, $recurrenceId);
+            $wasAttendingBefore = $this->wasRecipientAttending($recipient, $previousVEvent);
+
+            // Fix for issue #152: Skip AMQP notification if recipient is not and was not attending
+            if (!$this->isAttending($recipient, $currentVEvent) && !$wasAttendingBefore) {
+                continue;
+            }
+
+            $previousVEvent = $this->previousVEventForChanges($previousEventVEvents, $previousVEvent, $recurrenceId);
+
+            $modifiedInstances[] = $this->buildModifiedInstanceMessage($clonedScheduledEvent, $currentVEvent, $previousVEvent, $wasAttendingBefore);
         }
 
         if ($formerEvent) {
@@ -433,6 +423,70 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         }
 
         return array_merge($modifiedInstances, $cancelledEvents);
+    }
+
+    private function isRecurringMaster($recurrenceId, $vevent): bool {
+        return $recurrenceId == self::MASTER_EVENT && isset($vevent->RRULE);
+    }
+
+    private function wasRecipientAttending(string $recipient, $previousVEvent): bool {
+        return isset($previousVEvent) && $this->isAttending($recipient, $previousVEvent);
+    }
+
+    private function instanceRequiresNotification(array $previousEventVEvents, $currentVEvent, $recurrenceId, bool $isChairAcceptedTransition): bool {
+        // Instance has been created
+        if (!isset($previousEventVEvents[$recurrenceId])) {
+            return true;
+        }
+
+        // Instance has been modified
+        if ($this->hasInstanceChanged($previousEventVEvents[$recurrenceId], $currentVEvent)) {
+            return true;
+        }
+
+        return $isChairAcceptedTransition && $recurrenceId === self::MASTER_EVENT;
+    }
+
+    private function resolvePreviousVEvent(array $previousEventVEvents, $recurrenceId) {
+        if (!isset($previousEventVEvents[$recurrenceId])) {
+            // For new exceptions, check master event to detect removed attendees
+            return $previousEventVEvents[self::MASTER_EVENT] ?? null;
+        }
+
+        // For existing exceptions, check the previous version of this occurrence
+        return $previousEventVEvents[$recurrenceId];
+    }
+
+    /**
+     * Can't find the previous vEvent associated with the recurrence id,
+     * which means we're dealing with a newly added recurrence exception here:
+     * derive the previous instance from the master event.
+     */
+    private function previousVEventForChanges(array $previousEventVEvents, $previousVEvent, $recurrenceId) {
+        if (!isset($previousEventVEvents[$recurrenceId]) && $previousVEvent) {
+            return $this->getRecurrenceInstance($previousVEvent, $recurrenceId);
+        }
+
+        return $previousVEvent;
+    }
+
+    private function buildModifiedInstanceMessage($clonedScheduledEvent, $currentVEvent, $previousVEvent, bool $wasAttendingBefore): array {
+        // Clone the already-cloned message for this specific instance
+        $currentMessage = clone $clonedScheduledEvent;
+
+        $currentMessage->remove('VEVENT');
+        $currentMessage->add($currentVEvent);
+
+        $modifiedInstance = ['message' => $currentMessage];
+
+        // Mark as new event if recipient wasn't attending before
+        if (!$wasAttendingBefore) {
+            $modifiedInstance['newEvent'] = 1;
+        }
+
+        $modifiedInstance['changes'] = $this->getPropertyChanges($previousVEvent, $currentVEvent);
+
+        return $modifiedInstance;
     }
 
     /**
@@ -628,54 +682,64 @@ class IMipPlugin extends \Sabre\CalDAV\Schedule\IMipPlugin {
         $changes = [];
 
         foreach ($changeProperties as $changeProperty) {
-            if ($changeProperty === 'DTSTART' || $changeProperty === 'DTEND') {
-                $previousPropertyValue = isset($previousEvent) && isset($previousEvent->$changeProperty) ? $previousEvent->$changeProperty->getDateTime()->getTimeStamp() : null;
-                $currentPropertyValue = isset($currentEvent->$changeProperty) ? $currentEvent->$changeProperty->getDateTime()->getTimeStamp() : null;
+            $change = $this->isDateProperty($changeProperty)
+                ? $this->datePropertyChange($previousEvent, $currentEvent, $changeProperty)
+                : $this->stringPropertyChange($previousEvent, $currentEvent, $changeProperty);
 
-                if ($previousPropertyValue !== $currentPropertyValue) {
-                    $propertyKey = strtolower($changeProperty);
-
-                    if (isset($previousEvent) && isset($previousEvent->$changeProperty)) {
-                        $previousDateTime = $previousEvent->$changeProperty->getDateTime();
-                        // Convert DateTime to array to get its properties
-                        $previousData = json_decode(json_encode($previousDateTime), true);
-                        // Rebuild object with isAllDay first to match expected order
-                        $changes[$propertyKey]['previous'] = (object)[
-                            'isAllDay' => !$previousEvent->$changeProperty->hasTime(),
-                            'date' => $previousData['date'],
-                            'timezone_type' => $previousData['timezone_type'],
-                            'timezone' => $previousData['timezone']
-                        ];
-                    } else {
-                        $changes[$propertyKey]['previous'] = [];
-                    }
-
-                    $currentDateTime = $currentEvent->$changeProperty->getDateTime();
-                    // Convert DateTime to array to get its properties
-                    $currentData = json_decode(json_encode($currentDateTime), true);
-                    // Rebuild object with isAllDay first to match expected order
-                    $changes[$propertyKey]['current'] = (object)[
-                        'isAllDay' => !$currentEvent->$changeProperty->hasTime(),
-                        'date' => $currentData['date'],
-                        'timezone_type' => $currentData['timezone_type'],
-                        'timezone' => $currentData['timezone']
-                    ];
-                }
-
-                continue;
-            }
-
-            $previousPropertyValue = isset($previousEvent) && isset($previousEvent->$changeProperty) ? $previousEvent->$changeProperty->getValue() : '';
-            $currentPropertyValue = isset($currentEvent->$changeProperty) ? $currentEvent->$changeProperty->getValue() : '';
-
-            if ($previousPropertyValue !== $currentPropertyValue) {
-                $changes[strtolower($changeProperty)] = [
-                    'previous' => $previousPropertyValue,
-                    'current' => $currentPropertyValue
-                ];
+            if ($change !== null) {
+                $changes[strtolower($changeProperty)] = $change;
             }
         }
 
         return $changes;
+    }
+
+    private function isDateProperty(string $property): bool {
+        return $property === 'DTSTART' || $property === 'DTEND';
+    }
+
+    private function stringPropertyChange($previousEvent, $currentEvent, string $changeProperty): ?array {
+        $previousPropertyValue = isset($previousEvent) && isset($previousEvent->$changeProperty) ? $previousEvent->$changeProperty->getValue() : '';
+        $currentPropertyValue = isset($currentEvent->$changeProperty) ? $currentEvent->$changeProperty->getValue() : '';
+
+        if ($previousPropertyValue === $currentPropertyValue) {
+            return null;
+        }
+
+        return [
+            'previous' => $previousPropertyValue,
+            'current' => $currentPropertyValue
+        ];
+    }
+
+    private function datePropertyChange($previousEvent, $currentEvent, string $changeProperty): ?array {
+        $previousPropertyValue = isset($previousEvent) && isset($previousEvent->$changeProperty) ? $previousEvent->$changeProperty->getDateTime()->getTimeStamp() : null;
+        $currentPropertyValue = isset($currentEvent->$changeProperty) ? $currentEvent->$changeProperty->getDateTime()->getTimeStamp() : null;
+
+        if ($previousPropertyValue === $currentPropertyValue) {
+            return null;
+        }
+
+        $previous = isset($previousEvent) && isset($previousEvent->$changeProperty)
+            ? $this->dateChangeValue($previousEvent->$changeProperty)
+            : [];
+
+        return [
+            'previous' => $previous,
+            'current' => $this->dateChangeValue($currentEvent->$changeProperty)
+        ];
+    }
+
+    private function dateChangeValue($dateProperty): object {
+        // Convert DateTime to array to get its properties
+        $data = json_decode(json_encode($dateProperty->getDateTime()), true);
+
+        // Rebuild object with isAllDay first to match expected order
+        return (object)[
+            'isAllDay' => !$dateProperty->hasTime(),
+            'date' => $data['date'],
+            'timezone_type' => $data['timezone_type'],
+            'timezone' => $data['timezone']
+        ];
     }
 }

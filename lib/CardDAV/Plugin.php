@@ -92,18 +92,22 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
     private function checkDomainMembersAccess($path) {
         // Check if the path is within domain-members addressbook
+        if (!$this->isDomainMembersPath($path)) {
+            return;
+        }
+
+        // Only technical users can modify domain-members addressbook
+        if ($this->authTenant?->tenantType !== TenantType::Technical)
+            throw new Forbidden('Only technical users can modify domain-members addressbook'.json_encode($this->authTenant));
+    }
+
+    private function isDomainMembersPath($path): bool {
+        // Path format: addressbooks/{domainId}/domain-members/{card.vcf}
         $pathParts = explode('/', trim($path, '/'));
 
-        // Path format: addressbooks/{domainId}/domain-members/{card.vcf}
-        if (
-            count($pathParts) >= 3 &&
-            $pathParts[0] === 'addressbooks' &&
-            $pathParts[2] === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI
-        ) {
-            // Only technical users can modify domain-members addressbook
-            if ($this->authTenant?->tenantType !== TenantType::Technical)
-                throw new Forbidden('Only technical users can modify domain-members addressbook'.json_encode($this->authTenant));
-        }
+        return count($pathParts) >= 3
+            && $pathParts[0] === 'addressbooks'
+            && $pathParts[2] === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI;
     }
 
     function httpHead($request, $response) {
@@ -133,41 +137,14 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $path = $request->getPath();
 
         $node = $this->server->tree->getNodeForPath($path);
-        $queryParams = $request->getQueryParameters();
 
         $code = null;
         $body = null;
 
         if ($node instanceof \ESN\CardDAV\AddressBookRoot) {
-            if ($this->authTenant?->tenantType !== TenantType::Technical)
-                throw new Forbidden('Only technical users'.json_encode($this->authTenant));
-
-            $children = [];
-
-            foreach($node->getChildren() as $child) {
-                $children[] = $child->getName();
-            }
-
-            list($code, $body) = [200, $children];
+            list($code, $body) = $this->listAddressBookHomes($node);
         } else if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
-            $options = new \stdClass();
-            $options->public = Utils::getArrayValue($queryParams, 'public') === 'true';
-            $options->subscribed = Utils::getArrayValue($queryParams, 'subscribed') === 'true';
-            $options->personal = Utils::getArrayValue($queryParams, 'personal') === 'true';
-            $options->contactsCount = Utils::getArrayValue($queryParams, 'contactsCount') === 'true';
-
-            // TODO: these should be in sharing plugin but we still do not find a effective way to do it
-            $options->shared = Utils::getArrayValue($queryParams, 'shared') === 'true';
-            $options->inviteStatus = Utils::getArrayValue($queryParams, 'inviteStatus', null);
-            $options->shareOwner = Utils::getArrayValue($queryParams, 'shareOwner', null);
-
-            if ($options->inviteStatus !== null) {
-                $options->inviteStatus = (int)$options->inviteStatus;
-            }
-
-            if ($options->shareOwner !== null) {
-                $options->shareOwner = 'principals/users/' . $options->shareOwner;
-            }
+            $options = $this->addressBookListOptions($request->getQueryParameters());
 
             list($code, $body) = $this->getAddressBooks($path, $node, $options);
         } else if ($node instanceof \Sabre\CardDAV\AddressBook || $node instanceof Subscriptions\Subscription) {
@@ -175,6 +152,42 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return $this->send($code, $body);
+    }
+
+    private function listAddressBookHomes($node): array {
+        if ($this->authTenant?->tenantType !== TenantType::Technical)
+            throw new Forbidden('Only technical users'.json_encode($this->authTenant));
+
+        $children = [];
+
+        foreach($node->getChildren() as $child) {
+            $children[] = $child->getName();
+        }
+
+        return [200, $children];
+    }
+
+    private function addressBookListOptions(array $queryParams): \stdClass {
+        $options = new \stdClass();
+        $options->public = Utils::getArrayValue($queryParams, 'public') === 'true';
+        $options->subscribed = Utils::getArrayValue($queryParams, 'subscribed') === 'true';
+        $options->personal = Utils::getArrayValue($queryParams, 'personal') === 'true';
+        $options->contactsCount = Utils::getArrayValue($queryParams, 'contactsCount') === 'true';
+
+        // TODO: these should be in sharing plugin but we still do not find a effective way to do it
+        $options->shared = Utils::getArrayValue($queryParams, 'shared') === 'true';
+        $options->inviteStatus = Utils::getArrayValue($queryParams, 'inviteStatus', null);
+        $options->shareOwner = Utils::getArrayValue($queryParams, 'shareOwner', null);
+
+        if ($options->inviteStatus !== null) {
+            $options->inviteStatus = (int)$options->inviteStatus;
+        }
+
+        if ($options->shareOwner !== null) {
+            $options->shareOwner = 'principals/users/' . $options->shareOwner;
+        }
+
+        return $options;
     }
 
     function httpPropfind($request, $response) {
@@ -192,19 +205,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $properties = $node->getProperties($jsonData['properties']);
 
             if (isset($properties['acl'])) {
-                $acl = [];
-
-                $authPlugin = $this->server->getPlugin('auth');
-                $currentPrincipal = $authPlugin->getCurrentPrincipal();
-
-                // only return acl which contains principal of requester and authenticated users
-                foreach($properties['acl'] as $ace) {
-                    if (in_array($ace['principal'], [$currentPrincipal, '{DAV:}authenticated'])) {
-                        $acl[] = $ace;
-                    }
-                }
-
-                $properties['acl'] = $acl;
+                $properties['acl'] = $this->filterAclForCurrentPrincipal($properties['acl']);
             }
 
             $body = $properties;
@@ -213,6 +214,24 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return $this->send($code, $body);
+    }
+
+    /**
+     * Only returns the ACEs which concern the principal of the requester or
+     * authenticated users.
+     */
+    private function filterAclForCurrentPrincipal($aces): array {
+        $authPlugin = $this->server->getPlugin('auth');
+        $currentPrincipal = $authPlugin->getCurrentPrincipal();
+
+        $acl = [];
+        foreach($aces as $ace) {
+            if (in_array($ace['principal'], [$currentPrincipal, '{DAV:}authenticated'])) {
+                $acl[] = $ace;
+            }
+        }
+
+        return $acl;
     }
 
     function httpProppatch($request, $response) {
@@ -274,41 +293,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         $items = [];
         foreach ($addressBooks as $addressBook) {
-            $shouldInclude = false;
-
-            if ($addressBook instanceof Group\GroupAddressBook) {
-                if ($addressBook->isDisabled()) continue;
-
-                if ($options->personal) {
-                    $shouldInclude = true;
-                }
-
-                if ($options->public) {
-                    $shouldInclude = $addressBook->isPublic();
-                }
-            } else if ($addressBook instanceof AddressBook) {
-                if ($options->personal) {
-                    $shouldInclude = true;
-                }
-
-                if ($options->public) {
-                    $shouldInclude = $addressBook->isPublic();
-                }
-            } else if ($addressBook instanceof Subscriptions\Subscription) {
-                $shouldInclude = $options->subscribed;
-            } else if ($addressBook instanceof Sharing\SharedAddressBook) {
-                $shouldInclude = $options->shared;
-
-                if ($options->inviteStatus !== null) {
-                    $shouldInclude =  $shouldInclude && $addressBook->getInviteStatus() === $options->inviteStatus;
-                }
-
-                if ($options->shareOwner !== null) {
-                    $shouldInclude =  $shouldInclude && $addressBook->getShareOwner() === $options->shareOwner;
-                }
-            }
-
-            if ($shouldInclude) {
+            if ($this->shouldIncludeAddressBook($addressBook, $options)) {
                 $items[] = $this->getAddressBookDetail($nodePath . '/' . $addressBook->getName(), $addressBook, $options);
             }
         }
@@ -322,6 +307,52 @@ class Plugin extends \ESN\JSON\BasePlugin {
         ];
 
         return [200, $result];
+    }
+
+    private function shouldIncludeAddressBook($addressBook, $options): bool {
+        if ($addressBook instanceof Group\GroupAddressBook) {
+            return !$addressBook->isDisabled() && $this->matchesPersonalOrPublicOptions($addressBook, $options);
+        }
+
+        if ($addressBook instanceof AddressBook) {
+            return $this->matchesPersonalOrPublicOptions($addressBook, $options);
+        }
+
+        if ($addressBook instanceof Subscriptions\Subscription) {
+            return (bool)$options->subscribed;
+        }
+
+        if ($addressBook instanceof Sharing\SharedAddressBook) {
+            return $this->matchesSharedOptions($addressBook, $options);
+        }
+
+        return false;
+    }
+
+    /**
+     * When both filters are requested, ?public takes precedence over
+     * ?personal (historical behavior).
+     */
+    private function matchesPersonalOrPublicOptions($addressBook, $options): bool {
+        if ($options->public) {
+            return $addressBook->isPublic();
+        }
+
+        return (bool)$options->personal;
+    }
+
+    private function matchesSharedOptions($addressBook, $options): bool {
+        return $options->shared
+            && $this->matchesInviteStatusOption($addressBook, $options)
+            && $this->matchesShareOwnerOption($addressBook, $options);
+    }
+
+    private function matchesInviteStatusOption($addressBook, $options): bool {
+        return $options->inviteStatus === null || $addressBook->getInviteStatus() === $options->inviteStatus;
+    }
+
+    private function matchesShareOwnerOption($addressBook, $options): bool {
+        return $options->shareOwner === null || $addressBook->getShareOwner() === $options->shareOwner;
     }
 
     function getAddressBookDetail($nodePath, \Sabre\DAV\Collection $addressBook, $options = null) {
@@ -416,40 +447,9 @@ class Plugin extends \ESN\JSON\BasePlugin {
             return [404, null];
         }
 
-        // Get the source addressbook node to check its ACLs
-        $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
-        if (!($sourceNode instanceof \Sabre\DAVACL\IACL)) {
+        $privilege = $this->resolveSourcePrivileges($sourcePath);
+        if ($privilege === null) {
             return [403, null];
-        }
-
-        // Check privileges using the ACL plugin
-        $aclPlugin = $this->server->getPlugin('acl');
-        if (!$aclPlugin) {
-            return [403, null];
-        }
-
-        // Check for read access (required)
-        $hasWriteAccess = false;
-        try {
-            $aclPlugin->checkPrivileges($sourcePath, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT);
-        } catch (\Sabre\DAV\Exception\Forbidden $e) {
-            return [403, null];
-        }
-
-        // Check for write access (optional, determines subscription privileges)
-        try {
-            $aclPlugin->checkPrivileges($sourcePath, '{DAV:}write', \Sabre\DAVACL\Plugin::R_PARENT);
-            $hasWriteAccess = true;
-        } catch (\Sabre\DAV\Exception\Forbidden $e) {
-            // read-only subscription
-        }
-
-        // Determine privilege array based on actual privileges on the source
-        // Store normalized privilege in database
-        if ($hasWriteAccess) {
-            $privilege = ['dav:read', 'dav:write'];
-        } else {
-            $privilege = ['dav:read'];
         }
 
         $rt = ['{DAV:}collection', '{http://open-paas.org/contacts}subscribed'];
@@ -463,6 +463,42 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];
+    }
+
+    /**
+     * Determines the normalized privileges granted on the subscription source
+     * (read access is required, write access is optional), or returns null
+     * when the requester may not subscribe to the source.
+     */
+    private function resolveSourcePrivileges($sourcePath): ?array {
+        // Get the source addressbook node to check its ACLs
+        $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+        if (!($sourceNode instanceof \Sabre\DAVACL\IACL)) {
+            return null;
+        }
+
+        // Check privileges using the ACL plugin
+        $aclPlugin = $this->server->getPlugin('acl');
+        if (!$aclPlugin) {
+            return null;
+        }
+
+        // Check for read access (required)
+        try {
+            $aclPlugin->checkPrivileges($sourcePath, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT);
+        } catch (\Sabre\DAV\Exception\Forbidden $e) {
+            return null;
+        }
+
+        // Check for write access (optional, determines subscription privileges)
+        try {
+            $aclPlugin->checkPrivileges($sourcePath, '{DAV:}write', \Sabre\DAVACL\Plugin::R_PARENT);
+
+            return ['dav:read', 'dav:write'];
+        } catch (\Sabre\DAV\Exception\Forbidden $e) {
+            // read-only subscription
+            return ['dav:read'];
+        }
     }
 
     private function changeAddressBookProperties($nodePath, $node, $jsonData) {
@@ -497,15 +533,17 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         $result = $this->server->updateProperties($nodePath, $davProps);
 
-        $returncode = 204;
-        foreach ($result as $prop => $code) {
+        return [$this->statusCodeFromUpdateResult($result), null];
+    }
+
+    private function statusCodeFromUpdateResult($result): int {
+        foreach ($result as $code) {
             if ((int)$code > 299) {
-                $returncode = (int)$code;
-                break;
+                return (int)$code;
             }
         }
 
-        return [$returncode, null];
+        return 204;
     }
 
     private function getContacts($request, $response, $nodePath, $node) {

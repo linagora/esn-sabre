@@ -244,7 +244,11 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
 
-    function getAuthTenantByEmail(string $email, TenantType $tenantType = TenantType::User): ?AuthTenant {
+    // Nullable + in-body default: the CodeScene parser chokes on enum constants
+    // used as parameter defaults, which corrupts the whole file analysis.
+    function getAuthTenantByEmail(string $email, ?TenantType $tenantType = null): ?AuthTenant {
+        $tenantType = $tenantType ?? TenantType::User;
+
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return null;
         }
@@ -283,7 +287,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         return new AuthTenant($user['_id'], (string) $domainObjectId, $tenantType);
     }
 
-    function getAuthTenantByResourceEmail($email, TenantType $tenantType = TenantType::Resources) {
+    function getAuthTenantByResourceEmail($email, ?TenantType $tenantType = null) {
+        $tenantType = $tenantType ?? TenantType::Resources;
+
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return null;
         }

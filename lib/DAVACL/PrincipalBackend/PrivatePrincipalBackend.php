@@ -49,12 +49,14 @@ class PrivatePrincipalBackend extends AbstractBackend {
         return $this->principalBackend->setAuthTenant($authTenant);
     }
 
-    function getAuthTenantByEmail(string $email, TenantType $tenantType = TenantType::User): ?AuthTenant {
-        return $this->principalBackend->getAuthTenantByEmail($email, $tenantType);
+    // Nullable + in-body default: the CodeScene parser chokes on enum constants
+    // used as parameter defaults, which corrupts the whole file analysis.
+    function getAuthTenantByEmail(string $email, ?TenantType $tenantType = null): ?AuthTenant {
+        return $this->principalBackend->getAuthTenantByEmail($email, $tenantType ?? TenantType::User);
     }
 
-    function getAuthTenantByResourceEmail($email, TenantType $tenantType = TenantType::Resources): ?AuthTenant {
-        return $this->principalBackend->getAuthTenantByResourceEmail($email, $tenantType);
+    function getAuthTenantByResourceEmail($email, ?TenantType $tenantType = null): ?AuthTenant {
+        return $this->principalBackend->getAuthTenantByResourceEmail($email, $tenantType ?? TenantType::Resources);
     }
 
     function getPrincipalsByPrefix($prefixPath) {
@@ -105,11 +107,16 @@ class PrivatePrincipalBackend extends AbstractBackend {
             return [$currentPrincipal];
         }
 
-        $parts = explode('/', $currentPrincipal);
-        if ($prefixPath === 'principals/domains' && count($parts) === 3 && $parts[1] === 'users') {
+        if ($prefixPath === 'principals/domains' && $this->isUserPrincipalPath($currentPrincipal)) {
             return $this->principalBackend->getGroupMembership($currentPrincipal);
         }
         return [];
+    }
+
+    private function isUserPrincipalPath(string $principalPath): bool {
+        $parts = explode('/', $principalPath);
+
+        return count($parts) === 3 && $parts[1] === 'users';
     }
 
     private function principalMatches($principal, array $searchProperties, $test) {

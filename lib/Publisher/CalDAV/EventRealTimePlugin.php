@@ -8,13 +8,15 @@ use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject;
 use Sabre\Uri;
 use \ESN\Utils\Utils as Utils;
-use \ESN\CalDAV\Schedule\IMipPlugin;
-
 #[\AllowDynamicProperties]
 class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     const PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN = 101;
     // Run after Sabre's CalDAV plugin (priority 100) to get the converted ICS data
     const PRIORITY_AFTER_CALDAV_PLUGIN = 150;
+
+    const SCHEDSTAT_SUCCESS_PENDING = '1.0';
+    const SCHEDSTAT_FAIL_TEMPORARY  = '5.1';
+    const SCHEDSTAT_FAIL_PERMANENT  = '5.2';
 
     protected $caldavBackend;
 
@@ -403,9 +405,9 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     private function hasPendingOrFailedScheduleStatus(\Sabre\VObject\ITip\Message $iTipMessage): bool {
         switch($iTipMessage->scheduleStatus) {
-            case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_SUCCESS_PENDING:
-            case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_TEMPORARY:
-            case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_PERMANENT:
+            case self::SCHEDSTAT_SUCCESS_PENDING:
+            case self::SCHEDSTAT_FAIL_TEMPORARY:
+            case self::SCHEDSTAT_FAIL_PERMANENT:
                 return true;
         }
 

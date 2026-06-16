@@ -34,6 +34,8 @@ RUN apt-get update && \
     nginx \
     ca-certificates \
     curl \
+    tzdata \
+    tzdata-legacy \
     # Build tools (temporary)
     php-pear \
     php${PHPVERSION}-dev \

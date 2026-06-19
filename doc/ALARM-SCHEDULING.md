@@ -51,6 +51,11 @@ For each attendee copy, esn-sabre MUST:
 The organizer source event MUST remain unchanged. Its `VALARM` components keep
 their complete recipient lists.
 
+The organizer MAY target himself in an organizer-managed email alarm by listing
+his own mail address in the alarm `ATTENDEE` properties. The organizer MAY also
+use a dedicated `VALARM` component for himself when his reminder trigger differs
+from other attendees.
+
 This prevents:
 
 - an alarm addressed to Alice from being cloned to all event attendees;

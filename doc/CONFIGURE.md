@@ -76,6 +76,13 @@ If the event attendee count is greater than or equal to `TW_CAL_REPLY_PROPAGATIO
 - Default: enabled. Unset, empty, or invalid values are treated as enabled.
 - Set to `false`, `0`, `off`, or `no` to disable.
 
+`SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING` controls recipient-aware scheduling for `ACTION:EMAIL` `VALARM` components.
+
+- Default: enabled. Unset, empty, or invalid values are treated as enabled.
+- Set to `false`, `0`, `off`, or `no` to disable.
+
+When enabled, Sabre sends each attendee only the email alarms that explicitly list them as an alarm recipient, preserves attendee-local alarms during organizer updates, See [Alarm Scheduling Specification](ALARM-SCHEDULING.md) for the complete behavior.
+
 ## Nginx rate limiting
 
 The embedded Nginx is configured with `ngx_http_limit_req_module` to protect the CalDAV server from request flooding. Three ENV variables control the behaviour:

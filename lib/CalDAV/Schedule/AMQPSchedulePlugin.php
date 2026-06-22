@@ -193,6 +193,10 @@ class AMQPSchedulePlugin extends Plugin {
             return;
         }
 
+        if ($this->shouldEnableEmailValarmRecipientScheduling() && $this->ensureValarmUids($vCal)) {
+            $modified = true;
+        }
+
         $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
 
         $this->currentOldMessage = null;

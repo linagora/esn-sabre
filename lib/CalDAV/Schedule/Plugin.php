@@ -31,8 +31,10 @@ use Sabre\VObject\Reader;
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private const DEFAULT_REPLY_PROPAGATION_THRESHOLD = 200;
     private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES = ['VALARM', 'TRANSP', 'CLASS'];
+    private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES_WITH_MANAGED_ALARMS = ['TRANSP', 'CLASS'];
     private const FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES = ['DTSTART', 'DTEND', 'LOCATION', 'SUMMARY', 'ORGANIZER'];
     private const ENFORCE_RFC_6638_ENV = 'SABRE_ENFORCE_RFC_6638';
+    private const EMAIL_VALARM_RECIPIENT_SCHEDULING_ENV = 'SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING';
 
     private $logger;
     private $principalBackend;
@@ -300,7 +302,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 continue;
             }
 
-            foreach (self::PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES as $property) {
+            if ($this->shouldEnableEmailValarmRecipientScheduling()) {
+                $this->preserveRecipientLocalVALARMs($oldEvent, $newEvent);
+                $preservableProperties = self::PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES_WITH_MANAGED_ALARMS;
+            } else {
+                $preservableProperties = self::PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES;
+            }
+
+            foreach ($preservableProperties as $property) {
                 $newEvent->remove($property);
 
                 foreach ($oldEvent->select($property) as $oldProperty) {
@@ -310,6 +319,95 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         $oldObject->destroy();
+    }
+
+    // Email VALARM recipient scheduling
+    protected function shouldEnableEmailValarmRecipientScheduling(): bool {
+        return $this->envBoolean(self::EMAIL_VALARM_RECIPIENT_SCHEDULING_ENV, true);
+    }
+
+    protected function ensureValarmUids(VCalendar $calendarObject): bool {
+        $modified = false;
+
+        foreach ($calendarObject->select('VEVENT') as $event) {
+            foreach ($event->select('VALARM') as $alarm) {
+                if (!isset($alarm->UID) || trim($alarm->UID->getValue()) === '') {
+                    $alarm->UID = 'alarm-' . \Sabre\DAV\UUIDUtil::getUUID();
+                    $modified = true;
+                }
+            }
+        }
+
+        return $modified;
+    }
+
+    private function preserveRecipientLocalVALARMs($oldEvent, $newEvent): void {
+        $newEmailAlarms = array_map(fn ($alarm) => clone $alarm, array_filter($newEvent->select('VALARM'), [$this, 'isEmailAlarm']));
+
+        $newEvent->remove('VALARM');
+        foreach ($newEmailAlarms as $alarm) {
+            $newEvent->add($alarm);
+        }
+
+        $newEmailAlarmUids = array_filter(array_map(fn ($alarm) => isset($alarm->UID) ? $alarm->UID->getValue() : null, $newEmailAlarms));
+        $eventAttendees = array_map(fn ($attendee) => strtolower($attendee->getNormalizedValue()), $newEvent->select('ATTENDEE'));
+
+        foreach ($oldEvent->select('VALARM') as $oldAlarm) {
+            if ($this->isEmailAlarm($oldAlarm) && $this->isOrganizerManagedEmailAlarm($oldAlarm, $newEmailAlarmUids, $eventAttendees)) {
+                continue;
+            }
+
+            $newEvent->add(clone $oldAlarm);
+        }
+    }
+
+    private function isEmailAlarm($alarm): bool {
+        return isset($alarm->ACTION) && strcasecmp($alarm->ACTION->getValue(), 'EMAIL') === 0;
+    }
+
+    private function isOrganizerManagedEmailAlarm($alarm, array $newEmailAlarmUids, array $eventAttendees): bool {
+        if (isset($alarm->UID) && in_array($alarm->UID->getValue(), $newEmailAlarmUids, true)) {
+            return true;
+        }
+
+        $alarmAttendees = array_map(fn ($attendee) => strtolower($attendee->getNormalizedValue()), $alarm->select('ATTENDEE'));
+
+        return !empty($alarmAttendees) && empty(array_diff($alarmAttendees, $eventAttendees));
+    }
+
+    /**
+     * EMAIL alarms are recipient-specific: only deliver alarms that explicitly
+     * name the iTIP recipient in their own ATTENDEE properties.
+     */
+    private function filterEmailAlarmsForRecipient(ITip\Message $message, VCalendar $sourceCalendar): void {
+        $sourceEvents = CalendarObjectHelper::indexEventsByRecurrenceKey($sourceCalendar);
+
+        foreach ($message->message->select('VEVENT') as $vevent) {
+            $sourceEvent = $sourceEvents[CalendarObjectHelper::recurrenceKey($vevent)] ?? null;
+
+            // The broker may rewrite VALARM attendees to the message recipient,
+            // so rebuild EMAIL alarms from the organizer's original calendar.
+            foreach (array_filter($vevent->select('VALARM'), [$this, 'isEmailAlarm']) as $alarm) {
+                $vevent->remove($alarm);
+            }
+
+            if (!$sourceEvent) {
+                continue;
+            }
+
+            foreach (array_filter($sourceEvent->select('VALARM'), [$this, 'isEmailAlarm']) as $alarm) {
+                $recipientAlarm = clone $alarm;
+                // Organizer aliases must not leak into an attendee's copied event.
+                foreach ($recipientAlarm->select('ATTENDEE') as $attendee) {
+                    if (strcasecmp($attendee->getNormalizedValue(), $message->recipient) !== 0) {
+                        $recipientAlarm->remove($attendee);
+                    }
+                }
+                if ($recipientAlarm->select('ATTENDEE')) {
+                    $vevent->add($recipientAlarm);
+                }
+            }
+        }
     }
 
     /**
@@ -327,6 +425,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         if (PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($vCal)) {
             return;
+        }
+
+        if ($this->shouldEnableEmailValarmRecipientScheduling() && $this->ensureValarmUids($vCal)) {
+            $modified = true;
         }
 
         $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
@@ -385,12 +487,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     private function shouldEnforceRfc6638(): bool {
-        $value = getenv(self::ENFORCE_RFC_6638_ENV);
-        if ($value === false || trim($value) === '') {
-            return true;
-        }
+        return $this->envBoolean(self::ENFORCE_RFC_6638_ENV, true);
+    }
 
-        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true;
+    private function envBoolean(string $name, bool $default): bool {
+        $value = getenv($name);
+        return $value === false || trim($value) === ''
+            ? $default
+            : filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default;
     }
 
     /**
@@ -459,7 +563,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      *
      * As suggested by chibenwa in PR #142 review.
      */
-    protected function processICalendarChange($oldObject = null, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
+    protected function processICalendarChange($oldObject, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
         $messages = $this->createBroker()->parseEvent($newObject, $addresses, $oldObject);
 
         if ($messages) $modified = true;
@@ -485,7 +589,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             // iTIP payload. Also strip RRULE from override VEVENTs (RFC 5545 §3.8.5.3 forbids
             // RRULE in a component that has RECURRENCE-ID; a misbehaving client may send it).
             if ($message->method === 'REQUEST') {
-                $this->sanitizeOutgoingRequestMessage($message);
+                $this->sanitizeOutgoingRequestMessage($message, $newObject);
             }
 
             $this->deliver($message);
@@ -611,7 +715,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * (RFC 5545 §3.8.5.3: RRULE MUST NOT appear in a component that has
      * RECURRENCE-ID; some clients send it anyway).
      */
-    private function sanitizeOutgoingRequestMessage(ITip\Message $message): void {
+    private function sanitizeOutgoingRequestMessage(ITip\Message $message, VCalendar $sourceCalendar): void {
+        if ($this->shouldEnableEmailValarmRecipientScheduling()) {
+            $this->filterEmailAlarmsForRecipient($message, $sourceCalendar);
+        }
+
         if (!CalendarObjectHelper::hasMasterEvent($message->message)) {
             // Override-only message: strip RRULE only (invalid per RFC 5545 §3.8.5.3
             // in a component that has RECURRENCE-ID), but KEEP RECURRENCE-ID.

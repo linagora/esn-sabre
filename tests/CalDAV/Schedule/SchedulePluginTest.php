@@ -67,6 +67,18 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame('', $message->recipient);
     }
 
+    function testShouldEnableEmailVALARMRecipientSchedulingByDefault() {
+        $this->withEmailValarmRecipientSchedulingEnv(null, function () {
+            $this->assertTrue($this->invokeShouldEnableEmailValarmRecipientScheduling());
+        });
+    }
+
+    function testShouldAllowDisablingEmailVALARMRecipientScheduling() {
+        $this->withEmailValarmRecipientSchedulingEnv('false', function () {
+            $this->assertFalse($this->invokeShouldEnableEmailValarmRecipientScheduling());
+        });
+    }
+
     function testShouldNotSkipMasterRequestWhenBrokerProjectsExdateForRecipientRemoval() {
         $oldObject = Reader::read(<<<'ICS'
 BEGIN:VCALENDAR
@@ -346,6 +358,157 @@ ICS
         $this->assertEquals('Local reminder', $newObject->VEVENT->VALARM->DESCRIPTION->getValue());
     }
 
+    function testShouldReplaceOrganizerManagedEmailVALARMAndPreservePersonalEmailVALARM() {
+        $this->withEmailValarmRecipientSchedulingEnv('true', function () {
+            $oldData = <<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-email-alarm-merge
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+UID:organizer-reminder@example.org
+ACTION:EMAIL
+ATTENDEE:mailto:alice@example.org
+TRIGGER:-PT5M
+DESCRIPTION:Organizer reminder
+SUMMARY:Alarm notification
+END:VALARM
+BEGIN:VALARM
+UID:alice-personal-reminder@example.org
+ACTION:EMAIL
+ATTENDEE:mailto:alias@example.org
+TRIGGER:-PT10M
+DESCRIPTION:Personal reminder
+SUMMARY:Personal alarm notification
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+            $newObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-email-alarm-merge
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Updated meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+UID:organizer-reminder@example.org
+ACTION:EMAIL
+ATTENDEE:mailto:alice@example.org
+TRIGGER:-PT20M
+DESCRIPTION:Organizer reminder
+SUMMARY:Alarm notification
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+            );
+
+            $this->invokePreserveRecipientLocalProperties($oldData, $newObject);
+
+            $alarms = $newObject->VEVENT->select('VALARM');
+            $alarmsByUid = [];
+            foreach ($alarms as $alarm) {
+                $alarmsByUid[$alarm->UID->getValue()] = $alarm;
+            }
+
+            $this->assertCount(2, $alarms);
+            $this->assertEquals('-PT20M', $alarmsByUid['organizer-reminder@example.org']->TRIGGER->getValue());
+            $this->assertEquals('mailto:alice@example.org', $alarmsByUid['organizer-reminder@example.org']->ATTENDEE->getNormalizedValue());
+            $this->assertEquals('-PT10M', $alarmsByUid['alice-personal-reminder@example.org']->TRIGGER->getValue());
+            $this->assertEquals('mailto:alias@example.org', $alarmsByUid['alice-personal-reminder@example.org']->ATTENDEE->getNormalizedValue());
+        });
+    }
+
+    function testShouldRemoveOrganizerManagedEmailVALARMWhenNoLongerProjected() {
+        $this->withEmailValarmRecipientSchedulingEnv('true', function () {
+            $oldData = <<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-email-alarm-removal
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+UID:organizer-reminder@example.org
+ACTION:EMAIL
+ATTENDEE:mailto:alice@example.org
+TRIGGER:-PT5M
+DESCRIPTION:Organizer reminder
+SUMMARY:Alarm notification
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+            $newObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-email-alarm-removal
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Updated meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+            );
+
+            $this->invokePreserveRecipientLocalProperties($oldData, $newObject);
+
+            $this->assertCount(0, $newObject->VEVENT->select('VALARM'));
+        });
+    }
+
+    function testShouldGenerateMissingVALARMUIDsAndPreserveExistingVALARMUIDs() {
+        $calendar = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-valarm-uid
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Meeting with reminders
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT5M
+DESCRIPTION:Missing UID reminder
+END:VALARM
+BEGIN:VALARM
+UID:client-reminder
+ACTION:EMAIL
+ATTENDEE:mailto:alice@example.org
+TRIGGER:-PT10M
+DESCRIPTION:Client UID reminder
+SUMMARY:Alarm notification
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $modified = $this->invokeEnsureValarmUids($calendar);
+
+        $alarms = $calendar->VEVENT->select('VALARM');
+        $this->assertTrue($modified);
+        $this->assertMatchesRegularExpression('/^alarm-[0-9a-fA-F-]{36}$/', $alarms[0]->UID->getValue());
+        $this->assertEquals('client-reminder', $alarms[1]->UID->getValue());
+    }
+
     function testShouldRejectForbiddenAttendeeSchedulingObjectChanges() {
         $forbiddenChanges = [
             'DTSTART' => [
@@ -493,6 +656,120 @@ ICS
 
         $this->assertEquals('TRANSPARENT', $newObject->VEVENT->TRANSP->getValue());
         $this->assertEquals('-PT5M', $newObject->VEVENT->VALARM->TRIGGER->getValue());
+        $this->assertEquals('Local reminder', $newObject->VEVENT->VALARM->DESCRIPTION->getValue());
+    }
+
+    function testShouldAllowAttendeePersonalEmailVALARMWithAlias() {
+        $oldObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-allowed-attendee-personal-email-alarm
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+LOCATION:Room A
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+        $newObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-allowed-attendee-personal-email-alarm
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Original meeting
+LOCATION:Room A
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+ACTION:EMAIL
+ATTENDEE:mailto:alias@example.org
+TRIGGER:-PT5M
+DESCRIPTION:Local reminder
+SUMMARY:Alarm notification
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+
+        $this->assertEquals('-PT5M', $newObject->VEVENT->VALARM->TRIGGER->getValue());
+        $this->assertEquals('mailto:alias@example.org', $newObject->VEVENT->VALARM->ATTENDEE->getNormalizedValue());
+    }
+
+    function testShouldFilterEmailVALARMsByRequestRecipient() {
+        $this->withEmailValarmRecipientSchedulingEnv('true', function () {
+            // Given an outgoing request with recipient-specific email alarms and a display alarm
+            $sourceCalendar = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:event-recipient-specific-alarms
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+ATTENDEE:mailto:bob@example.org
+BEGIN:VALARM
+ACTION:EMAIL
+ATTENDEE:MAILTO:ALICE@EXAMPLE.ORG
+ATTENDEE:mailto:alias@example.org
+TRIGGER:-PT10M
+DESCRIPTION:Alice reminder
+SUMMARY:Alarm notification
+END:VALARM
+BEGIN:VALARM
+ACTION:EMAIL
+ATTENDEE:mailto:bob@example.org
+TRIGGER:-PT5M
+DESCRIPTION:Bob reminder
+SUMMARY:Alarm notification
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT15M
+DESCRIPTION:Display reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+            );
+            $message = new Message();
+            $message->recipient = 'mailto:alice@example.org';
+            $message->message = clone $sourceCalendar;
+            $message->message->VEVENT->select('VALARM')[1]->ATTENDEE = 'mailto:alice@example.org';
+
+            // When the broker-rewritten request is sanitized for Alice from the organizer source
+            $this->invokeSanitizeOutgoingRequestMessage($message, $sourceCalendar);
+
+            // Then Alice's email alarm and the non-email alarm remain, while Bob's email alarm is removed
+            $alarms = $message->message->VEVENT->select('VALARM');
+            $this->assertCount(2, $alarms);
+            $this->assertEqualsCanonicalizing(['-PT10M', '-PT15M'], array_values(array_map(
+                fn ($alarm) => $alarm->TRIGGER->getValue(),
+                $alarms
+            )));
+            $emailAlarms = array_values(array_filter(
+                $alarms,
+                fn ($alarm) => isset($alarm->ACTION) && strcasecmp($alarm->ACTION->getValue(), 'EMAIL') === 0
+            ));
+            $this->assertCount(1, $emailAlarms);
+            $this->assertSame(
+                ['mailto:alice@example.org'],
+                array_values(array_map(
+                    fn ($attendee) => $attendee->getNormalizedValue(),
+                    $emailAlarms[0]->select('ATTENDEE')
+                ))
+            );
+        });
     }
 
     function testForbiddenAttendeeSchedulingObjectChangeShouldSerializeCalDAVPrecondition() {
@@ -580,6 +857,27 @@ END:VCALENDAR
         $method->invoke($this->plugin, $oldICalendarData, $newObject);
     }
 
+    private function invokeSanitizeOutgoingRequestMessage(Message $message, $sourceCalendar): void {
+        $method = new \ReflectionMethod(Plugin::class, 'sanitizeOutgoingRequestMessage');
+        $method->setAccessible(true);
+
+        $method->invoke($this->plugin, $message, $sourceCalendar);
+    }
+
+    private function invokeEnsureValarmUids($calendarObject): bool {
+        $method = new \ReflectionMethod(Plugin::class, 'ensureValarmUids');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $calendarObject);
+    }
+
+    private function invokeShouldEnableEmailValarmRecipientScheduling(): bool {
+        $method = new \ReflectionMethod(Plugin::class, 'shouldEnableEmailValarmRecipientScheduling');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin);
+    }
+
     private function invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, array $addresses) {
         $method = new \ReflectionMethod(Plugin::class, 'assertAllowedAttendeeSchedulingObjectChange');
         $method->setAccessible(true);
@@ -603,6 +901,26 @@ END:VCALENDAR
                 putenv('SABRE_ENFORCE_RFC_6638');
             } else {
                 putenv('SABRE_ENFORCE_RFC_6638=' . $previousValue);
+            }
+        }
+    }
+
+    private function withEmailValarmRecipientSchedulingEnv(?string $value, callable $callback) {
+        $previousValue = getenv('SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING');
+
+        try {
+            if ($value === null) {
+                putenv('SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING');
+            } else {
+                putenv('SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING=' . $value);
+            }
+
+            return $callback();
+        } finally {
+            if ($previousValue === false) {
+                putenv('SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING');
+            } else {
+                putenv('SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING=' . $previousValue);
             }
         }
     }

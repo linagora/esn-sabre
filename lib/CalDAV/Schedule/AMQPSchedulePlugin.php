@@ -11,8 +11,7 @@ use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\ITip;
 
 /**
- * Async scheduling plugin — replaces ESN\CalDAV\Schedule\Plugin when
- * AMQP_SCHEDULING_ENABLED=true.
+ * Async scheduling plugin — the sole scheduling plugin registered in esn.php.
  *
  * Instead of writing directly into attendee calendars and inboxes,
  * this plugin buffers all recipients and publishes a single AMQP message
@@ -192,6 +191,10 @@ class AMQPSchedulePlugin extends Plugin {
 
         if (PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($vCal)) {
             return;
+        }
+
+        if ($this->shouldEnableEmailValarmRecipientScheduling() && $this->ensureValarmUids($vCal)) {
+            $modified = true;
         }
 
         $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);

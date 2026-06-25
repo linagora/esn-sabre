@@ -29,11 +29,12 @@ use Sabre\VObject\Reader;
  */
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
-    private const MASTER_EVENT = 'master';
     private const DEFAULT_REPLY_PROPAGATION_THRESHOLD = 200;
     private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES = ['VALARM', 'TRANSP', 'CLASS'];
+    private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES_WITH_MANAGED_ALARMS = ['TRANSP', 'CLASS'];
     private const FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES = ['DTSTART', 'DTEND', 'LOCATION', 'SUMMARY', 'ORGANIZER'];
     private const ENFORCE_RFC_6638_ENV = 'SABRE_ENFORCE_RFC_6638';
+    private const EMAIL_VALARM_RECIPIENT_SCHEDULING_ENV = 'SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING';
 
     private $logger;
     private $principalBackend;
@@ -42,10 +43,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $this->logger = new Logger('esn-sabre');
         $this->logger->pushHandler(new StreamHandler('php://stderr', Logger::DEBUG));
         $this->principalBackend = $principalBackend;
-    }
-
-    public function initialize(\Sabre\DAV\Server $server) {
-        parent::initialize($server);
     }
 
     protected function scheduleReply(RequestInterface $request) {
@@ -92,12 +89,94 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
+        $deliveryPaths = $this->resolveRecipientDeliveryPaths($aclPlugin, $iTipMessage);
+        if (!$deliveryPaths) {
+            return;
+        }
+        list($homePath, $inboxPath, $calendarPath) = $deliveryPaths;
+
+        if (!$this->hasDeliveryPrivilege($aclPlugin, $inboxPath, $iTipMessage)) {
+            return;
+        }
+
+        $newFileName = 'sabredav-' . \Sabre\DAV\UUIDUtil::getUUID() . '.ics';
+
+        list($objectNode, $oldICalendarData, $currentObject) = $this->loadExistingCalendarObject($homePath, $iTipMessage->uid);
+
+        if ($currentObject) {
+            $this->normalizeIncomingReplyMessage($iTipMessage, $currentObject);
+        }
+
+        $broker = new ITip\Broker();
+        $newObject = $broker->processMessage($iTipMessage, $currentObject);
+
+        $this->createInboxItemIfSignificant($inboxPath, $newFileName, $iTipMessage);
+
+        if (!$newObject) {
+            $iTipMessage->scheduleStatus = '5.0;iTip message was not processed by the server, likely because we didn\'t understand it.';
+            return;
+        }
+
+        if (!$objectNode) {
+            $this->deliverToNewObject($iTipMessage, $calendarPath, $newFileName, $newObject);
+        } else {
+            $this->deliverToExistingObject($iTipMessage, $objectNode, $oldICalendarData, $newObject);
+        }
+        $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
+    }
+
+    /**
+     * Loads the recipient's existing calendar object matching the iTIP UID.
+     *
+     * @return array [$objectNode, $oldICalendarData, $currentObject], all null
+     *               when the recipient has no copy of the event yet.
+     */
+    private function loadExistingCalendarObject(string $homePath, string $uid): array {
+        $home = $this->server->tree->getNodeForPath($homePath);
+
+        $result = $home->getCalendarObjectByUID($uid);
+        if (!$result) {
+            return [null, null, null];
+        }
+
+        $objectNode = $this->server->tree->getNodeForPath($homePath . '/' . $result);
+        $oldICalendarData = $objectNode->get();
+
+        return [$objectNode, $oldICalendarData, Reader::read($oldICalendarData)];
+    }
+
+    private function normalizeIncomingReplyMessage(ITip\Message $iTipMessage, VCalendar $currentObject): void {
+        if ($iTipMessage->method === 'REPLY') {
+            $this->normalizeReplyRecurrenceId($iTipMessage, $currentObject);
+        }
+    }
+
+    /**
+     * Skip inbox creation for non-significant REQUEST messages (pure PARTSTAT
+     * propagation). The calendar object is still updated by the caller so
+     * attendees see the PARTSTAT change without polluting everyone's inbox.
+     */
+    private function createInboxItemIfSignificant(string $inboxPath, string $newFileName, ITip\Message $iTipMessage): void {
+        if ($iTipMessage->method === 'REQUEST' && !$iTipMessage->hasChange) {
+            return;
+        }
+
+        $inbox = $this->server->tree->getNodeForPath($inboxPath);
+        $inbox->createFile($newFileName, $iTipMessage->message->serialize());
+    }
+
+    /**
+     * Resolves the recipient's calendar-home, inbox and default calendar paths,
+     * setting the iTIP schedule status and returning null when any of them
+     * cannot be found.
+     */
+    private function resolveRecipientDeliveryPaths($aclPlugin, ITip\Message $iTipMessage): ?array {
         $caldavNS = '{' . self::NS_CALDAV . '}';
 
         $principalUri = $aclPlugin->getPrincipalByUri($iTipMessage->recipient);
         if (!$principalUri) {
             $iTipMessage->scheduleStatus = '3.7;Could not find principal.';
-            return;
+            return null;
         }
 
         $this->server->removeListener('propFind', [$aclPlugin, 'propFind']);
@@ -115,28 +194,27 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         $this->server->on('propFind', [$aclPlugin, 'propFind'], 20);
 
-        if (!isset($result[$caldavNS . 'schedule-inbox-URL'])) {
-            $iTipMessage->scheduleStatus = '5.2;Could not find local inbox';
-            return;
-        }
-        if (!isset($result[$caldavNS . 'calendar-home-set'])) {
-            $iTipMessage->scheduleStatus = '5.2;Could not locate a calendar-home-set';
-            return;
-        }
-        if (!isset($result[$caldavNS . 'schedule-default-calendar-URL'])) {
-            $iTipMessage->scheduleStatus = '5.2;Could not find a schedule-default-calendar-URL property';
-            return;
+        $requiredProperties = [
+            $caldavNS . 'schedule-inbox-URL' => '5.2;Could not find local inbox',
+            $caldavNS . 'calendar-home-set' => '5.2;Could not locate a calendar-home-set',
+            $caldavNS . 'schedule-default-calendar-URL' => '5.2;Could not find a schedule-default-calendar-URL property',
+        ];
+        foreach ($requiredProperties as $property => $failureStatus) {
+            if (!isset($result[$property])) {
+                $iTipMessage->scheduleStatus = $failureStatus;
+                return null;
+            }
         }
 
-        $calendarPath = $result[$caldavNS . 'schedule-default-calendar-URL']->getHref();
-        $homePath = $result[$caldavNS . 'calendar-home-set']->getHref();
-        $inboxPath = $result[$caldavNS . 'schedule-inbox-URL']->getHref();
+        return [
+            $result[$caldavNS . 'calendar-home-set']->getHref(),
+            $result[$caldavNS . 'schedule-inbox-URL']->getHref(),
+            $result[$caldavNS . 'schedule-default-calendar-URL']->getHref(),
+        ];
+    }
 
-        if ($iTipMessage->method === 'REPLY') {
-            $privilege = 'schedule-deliver-reply';
-        } else {
-            $privilege = 'schedule-deliver-invite';
-        }
+    private function hasDeliveryPrivilege($aclPlugin, string $inboxPath, ITip\Message $iTipMessage): bool {
+        $privilege = $iTipMessage->method === 'REPLY' ? 'schedule-deliver-reply' : 'schedule-deliver-invite';
 
         // On the ITIP path (POST /itip) the Twake Side Service is an internal trusted caller
         // and recipientMatchesCurrentUser() in ITipPlugin already validated the recipient.
@@ -150,79 +228,45 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         //     explicitly grant schedule-deliver-* to {DAV:}unauthenticated.
         $req = $this->server->httpRequest;
         $isItipPath = $req->getMethod() === 'ITIP' || $req->getPath() === 'itip';
-        if (!$isItipPath && !$aclPlugin->checkPrivileges($inboxPath, $caldavNS . $privilege, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+        if ($isItipPath) {
+            return true;
+        }
+
+        $caldavNS = '{' . self::NS_CALDAV . '}';
+        if (!$aclPlugin->checkPrivileges($inboxPath, $caldavNS . $privilege, \Sabre\DAVACL\Plugin::R_PARENT, false)) {
             $iTipMessage->scheduleStatus = '3.8;insufficient privileges: ' . $privilege . ' is required on the recipient schedule inbox.';
+            return false;
+        }
+
+        return true;
+    }
+
+    private function deliverToNewObject(ITip\Message $iTipMessage, string $calendarPath, string $newFileName, VCalendar $newObject): void {
+        // Do not re-create the event when the attendee already declined (issue-347).
+        // An attendee who deleted their copy sends REPLY DECLINED; the organizer's
+        // copy then reflects PARTSTAT=DECLINED.  Subsequent REQUEST messages (e.g.
+        // reschedule, new attendee added, partstat propagation) must not resurrect
+        // the event in the attendee's calendar.
+        if ($iTipMessage->method === 'REQUEST' && $this->recipientHasDeclinedInMessage($iTipMessage)) {
             return;
         }
+        $calendar = $this->server->tree->getNodeForPath($calendarPath);
+        $calendar->createFile($newFileName, $newObject->serialize());
+    }
 
-        $uid = $iTipMessage->uid;
-        $newFileName = 'sabredav-' . \Sabre\DAV\UUIDUtil::getUUID() . '.ics';
-
-        $home = $this->server->tree->getNodeForPath($homePath);
-        $inbox = $this->server->tree->getNodeForPath($inboxPath);
-
-        $currentObject = null;
-        $objectNode = null;
-        $isNewNode = false;
-
-        $result = $home->getCalendarObjectByUID($uid);
-        if ($result) {
-            $objectPath = $homePath . '/' . $result;
-            $objectNode = $this->server->tree->getNodeForPath($objectPath);
-            $oldICalendarData = $objectNode->get();
-            $currentObject = \Sabre\VObject\Reader::read($oldICalendarData);
-        } else {
-            $isNewNode = true;
+    private function deliverToExistingObject(ITip\Message $iTipMessage, $objectNode, $oldICalendarData, VCalendar $newObject): void {
+        if ($iTipMessage->method === 'REPLY' && !$this->shouldSkipReplyPropagation($oldICalendarData)) {
+            $this->processICalendarChange(
+                $oldICalendarData,
+                $newObject,
+                [$iTipMessage->recipient],
+                [$iTipMessage->sender]
+            );
         }
-
-        if ($iTipMessage->method === 'REPLY' && $currentObject) {
-            $this->normalizeReplyRecurrenceId($iTipMessage, $currentObject);
+        if ($iTipMessage->method === 'REQUEST') {
+            $this->preserveRecipientLocalProperties($oldICalendarData, $newObject);
         }
-
-        $broker = new ITip\Broker();
-        $newObject = $broker->processMessage($iTipMessage, $currentObject);
-
-        // Skip inbox creation for non-significant REQUEST messages (pure PARTSTAT
-        // propagation). The calendar object is still updated below so attendees
-        // see the PARTSTAT change without polluting everyone's inbox.
-        if ($iTipMessage->method !== 'REQUEST' || $iTipMessage->hasChange) {
-            $inbox->createFile($newFileName, $iTipMessage->message->serialize());
-        }
-
-        if (!$newObject) {
-            $iTipMessage->scheduleStatus = '5.0;iTip message was not processed by the server, likely because we didn\'t understand it.';
-            return;
-        }
-
-        if ($isNewNode) {
-            // Do not re-create the event when the attendee already declined (issue-347).
-            // An attendee who deleted their copy sends REPLY DECLINED; the organizer's
-            // copy then reflects PARTSTAT=DECLINED.  Subsequent REQUEST messages (e.g.
-            // reschedule, new attendee added, partstat propagation) must not resurrect
-            // the event in the attendee's calendar.
-            if ($iTipMessage->method === 'REQUEST' && $this->recipientHasDeclinedInMessage($iTipMessage)) {
-                $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
-                return;
-            }
-            $calendar = $this->server->tree->getNodeForPath($calendarPath);
-            $calendar->createFile($newFileName, $newObject->serialize());
-        } else {
-            if ($iTipMessage->method === 'REPLY') {
-                if (!$this->shouldSkipReplyPropagation($oldICalendarData)) {
-                    $this->processICalendarChange(
-                        $oldICalendarData,
-                        $newObject,
-                        [$iTipMessage->recipient],
-                        [$iTipMessage->sender]
-                    );
-                }
-            }
-            if ($iTipMessage->method === 'REQUEST') {
-                $this->preserveRecipientLocalProperties($oldICalendarData, $newObject);
-            }
-            $objectNode->put($newObject->serialize());
-        }
-        $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
+        $objectNode->put($newObject->serialize());
     }
 
     /**
@@ -231,20 +275,13 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * previously declined the event and the event must not be re-created.
      */
     private function recipientHasDeclinedInMessage(ITip\Message $iTipMessage): bool {
-        $recipient = strtolower($iTipMessage->recipient);
-
         foreach ($iTipMessage->message->VEVENT as $vevent) {
             if (isset($vevent->{'RECURRENCE-ID'})) {
                 continue; // skip overrides; check master only
             }
-            if (!isset($vevent->ATTENDEE)) {
-                continue;
-            }
-            foreach ($vevent->ATTENDEE as $attendee) {
-                if (strtolower($attendee->getNormalizedValue()) === $recipient) {
-                    $partstat = isset($attendee['PARTSTAT']) ? strtoupper((string)$attendee['PARTSTAT']) : 'NEEDS-ACTION';
-                    return $partstat === 'DECLINED';
-                }
+            $partstat = CalendarObjectHelper::attendeePartStat($vevent, $iTipMessage->recipient);
+            if ($partstat !== null) {
+                return $partstat === 'DECLINED';
             }
         }
 
@@ -252,23 +289,27 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     private function preserveRecipientLocalProperties(?string $oldICalendarData, VCalendar $newObject): void {
-        $oldObject = $this->readCalendarObject($oldICalendarData);
+        $oldObject = CalendarObjectHelper::readCalendarObject($oldICalendarData);
         if (!$oldObject) {
             return;
         }
 
-        $oldEvents = [];
-        foreach ($oldObject->select('VEVENT') as $oldEvent) {
-            $oldEvents[$this->eventRecurrenceKey($oldEvent)] = $oldEvent;
-        }
+        $oldEvents = CalendarObjectHelper::indexEventsByRecurrenceKey($oldObject);
 
         foreach ($newObject->select('VEVENT') as $newEvent) {
-            $oldEvent = $oldEvents[$this->eventRecurrenceKey($newEvent)] ?? null;
+            $oldEvent = $oldEvents[CalendarObjectHelper::recurrenceKey($newEvent)] ?? null;
             if (!$oldEvent) {
                 continue;
             }
 
-            foreach (self::PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES as $property) {
+            if ($this->shouldEnableEmailValarmRecipientScheduling()) {
+                $this->preserveRecipientLocalVALARMs($oldEvent, $newEvent);
+                $preservableProperties = self::PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES_WITH_MANAGED_ALARMS;
+            } else {
+                $preservableProperties = self::PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES;
+            }
+
+            foreach ($preservableProperties as $property) {
                 $newEvent->remove($property);
 
                 foreach ($oldEvent->select($property) as $oldProperty) {
@@ -280,15 +321,92 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $oldObject->destroy();
     }
 
-    private function eventRecurrenceKey($vevent): string {
-        if (!isset($vevent->{'RECURRENCE-ID'})) {
-            return self::MASTER_EVENT;
+    // Email VALARM recipient scheduling
+    protected function shouldEnableEmailValarmRecipientScheduling(): bool {
+        return $this->envBoolean(self::EMAIL_VALARM_RECIPIENT_SCHEDULING_ENV, true);
+    }
+
+    protected function ensureValarmUids(VCalendar $calendarObject): bool {
+        $modified = false;
+
+        foreach ($calendarObject->select('VEVENT') as $event) {
+            foreach ($event->select('VALARM') as $alarm) {
+                if (!isset($alarm->UID) || trim($alarm->UID->getValue()) === '') {
+                    $alarm->UID = 'alarm-' . \Sabre\DAV\UUIDUtil::getUUID();
+                    $modified = true;
+                }
+            }
         }
 
-        try {
-            return (string)$vevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp();
-        } catch (\Throwable) {
-            return (string)$vevent->{'RECURRENCE-ID'}->getValue();
+        return $modified;
+    }
+
+    private function preserveRecipientLocalVALARMs($oldEvent, $newEvent): void {
+        $newEmailAlarms = array_map(fn ($alarm) => clone $alarm, array_filter($newEvent->select('VALARM'), [$this, 'isEmailAlarm']));
+
+        $newEvent->remove('VALARM');
+        foreach ($newEmailAlarms as $alarm) {
+            $newEvent->add($alarm);
+        }
+
+        $newEmailAlarmUids = array_filter(array_map(fn ($alarm) => isset($alarm->UID) ? $alarm->UID->getValue() : null, $newEmailAlarms));
+        $eventAttendees = array_map(fn ($attendee) => strtolower($attendee->getNormalizedValue()), $newEvent->select('ATTENDEE'));
+
+        foreach ($oldEvent->select('VALARM') as $oldAlarm) {
+            if ($this->isEmailAlarm($oldAlarm) && $this->isOrganizerManagedEmailAlarm($oldAlarm, $newEmailAlarmUids, $eventAttendees)) {
+                continue;
+            }
+
+            $newEvent->add(clone $oldAlarm);
+        }
+    }
+
+    private function isEmailAlarm($alarm): bool {
+        return isset($alarm->ACTION) && strcasecmp($alarm->ACTION->getValue(), 'EMAIL') === 0;
+    }
+
+    private function isOrganizerManagedEmailAlarm($alarm, array $newEmailAlarmUids, array $eventAttendees): bool {
+        if (isset($alarm->UID) && in_array($alarm->UID->getValue(), $newEmailAlarmUids, true)) {
+            return true;
+        }
+
+        $alarmAttendees = array_map(fn ($attendee) => strtolower($attendee->getNormalizedValue()), $alarm->select('ATTENDEE'));
+
+        return !empty($alarmAttendees) && empty(array_diff($alarmAttendees, $eventAttendees));
+    }
+
+    /**
+     * EMAIL alarms are recipient-specific: only deliver alarms that explicitly
+     * name the iTIP recipient in their own ATTENDEE properties.
+     */
+    private function filterEmailAlarmsForRecipient(ITip\Message $message, VCalendar $sourceCalendar): void {
+        $sourceEvents = CalendarObjectHelper::indexEventsByRecurrenceKey($sourceCalendar);
+
+        foreach ($message->message->select('VEVENT') as $vevent) {
+            $sourceEvent = $sourceEvents[CalendarObjectHelper::recurrenceKey($vevent)] ?? null;
+
+            // The broker may rewrite VALARM attendees to the message recipient,
+            // so rebuild EMAIL alarms from the organizer's original calendar.
+            foreach (array_filter($vevent->select('VALARM'), [$this, 'isEmailAlarm']) as $alarm) {
+                $vevent->remove($alarm);
+            }
+
+            if (!$sourceEvent) {
+                continue;
+            }
+
+            foreach (array_filter($sourceEvent->select('VALARM'), [$this, 'isEmailAlarm']) as $alarm) {
+                $recipientAlarm = clone $alarm;
+                // Organizer aliases must not leak into an attendee's copied event.
+                foreach ($recipientAlarm->select('ATTENDEE') as $attendee) {
+                    if (strcasecmp($attendee->getNormalizedValue(), $message->recipient) !== 0) {
+                        $recipientAlarm->remove($attendee);
+                    }
+                }
+                if ($recipientAlarm->select('ATTENDEE')) {
+                    $vevent->add($recipientAlarm);
+                }
+            }
         }
     }
 
@@ -307,6 +425,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         if (PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($vCal)) {
             return;
+        }
+
+        if ($this->shouldEnableEmailValarmRecipientScheduling() && $this->ensureValarmUids($vCal)) {
+            $modified = true;
         }
 
         $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
@@ -331,18 +453,15 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        $oldEvents = [];
-        foreach ($oldObject->select('VEVENT') as $oldEvent) {
-            $oldEvents[$this->eventRecurrenceKey($oldEvent)] = $oldEvent;
-        }
+        $oldEvents = CalendarObjectHelper::indexEventsByRecurrenceKey($oldObject);
 
         foreach ($newObject->select('VEVENT') as $newEvent) {
-            $oldEvent = $oldEvents[$this->eventRecurrenceKey($newEvent)] ?? null;
+            $oldEvent = $oldEvents[CalendarObjectHelper::recurrenceKey($newEvent)] ?? null;
             if (!$oldEvent) {
                 continue;
             }
             foreach (self::FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES as $propertyName) {
-                if ($this->eventPropertySignatures($oldEvent, $propertyName) !== $this->eventPropertySignatures($newEvent, $propertyName)) {
+                if (CalendarObjectHelper::propertySignatures($oldEvent, $propertyName) !== CalendarObjectHelper::propertySignatures($newEvent, $propertyName)) {
                     throw new ForbiddenAttendeeSchedulingObjectChange($propertyName);
                 }
             }
@@ -361,32 +480,21 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                     return false;
                 }
             }
-            foreach ($event->select('ATTENDEE') as $attendee) {
-                if (in_array(strtolower($attendee->getNormalizedValue()), $normalizedAddresses, true)) {
-                    $isAttendee = true;
-                }
-            }
+            $isAttendee = $isAttendee || CalendarObjectHelper::hasAttendeeInAddresses($event, $normalizedAddresses);
         }
 
         return $hasOrganizer && $isAttendee;
     }
 
     private function shouldEnforceRfc6638(): bool {
-        $value = getenv(self::ENFORCE_RFC_6638_ENV);
-        if ($value === false || trim($value) === '') {
-            return true;
-        }
-
-        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true;
+        return $this->envBoolean(self::ENFORCE_RFC_6638_ENV, true);
     }
 
-    private function eventPropertySignatures($event, string $propertyName): array {
-        $signatures = [];
-        foreach ($event->select($propertyName) as $property) {
-            $signatures[] = $property->serialize();
-        }
-        sort($signatures);
-        return $signatures;
+    private function envBoolean(string $name, bool $default): bool {
+        $value = getenv($name);
+        return $value === false || trim($value) === ''
+            ? $default
+            : filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default;
     }
 
     /**
@@ -407,210 +515,38 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return false;
         }
 
-        // Parse oldObject if it's a string (raw iCalendar data)
-        if (is_string($oldObject)) {
-            $oldObject = Reader::read($oldObject);
-        }
-
-        // Ensure oldObject has VEVENT
-        if (!isset($oldObject->VEVENT)) {
+        $oldObject = CalendarObjectHelper::asFilterableRecurringCalendar($oldObject);
+        if (!$oldObject) {
             return false;
         }
 
-        // Only apply this filter to recurring events (must have RRULE or RECURRENCE-ID)
-        $hasRecurrence = false;
-        foreach ($oldObject->VEVENT as $vevent) {
-            if (isset($vevent->RRULE) || isset($vevent->{'RECURRENCE-ID'})) {
-                $hasRecurrence = true;
-                break;
-            }
+        $occurrencePair = CalendarObjectHelper::findMessageOccurrencePair($message, $oldObject, $newObject);
+        if (!$occurrencePair) {
+            return false;
         }
-        if (!$hasRecurrence) {
+        list($recurrenceId, $oldVEvent, $newVEvent) = $occurrencePair;
+
+        if ($recurrenceId === CalendarObjectHelper::MASTER_EVENT
+            && $this->masterRequiresDelivery($message->message->VEVENT, $newVEvent, $oldObject, $newObject)) {
             return false;
         }
 
-        // Only filter messages with a single VEVENT (single occurrence)
-        // Messages with multiple VEVENTs (bundled occurrences) should not be filtered
-        // as they represent legitimate multi-occurrence invitations
-        $veventCount = count($message->message->VEVENT);
-        if ($veventCount !== 1) {
+        if (CalendarObjectHelper::recipientAttendanceChanged($message->recipient, $oldVEvent, $newVEvent)) {
             return false;
         }
 
-        // Get the VEVENT from the message to identify which occurrence this is about
-        $messageEvent = $message->message->VEVENT;
-        if (!$messageEvent) {
+        if (CalendarObjectHelper::invitedExceptionCountChanged($message->recipient, $oldObject, $newObject)) {
             return false;
         }
 
-        // Determine the recurrence ID of this message
-        $recurrenceId = isset($messageEvent->{'RECURRENCE-ID'})
-            ? $messageEvent->{'RECURRENCE-ID'}->getValue()
-            : self::MASTER_EVENT;
-
-        // Find the corresponding VEVENTs in old and new objects
-        $oldVEvent = null;
-        $newVEvent = null;
-
-        foreach ($oldObject->VEVENT as $vevent) {
-            $oldRecurId = isset($vevent->{'RECURRENCE-ID'})
-                ? $vevent->{'RECURRENCE-ID'}->getValue()
-                : self::MASTER_EVENT;
-            if ($oldRecurId === $recurrenceId) {
-                $oldVEvent = $vevent;
-                break;
-            }
-        }
-
-        foreach ($newObject->VEVENT as $vevent) {
-            $newRecurId = isset($vevent->{'RECURRENCE-ID'})
-                ? $vevent->{'RECURRENCE-ID'}->getValue()
-                : self::MASTER_EVENT;
-            if ($newRecurId === $recurrenceId) {
-                $newVEvent = $vevent;
-                break;
-            }
-        }
-
-        // If this is a new occurrence (wasn't in oldObject), don't skip
-        if (!$oldVEvent || !$newVEvent) {
-            return false;
-        }
-
-        if ($recurrenceId === self::MASTER_EVENT) {
-            if ($this->masterExDatesDiffer($messageEvent, $newVEvent)
-                // Public Agenda rule: organizer chair transition to ACCEPTED must trigger notification delivery.
-                || PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($oldObject, $newObject)) {
-                return false;
-            }
-        }
-
-        // Check if recipient was attending this occurrence before
-        $wasAttendingBefore = false;
-        if (isset($oldVEvent->ATTENDEE)) {
-            foreach ($oldVEvent->ATTENDEE as $attendee) {
-                if ($attendee->getNormalizedValue() === $message->recipient) {
-                    $wasAttendingBefore = true;
-                    break;
-                }
-            }
-        }
-
-        // Check if recipient is attending this occurrence now
-        $isAttendingNow = false;
-        if (isset($newVEvent->ATTENDEE)) {
-            foreach ($newVEvent->ATTENDEE as $attendee) {
-                if ($attendee->getNormalizedValue() === $message->recipient) {
-                    $isAttendingNow = true;
-                    break;
-                }
-            }
-        }
-
-        // If recipient wasn't and isn't attending, skip (already handled by broker)
-        // If recipient was attending but isn't now, don't skip (it's a removal)
-        // If recipient wasn't attending but is now, don't skip (it's an addition)
-        // Only skip if recipient was AND is still attending
-        if (!$wasAttendingBefore || !$isAttendingNow) {
-            return false;
-        }
-
-        // Check if the number of occurrences (exceptions) the recipient is invited to has changed
-        // Only count exceptions where the recipient is an attendee
-        $oldExceptionCount = 0;
-        $newExceptionCount = 0;
-        foreach ($oldObject->VEVENT as $vevent) {
-            if (isset($vevent->{'RECURRENCE-ID'})) {
-                // Check if recipient is attending this occurrence
-                if (isset($vevent->ATTENDEE)) {
-                    foreach ($vevent->ATTENDEE as $attendee) {
-                        if ($attendee->getNormalizedValue() === $message->recipient) {
-                            $oldExceptionCount++;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        foreach ($newObject->VEVENT as $vevent) {
-            if (isset($vevent->{'RECURRENCE-ID'})) {
-                // Check if recipient is attending this occurrence
-                if (isset($vevent->ATTENDEE)) {
-                    foreach ($vevent->ATTENDEE as $attendee) {
-                        if ($attendee->getNormalizedValue() === $message->recipient) {
-                            $newExceptionCount++;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        if ($oldExceptionCount !== $newExceptionCount) {
-            return false; // Number of exceptions recipient is invited to changed, don't skip
-        }
-
-        // Check if the occurrence has actually changed
-        // Compare SEQUENCE, DTSTART, DTEND, SUMMARY, LOCATION, DESCRIPTION, etc.
-        $oldSequence = isset($oldVEvent->SEQUENCE) ? $oldVEvent->SEQUENCE->getValue() : 0;
-        $newSequence = isset($newVEvent->SEQUENCE) ? $newVEvent->SEQUENCE->getValue() : 0;
-
-        if ($oldSequence != $newSequence) {
-            return false; // Sequence changed, don't skip
-        }
-
-        // Compare key properties (including EXDATE for occurrence exclusion detection)
-        $properties = ['DTSTART', 'DTEND', 'SUMMARY', 'LOCATION', 'DESCRIPTION', 'STATUS', 'EXDATE'];
-        foreach ($properties as $prop) {
-            $oldValue = isset($oldVEvent->$prop) ? (string)$oldVEvent->$prop : '';
-            $newValue = isset($newVEvent->$prop) ? (string)$newVEvent->$prop : '';
-            if ($oldValue !== $newValue) {
-                return false; // Property changed, don't skip
-            }
-        }
-
-        // Compare PARTSTAT for all attendees. A PARTSTAT-only change (e.g. an attendee
-        // accepting/declining) is invisible to the checks above because PARTSTAT is not in
-        // significantChangeProperties. Without this check, recurring-event attendees never see
-        // co-attendee PARTSTAT updates — inconsistent with the single-day-event behaviour
-        // (single-day events short-circuit at the $hasRecurrence guard above and always deliver).
-        $collectPartStats = function ($vevent): array {
-            $map = [];
-            if (isset($vevent->ATTENDEE)) {
-                foreach ($vevent->ATTENDEE as $attendee) {
-                    $email = strtolower($attendee->getNormalizedValue());
-                    $map[$email] = $attendee['PARTSTAT'] ? strtoupper((string)$attendee['PARTSTAT']) : 'NEEDS-ACTION';
-                }
-            }
-            ksort($map);
-            return $map;
-        };
-        if ($collectPartStats($oldVEvent) !== $collectPartStats($newVEvent)) {
-            return false; // An attendee's PARTSTAT changed, don't skip
-        }
-
-        // Occurrence hasn't changed significantly, skip the message
-        return true;
+        // Skip the message only when the occurrence hasn't changed significantly
+        return !CalendarObjectHelper::occurrenceContentChanged($oldVEvent, $newVEvent);
     }
 
-    private function masterExDatesDiffer($leftEvent, $rightEvent): bool {
-        return $this->extractExDateTimestamps($leftEvent) !== $this->extractExDateTimestamps($rightEvent);
-    }
-
-    private function extractExDateTimestamps($event): array {
-        $timestamps = [];
-
-        if (!isset($event->EXDATE)) {
-            return $timestamps;
-        }
-
-        foreach ($event->select('EXDATE') as $exDate) {
-            foreach ($exDate->getDateTimes() as $dateTime) {
-                $timestamps[] = $dateTime->getTimestamp();
-            }
-        }
-
-        sort($timestamps);
-        return array_values(array_unique($timestamps));
+    private function masterRequiresDelivery($messageEvent, $newVEvent, $oldObject, VCalendar $newObject): bool {
+        return CalendarObjectHelper::exDatesDiffer($messageEvent, $newVEvent)
+            // Public Agenda rule: organizer chair transition to ACCEPTED must trigger notification delivery.
+            || PublicAgendaScheduleUtils::isChairOrganizerAcceptedTransition($oldObject, $newObject);
     }
 
     /*
@@ -627,15 +563,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      *
      * As suggested by chibenwa in PR #142 review.
      */
-    protected function processICalendarChange($oldObject = null, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
-        $broker = new ITip\Broker();
-        // Add SUMMARY, LOCATION, DESCRIPTION to significant change properties
-        // These are important for email notifications even though they're not in RFC5546 list
-        $broker->significantChangeProperties = array_merge(
-            $broker->significantChangeProperties,
-            ['SUMMARY', 'LOCATION', 'DESCRIPTION']
-        );
-        $messages = $broker->parseEvent($newObject, $addresses, $oldObject);
+    protected function processICalendarChange($oldObject, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
+        $messages = $this->createBroker()->parseEvent($newObject, $addresses, $oldObject);
 
         if ($messages) $modified = true;
 
@@ -660,31 +589,28 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             // iTIP payload. Also strip RRULE from override VEVENTs (RFC 5545 §3.8.5.3 forbids
             // RRULE in a component that has RECURRENCE-ID; a misbehaving client may send it).
             if ($message->method === 'REQUEST') {
-                $this->sanitizeOutgoingRequestMessage($message);
+                $this->sanitizeOutgoingRequestMessage($message, $newObject);
             }
 
             $this->deliver($message);
 
-            // Update schedule status for organizer or attendee
-            if (isset($newObject->VEVENT->ORGANIZER) && ($newObject->VEVENT->ORGANIZER->getNormalizedValue() === $message->recipient)) {
-                if ($message->scheduleStatus) {
-                    $newObject->VEVENT->ORGANIZER['SCHEDULE-STATUS'] = $message->getScheduleStatus();
-                }
-                unset($newObject->VEVENT->ORGANIZER['SCHEDULE-FORCE-SEND']);
-            } else {
-                if (isset($newObject->VEVENT->ATTENDEE)) {
-                    foreach ($newObject->VEVENT->ATTENDEE as $attendee) {
-                        if ($attendee->getNormalizedValue() === $message->recipient) {
-                            if ($message->scheduleStatus) {
-                                $attendee['SCHEDULE-STATUS'] = $message->getScheduleStatus();
-                            }
-                            unset($attendee['SCHEDULE-FORCE-SEND']);
-                            break;
-                        }
-                    }
-                }
-            }
+            CalendarObjectHelper::updateScheduleStatus($newObject, $message);
         }
+    }
+
+    /**
+     * Builds an iTIP broker with the ESN-specific significant change properties.
+     */
+    private function createBroker(): ITip\Broker {
+        $broker = new ITip\Broker();
+        // Add SUMMARY, LOCATION, DESCRIPTION to significant change properties
+        // These are important for email notifications even though they're not in RFC5546 list
+        $broker->significantChangeProperties = array_merge(
+            $broker->significantChangeProperties,
+            ['SUMMARY', 'LOCATION', 'DESCRIPTION']
+        );
+
+        return $broker;
     }
 
     private function getReplyPropagationThreshold(): int {
@@ -712,52 +638,17 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     private function countEventAttendees($calendarObject): int {
-        $calendarObject = $this->readCalendarObject($calendarObject);
+        $calendarObject = CalendarObjectHelper::readCalendarObject($calendarObject);
         if (!$calendarObject) {
             return 0;
         }
 
-        $masterEvent = $this->findMasterEvent($calendarObject);
+        $masterEvent = CalendarObjectHelper::findMasterEvent($calendarObject);
         if (!$masterEvent || !isset($masterEvent->ATTENDEE)) {
             return 0;
         }
 
-        return $this->countUniqueAttendees($masterEvent->ATTENDEE);
-    }
-
-    private function readCalendarObject($calendarObject): ?VCalendar {
-        if ($calendarObject instanceof VCalendar) {
-            return $calendarObject;
-        }
-
-        try {
-            $parsedObject = \Sabre\VObject\Reader::read($calendarObject);
-        } catch (\Throwable) {
-            return null;
-        }
-
-        return $parsedObject instanceof VCalendar ? $parsedObject : null;
-    }
-
-    private function findMasterEvent(VCalendar $calendarObject) {
-        $firstEvent = null;
-        foreach ($calendarObject->select('VEVENT') as $vevent) {
-            $firstEvent = $firstEvent ?? $vevent;
-            if (!isset($vevent->{'RECURRENCE-ID'})) {
-                return $vevent;
-            }
-        }
-
-        return $firstEvent;
-    }
-
-    private function countUniqueAttendees($attendees): int {
-        $attendeeMap = [];
-        foreach ($attendees as $attendee) {
-            $attendeeMap[strtolower($attendee->getNormalizedValue())] = true;
-        }
-
-        return count($attendeeMap);
+        return CalendarObjectHelper::countUniqueAttendees($masterEvent->ATTENDEE);
     }
 
     /**
@@ -785,25 +676,16 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
             $replyRecurTs = $replyVevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp();
 
-            // Check whether this RECURRENCE-ID already matches an exception.
-            foreach ($organizerCalendar->VEVENT as $orgVevent) {
-                if (isset($orgVevent->{'RECURRENCE-ID'}) &&
-                    $orgVevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp() === $replyRecurTs) {
-                    continue 2; // Exact match — no correction needed.
-                }
+            if (CalendarObjectHelper::hasExceptionWithRecurrenceTimestamp($organizerCalendar, $replyRecurTs)) {
+                continue; // Exact match — no correction needed.
             }
 
             // No match by RECURRENCE-ID.  Try to find an exception whose DTSTART
             // equals the REPLY's RECURRENCE-ID (the client used the moved time as key).
-            foreach ($organizerCalendar->VEVENT as $orgVevent) {
-                if (!isset($orgVevent->{'RECURRENCE-ID'})) {
-                    continue; // Skip master VEVENT.
-                }
-                if ($orgVevent->DTSTART->getDateTime()->getTimestamp() === $replyRecurTs) {
-                    // Correct: replace client's wrong RECURRENCE-ID with the canonical one.
-                    $replyVevent->{'RECURRENCE-ID'} = clone $orgVevent->{'RECURRENCE-ID'};
-                    break;
-                }
+            $matchingException = CalendarObjectHelper::findExceptionByStartTimestamp($organizerCalendar, $replyRecurTs);
+            if ($matchingException) {
+                // Correct: replace client's wrong RECURRENCE-ID with the canonical one.
+                $replyVevent->{'RECURRENCE-ID'} = clone $matchingException->{'RECURRENCE-ID'};
             }
         }
     }
@@ -833,16 +715,12 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * (RFC 5545 §3.8.5.3: RRULE MUST NOT appear in a component that has
      * RECURRENCE-ID; some clients send it anyway).
      */
-    private function sanitizeOutgoingRequestMessage(ITip\Message $message): void {
-        $hasMaster = false;
-        foreach ($message->message->VEVENT as $vevent) {
-            if (!isset($vevent->{'RECURRENCE-ID'})) {
-                $hasMaster = true;
-                break;
-            }
+    private function sanitizeOutgoingRequestMessage(ITip\Message $message, VCalendar $sourceCalendar): void {
+        if ($this->shouldEnableEmailValarmRecipientScheduling()) {
+            $this->filterEmailAlarmsForRecipient($message, $sourceCalendar);
         }
 
-        if (!$hasMaster) {
+        if (!CalendarObjectHelper::hasMasterEvent($message->message)) {
             // Override-only message: strip RRULE only (invalid per RFC 5545 §3.8.5.3
             // in a component that has RECURRENCE-ID), but KEEP RECURRENCE-ID.
             //
@@ -861,12 +739,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        // Master is present: only strip the invalid RRULE from override VEVENTs.
-        foreach ($message->message->VEVENT as $vevent) {
-            if (isset($vevent->{'RECURRENCE-ID'}) && isset($vevent->RRULE)) {
-                unset($vevent->RRULE);
-            }
-        }
+        CalendarObjectHelper::stripRruleFromOverrides($message->message);
     }
 
     /**
@@ -903,13 +776,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        $broker = new ITip\Broker();
-        // Add SUMMARY, LOCATION, DESCRIPTION to significant change properties
-        $broker->significantChangeProperties = array_merge(
-            $broker->significantChangeProperties,
-            ['SUMMARY', 'LOCATION', 'DESCRIPTION']
-        );
-        $messages = $broker->parseEvent(null, $addresses, $node->get());
+        $messages = $this->createBroker()->parseEvent(null, $addresses, $node->get());
 
         foreach ($messages as $message) {
             $this->deliver($message);
@@ -935,28 +802,49 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return [];
         }
 
-        // For resource principals, get email address directly from principal properties
-        // to avoid issues with getAddressesForPrincipal() failing (issue #195)
-        if (strpos($owner, 'principals/resources/') === 0 && $this->principalBackend) {
-            if (method_exists($this->principalBackend, 'getPrincipalByPath')) {
-                try {
-                    $principalInfo = $this->principalBackend->getPrincipalByPath($owner);
-                    if ($principalInfo && isset($principalInfo['{http://sabredav.org/ns}email-address'])) {
-                        $email = $principalInfo['{http://sabredav.org/ns}email-address'];
-                        if (is_string($email) && !empty($email)) {
-                            return ['mailto:' . $email];
-                        }
-                    }
-                } catch (\Throwable $e) {
-                    // Log but continue to try standard method
-                    $this->logger->debug('Failed to get resource email from principal backend', [
-                        'principal' => $owner,
-                        'exception' => get_class($e) . ': ' . $e->getMessage()
-                    ]);
-                }
-            }
+        $resourceAddresses = $this->getResourceOwnerAddresses($owner);
+        if ($resourceAddresses !== null) {
+            return $resourceAddresses;
         }
 
+        return $this->getAddressesForPrincipalSafely($owner);
+    }
+
+    /**
+     * For resource principals, gets the email address directly from principal
+     * properties to avoid issues with getAddressesForPrincipal() failing
+     * (issue #195). Returns null when the owner is not a resource or the
+     * lookup fails, so the caller can fall back to the standard method.
+     */
+    private function getResourceOwnerAddresses($owner): ?array {
+        if (!$this->canResolveResourceEmail($owner)) {
+            return null;
+        }
+
+        try {
+            $principalInfo = $this->principalBackend->getPrincipalByPath($owner);
+            $email = $principalInfo['{http://sabredav.org/ns}email-address'] ?? null;
+            if (is_string($email) && !empty($email)) {
+                return ['mailto:' . $email];
+            }
+        } catch (\Throwable $e) {
+            // Log but continue to try standard method
+            $this->logger->debug('Failed to get resource email from principal backend', [
+                'principal' => $owner,
+                'exception' => get_class($e) . ': ' . $e->getMessage()
+            ]);
+        }
+
+        return null;
+    }
+
+    private function canResolveResourceEmail($owner): bool {
+        return strpos($owner, 'principals/resources/') === 0
+            && $this->principalBackend
+            && method_exists($this->principalBackend, 'getPrincipalByPath');
+    }
+
+    private function getAddressesForPrincipalSafely($owner): array {
         try {
             $addresses = $this->getAddressesForPrincipal($owner);
             // getAddressesForPrincipal may return null, ensure we return an array

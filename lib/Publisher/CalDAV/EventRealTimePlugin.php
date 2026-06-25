@@ -8,13 +8,15 @@ use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject;
 use Sabre\Uri;
 use \ESN\Utils\Utils as Utils;
-use \ESN\CalDAV\Schedule\IMipPlugin;
-
 #[\AllowDynamicProperties]
 class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     const PRIORITY_LOWER_THAN_SCHEDULE_PLUGIN = 101;
     // Run after Sabre's CalDAV plugin (priority 100) to get the converted ICS data
     const PRIORITY_AFTER_CALDAV_PLUGIN = 150;
+
+    const SCHEDSTAT_SUCCESS_PENDING = '1.0';
+    const SCHEDSTAT_FAIL_TEMPORARY  = '5.1';
+    const SCHEDSTAT_FAIL_PERMANENT  = '5.2';
 
     protected $caldavBackend;
 
@@ -183,78 +185,103 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     function addSharedUsers($action, $calendar, $calendarPathObject, $data, $old_event = null) {
-        if ($calendar instanceof \ESN\CalDAV\SharedCalendar) {
-            $calendarid = $calendar->getCalendarId();
-            $pathExploded = explode('/', $calendarPathObject);
-            $objectUri = $pathExploded[3];
-            $calendarUri = $pathExploded[2];
-            $isImport = false;
-
-            // Validate that $data is a string or resource before parsing
-            if (!is_string($data) && !is_resource($data)) {
-                error_log('EventRealTimePlugin: Invalid data type in addSharedUsers, expected string or resource, got ' . gettype($data));
-                return;
-            }
-
-            if ($this->getFirstChar($data) === '[') {
-                $event = \Sabre\VObject\Reader::readJson($data);
-            } else {
-                $event = \Sabre\VObject\Reader::read($data);
-            }
-
-            $dataAsString = $data;
-            if (is_resource($data)) {
-                rewind($data);
-                $dataAsString = stream_get_contents($data);
-                rewind($data);
-            } else {
-                $dataAsString = $data;
-            }
-            $event->remove('method');
-
-            if (array_key_exists('import', $this->server->httpRequest->getQueryParameters())) {
-                $isImport = true;
-            }
-
-            $dataMessage = [
-                'eventPath' => '/' . $calendarPathObject,
-                'event' => $event,
-                'rawEvent' => $dataAsString,
-                'import' => $isImport
-            ];
-
-            if($old_event) {
-                $dataMessage['old_event'] = $old_event;
-            }
-
-            $options = [
-                'action' => $action,
-                'eventSourcePath' => $calendarPathObject,
-                'calendarid' => $calendarid,
-                'objectUri' => $objectUri,
-                'calendarUri' => $calendarUri
-            ];
-
-            // When a PUT replaces the content of an existing resource with a different UID
-            // (client reuses the same .ics filename for a completely different event), the
-            // old alarm must be cancelled before the new one is created, otherwise consumers
-            // are left with an orphaned alarm indexed on the old UID.
-            if ($action === 'UPDATED' && $old_event) {
-                $oldUid = isset($old_event->VEVENT->UID) ? (string)$old_event->VEVENT->UID : null;
-                $newUid = isset($event->VEVENT->UID) ? (string)$event->VEVENT->UID : null;
-                if ($oldUid && $newUid && $oldUid !== $newUid) {
-                    $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_CANCEL'], [
-                        'eventPath' => '/' . $calendarPathObject,
-                        'event'     => $old_event,
-                        'rawEvent'  => $old_event->serialize(),
-                    ]);
-                }
-            }
-
-            $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_'.$action], $dataMessage);
-            $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
-            $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
+        if (!($calendar instanceof \ESN\CalDAV\SharedCalendar)) {
+            return;
         }
+
+        $payload = $this->parseEventPayload($data);
+        if ($payload === null) {
+            return;
+        }
+        list($event, $dataAsString) = $payload;
+
+        $pathExploded = explode('/', $calendarPathObject);
+
+        $dataMessage = [
+            'eventPath' => '/' . $calendarPathObject,
+            'event' => $event,
+            'rawEvent' => $dataAsString,
+            'import' => array_key_exists('import', $this->server->httpRequest->getQueryParameters())
+        ];
+
+        if($old_event) {
+            $dataMessage['old_event'] = $old_event;
+        }
+
+        $options = [
+            'action' => $action,
+            'eventSourcePath' => $calendarPathObject,
+            'calendarid' => $calendar->getCalendarId(),
+            'objectUri' => $pathExploded[3],
+            'calendarUri' => $pathExploded[2]
+        ];
+
+        $this->cancelOrphanedAlarmOnUidChange($action, $old_event, $event, $calendarPathObject);
+
+        $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_'.$action], $dataMessage);
+        $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+        $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
+    }
+
+    /**
+     * Parses the raw event payload (iCalendar or jCal, string or stream).
+     *
+     * @return array|null [$event, $dataAsString], or null when $data is not a
+     *                    parseable type.
+     */
+    private function parseEventPayload($data): ?array {
+        // Validate that $data is a string or resource before parsing
+        if (!is_string($data) && !is_resource($data)) {
+            error_log('EventRealTimePlugin: Invalid data type in addSharedUsers, expected string or resource, got ' . gettype($data));
+            return null;
+        }
+
+        if ($this->getFirstChar($data) === '[') {
+            $event = \Sabre\VObject\Reader::readJson($data);
+        } else {
+            $event = \Sabre\VObject\Reader::read($data);
+        }
+
+        $dataAsString = $data;
+        if (is_resource($data)) {
+            rewind($data);
+            $dataAsString = stream_get_contents($data);
+            rewind($data);
+        }
+
+        $event->remove('method');
+
+        return [$event, $dataAsString];
+    }
+
+    /**
+     * When a PUT replaces the content of an existing resource with a different UID
+     * (client reuses the same .ics filename for a completely different event), the
+     * old alarm must be cancelled before the new one is created, otherwise consumers
+     * are left with an orphaned alarm indexed on the old UID.
+     */
+    private function cancelOrphanedAlarmOnUidChange($action, $old_event, $event, $calendarPathObject): void {
+        if ($action !== 'UPDATED') {
+            return;
+        }
+        if (!$old_event) {
+            return;
+        }
+
+        $oldUid = isset($old_event->VEVENT->UID) ? (string)$old_event->VEVENT->UID : null;
+        $newUid = isset($event->VEVENT->UID) ? (string)$event->VEVENT->UID : null;
+
+        if ($this->uidChanged($oldUid, $newUid)) {
+            $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_CANCEL'], [
+                'eventPath' => '/' . $calendarPathObject,
+                'event'     => $old_event,
+                'rawEvent'  => $old_event->serialize(),
+            ]);
+        }
+    }
+
+    private function uidChanged(?string $oldUid, ?string $newUid): bool {
+        return $oldUid && $newUid && $oldUid !== $newUid;
     }
 
     private function notifySubscribers($subscribers, $dataMessage, $options) {
@@ -267,24 +294,20 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     private function notifyInvites($invites, $dataMessage, $options) {
+        $calendarUri = null;
+        $eventCalendar = null;
+
         foreach($invites as $user) {
             if($user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
                 continue;
             }
 
-            $calendars = $this->caldavBackend->getCalendarsForUser($user->principal);
-
-            foreach($calendars as $calendarUser) {
-                if($calendarUser['id'][0] == $options['calendarid']) {
-                    $calendarUri = $calendarUser['uri'];
-
-                    list(,, $userId) = explode('/', $user->principal);
-                    $eventCalendar = $this->server->tree->getNodeForPath('calendars/' . $userId . '/' . $calendarUri);
-                }
+            $inviteeCalendar = $this->findInviteeCalendar($user->principal, $options['calendarid']);
+            if ($inviteeCalendar !== null) {
+                list($calendarUri, $eventCalendar) = $inviteeCalendar;
             }
 
-            $vCalendar = $dataMessage['event'];
-            $dataMessage['event'] = Utils::hidePrivateEventInfoForUser($vCalendar, $eventCalendar, $user->principal);
+            $dataMessage['event'] = Utils::hidePrivateEventInfoForUser($dataMessage['event'], $eventCalendar, $user->principal);
 
             $dataMessage['eventPath'] = Utils::objectPathFromUri($user->principal,  $calendarUri, $options['objectUri']);
 
@@ -292,38 +315,37 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         }
     }
 
+    /**
+     * Finds the invitee's instance of the shared calendar.
+     *
+     * @return array|null [$calendarUri, $eventCalendar node], or null when the
+     *                    invitee has no instance of the calendar.
+     */
+    private function findInviteeCalendar($principal, $calendarid): ?array {
+        $found = null;
+
+        foreach($this->caldavBackend->getCalendarsForUser($principal) as $calendarUser) {
+            if($calendarUser['id'][0] == $calendarid) {
+                $calendarUri = $calendarUser['uri'];
+
+                list(,, $userId) = explode('/', $principal);
+                $found = [$calendarUri, $this->server->tree->getNodeForPath('calendars/' . $userId . '/' . $calendarUri)];
+            }
+        }
+
+        return $found;
+    }
+
     function schedule(\Sabre\VObject\ITip\Message $iTipMessage) {
         if($iTipMessage->method === 'COUNTER') {
             return true;
         }
 
-        switch($iTipMessage->scheduleStatus) {
-            case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_SUCCESS_PENDING:
-            case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_TEMPORARY:
-            case \ESN\CalDAV\Schedule\IMipPlugin::SCHEDSTAT_FAIL_PERMANENT:
-                return false;
+        if ($this->hasPendingOrFailedScheduleStatus($iTipMessage)) {
+            return false;
         }
 
-        $recipientPrincipalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
-
-        // If getPrincipalByUri fails (external recipient), try to find principal by email
-        if (!$recipientPrincipalUri) {
-            $recipientEmail = $iTipMessage->recipient;
-            if (strpos($recipientEmail, 'mailto:') === 0) {
-                $recipientEmail = substr($recipientEmail, 7);
-            }
-
-            // Use PrincipalBackend from CalDAV backend to find user by email
-            if ($this->caldavBackend && method_exists($this->caldavBackend, 'getPrincipalBackend')) {
-                $principalBackend = $this->caldavBackend->getPrincipalBackend();
-                if ($principalBackend && method_exists($principalBackend, 'getAuthTenantByEmail')) {
-                    $tenant = $principalBackend->getAuthTenantByEmail($recipientEmail);
-                    if ($tenant) {
-                        $recipientPrincipalUri = (string) $tenant->getPrincipal();
-                    }
-                }
-            }
-        }
+        $recipientPrincipalUri = $this->resolveRecipientPrincipalUri($iTipMessage);
 
         // If we still don't have a principal URI, we can't process this iTip message
         if (!$recipientPrincipalUri) {
@@ -333,65 +355,15 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         // Get sender principal URI to check if recipient is the organizer themselves
         $senderPrincipalUri = Utils::getPrincipalByUri($iTipMessage->sender, $this->server);
 
-        // Don't send REQUEST to organizer themselves (fixes #215)
-        // This happens when ATTENDEE doesn't have mailto: prefix and matches the organizer
-        if ($iTipMessage->method === 'REQUEST' &&
-            $senderPrincipalUri &&
-            $recipientPrincipalUri === $senderPrincipalUri) {
+        if ($this->isSelfAddressedRequest($iTipMessage, $recipientPrincipalUri, $senderPrincipalUri)) {
             return true;
         }
 
-        // Get the event from recipient's calendar (should exist now, created by schedule plugin)
-        list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
-
-        // Track whether the event already existed in the recipient's calendar before delivery.
-        // Used below to choose between EVENT_CREATED and EVENT_UPDATED for search indexing.
-        $foundInCalendar = ($eventPath !== null);
-
-        // If event not found (e.g., CANCEL deleted it, or external REQUEST), construct path manually
-        if (!$eventPath) {
-            $aclPlugin = $this->server->getPlugin('acl');
-            if (!$aclPlugin) {
-                return false;
-            }
-
-            $caldavNS = '{' . \Sabre\CalDAV\Schedule\Plugin::NS_CALDAV . '}';
-
-            // Get calendar properties
-            $this->server->removeListener('propFind', [$aclPlugin, 'propFind']);
-            $result = $this->server->getProperties(
-                $recipientPrincipalUri,
-                [
-                    $caldavNS . 'calendar-home-set',
-                    $caldavNS . 'schedule-default-calendar-URL',
-                ]
-            );
-            $this->server->on('propFind', [$aclPlugin, 'propFind'], 20);
-
-            if (!isset($result[$caldavNS . 'calendar-home-set']) ||
-                !isset($result[$caldavNS . 'schedule-default-calendar-URL'])) {
-                return false;
-            }
-
-            $homePath = $result[$caldavNS . 'calendar-home-set']->getHref();
-            $defaultCalendarPath = $result[$caldavNS . 'schedule-default-calendar-URL']->getHref();
-
-            // Extract calendar URI from the full path
-            // defaultCalendarPath is like: /calendars/54b64eadf6d7d8e41d263e0f/events
-            $calendarUri = basename($defaultCalendarPath);
-            $homeId = basename($homePath);
-
-            // Construct event path: calendars/homeId/calendarUri/uid.ics
-            $objectUri = $iTipMessage->uid . '.ics';
-            $eventPath = 'calendars/' . $homeId . '/' . $calendarUri . '/' . $objectUri;
-
-            // Use the iTip message as the event data
-            $upToDateEventIcs = $iTipMessage->message->serialize();
+        $delivery = $this->resolveEventDelivery($iTipMessage, $recipientPrincipalUri);
+        if ($delivery === null) {
+            return false;
         }
-
-        // Normalize to relative path — getEventObjectFromAnotherPrincipalHome() returns an
-        // absolute path ('/calendars/...') but all downstream code assumes relative (no leading slash).
-        $eventPath = ltrim($eventPath, '/');
+        list($eventPath, $upToDateEventIcs, $foundInCalendar) = $delivery;
 
         $dataMessage = [
             'eventPath' => '/' . $eventPath,
@@ -404,131 +376,288 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $dataMessage
         );
 
-        list($namespace, $homeId, $calendarUri, $objectUri) = explode('/', $eventPath);
+        list(,, $calendarUri, $objectUri) = explode('/', $eventPath);
         $calendar = $this->server->tree->getNodeForPath('/'. substr($eventPath,0,strrpos($eventPath,'/')));
-        $calendarid = $calendar->getCalendarId();
 
         $options = [
             'action' => $iTipMessage->method,
             'eventSourcePath' => $eventPath,
-            'calendarid' => $calendarid,
+            'calendarid' => $calendar->getCalendarId(),
             'objectUri' => $objectUri,
             'calendarUri' => $calendarUri
         ];
 
         $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
 
-        if ($iTipMessage->method === 'REQUEST' && $iTipMessage->significantChange) {
-            // Only notify the alarm service if the recipient has accepted the event.
-            // The ICS in $dataMessage is fetched after scheduleLocalDelivery has merged
-            // the organizer's changes, so the recipient's PARTSTAT reflects the current state.
-            $vcalendar = $dataMessage['event'];
-            $recipientUri = strtolower($iTipMessage->recipient);
-            $masterVEvent = null;
-            foreach ($vcalendar->VEVENT as $vevent) {
-                if (!isset($vevent->{'RECURRENCE-ID'})) {
-                    $masterVEvent = $vevent;
-                    break;
-                }
-            }
-            if ($masterVEvent && isset($masterVEvent->ATTENDEE)) {
-                foreach ($masterVEvent->ATTENDEE as $attendee) {
-                    if (strtolower($attendee->getValue()) === $recipientUri) {
-                        $partstat = isset($attendee['PARTSTAT'])
-                            ? strtoupper(trim($attendee['PARTSTAT']->getValue()))
-                            : 'NEEDS-ACTION';
-                        if ($partstat === 'ACCEPTED') {
-                            $this->createMessage(
-                                $this->EVENT_TOPICS['EVENT_ALARM_UPDATED'],
-                                $dataMessage
-                            );
-                        }
-                        break;
-                    }
-                }
-            }
-        } elseif ($iTipMessage->method === 'CANCEL') {
-            $this->createMessage(
-                $this->EVENT_TOPICS['EVENT_ALARM_CANCEL'],
-                $dataMessage
-            );
-        }
+        $this->notifyAlarm($iTipMessage, $dataMessage);
 
-        if($iTipMessage->method === 'REQUEST' && Utils::isResourceFromPrincipal($recipientPrincipalUri) && $iTipMessage->significantChange) {
-            $pathExploded = explode('/', $eventPath);
+        $this->notifyResourceEventCreated($iTipMessage, $recipientPrincipalUri, $eventPath, $upToDateEventIcs);
 
-            $dataMessage = [
-                'resourceId' => $pathExploded[1],
-                'eventId' => $pathExploded[3],
-                'eventPath' => '/' . $eventPath,
-                'ics' => $upToDateEventIcs
-            ];
-            $this->createMessage(
-                $this->EVENT_TOPICS['RESOURCE_EVENT_CREATED'],
-                $dataMessage
-            );
-        }
+        $this->emitSearchIndexingEvent($iTipMessage->method, $foundInCalendar, $dataMessage);
 
-
-        // scheduleLocalDelivery writes directly to the backend (bypassing the HTTP layer),
-        // so beforeCreateFile / beforeWriteContent never fire and the search index is never
-        // notified.  Emit the appropriate search-indexing event explicitly here.
-        //
-        // • REQUEST → created (new invite) or updated (re-invite / modification)
-        // • CANCEL  → deleted
-        // REPLY is intentionally omitted: the organiser's calendar is updated via a normal
-        // PUT on the attendee side which already triggers beforeWriteContent on the organiser.
-        if ($iTipMessage->method === 'REQUEST') {
-            $indexTopic = $foundInCalendar
-                ? $this->EVENT_TOPICS['EVENT_UPDATED']
-                : $this->EVENT_TOPICS['EVENT_CREATED'];
-            $this->createMessage($indexTopic, $dataMessage);
-        } elseif ($iTipMessage->method === 'CANCEL') {
-            $this->createMessage($this->EVENT_TOPICS['EVENT_DELETED'], $dataMessage);
-        }
-
-        if($senderPrincipalUri && $iTipMessage->method === 'REPLY' && Utils::isResourceFromPrincipal($senderPrincipalUri)) {
-            list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
-
-            if (!$eventPath) {
-                return false;
-            }
-
-            $explodedSenderPrincipalUri = explode('/', $senderPrincipalUri);
-
-            foreach ($iTipMessage->message->VEVENT->ATTENDEE as $attendee) {
-                if ($attendee->getValue() === $iTipMessage->sender) {
-                    switch($attendee['PARTSTAT']->getValue()) {
-                        case 'ACCEPTED':
-                            $dataMessage = [
-                                'resourceId' => $explodedSenderPrincipalUri[2],
-                                'eventId' => $iTipMessage->uid,
-                                'eventPath' => '/' . $eventPath,
-                                'ics' => $upToDateEventIcs
-                            ];
-                            $this->createMessage(
-                                $this->EVENT_TOPICS['RESOURCE_EVENT_ACCEPTED'],
-                                $dataMessage
-                            );
-                            break;
-                        case 'DECLINED':
-                            $dataMessage = [
-                                'resourceId' => $explodedSenderPrincipalUri[2],
-                                'eventId' => $iTipMessage->uid,
-                                'eventPath' => '/' . $eventPath,
-                                'ics' => $upToDateEventIcs
-                            ];
-                            $this->createMessage(
-                                $this->EVENT_TOPICS['RESOURCE_EVENT_DECLINED'],
-                                $dataMessage
-                            );
-                    }
-                }
-            }
+        if (!$this->notifyResourceReplyStatus($iTipMessage, $senderPrincipalUri)) {
+            return false;
         }
 
         $this->publishMessages();
         return true;
+    }
+
+    private function hasPendingOrFailedScheduleStatus(\Sabre\VObject\ITip\Message $iTipMessage): bool {
+        switch($iTipMessage->scheduleStatus) {
+            case self::SCHEDSTAT_SUCCESS_PENDING:
+            case self::SCHEDSTAT_FAIL_TEMPORARY:
+            case self::SCHEDSTAT_FAIL_PERMANENT:
+                return true;
+        }
+
+        return false;
+    }
+
+    private function resolveRecipientPrincipalUri(\Sabre\VObject\ITip\Message $iTipMessage): ?string {
+        $recipientPrincipalUri = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
+        if ($recipientPrincipalUri) {
+            return $recipientPrincipalUri;
+        }
+
+        // If getPrincipalByUri fails (external recipient), try to find principal by email
+        $recipientEmail = $iTipMessage->recipient;
+        if (strpos($recipientEmail, 'mailto:') === 0) {
+            $recipientEmail = substr($recipientEmail, 7);
+        }
+
+        // Use PrincipalBackend from CalDAV backend to find user by email
+        if ($this->caldavBackend && method_exists($this->caldavBackend, 'getPrincipalBackend')) {
+            $principalBackend = $this->caldavBackend->getPrincipalBackend();
+            if ($principalBackend && method_exists($principalBackend, 'getAuthTenantByEmail')) {
+                $tenant = $principalBackend->getAuthTenantByEmail($recipientEmail);
+                if ($tenant) {
+                    return (string) $tenant->getPrincipal();
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Don't send REQUEST to organizer themselves (fixes #215)
+     * This happens when ATTENDEE doesn't have mailto: prefix and matches the organizer
+     */
+    private function isSelfAddressedRequest(\Sabre\VObject\ITip\Message $iTipMessage, string $recipientPrincipalUri, $senderPrincipalUri): bool {
+        return $iTipMessage->method === 'REQUEST' &&
+            $senderPrincipalUri &&
+            $recipientPrincipalUri === $senderPrincipalUri;
+    }
+
+    /**
+     * Locates the event in the recipient's calendar (it should exist now,
+     * created by the schedule plugin), falling back to the default calendar
+     * path when not found (e.g., CANCEL deleted it, or external REQUEST).
+     *
+     * @return array|null [$eventPath (relative), $upToDateEventIcs, $foundInCalendar],
+     *                    or null when delivery cannot be resolved.
+     */
+    private function resolveEventDelivery(\Sabre\VObject\ITip\Message $iTipMessage, string $recipientPrincipalUri): ?array {
+        list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+
+        // Track whether the event already existed in the recipient's calendar before delivery.
+        // Used to choose between EVENT_CREATED and EVENT_UPDATED for search indexing.
+        $foundInCalendar = ($eventPath !== null);
+
+        if (!$eventPath) {
+            $defaultDelivery = $this->buildDefaultEventDelivery($iTipMessage, $recipientPrincipalUri);
+            if ($defaultDelivery === null) {
+                return null;
+            }
+            list($eventPath, $upToDateEventIcs) = $defaultDelivery;
+        }
+
+        // Normalize to relative path — getEventObjectFromAnotherPrincipalHome() returns an
+        // absolute path ('/calendars/...') but all downstream code assumes relative (no leading slash).
+        return [ltrim($eventPath, '/'), $upToDateEventIcs, $foundInCalendar];
+    }
+
+    /**
+     * Constructs the event path in the recipient's default calendar and uses
+     * the iTip message itself as the event data.
+     *
+     * @return array|null [$eventPath, $eventIcs], or null when the recipient's
+     *                    calendar home cannot be resolved.
+     */
+    private function buildDefaultEventDelivery(\Sabre\VObject\ITip\Message $iTipMessage, string $recipientPrincipalUri): ?array {
+        $aclPlugin = $this->server->getPlugin('acl');
+        if (!$aclPlugin) {
+            return null;
+        }
+
+        $caldavNS = '{' . \Sabre\CalDAV\Schedule\Plugin::NS_CALDAV . '}';
+
+        // Get calendar properties
+        $this->server->removeListener('propFind', [$aclPlugin, 'propFind']);
+        $result = $this->server->getProperties(
+            $recipientPrincipalUri,
+            [
+                $caldavNS . 'calendar-home-set',
+                $caldavNS . 'schedule-default-calendar-URL',
+            ]
+        );
+        $this->server->on('propFind', [$aclPlugin, 'propFind'], 20);
+
+        if (!isset($result[$caldavNS . 'calendar-home-set']) ||
+            !isset($result[$caldavNS . 'schedule-default-calendar-URL'])) {
+            return null;
+        }
+
+        $homePath = $result[$caldavNS . 'calendar-home-set']->getHref();
+        $defaultCalendarPath = $result[$caldavNS . 'schedule-default-calendar-URL']->getHref();
+
+        // Extract calendar URI from the full path
+        // defaultCalendarPath is like: /calendars/54b64eadf6d7d8e41d263e0f/events
+        // Construct event path: calendars/homeId/calendarUri/uid.ics
+        $eventPath = 'calendars/' . basename($homePath) . '/' . basename($defaultCalendarPath) . '/' . $iTipMessage->uid . '.ics';
+
+        return [$eventPath, $iTipMessage->message->serialize()];
+    }
+
+    private function notifyAlarm(\Sabre\VObject\ITip\Message $iTipMessage, array $dataMessage): void {
+        if ($iTipMessage->method === 'REQUEST' && $iTipMessage->significantChange) {
+            // Only notify the alarm service if the recipient has accepted the event.
+            // The ICS in $dataMessage is fetched after scheduleLocalDelivery has merged
+            // the organizer's changes, so the recipient's PARTSTAT reflects the current state.
+            if ($this->recipientHasAcceptedMaster($dataMessage['event'], strtolower($iTipMessage->recipient))) {
+                $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_UPDATED'], $dataMessage);
+            }
+        } elseif ($iTipMessage->method === 'CANCEL') {
+            $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_CANCEL'], $dataMessage);
+        }
+    }
+
+    private function recipientHasAcceptedMaster($vcalendar, string $recipientUri): bool {
+        $masterVEvent = $this->findMasterVEvent($vcalendar);
+
+        if (!$masterVEvent || !isset($masterVEvent->ATTENDEE)) {
+            return false;
+        }
+
+        return $this->attendeePartstat($masterVEvent, $recipientUri) === 'ACCEPTED';
+    }
+
+    private function findMasterVEvent($vcalendar) {
+        foreach ($vcalendar->VEVENT as $vevent) {
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                return $vevent;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Returns the uppercased PARTSTAT of the attendee matching the recipient
+     * (NEEDS-ACTION when the parameter is absent), or null when the recipient
+     * is not an attendee.
+     */
+    private function attendeePartstat($vevent, string $recipientUri): ?string {
+        foreach ($vevent->ATTENDEE as $attendee) {
+            if (strtolower($attendee->getValue()) === $recipientUri) {
+                return isset($attendee['PARTSTAT'])
+                    ? strtoupper(trim($attendee['PARTSTAT']->getValue()))
+                    : 'NEEDS-ACTION';
+            }
+        }
+
+        return null;
+    }
+
+    private function notifyResourceEventCreated(\Sabre\VObject\ITip\Message $iTipMessage, string $recipientPrincipalUri, string $eventPath, $upToDateEventIcs): void {
+        if ($iTipMessage->method !== 'REQUEST' || !$iTipMessage->significantChange) {
+            return;
+        }
+        if (!Utils::isResourceFromPrincipal($recipientPrincipalUri)) {
+            return;
+        }
+
+        $pathExploded = explode('/', $eventPath);
+
+        $this->createMessage($this->EVENT_TOPICS['RESOURCE_EVENT_CREATED'], [
+            'resourceId' => $pathExploded[1],
+            'eventId' => $pathExploded[3],
+            'eventPath' => '/' . $eventPath,
+            'ics' => $upToDateEventIcs
+        ]);
+    }
+
+    /**
+     * scheduleLocalDelivery writes directly to the backend (bypassing the HTTP layer),
+     * so beforeCreateFile / beforeWriteContent never fire and the search index is never
+     * notified.  Emit the appropriate search-indexing event explicitly here.
+     *
+     * • REQUEST → created (new invite) or updated (re-invite / modification)
+     * • CANCEL  → deleted
+     * REPLY is intentionally omitted: the organiser's calendar is updated via a normal
+     * PUT on the attendee side which already triggers beforeWriteContent on the organiser.
+     */
+    private function emitSearchIndexingEvent(string $method, bool $foundInCalendar, array $dataMessage): void {
+        if ($method === 'REQUEST') {
+            $indexTopic = $foundInCalendar
+                ? $this->EVENT_TOPICS['EVENT_UPDATED']
+                : $this->EVENT_TOPICS['EVENT_CREATED'];
+            $this->createMessage($indexTopic, $dataMessage);
+        } elseif ($method === 'CANCEL') {
+            $this->createMessage($this->EVENT_TOPICS['EVENT_DELETED'], $dataMessage);
+        }
+    }
+
+    /**
+     * When a resource replies, notifies the resource service of the accepted
+     * or declined status. Returns false when the resource's own copy of the
+     * event cannot be found, aborting the scheduling flow like before.
+     */
+    private function notifyResourceReplyStatus(\Sabre\VObject\ITip\Message $iTipMessage, $senderPrincipalUri): bool {
+        if (!$senderPrincipalUri || $iTipMessage->method !== 'REPLY') {
+            return true;
+        }
+        if (!Utils::isResourceFromPrincipal($senderPrincipalUri)) {
+            return true;
+        }
+
+        list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($senderPrincipalUri, $iTipMessage->uid, $iTipMessage->method, $this->server);
+
+        if (!$eventPath) {
+            return false;
+        }
+
+        $explodedSenderPrincipalUri = explode('/', $senderPrincipalUri);
+
+        foreach ($iTipMessage->message->VEVENT->ATTENDEE as $attendee) {
+            if ($attendee->getValue() !== $iTipMessage->sender) {
+                continue;
+            }
+
+            $topic = $this->resourceReplyTopic($attendee['PARTSTAT']->getValue());
+            if ($topic !== null) {
+                $this->createMessage($topic, [
+                    'resourceId' => $explodedSenderPrincipalUri[2],
+                    'eventId' => $iTipMessage->uid,
+                    'eventPath' => '/' . $eventPath,
+                    'ics' => $upToDateEventIcs
+                ]);
+            }
+        }
+
+        return true;
+    }
+
+    private function resourceReplyTopic(string $partstat): ?string {
+        switch($partstat) {
+            case 'ACCEPTED':
+                return $this->EVENT_TOPICS['RESOURCE_EVENT_ACCEPTED'];
+            case 'DECLINED':
+                return $this->EVENT_TOPICS['RESOURCE_EVENT_DECLINED'];
+        }
+
+        return null;
     }
 
     function itip(\Sabre\VObject\ITip\Message $iTipMessage) {

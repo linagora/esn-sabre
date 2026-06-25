@@ -27,67 +27,131 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     function getPrincipalsByPrefix($prefixPath) {
-        $parts = explode('/', $prefixPath);
-        $principals = [];
-        if (count($parts) == 2 && $parts[0] == 'principals' &&
-              isset($this->collectionMap[$parts[1]])) {
-            $query = [];
-            $domainId = $this->authTenant?->domainId;
-            if (!$domainId)
-                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
-            if ($parts[1] === 'users') {
-                $query = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
-            } else if ($parts[1] === 'domains') {
-                $query = ['_id' => new \MongoDB\BSON\ObjectId($domainId)];
-            }
-            $res = $this->collectionMap[$parts[1]]->find($query);
-            foreach ($res as $obj) {
-                $principals[] = $this->objectToPrincipal($obj, $parts[1]);
-            }
+        $type = $this->parsePrincipalPrefix($prefixPath);
+        if ($type === null) {
+            return [];
         }
+
+        $principals = [];
+        $res = $this->collectionMap[$type]->find($this->principalsByPrefixQuery($type));
+        foreach ($res as $obj) {
+            $principals[] = $this->objectToPrincipal($obj, $type);
+        }
+
         return $principals;
     }
 
+    private function principalsByPrefixQuery(string $type): array {
+        $domainId = $this->requireAuthDomainId();
+
+        if ($type === 'users') {
+            return ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
+        }
+        if ($type === 'domains') {
+            return ['_id' => new \MongoDB\BSON\ObjectId($domainId)];
+        }
+
+        return [];
+    }
+
     function getPrincipalByPath($path) {
-        $parts = explode('/', $path);
-        if ($parts[0] == 'principals' && isset($this->collectionMap[$parts[1]]) && count($parts) == 3) {
-            $collection = $this->collectionMap[$parts[1]];
-            $obj = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($parts[2]) ]);
-
-            if (!$obj) {
-                return null;
-            }
-
-            $domainId = $this->authTenant?->domainId;
-            if (!$domainId)
-                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
-            if ($parts[1] == 'domains') {
-                if ($parts[2] !== $domainId) {
-                    throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
-                }
-            } else if ($parts[1] == 'resources') {
-                if (isset($obj['domain'])) {
-                    $domain = $this->db->domains->findOne([ '_id' => $obj[ 'domain' ]]);
-                    $obj['domain'] = $domain;
-                }
-            } else if ($parts[1] == 'users' && !empty($obj[ 'domains' ])) {
-                $userDomainIds = array_map(
-                    fn($d) => (string)$d['domain_id'],
-                    (array)$obj['domains']
-                );
-                if (!in_array($domainId, $userDomainIds, true)) {
-                    throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
-                }
-
-            $domainIds = array_column((array) $obj[ 'domains' ], 'domain_id');
-            $domains = $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]);
-            $obj['domains'] = $domains;
-            }
-
-            return $this->objectToPrincipal($obj, $parts[1]);
-        } else {
+        $parsed = $this->parsePrincipalPath($path);
+        if ($parsed === null) {
             return null;
         }
+        list($type, $id) = $parsed;
+
+        $obj = $this->collectionMap[$type]->findOne([ '_id' => new \MongoDB\BSON\ObjectId($id) ]);
+        if (!$obj) {
+            return null;
+        }
+
+        $obj = $this->enrichPrincipalObject($obj, $type, $id);
+
+        return $this->objectToPrincipal($obj, $type);
+    }
+
+    /**
+     * Enforces tenant isolation for the principal and loads the related
+     * domain document(s) depending on the principal type.
+     */
+    private function enrichPrincipalObject($obj, string $type, string $id) {
+        $domainId = $this->requireAuthDomainId();
+
+        if ($type == 'domains') {
+            $this->assertSameDomain($id, $domainId);
+        } else if ($type == 'resources') {
+            $obj = $this->attachResourceDomain($obj);
+        } else if ($type == 'users' && !empty($obj['domains'])) {
+            $this->assertUserBelongsToDomain($obj, $domainId);
+
+            $domainIds = array_column((array) $obj['domains'], 'domain_id');
+            $obj['domains'] = $this->db->domains->find([ '_id' => [ '$in' => $domainIds ]]);
+        }
+
+        return $obj;
+    }
+
+    private function assertSameDomain(string $id, string $domainId): void {
+        if ($id !== $domainId) {
+            throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
+        }
+    }
+
+    private function attachResourceDomain($obj) {
+        if (isset($obj['domain'])) {
+            $obj['domain'] = $this->db->domains->findOne([ '_id' => $obj['domain'] ]);
+        }
+
+        return $obj;
+    }
+
+    private function assertUserBelongsToDomain($obj, string $domainId): void {
+        $userDomainIds = array_map(
+            fn($d) => (string)$d['domain_id'],
+            (array)$obj['domains']
+        );
+
+        if (!in_array($domainId, $userDomainIds, true)) {
+            throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
+        }
+    }
+
+    private function requireAuthDomainId(): string {
+        $domainId = $this->authTenant?->domainId;
+        if (!$domainId) {
+            throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
+        }
+
+        return $domainId;
+    }
+
+    /**
+     * Splits a 'principals/{type}/{id}' path into [$type, $id], or returns
+     * null when the path is malformed or the type is unknown.
+     */
+    private function parsePrincipalPath($path): ?array {
+        $parts = explode('/', $path);
+
+        $isValid = count($parts) == 3
+            && $parts[0] == 'principals'
+            && isset($this->collectionMap[$parts[1]]);
+
+        return $isValid ? [$parts[1], $parts[2]] : null;
+    }
+
+    /**
+     * Extracts the principal type from a 'principals/{type}' prefix path, or
+     * returns null when the prefix is malformed or the type is unknown.
+     */
+    private function parsePrincipalPrefix($prefixPath): ?string {
+        $parts = explode('/', $prefixPath);
+
+        $isValid = count($parts) == 2
+            && $parts[0] == 'principals'
+            && isset($this->collectionMap[$parts[1]]);
+
+        return $isValid ? $parts[1] : null;
     }
 
     function updatePrincipal($path, \Sabre\DAV\PropPatch $propPatch) {
@@ -108,47 +172,67 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     function getGroupMemberSet($principal) {
-        $parts = explode('/', $principal);
+        $parsed = $this->parsePrincipalPath($principal);
+        if ($parsed === null) {
+            return [];
+        }
+        list($type, $id) = $parsed;
+
+        if ($type === 'domains') {
+            return $this->domainMemberPrincipals($id);
+        }
+
+        return $this->collectionMemberPrincipals($type, $id);
+    }
+
+    private function domainMemberPrincipals(string $domainId): array {
+        $users = $this->db->users->find(
+            [ 'domains' => [ '$elemMatch' => [ 'domain_id' => new \MongoDB\BSON\ObjectId($domainId) ] ] ],
+            [ 'projection' => [ '_id' => 1 ]]
+        );
+
         $principals = [];
-        if (count($parts) == 3 && $parts[0] == 'principals' && isset($this->collectionMap[$parts[1]])) {
-            if ($parts[1] === 'domains') {
-                $users = $this->db->users->find(
-                    [ 'domains' => [ '$elemMatch' => [ 'domain_id' => new \MongoDB\BSON\ObjectId($parts[2]) ] ] ],
-                    [ 'projection' => [ '_id' => 1 ]]
-                );
+        foreach ($users as $user) {
+            $principals[] = 'principals/users/' . (string)$user['_id'];
+        }
 
-                foreach ($users as $user) {
-                    $principals[] = 'principals/users/' . (string)$user['_id'];
-                }
-            } else {
-                $collection = $this->collectionMap[$parts[1]];
-                $res = $collection->findOne([ '_id' => new \MongoDB\BSON\ObjectId($parts[2])], [ 'projection' => [ 'members.member.id' => 1 ]]);
+        return $principals;
+    }
 
-                if ($res && isset($res['members'])) {
-                    foreach ($res['members'] as $member) {
-                        $principals[] = 'principals/users/' . $member['member']['id'];
-                    }
-                }
-            }
+    private function collectionMemberPrincipals(string $type, string $id): array {
+        $res = $this->collectionMap[$type]->findOne([ '_id' => new \MongoDB\BSON\ObjectId($id)], [ 'projection' => [ 'members.member.id' => 1 ]]);
+
+        if (!$res || !isset($res['members'])) {
+            return [];
+        }
+
+        $principals = [];
+        foreach ($res['members'] as $member) {
+            $principals[] = 'principals/users/' . $member['member']['id'];
         }
 
         return $principals;
     }
 
     function getGroupMembership($principal) {
-        $parts = explode('/', $principal);
+        $parsed = $this->parsePrincipalPath($principal);
+        if ($parsed === null) {
+            return [];
+        }
+        list($type, $id) = $parsed;
+
+        if ($type != 'users') {
+            return [];
+        }
+
+        $user = $this->db->users->findOne(
+            [ '_id' => new \MongoDB\BSON\ObjectId($id) ],
+            [ 'projection' => [ 'domains' => 1 ]]
+        );
+
         $principals = [];
-        if (count($parts) == 3 && $parts[0] == 'principals' && $parts[1] == 'users') {
-            $collaborationQuery = [ 'members' => [ '$elemMatch' => [ 'member.id' => new \MongoDB\BSON\ObjectId($parts[2]) ] ] ];
-
-            $user = $this->db->users->findOne(
-                [ '_id' => new \MongoDB\BSON\ObjectId($parts[2]) ],
-                [ 'projection' => [ 'domains' => 1 ]]
-            );
-
-            foreach ($user['domains'] as $domain) {
-                $principals[] = 'principals/domains/' . (string)$domain['domain_id'];
-            }
+        foreach ($user['domains'] as $domain) {
+            $principals[] = 'principals/domains/' . (string)$domain['domain_id'];
         }
 
         return $principals;
@@ -160,7 +244,11 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
 
-    function getAuthTenantByEmail(string $email, TenantType $tenantType = TenantType::User): ?AuthTenant {
+    // Nullable + in-body default: the CodeScene parser chokes on enum constants
+    // used as parameter defaults, which corrupts the whole file analysis.
+    function getAuthTenantByEmail(string $email, ?TenantType $tenantType = null): ?AuthTenant {
+        $tenantType = $tenantType ?? TenantType::User;
+
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return null;
         }
@@ -199,7 +287,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         return new AuthTenant($user['_id'], (string) $domainObjectId, $tenantType);
     }
 
-    function getAuthTenantByResourceEmail($email, TenantType $tenantType = TenantType::Resources) {
+    function getAuthTenantByResourceEmail($email, ?TenantType $tenantType = null) {
+        $tenantType = $tenantType ?? TenantType::Resources;
+
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return null;
         }
@@ -238,63 +328,74 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
 
         switch($type) {
             case "users":
-                $displayname = "";
-                if (isset($obj['firstname'])) {
-                    $displayname = $displayname . $obj['firstname'];
-                }
-                if (isset($obj['lastname'])) {
-                    $displayname = $displayname . " " .  $obj['lastname'];
-                }
-
-                $principal = [
-                    'id' => (string)$obj['_id'],
-                    '{DAV:}displayname' => $displayname,
-                    '{http://sabredav.org/ns}email-address' => Utils::firstEmailAddress($obj)
-                ];
-
-                if (!empty($obj['domains'])) {
-                    $adminForDomains = $this->getDomainsUserIsAdminOf($obj['_id'], $obj['domains']);
-
-                    if (!empty($adminForDomains)) {
-                        $principal['adminForDomains'] = $adminForDomains;
-                    }
-                }
-
+                $principal = $this->userToPrincipal($obj);
                 break;
             case "resources":
-                $displayname = "";
-                if (isset($obj['name'])) {
-                    $displayname = $obj['name'];
-                }
-
-                $principal = [
-                    'id' => (string)$obj['_id'],
-                    '{DAV:}displayname' => $displayname
-                ];
-
-                if (isset($obj['domain']) && $obj['domain'] instanceof \MongoDB\Model\BSONDocument) {
-                    $principal['{http://sabredav.org/ns}email-address'] = $obj['_id'] . '@' . $obj['domain']['name'];
-                }
+                $principal = $this->resourceToPrincipal($obj);
                 break;
             case "domains":
-                $displayname = "";
-                if (isset($obj['name'])) {
-                    $displayname = $obj['name'];
-                }
-
-                $principal = [
-                    'id' => (string)$obj['_id'],
-                    '{DAV:}displayname' => $displayname,
-                    'administrators' => $this->getAdministratorsForGroup($principalUri),
-                    'members' => $this->getGroupMemberSet($principalUri)
-                ];
+                $principal = $this->domainToPrincipal($obj, $principalUri);
                 break;
         }
 
         $principal['uri'] = $principalUri;
+        $principal['groupPrincipals'] = $this->groupPrincipalsFor($principalUri);
+
+        return $principal;
+    }
+
+    private function userToPrincipal($obj): array {
+        $displayname = "";
+        if (isset($obj['firstname'])) {
+            $displayname = $displayname . $obj['firstname'];
+        }
+        if (isset($obj['lastname'])) {
+            $displayname = $displayname . " " .  $obj['lastname'];
+        }
+
+        $principal = [
+            'id' => (string)$obj['_id'],
+            '{DAV:}displayname' => $displayname,
+            '{http://sabredav.org/ns}email-address' => Utils::firstEmailAddress($obj)
+        ];
+
+        if (!empty($obj['domains'])) {
+            $adminForDomains = $this->getDomainsUserIsAdminOf($obj['_id'], $obj['domains']);
+
+            if (!empty($adminForDomains)) {
+                $principal['adminForDomains'] = $adminForDomains;
+            }
+        }
+
+        return $principal;
+    }
+
+    private function resourceToPrincipal($obj): array {
+        $principal = [
+            'id' => (string)$obj['_id'],
+            '{DAV:}displayname' => isset($obj['name']) ? $obj['name'] : ""
+        ];
+
+        if (isset($obj['domain']) && $obj['domain'] instanceof \MongoDB\Model\BSONDocument) {
+            $principal['{http://sabredav.org/ns}email-address'] = $obj['_id'] . '@' . $obj['domain']['name'];
+        }
+
+        return $principal;
+    }
+
+    private function domainToPrincipal($obj, string $principalUri): array {
+        return [
+            'id' => (string)$obj['_id'],
+            '{DAV:}displayname' => isset($obj['name']) ? $obj['name'] : "",
+            'administrators' => $this->getAdministratorsForGroup($principalUri),
+            'members' => $this->getGroupMemberSet($principalUri)
+        ];
+    }
+
+    private function groupPrincipalsFor(string $principalUri): array {
         $groupPrincipals = [];
 
-        foreach ($this->getGroupMembership($principal['uri']) as $groupPrincipal) {
+        foreach ($this->getGroupMembership($principalUri) as $groupPrincipal) {
             $groupPrincipals[] = [
                 'uri' => $groupPrincipal,
                 'administrators' => $this->getAdministratorsForGroup($groupPrincipal),
@@ -302,9 +403,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             ];
         }
 
-        $principal['groupPrincipals'] = $groupPrincipals;
-
-        return $principal;
+        return $groupPrincipals;
     }
 
     private function getDomainsUserIsAdminOf($userId, $domains) {
@@ -386,7 +485,27 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     private function searchUserPrincipals(array $searchProperties, $test = 'allof') {
+        $query = $this->userSearchQuery($searchProperties);
+
+        $domainId = $this->requireAuthDomainId();
+
+        if (empty($query)) {
+            return [];
+        }
+
+        $finalQuery = $this->withDomainFilter($query, $domainId, $test);
+
+        $principals = [];
+        $res = $this->db->users->find($finalQuery, ['projection' => ['_id' => 1]]);
+        foreach ($res as $obj) {
+            $principals[] = 'principals/users/' . $obj['_id'];
+        }
+        return $principals;
+    }
+
+    private function userSearchQuery(array $searchProperties): array {
         $query = [];
+
         foreach ($searchProperties as $property => $value) {
             switch ($property) {
                 case '{DAV:}displayname':
@@ -403,28 +522,23 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             }
         }
 
-        $domainId = $this->authTenant?->domainId;
-        if (!$domainId)
-            throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
+        return $query;
+    }
 
-        if (empty($query)) {
-            return [];
-        }
-
+    /**
+     * Combines the search query with the tenant domain filter, honoring the
+     * 'allof' / 'anyof' search semantics.
+     */
+    private function withDomainFilter(array $query, string $domainId, $test): array {
         $domainFilter = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
+
         if ($test === 'anyof') {
-            $finalQuery = ['$and' => [['$or' => $query], $domainFilter]];
-        } else {
-            $query[] = $domainFilter;
-            $finalQuery = ['$and' => $query];
+            return ['$and' => [['$or' => $query], $domainFilter]];
         }
 
-        $principals = [];
-        $res = $this->db->users->find($finalQuery, ['projection' => ['_id' => 1]]);
-        foreach ($res as $obj) {
-            $principals[] = 'principals/users/' . $obj['_id'];
-        }
-        return $principals;
+        $query[] = $domainFilter;
+
+        return ['$and' => $query];
     }
 
     private function getAdministratorsForGroup($principal) {
@@ -445,5 +559,5 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         return $administrators;
-    }}
-        
+    }
+}

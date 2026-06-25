@@ -15,6 +15,7 @@ RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \
   DEBIAN_FRONTEND=noninteractive apt-get -y install php${PHPVERSION}-fpm php${PHPVERSION}-cli curl supervisor nginx git \
+    tzdata tzdata-legacy \
     php${PHPVERSION}-curl php${PHPVERSION}-ldap php${PHPVERSION}-bcmath php${PHPVERSION}-mbstring php${PHPVERSION}-zip \
     php-pear php${PHPVERSION}-dev make pkg-config php-apcu php${PHPVERSION}-xdebug && \
   DEBIAN_FRONTEND=noninteractive apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

@@ -17,38 +17,16 @@ When an organizer (Bob) creates or updates an event with attendees (Alice, Cédr
 
 ---
 
-## Feature Flag — `AMQP_SCHEDULING_ENABLED`
+## Plugin Registration
 
-Both the legacy behaviour and the new async behaviour are **retained simultaneously** in the codebase. The active path is selected at boot time via the environment variable `AMQP_SCHEDULING_ENABLED`.
-
-| Value | Active plugins | Behaviour |
-|---|---|---|
-| `false` (default) | `ESN\CalDAV\Schedule\Plugin` + `ESN\CalDAV\Schedule\IMipPlugin` | Fully synchronous — current production behaviour, unchanged |
-| `true` | `AMQPSchedulePlugin` | Async via AMQP — new behaviour described in this document |
-
-Plugin registration in `esn.php`:
+The `AMQP_SCHEDULING_ENABLED` feature flag has been removed. `AMQPSchedulePlugin` is now the sole scheduling plugin and is always registered when AMQP is configured:
 
 ```php
-// Calendar scheduling support.
-// AMQPSchedulePlugin requires $AMQPPublisher; the legacy Plugin does not.
-// Only the AMQP branches go inside the existing `if ($AMQPPublisher)` guard.
-if (getenv('AMQP_SCHEDULING_ENABLED') === 'true') {
-    // Inside the if ($AMQPPublisher) guard — fails fast at boot if publisher is missing.
-    $server->addPlugin(new ESN\CalDAV\Schedule\AMQPSchedulePlugin($AMQPPublisher, $principalBackend));
-} else {
-    $server->addPlugin(new ESN\CalDAV\Schedule\Plugin($principalBackend));
-}
-
-// ... further down; IMipPlugin branches follow the same pattern ...
-// In async mode, IMipPlugin is not registered.
-if (getenv('AMQP_SCHEDULING_ENABLED') !== 'true') {
-    $server->addPlugin(new ESN\CalDAV\Schedule\IMipPlugin($AMQPPublisher));
-}
+// esn.php — inside the if (!empty($config['amqp']['host'])) block
+$server->addPlugin(new ESN\CalDAV\Schedule\AMQPSchedulePlugin($AMQPPublisher, $principalBackend));
 ```
 
-> **Placement note**: in the current `esn.php`, `ESN\CalDAV\Schedule\Plugin` is registered **outside** the `if ($AMQPPublisher)` block (line ~184) while `IMipPlugin` is **inside** it (line ~224). Only `AMQPSchedulePlugin` requires `$AMQPPublisher` in this ADR path. The legacy `Plugin` and `IMipPlugin` branches must remain reachable even when `$AMQPPublisher` is null. Verify that `$AMQPPublisher` is always available when `AMQP_SCHEDULING_ENABLED=true` — a missing publisher should fail fast at boot.
-
-The legacy `ESN\CalDAV\Schedule\Plugin` and `IMipPlugin` are **not modified** except for changing `fetchCalendarOwnerAddresses` visibility from `private` to `protected` in `Plugin`. This flag is the sole switching mechanism — no logic is shared or entangled between the two paths.
+The legacy synchronous path (`ESN\CalDAV\Schedule\IMipPlugin`) has been removed from the codebase.
 
 ---
 

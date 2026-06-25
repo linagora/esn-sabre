@@ -46,6 +46,8 @@ RUN apt-get update && \
     gettext-base \
     ca-certificates \
     curl \
+    tzdata \
+    tzdata-legacy \
     # Build tools (temporary)
     php-pear \
     php${PHPVERSION}-dev \

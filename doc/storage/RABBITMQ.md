@@ -98,7 +98,7 @@ Published by `IMipPlugin` to request an invitation email be sent.
 ## CalDAV — Async iTIP local delivery
 
 ### `calendar:itip:localDelivery`
-Published by `AMQPSchedulePlugin` (when `AMQP_SCHEDULING_ENABLED=true`) so Twake Calendar Side Service can fan out iTIP messages to attendees.
+Published by `AMQPSchedulePlugin` so Twake Calendar Side Service can fan out iTIP messages to attendees.
 
 ```json
 {

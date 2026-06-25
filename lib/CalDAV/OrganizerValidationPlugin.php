@@ -26,9 +26,7 @@ class OrganizerValidationPlugin extends ServerPlugin {
         RequestInterface $request,
         ResponseInterface $response,
         VCalendar $vCal,
-        $calendarPath,
-        &$modified,
-        $isNew
+        $calendarPath
     ) {
         if ($request->getMethod() === 'ITIP') {
             return;
@@ -48,15 +46,7 @@ class OrganizerValidationPlugin extends ServerPlugin {
     }
 
     private function extractOrganizerUri(array $vevents): ?string {
-        $organizerValues = [];
-        foreach ($vevents as $vevent) {
-            if (isset($vevent->ATTENDEE) && !isset($vevent->ORGANIZER)) {
-                throw new Forbidden('A VEVENT with ATTENDEE properties must also have an ORGANIZER.');
-            }
-            if (isset($vevent->ORGANIZER)) {
-                $organizerValues[] = strtolower((string) $vevent->ORGANIZER);
-            }
-        }
+        $organizerValues = $this->collectOrganizerValues($vevents);
 
         if (empty($organizerValues)) {
             return null;
@@ -67,6 +57,19 @@ class OrganizerValidationPlugin extends ServerPlugin {
         }
 
         return reset($organizerValues);
+    }
+
+    private function collectOrganizerValues(array $vevents): array {
+        $organizerValues = [];
+        foreach ($vevents as $vevent) {
+            if (isset($vevent->ATTENDEE) && !isset($vevent->ORGANIZER)) {
+                throw new Forbidden('A VEVENT with ATTENDEE properties must also have an ORGANIZER.');
+            }
+            if (isset($vevent->ORGANIZER)) {
+                $organizerValues[] = strtolower((string) $vevent->ORGANIZER);
+            }
+        }
+        return $organizerValues;
     }
 
     private function validateOrganizerAuthorized(string $organizerUri, $calendarPath): void {

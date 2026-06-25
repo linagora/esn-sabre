@@ -33,6 +33,22 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         $acl = parent::getACL();
 
         switch ($this->getShareAccess()) {
+            case SPlugin::ACCESS_SHAREDOWNER :
+                foreach ($this->getInvites() as $sharee) {
+                    if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE && $sharee->principal) {
+                        $acl[] = [
+                            'privilege' => '{DAV:}read',
+                            'principal' => $sharee->principal,
+                            'protected' => true,
+                        ];
+                        $acl[] = [
+                            'privilege' => '{DAV:}write',
+                            'principal' => $sharee->principal,
+                            'protected' => true,
+                        ];
+                    }
+                }
+                break;
             case SPlugin::ACCESS_ADMINISTRATION :
                 $acl[] = [
                     'privilege' => '{DAV:}read',
@@ -149,6 +165,23 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
      */
     function getChildACL() {
         $childACL = parent::getChildACL();
+
+        if ($this->getShareAccess() == SPlugin::ACCESS_SHAREDOWNER) {
+            foreach ($this->getInvites() as $sharee) {
+                if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE && $sharee->principal) {
+                    $childACL[] = [
+                        'privilege' => '{DAV:}read',
+                        'principal' => $sharee->principal,
+                        'protected' => true,
+                    ];
+                    $childACL[] = [
+                        'privilege' => '{DAV:}write',
+                        'principal' => $sharee->principal,
+                        'protected' => true,
+                    ];
+                }
+            }
+        }
 
         if ($this->getShareAccess() == SPlugin::ACCESS_ADMINISTRATION) {
             $childACL[] = [

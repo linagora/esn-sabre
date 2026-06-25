@@ -131,28 +131,11 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testAcceptsRecurringEventWhereAllVEventsShareSameOrganizer() {
-        $ics = <<<ICS
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Test//Test//EN
-BEGIN:VEVENT
-UID:recurring-same-organizer
-DTSTART:20260701T100000Z
-DTEND:20260701T110000Z
-SUMMARY:Master
-ORGANIZER:mailto:alice@example.org
-RRULE:FREQ=DAILY;COUNT=3
-END:VEVENT
-BEGIN:VEVENT
-UID:recurring-same-organizer
-RECURRENCE-ID:20260702T100000Z
-DTSTART:20260702T120000Z
-DTEND:20260702T130000Z
-SUMMARY:Override
-ORGANIZER:mailto:alice@example.org
-END:VEVENT
-END:VCALENDAR
-ICS;
+        $ics = $this->makeRecurringIcs(
+            'recurring-same-organizer',
+            'ORGANIZER:mailto:alice@example.org',
+            'ORGANIZER:mailto:alice@example.org'
+        );
         $response = $this->putIcs(self::USER1_ID, 'cal1', 'event.ics', $ics);
         $this->assertContains($response->getStatus(), [201, 204]);
     }
@@ -170,28 +153,11 @@ ICS;
     }
 
     function testRejectsDifferentOrganizersAcrossVEvents() {
-        $ics = <<<ICS
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Test//Test//EN
-BEGIN:VEVENT
-UID:diff-organizers
-DTSTART:20260701T100000Z
-DTEND:20260701T110000Z
-SUMMARY:Master
-ORGANIZER:mailto:alice@example.org
-RRULE:FREQ=DAILY;COUNT=2
-END:VEVENT
-BEGIN:VEVENT
-UID:diff-organizers
-RECURRENCE-ID:20260702T100000Z
-DTSTART:20260702T100000Z
-DTEND:20260702T110000Z
-SUMMARY:Override
-ORGANIZER:mailto:bob@example.org
-END:VEVENT
-END:VCALENDAR
-ICS;
+        $ics = $this->makeRecurringIcs(
+            'diff-organizers',
+            'ORGANIZER:mailto:alice@example.org',
+            'ORGANIZER:mailto:bob@example.org'
+        );
         $response = $this->putIcs(self::USER1_ID, 'cal1', 'event.ics', $ics);
         $this->assertEquals(403, $response->getStatus());
     }
@@ -236,6 +202,31 @@ ICS;
         $ics = $this->makeIcs('self-cal-wrong-org', 'ORGANIZER:mailto:' . self::USER2_EMAIL);
         $response = $this->putIcs(self::USER1_ID, 'cal1', 'event.ics', $ics);
         $this->assertEquals(403, $response->getStatus());
+    }
+
+    private function makeRecurringIcs(string $uid, string $masterOrganizer, string $overrideOrganizer): string {
+        return <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VEVENT
+UID:{$uid}
+DTSTART:20260701T100000Z
+DTEND:20260701T110000Z
+SUMMARY:Master
+{$masterOrganizer}
+RRULE:FREQ=DAILY;COUNT=3
+END:VEVENT
+BEGIN:VEVENT
+UID:{$uid}
+RECURRENCE-ID:20260702T100000Z
+DTSTART:20260702T120000Z
+DTEND:20260702T130000Z
+SUMMARY:Override
+{$overrideOrganizer}
+END:VEVENT
+END:VCALENDAR
+ICS;
     }
 
     private function makeIcs(string $uid, string $extraLine): string {

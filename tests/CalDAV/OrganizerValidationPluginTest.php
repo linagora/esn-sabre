@@ -77,6 +77,7 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $tree = [
             new \Sabre\DAV\SimpleCollection('principals', [
                 new \Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/users'),
+                new \Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/domains'),
             ]),
             $calendarRoot,
         ];
@@ -93,7 +94,7 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $this->server->addPlugin(new \Sabre\DAV\Auth\Plugin($authBackend));
 
         $aclPlugin = new \Sabre\DAVACL\Plugin();
-        $aclPlugin->principalCollectionSet = ['principals/users'];
+        $aclPlugin->principalCollectionSet = ['principals', 'principals/users'];
         $this->server->addPlugin($aclPlugin);
 
         $this->server->addPlugin(new OrganizerValidationPlugin());

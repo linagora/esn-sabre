@@ -3,8 +3,12 @@
 #
 services:
   mongodb:
-    image: docker.io/library/mongo:7
+    image: docker.io/library/mongo:8.0.6
     hostname: mongodb
+    ulimits:
+      nofile:
+        soft: 64000
+        hard: 64000
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s

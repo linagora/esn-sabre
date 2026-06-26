@@ -6,7 +6,28 @@ namespace ESN\CalDAV;
 class CalendarHome extends \Sabre\CalDAV\CalendarHome {
 
     function getChild($name) {
-        return $this->wrapCalendarForACLs(parent::getChild($name));
+        try {
+            return $this->wrapCalendarForACLs(parent::getChild($name));
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            // A principal that only owns delegated calendars never triggers the
+            // lazy creation of its own default calendar (that path is guarded by
+            // "no calendars at all"). Resolving /calendars/{id}/{id} directly
+            // (e.g. a PUT into the default calendar) must still succeed, so we
+            // create the missing default on demand. Listing is left untouched.
+            if ($this->isOwnDefaultCalendar($name) && method_exists($this->caldavBackend, 'createDefaultCalendar')) {
+                $this->caldavBackend->createDefaultCalendar($this->principalInfo['uri']);
+
+                return $this->wrapCalendarForACLs(parent::getChild($name));
+            }
+
+            throw $e;
+        }
+    }
+
+    private function isOwnDefaultCalendar($name) {
+        $principalExploded = explode('/', $this->principalInfo['uri']);
+
+        return end($principalExploded) === $name;
     }
 
     function getChildren() {

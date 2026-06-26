@@ -33,7 +33,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         $acl = parent::getACL();
 
         switch ($this->getShareAccess()) {
-            case SPlugin::ACCESS_SHAREDOWNER :
+            case SPlugin::ACCESS_NOTSHARED :
                 foreach ($this->getInvites() as $sharee) {
                     if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE && $sharee->principal) {
                         $acl[] = [
@@ -166,7 +166,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     function getChildACL() {
         $childACL = parent::getChildACL();
 
-        if ($this->getShareAccess() == SPlugin::ACCESS_SHAREDOWNER) {
+        if ($this->getShareAccess() == SPlugin::ACCESS_NOTSHARED) {
             foreach ($this->getInvites() as $sharee) {
                 if ($sharee->access === \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE && $sharee->principal) {
                     $childACL[] = [

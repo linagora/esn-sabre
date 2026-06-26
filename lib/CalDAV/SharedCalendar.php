@@ -32,6 +32,8 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     function getACL() {
         $acl = parent::getACL();
 
+        $acl = $this->appendOrganizerValidationDelegateAces($acl);
+
         switch ($this->getShareAccess()) {
             case SPlugin::ACCESS_ADMINISTRATION :
                 $acl[] = [
@@ -150,6 +152,8 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     function getChildACL() {
         $childACL = parent::getChildACL();
 
+        $childACL = $this->appendOrganizerValidationDelegateAces($childACL);
+
         if ($this->getShareAccess() == SPlugin::ACCESS_ADMINISTRATION) {
             $childACL[] = [
                 'privilege' => '{DAV:}write',
@@ -258,6 +262,49 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
     function getBackend() {
         return $this->caldavBackend;
+    }
+
+    /**
+     * When ORGANIZER validation is enabled (CALDAV_ORGANIZER_VALIDATION=true),
+     * delegates with read-write rights are allowed to write directly into the
+     * owner's source calendar (e.g. PUT /calendars/{owner}/{owner}/x.ics). The
+     * OrganizerValidationPlugin then enforces that the ORGANIZER is either the
+     * calendar owner or the authenticated user.
+     *
+     * Without the flag the strict default applies: the source calendar is only
+     * writable by its owner, and delegates must go through their own delegated
+     * calendar instance.
+     *
+     * The grant only targets the owner's source instance (ACCESS_NOTSHARED);
+     * delegated instances keep their own access level untouched.
+     */
+    private function appendOrganizerValidationDelegateAces(array $acl) {
+        if (getenv('CALDAV_ORGANIZER_VALIDATION') !== 'true') {
+            return $acl;
+        }
+
+        if ($this->getShareAccess() !== SPlugin::ACCESS_NOTSHARED) {
+            return $acl;
+        }
+
+        foreach ($this->getInvites() as $sharee) {
+            if ((int) $sharee->access !== SPlugin::ACCESS_READWRITE || !$sharee->principal) {
+                continue;
+            }
+
+            $acl[] = [
+                'privilege' => '{DAV:}read',
+                'principal' => $sharee->principal,
+                'protected' => true,
+            ];
+            $acl[] = [
+                'privilege' => '{DAV:}write',
+                'principal' => $sharee->principal,
+                'protected' => true,
+            ];
+        }
+
+        return $acl;
     }
 
 }

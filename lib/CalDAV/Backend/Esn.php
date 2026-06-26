@@ -52,18 +52,31 @@ class Esn extends Mongo {
         $calendars = parent::getCalendarsForUser($principalUri);
 
         if (count($calendars) == 0) {
-            $properties = [];
-            $principalExploded = explode('/', $principalUri);
-
-            if (Utils::isResourceFromPrincipal($principalUri)) {
-                $principal = $this->principalBackend->getPrincipalByPath($principalUri);
-                $properties['{DAV:}displayname'] = $principal['{DAV:}displayname'];
-            }
-
-            parent::createCalendar($principalUri, $principalExploded[2], $properties);
+            $this->createDefaultCalendar($principalUri);
             $calendars = parent::getCalendarsForUser($principalUri);
         }
 
         return $calendars;
+    }
+
+    /**
+     * Creates the principal's default calendar (whose URI equals the principal
+     * id). createCalendar is idempotent: when the instance already exists it
+     * is returned untouched, so this is safe to call defensively.
+     *
+     * @param string $principalUri
+     * @return void
+     * @throws \Sabre\DAV\Exception throwed by parent::createCalendar()
+     */
+    function createDefaultCalendar($principalUri) {
+        $properties = [];
+        $principalExploded = explode('/', $principalUri);
+
+        if (Utils::isResourceFromPrincipal($principalUri)) {
+            $principal = $this->principalBackend->getPrincipalByPath($principalUri);
+            $properties['{DAV:}displayname'] = $principal['{DAV:}displayname'];
+        }
+
+        parent::createCalendar($principalUri, $principalExploded[2], $properties);
     }
 }

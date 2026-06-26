@@ -185,6 +185,11 @@ $binaryAttachmentPlugin = new ESN\CalDAV\BinaryAttachmentPlugin(
 );
 $server->addPlugin($binaryAttachmentPlugin);
 
+// ORGANIZER validation (opt-in via CALDAV_ORGANIZER_VALIDATION=true)
+if (getenv('CALDAV_ORGANIZER_VALIDATION') === 'true') {
+    $server->addPlugin(new ESN\CalDAV\OrganizerValidationPlugin());
+}
+
 // CardDAV support
 $carddavPlugin = new Sabre\CardDAV\Plugin();
 $server->addPlugin($carddavPlugin);

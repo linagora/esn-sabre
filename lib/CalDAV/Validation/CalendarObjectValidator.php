@@ -16,8 +16,15 @@ class CalendarObjectValidator {
     private function validateRRules(VCalendar $vCalendar): void
     {
         foreach ($vCalendar->select('VEVENT') as $vevent) {
-            if (!isset($vevent->RRULE) || !isset($vevent->DTSTART)) {
+            if (!isset($vevent->RRULE)) {
                 continue;
+            }
+
+            // RFC 5545 §3.6.1: a VEVENT carrying RRULE MUST also carry DTSTART
+            // (the recurrence set is computed from it). Reject explicitly rather
+            // than silently skipping and relying on upstream Sabre validation.
+            if (!isset($vevent->DTSTART)) {
+                $this->fail('VEVENT with RRULE MUST have a DTSTART property');
             }
 
             foreach ($vevent->select('RRULE') as $rrule) {
@@ -100,8 +107,15 @@ class CalendarObjectValidator {
     private function validateExDates(VCalendar $vCalendar): void
     {
         foreach ($vCalendar->select('VEVENT') as $vevent) {
-            if (!isset($vevent->EXDATE) || !isset($vevent->DTSTART)) {
+            if (!isset($vevent->EXDATE)) {
                 continue;
+            }
+
+            // EXDATE only has meaning relative to the recurrence set anchored on
+            // DTSTART. A VEVENT with EXDATE but no DTSTART is invalid (RFC 5545
+            // §3.6.1); reject it explicitly rather than silently skipping.
+            if (!isset($vevent->DTSTART)) {
+                $this->fail('VEVENT with EXDATE MUST have a DTSTART property');
             }
 
             foreach ($vevent->select('EXDATE') as $exDate) {
@@ -180,6 +194,16 @@ class CalendarObjectValidator {
 
     private function assertSameDateTimeForm(DateTimeProperty $property, DateTimeProperty $dtStart): void
     {
+        // INTENTIONALLY STRICTER THAN RFC 5545: for RECURRENCE-ID and EXDATE the
+        // RFC only requires the same *value type* as DTSTART, so two different but
+        // valid zones (e.g. DTSTART TZID=Europe/Paris and EXDATE TZID=Europe/Berlin,
+        // or a UTC override of a TZID master) are technically legal. We deliberately
+        // require the exact same date-time form (identical TZID, UTC, or FLOATING)
+        // because the regressions this validator guards against (see #1089) produce
+        // a RECURRENCE-ID/EXDATE in the wrong timezone form while keeping a valid
+        // value type. This can reject interoperable third-party clients that legally
+        // use a different-but-equivalent zone; that trade-off is accepted to protect
+        // first-party (Twake) traffic.
         $dtStartValue = DateLikeValue::fromProperty($dtStart);
         foreach ($property->getParts() as $value) {
             $propertyValue = DateLikeValue::fromProperty($property, $value);

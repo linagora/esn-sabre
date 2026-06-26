@@ -377,6 +377,38 @@ class CalendarObjectValidatorTest extends TestCase {
         ]);
     }
 
+    function testRRuleWithoutDtStartIsRejected() {
+        $this->assertValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'RRULE:FREQ=DAILY;COUNT=3',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], [
+            'VEVENT with RRULE MUST have a DTSTART property'
+        ]);
+    }
+
+    function testExDateWithoutDtStartIsRejected() {
+        $this->assertValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'EXDATE:20260516T090000Z',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], [
+            'VEVENT with EXDATE MUST have a DTSTART property'
+        ]);
+    }
+
     function testDateExDateWithDateTimeDtStartIsRejected() {
         $this->assertValidationFails([
             'BEGIN:VCALENDAR',

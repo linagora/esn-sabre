@@ -26,6 +26,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function initialize(Server $server) {
+        VObjectPropertyRegistry::register();
+
         parent::initialize($server);
         $server->on('calendarObjectChange', [$this, 'validateCalendarObjectBeforeScheduling'], self::PRIORITY_BEFORE_SCHEDULING);
         $server->on('propFind', [$this, 'propFindSharedCalendar'], 151);

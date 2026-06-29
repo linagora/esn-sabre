@@ -50,6 +50,14 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertTrue($shouldSkip);
     }
 
+    function testShouldDetectPubliclyCreatedWithExplicitBooleanValueType() {
+        $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('NEEDS-ACTION', 'VALUE=BOOLEAN:TRUE'));
+
+        $shouldSkip = PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($vcalendar);
+
+        $this->assertTrue($shouldSkip);
+    }
+
     function testShouldNotSkipWhenChairOrganizerAcceptedEvenIfPubliclyCreated() {
         $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('ACCEPTED', true));
 
@@ -818,7 +826,9 @@ END:VCALENDAR
     }
 
     private function newCalendarWithOrganizerChairPartstat($partstat, $publiclyCreated) {
-        $publiclyCreatedValue = $publiclyCreated ? 'true' : 'false';
+        $publiclyCreatedProperty = is_bool($publiclyCreated)
+            ? 'X-PUBLICLY-CREATED:' . ($publiclyCreated ? 'true' : 'false')
+            : 'X-PUBLICLY-CREATED;' . $publiclyCreated;
 
         return "BEGIN:VCALENDAR
 VERSION:2.0
@@ -827,7 +837,7 @@ UID:test-publicly-created
 DTSTART:20260227T000000Z
 DTEND:20260227T003000Z
 SUMMARY:Test event
-X-PUBLICLY-CREATED:$publiclyCreatedValue
+$publiclyCreatedProperty
 ORGANIZER:mailto:alice@example.org
 ATTENDEE;PARTSTAT=$partstat;ROLE=CHAIR:mailto:alice@example.org
 ATTENDEE;PARTSTAT=NEEDS-ACTION;ROLE=REQ-PARTICIPANT:mailto:bob@example.org

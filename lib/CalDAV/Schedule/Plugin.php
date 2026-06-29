@@ -2,11 +2,13 @@
 namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
+use ESN\CalDAV\VObjectPropertyRegistry;
 use ESN\Utils\Utils;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
 use Sabre\CalDAV\ICalendarObject;
 use Sabre\CalDAV\Schedule\ISchedulingObject;
+use Sabre\DAV\Server;
 use
     Sabre\HTTP\RequestInterface,
     Sabre\HTTP\ResponseInterface,
@@ -43,6 +45,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $this->logger = new Logger('esn-sabre');
         $this->logger->pushHandler(new StreamHandler('php://stderr', Logger::DEBUG));
         $this->principalBackend = $principalBackend;
+    }
+
+    function initialize(Server $server) {
+        VObjectPropertyRegistry::register();
+        parent::initialize($server);
     }
 
     protected function scheduleReply(RequestInterface $request) {

@@ -44,6 +44,114 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertCount(1, $jsonResponse->_embedded->{'dav:item'});
     }
 
+    function testTimeRangeQuerySerializesRegisteredCustomCalendarPropertiesWithConfiguredTypes() {
+        $customEvent = 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:custom-property-event
+DTSTART:20120227T010000Z
+DTEND:20120227T020000Z
+SUMMARY:Custom property event
+X-OPENPAAS-VIDEOCONFERENCE:https://meet.example/room
+X-PUBLICLY-CREATED:true
+X-PUBLICLY-CREATOR:bob@linagora.local
+X-OPENPAAS-BOOKING-LINK:booking-link-id
+END:VEVENT
+END:VCALENDAR
+';
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'custom-property.ics', $customEvent);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeData));
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+
+        $customItem = null;
+        foreach ($jsonResponse['_embedded']['dav:item'] as $item) {
+            if (str_contains($item['_links']['self']['href'], 'custom-property.ics')) {
+                $customItem = $item;
+                break;
+            }
+        }
+
+        $this->assertNotNull($customItem);
+        $veventProperties = $customItem['data'][2][0][1];
+
+        $videoConference = $this->findJCalProperty($veventProperties, 'x-openpaas-videoconference');
+        $publiclyCreated = $this->findJCalProperty($veventProperties, 'x-publicly-created');
+        $publiclyCreator = $this->findJCalProperty($veventProperties, 'x-publicly-creator');
+        $bookingLink = $this->findJCalProperty($veventProperties, 'x-openpaas-booking-link');
+
+        $this->assertEquals('uri', $videoConference[2]);
+        $this->assertEquals('https://meet.example/room', $videoConference[3]);
+        $this->assertEquals('boolean', $publiclyCreated[2]);
+        $this->assertTrue($publiclyCreated[3]);
+        $this->assertEquals('text', $publiclyCreator[2]);
+        $this->assertEquals('bob@linagora.local', $publiclyCreator[3]);
+        $this->assertEquals('text', $bookingLink[2]);
+        $this->assertEquals('booking-link-id', $bookingLink[3]);
+    }
+
+    function testCalendarObjectReportSerializesRegisteredCustomCalendarPropertiesWithConfiguredTypes() {
+        $customEvent = 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:custom-property-object-event
+DTSTART:20120227T010000Z
+DTEND:20120227T020000Z
+SUMMARY:Custom property object event
+X-OPENPAAS-VIDEOCONFERENCE:https://meet.example/room
+X-PUBLICLY-CREATED:true
+X-PUBLICLY-CREATOR:bob@linagora.local
+X-OPENPAAS-BOOKING-LINK:booking-link-id
+END:VEVENT
+END:VCALENDAR
+';
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'custom-property-object.ics', $customEvent);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/custom-property-object.ics',
+        ));
+
+        $request->setBody(json_encode($this->timeRangeData));
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString(), true);
+        $veventProperties = $jsonResponse['data'][2][0][1];
+
+        $videoConference = $this->findJCalProperty($veventProperties, 'x-openpaas-videoconference');
+        $publiclyCreated = $this->findJCalProperty($veventProperties, 'x-publicly-created');
+        $publiclyCreator = $this->findJCalProperty($veventProperties, 'x-publicly-creator');
+        $bookingLink = $this->findJCalProperty($veventProperties, 'x-openpaas-booking-link');
+
+        $this->assertEquals('uri', $videoConference[2]);
+        $this->assertEquals('https://meet.example/room', $videoConference[3]);
+        $this->assertEquals('boolean', $publiclyCreated[2]);
+        $this->assertTrue($publiclyCreated[3]);
+        $this->assertEquals('text', $publiclyCreator[2]);
+        $this->assertEquals('bob@linagora.local', $publiclyCreator[3]);
+        $this->assertEquals('text', $bookingLink[2]);
+        $this->assertEquals('booking-link-id', $bookingLink[3]);
+    }
+
+    private function findJCalProperty($properties, $propertyName) {
+        foreach ($properties as $property) {
+            if ($property[0] === $propertyName) {
+                return $property;
+            }
+        }
+
+        return null;
+    }
+
     function testTimeRangeQueryShouldReturnTwoEventsWhenBothAreInRange() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

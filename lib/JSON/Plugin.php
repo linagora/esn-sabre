@@ -2,6 +2,7 @@
 
 namespace ESN\JSON;
 
+use ESN\CalDAV\VObjectPropertyRegistry;
 use ESN\JSON\CalDAV\CalendarHandler;
 use ESN\JSON\CalDAV\CalendarObjectHandler;
 use ESN\JSON\CalDAV\SubscriptionHandler;
@@ -40,6 +41,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function initialize(DAV\Server $server) {
+        VObjectPropertyRegistry::register();
+
         $this->server = $server;
         $server->on('beforeMethod:*', [$this, 'beforeMethod'], 15); // 15 is after Auth and before ACL
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);

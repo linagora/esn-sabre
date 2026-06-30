@@ -12,12 +12,20 @@ class VObjectPropertyRegistry {
         'X-PUBLICLY-CREATED' => Boolean::class,
         'X-PUBLICLY-CREATOR' => Text::class,
         'X-OPENPAAS-BOOKING-LINK' => Text::class,
-        'X-OPENPAAS-VIDEOCONFERENCE' => Uri::class,
+        'X-OPENPAAS-VIDEOCONFERENCE' => NullableUri::class,
+    ];
+
+    const array ICALENDAR_VALUE_TYPES = [
+        'URI' => NullableUri::class,
     ];
 
     public static function register(): void {
         foreach (self::ICALENDAR_PROPERTY_TYPES as $propertyName => $propertyClass) {
             VCalendar::$propertyMap[$propertyName] = $propertyClass;
+        }
+
+        foreach (self::ICALENDAR_VALUE_TYPES as $valueType => $propertyClass) {
+            VCalendar::$valueMap[$valueType] = $propertyClass;
         }
     }
 }

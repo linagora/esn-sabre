@@ -22,6 +22,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $this->collectionMap = [
             'users' => $this->db->users,
             'resources' => $this->db->resources,
+            'team-calendars' => $this->db->team_calendars,
             'domains' => $this->db->domains
         ];
     }
@@ -49,6 +50,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
         if ($type === 'domains') {
             return ['_id' => new \MongoDB\BSON\ObjectId($domainId)];
+        }
+        if ($type === 'team-calendars') {
+            return ['domainId' => new \MongoDB\BSON\ObjectId($domainId)];
         }
 
         return [];
@@ -82,6 +86,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             $this->assertSameDomain($id, $domainId);
         } else if ($type == 'resources') {
             $obj = $this->attachResourceDomain($obj);
+        } else if ($type == 'team-calendars') {
+            $this->assertTeamCalendarBelongsToDomain($obj, $domainId);
         } else if ($type == 'users' && !empty($obj['domains'])) {
             $this->assertUserBelongsToDomain($obj, $domainId);
 
@@ -114,6 +120,12 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
 
         if (!in_array($domainId, $userDomainIds, true)) {
             throw new \Sabre\DAV\Exception\Forbidden('Cross-domain principal access is not allowed');
+        }
+    }
+
+    private function assertTeamCalendarBelongsToDomain($obj, string $domainId): void {
+        if (!isset($obj['domainId']) || (string)$obj['domainId'] !== $domainId) {
+            throw new \Sabre\DAV\Exception\Forbidden('Cross-domain team calendar access is not allowed');
         }
     }
 
@@ -164,6 +176,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return $this->searchUserPrincipals($searchProperties, $test);
         } else if ($prefixPath == "principals/resources") {
             return $this->searchGroupPrincipals('resources', $searchProperties, $test);
+        } else if ($prefixPath == "principals/team-calendars") {
+            return $this->searchGroupPrincipals('team-calendars', $searchProperties, $test);
         } else if ($prefixPath == "principals/domains" && isset($searchProperties['{DAV:}displayname'])) {
             return $this->searchDomainPrincipals($searchProperties['{DAV:}displayname'], $test);
         } else {
@@ -322,6 +336,43 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         return new AuthTenant($resource['_id'], (string) $domainObjectId, $tenantType);
     }
 
+    function getAuthTenantByTeamCalendarEmail($email, ?TenantType $tenantType = null) {
+        $tenantType = $tenantType ?? TenantType::TeamCalendars;
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+
+        [$possibleId, $domain] = explode('@', $email, 2);
+
+        try {
+            $objectId = new \MongoDB\BSON\ObjectId($possibleId);
+        } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
+            return null;
+        }
+
+        $teamCalendar = $this->db->team_calendars->findOne(
+            ['_id' => $objectId],
+            ['projection' => ['_id' => 1, 'domainId' => 1, 'domainName' => 1]]
+        );
+        if (!$teamCalendar || !isset($teamCalendar['domainId'])) {
+            return null;
+        }
+
+        $domainMatches = isset($teamCalendar['domainName']) && strcasecmp($teamCalendar['domainName'], $domain) === 0;
+        if (!$domainMatches) {
+            $domainDocument = $this->db->domains->findOne(
+                [ '_id' => $teamCalendar['domainId'], 'name' => $domain ],
+                [ 'projection' => [ '_id' => 1 ] ]
+            );
+            if (!$domainDocument) {
+                return null;
+            }
+        }
+
+        return new AuthTenant($teamCalendar['_id'], (string) $teamCalendar['domainId'], $tenantType);
+    }
+
     private function objectToPrincipal($obj, $type) {
         $principal = null;
         $principalUri = 'principals/' . $type . '/' . $obj['_id'];
@@ -332,6 +383,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                 break;
             case "resources":
                 $principal = $this->resourceToPrincipal($obj);
+                break;
+            case "team-calendars":
+                $principal = $this->teamCalendarToPrincipal($obj);
                 break;
             case "domains":
                 $principal = $this->domainToPrincipal($obj, $principalUri);
@@ -378,6 +432,21 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
 
         if (isset($obj['domain']) && $obj['domain'] instanceof \MongoDB\Model\BSONDocument) {
             $principal['{http://sabredav.org/ns}email-address'] = $obj['_id'] . '@' . $obj['domain']['name'];
+        }
+
+        return $principal;
+    }
+
+    private function teamCalendarToPrincipal($obj): array {
+        $principal = [
+            'id' => (string)$obj['_id'],
+            '{DAV:}displayname' => $obj['displayName'] ?? $obj['name'] ?? ""
+        ];
+
+        if (isset($obj['emailAddress'])) {
+            $principal['{http://sabredav.org/ns}email-address'] = $obj['emailAddress'];
+        } else if (isset($obj['domainName'])) {
+            $principal['{http://sabredav.org/ns}email-address'] = $obj['_id'] . '@' . $obj['domainName'];
         }
 
         return $principal;
@@ -459,10 +528,19 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         foreach ($searchProperties as $property => $value) {
             switch ($property) {
                 case '{DAV:}displayname':
-                    $query[] = [ 'title' => [ '$regex' => preg_quote($value), '$options' => 'i' ] ];
+                    if ($groupName === 'team-calendars') {
+                        break;
+                    } else {
+                        $query[] = [ 'title' => [ '$regex' => preg_quote($value), '$options' => 'i' ] ];
+                    }
                     break;
                 case '{http://sabredav.org/ns}email-address':
                     list($possibleId) = explode('@', $value);
+
+                    if ($groupName === 'team-calendars') {
+                        $query[] = $this->teamCalendarEmailSearchQuery($value);
+                        break;
+                    }
 
                     try {
                         if($groupName === 'resources') {
@@ -481,7 +559,53 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         $collection = $this->collectionMap[$groupName];
+        if ($groupName === 'team-calendars') {
+            return $this->queryTeamCalendarPrincipals($collection, $query, $test);
+        }
         return $this->queryPrincipals($groupName, $collection, $query, $test);
+    }
+
+    private function teamCalendarEmailSearchQuery($value): array {
+        if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            return [ '_id' => null ];
+        }
+
+        [$possibleId, $domain] = explode('@', $value, 2);
+        $domain = strtolower($domain);
+        try {
+            $objectId = new \MongoDB\BSON\ObjectId($possibleId);
+        } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
+            return [ '_id' => null ];
+        }
+
+        $domainQuery = [
+            '_id' => new \MongoDB\BSON\ObjectId($this->requireAuthDomainId()),
+            'name' => $domain
+        ];
+        if (!$this->db->domains->findOne($domainQuery, ['projection' => ['_id' => 1]])) {
+            return [ '_id' => null ];
+        }
+
+        return [ '_id' => $objectId ];
+    }
+
+    private function queryTeamCalendarPrincipals($collection, array $query, $test): array {
+        if (empty($query) || !in_array($test, ['allof', 'anyof'], true)) {
+            return [];
+        }
+
+        $domainFilter = [ 'domainId' => new \MongoDB\BSON\ObjectId($this->requireAuthDomainId()) ];
+        $finalQuery = $test === 'anyof'
+            ? [ '$and' => [[ '$or' => $query ], $domainFilter] ]
+            : [ '$and' => array_merge($query, [$domainFilter]) ];
+
+        $principals = [];
+        $res = $collection->find($finalQuery, [ 'projection' => [ '_id' => 1 ]]);
+        foreach ($res as $obj) {
+            $principals[] = 'principals/team-calendars/' . $obj['_id'];
+        }
+
+        return $principals;
     }
 
     private function searchUserPrincipals(array $searchProperties, $test = 'allof') {

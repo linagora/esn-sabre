@@ -20,7 +20,10 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     const USER_DOMAIN_ADMIN_ID = '54313fcc398fef406b0041c3';
     const PROJECT_ID = '54b64eadf6d7d8e41d263e0f';
     const RESOURCE_ID = '82113fcc398fef406b0041b7';
+    const TEAM_CALENDAR_ID = '82113fcc398fef406b0041b8';
+    const OTHER_TEAM_CALENDAR_ID = '82113fcc398fef406b0041b9';
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
+    const OTHER_DOMAIN_ID = '5a095e2c46b72521d03f6d76';
 
     static function setUpBeforeClass(): void {
         $mc = new \MongoDB\Client(ESN_MONGO_ESNURI);
@@ -48,6 +51,11 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
                     'user_id' => self::USER_DOMAIN_ADMIN_ID
                 ]
             ]
+        ]);
+        self::$esndb->domains->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::OTHER_DOMAIN_ID),
+            'name' => 'other.test',
+            'administrators' => []
         ]);
         self::$esndb->users->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID),
@@ -138,6 +146,20 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_ID),
             'name' => 'resource',
             'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
+        ]);
+        self::$esndb->team_calendars->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::TEAM_CALENDAR_ID),
+            'domainId' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
+            'domainName' => 'example.com',
+            'name' => 'sales',
+            'displayName' => 'Sales Team'
+        ]);
+        self::$esndb->team_calendars->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::OTHER_TEAM_CALENDAR_ID),
+            'domainId' => new \MongoDB\BSON\ObjectId(self::OTHER_DOMAIN_ID),
+            'domainName' => 'other.test',
+            'name' => 'sales',
+            'displayName' => 'Other Sales Team'
         ]);
     }
 
@@ -355,6 +377,35 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame($expected['id'], $principal['id']);
     }
 
+    function testTeamCalendarPrincipalsByPrefix() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $principals = $backend->getPrincipalsByPrefix('principals/team-calendars');
+        $principal = $backend->getPrincipalByPath('principals/team-calendars/' . self::TEAM_CALENDAR_ID);
+        $this->assertEquals(count($principals), 1);
+
+        $expected = [
+            'uri' => 'principals/team-calendars/' . self::TEAM_CALENDAR_ID,
+            'id' => self::TEAM_CALENDAR_ID,
+            '{DAV:}displayname' => 'Sales Team',
+            '{http://sabredav.org/ns}email-address' => self::TEAM_CALENDAR_ID . '@example.com',
+            'groupPrincipals' => []
+        ];
+
+        $this->assertEquals($expected, $principals[0]);
+        $this->assertEquals($expected, $principal);
+
+        $this->assertSame($expected['id'], $principals[0]['id']);
+        $this->assertSame($expected['id'], $principal['id']);
+    }
+
+    function testTeamCalendarPrincipalShouldRejectCrossDomainAccess() {
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $backend->getPrincipalByPath('principals/team-calendars/' . self::OTHER_TEAM_CALENDAR_ID);
+    }
+
     function testGetGroupMemberSet() {
         $backend = new Mongo(self::$esndb, self::$tenant);
         $expected = array('principals/users/' . self::USER_ID);
@@ -415,6 +466,18 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
         $result = $backend->searchPrincipals('principals/domains', array('{DAV:}displayname' => 'notexist'));
         $this->assertEquals([], $result);
+
+        $result = $backend->searchPrincipals('principals/team-calendars', array('{DAV:}displayname' => 'sales'));
+        $this->assertEquals([], $result);
+
+        $result = $backend->searchPrincipals('principals/team-calendars', array('{http://sabredav.org/ns}email-address' => self::TEAM_CALENDAR_ID . '@EXAMPLE.CoM'));
+        $this->assertEquals(array('principals/team-calendars/' . self::TEAM_CALENDAR_ID), $result);
+
+        $result = $backend->searchPrincipals('principals/team-calendars', array('{http://sabredav.org/ns}email-address' => self::TEAM_CALENDAR_ID . '@other.test'));
+        $this->assertEquals([], $result);
+
+        $result = $backend->searchPrincipals('principals/team-calendars', array('{DAV:}displayname' => 'other sales'));
+        $this->assertEquals([], $result);
     }
 
     function testUpdatePrincipal() {
@@ -471,5 +534,33 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $backend = new Mongo(self::$esndb, self::$tenant);
 
         $this->assertNull($backend->getAuthTenantByResourceEmail('notanemail'));
+    }
+
+    function testGetAuthTenantByTeamCalendarEmailWhenTeamCalendarExists() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $teamCalendarEmail = self::TEAM_CALENDAR_ID . '@example.com';
+
+        $result = $backend->getAuthTenantByTeamCalendarEmail($teamCalendarEmail);
+
+        $this->assertEquals(self::TEAM_CALENDAR_ID, (string)$result->userId);
+        $this->assertEquals(\ESN\Utils\TenantType::TeamCalendars, $result->tenantType);
+    }
+
+    function testGetAuthTenantByTeamCalendarEmailWhenTeamCalendarDoesNotExist() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertNull($backend->getAuthTenantByTeamCalendarEmail('000000000000000000000000@example.com'));
+    }
+
+    function testGetAuthTenantByTeamCalendarEmailWhenLocalpartIsNotObjectId() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertNull($backend->getAuthTenantByTeamCalendarEmail('notanobjectid@example.com'));
+    }
+
+    function testGetAuthTenantByTeamCalendarEmailWhenEmailIsNotValid() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertNull($backend->getAuthTenantByTeamCalendarEmail('notanemail'));
     }
 }

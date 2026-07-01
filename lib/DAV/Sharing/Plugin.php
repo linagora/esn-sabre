@@ -3,7 +3,9 @@
 namespace ESN\DAV\Sharing;
 
 use Sabre\DAV\Exception\Forbidden;
+use Sabre\DAV\Sharing\ISharedNode;
 use \ESN\Utils\AuthTenant;
+use \ESN\Utils\TenantType;
 
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\DAV\Sharing\Plugin {
@@ -30,6 +32,9 @@ class Plugin extends \Sabre\DAV\Sharing\Plugin {
         $domainId = $this->authTenant?->domainId;
         if(!$domainId)
             throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
+
+        $node = $this->server->tree->getNodeForPath($path);
+
         if ($this->esnDb !== null) {
             foreach ($sharees as $sharee) {
                 if ($sharee->access === self::ACCESS_NOACCESS) {
@@ -52,7 +57,68 @@ class Plugin extends \Sabre\DAV\Sharing\Plugin {
                 }
             }
         }
+
+        if ($this->isTechnicalTeamCalendarSharingTarget($node, $domainId)) {
+            // Technical tokens authenticate as a synthetic principal, so they cannot
+            // satisfy the team-calendar owner ACL. Validate the owner first, then
+            // reuse Sabre's invite update flow without the owner ACL check.
+            $this->shareNodeWithoutAclCheck($node, $sharees);
+            return;
+        }
+
         parent::shareResource($path, $sharees);
+    }
+
+    private function isTechnicalTeamCalendarSharingTarget($node, string $domainId): bool {
+        if ($this->authTenant?->tenantType !== TenantType::Technical ||
+            !$node instanceof ISharedNode ||
+            !method_exists($node, 'getOwner')) {
+            return false;
+        }
+
+        $owner = $node->getOwner();
+        $prefix = 'principals/team-calendars/';
+        if (!is_string($owner) || !str_starts_with($owner, $prefix)) {
+            return false;
+        }
+
+        if ($this->esnDb === null) {
+            throw new Forbidden('Team calendar domain validation is not available');
+        }
+
+        $teamCalendarId = substr($owner, strlen($prefix));
+        try {
+            $teamCalendarObjectId = new \MongoDB\BSON\ObjectId($teamCalendarId);
+        } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
+            throw new Forbidden('Invalid team calendar principal');
+        }
+
+        $teamCalendar = $this->esnDb->team_calendars->findOne(
+            [
+                '_id' => $teamCalendarObjectId,
+                'domainId' => new \MongoDB\BSON\ObjectId($domainId)
+            ],
+            ['projection' => ['_id' => 1]]
+        );
+
+        if (!$teamCalendar) {
+            throw new Forbidden('Cross-domain team calendar access is not allowed');
+        }
+
+        return true;
+    }
+
+    private function shareNodeWithoutAclCheck(ISharedNode $node, array $sharees): void {
+        foreach ($sharees as $sharee) {
+            $principal = null;
+            $this->server->emit('getPrincipalByUri', [$sharee->href, &$principal]);
+            if ($sharee->access !== self::ACCESS_NOACCESS && $principal === null) {
+                throw new Forbidden('Delegated principal must resolve in the token domain');
+            }
+            $sharee->principal = $principal;
+        }
+
+        $node->updateInvites($sharees);
     }
 
     function accessToRightRse($access) {

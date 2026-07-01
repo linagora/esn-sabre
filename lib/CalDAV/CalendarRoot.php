@@ -9,6 +9,7 @@ class CalendarRoot extends \Sabre\DAV\Collection {
 
     const USER_PREFIX = 'principals/users';
     const RESOURCES_PREFIX = 'principals/resources';
+    const TEAM_CALENDARS_PREFIX = 'principals/team-calendars';
 
     protected $principalBackend;
     protected $caldavBackend;
@@ -45,6 +46,14 @@ class CalendarRoot extends \Sabre\DAV\Collection {
         $res = $this->db->resources->find([], [ 'projection' => ['_id' => 1 ]]);
         foreach ($res as $resource) {
             $principal = [ 'uri' => self::RESOURCES_PREFIX . '/' . $resource['_id'] ];
+            $homes[] = new CalendarHome($this->caldavBackend, $principal);
+        }
+        $res = $this->db->team_calendars->find(
+            ['domainId' => new \MongoDB\BSON\ObjectId($domainId)],
+            [ 'projection' => ['_id' => 1 ]]
+        );
+        foreach ($res as $teamCalendar) {
+            $principal = [ 'uri' => self::TEAM_CALENDARS_PREFIX . '/' . $teamCalendar['_id'] ];
             $homes[] = new CalendarHome($this->caldavBackend, $principal);
         }
 
@@ -84,6 +93,18 @@ class CalendarRoot extends \Sabre\DAV\Collection {
                 }
             }
             $principal = [ 'uri' => self::RESOURCES_PREFIX . '/' . $name ];
+            return new CalendarHome($this->caldavBackend, $principal);
+        }
+
+        $res = $this->db->team_calendars->findOne(['_id' => $mongoName], ['projection' => ['domainId' => 1]]);
+        if ($res) {
+            $domainId = $this->authTenant?->domainId;
+            if (!$domainId)
+                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
+            if (!isset($res['domainId']) || (string)$res['domainId'] !== $domainId) {
+                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain team calendar access is not allowed');
+            }
+            $principal = [ 'uri' => self::TEAM_CALENDARS_PREFIX . '/' . $name ];
             return new CalendarHome($this->caldavBackend, $principal);
         }
 

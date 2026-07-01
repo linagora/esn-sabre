@@ -59,6 +59,10 @@ class PrivatePrincipalBackend extends AbstractBackend {
         return $this->principalBackend->getAuthTenantByResourceEmail($email, $tenantType ?? TenantType::Resources);
     }
 
+    function getAuthTenantByTeamCalendarEmail($email, ?TenantType $tenantType = null): ?AuthTenant {
+        return $this->principalBackend->getAuthTenantByTeamCalendarEmail($email, $tenantType ?? TenantType::TeamCalendars);
+    }
+
     function getPrincipalsByPrefix($prefixPath) {
         if ($this->isTechnicalPrincipal()) {
             return $this->principalBackend->getPrincipalsByPrefix($prefixPath);
@@ -154,9 +158,10 @@ class PrivatePrincipalBackend extends AbstractBackend {
         }
 
         if ($property === self::EMAIL_ADDRESS && isset($principal[$property])) {
-            [$possibleResourceId] = explode('@', $value);
+            [$possiblePrincipalId] = explode('@', $value);
             return strcasecmp($principal[$property], $value) === 0 ||
-                $principal['uri'] === 'principals/resources/' . $possibleResourceId;
+                $principal['uri'] === 'principals/resources/' . $possiblePrincipalId ||
+                $principal['uri'] === 'principals/team-calendars/' . $possiblePrincipalId;
         }
 
         return null;

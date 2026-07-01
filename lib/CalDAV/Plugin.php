@@ -166,6 +166,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
      * @return array
      */
     protected function buildCalendarQueryReportResult($report, $path, ICalendarObjectContainer $node, $needsJson, $calendarTimeZone) {
+        if ($this->canReportFromSingleQuery($report, $node)) {
+            return $this->buildCalendarQueryReportResultFromSingleQuery($report, $path, $node, $needsJson);
+        }
+
         $calendarDataProp = '{' . self::NS_CALDAV . '}calendar-data';
 
         $nodePaths = $node->calendarQuery($report->filters);
@@ -198,6 +202,144 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return $result;
+    }
+
+    /**
+     * Whether the calendar-query REPORT can be answered straight from a single
+     * Mongo query (uri + calendardata + etag) without going through
+     * getPropertiesForMultiplePaths at all.
+     *
+     * This is the common filter-less case (the reindex REPORT): the objects are
+     * already returned with their data by the query, so we skip the extra node
+     * resolution round-trip entirely and parse each object at most once.
+     *
+     * We stay conservative: anything with a real filter, an expand, a non-Mongo
+     * backend, or a requested property we cannot synthesise from the query
+     * result falls back to the standard (batched) path.
+     *
+     * @param \Sabre\CalDAV\Xml\Request\CalendarQueryReport $report
+     * @param ICalendarObjectContainer $node
+     * @return bool
+     */
+    private function canReportFromSingleQuery($report, ICalendarObjectContainer $node) {
+        if ($report->expand) {
+            return false;
+        }
+
+        if (!($node instanceof SharedCalendar) || !($node->getBackend() instanceof Backend\Mongo)) {
+            return false;
+        }
+
+        $filters = $report->filters;
+        if (!empty($filters['prop-filters']) || !empty($filters['comp-filters'])) {
+            return false;
+        }
+
+        if (empty($report->properties)) {
+            return false;
+        }
+
+        $servable = ['{DAV:}getetag', '{' . self::NS_CALDAV . '}calendar-data'];
+        foreach ($report->properties as $property) {
+            if (!in_array($property, $servable, true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Builds the multistatus entries for a filter-less calendar-query REPORT
+     * directly from calendarQueryWithAllData(), i.e. a single query returning
+     * uri + calendardata + etag for every object.
+     *
+     * @param \Sabre\CalDAV\Xml\Request\CalendarQueryReport $report
+     * @param string $path
+     * @param SharedCalendar $node
+     * @param bool $needsJson
+     * @return array
+     */
+    private function buildCalendarQueryReportResultFromSingleQuery($report, $path, SharedCalendar $node, $needsJson) {
+        $calendarDataProp = '{' . self::NS_CALDAV . '}calendar-data';
+        $etagProp = '{DAV:}getetag';
+
+        $wantsCalendarData = in_array($calendarDataProp, $report->properties, true);
+        $wantsEtag = in_array($etagProp, $report->properties, true);
+
+        $currentUser = $this->getCurrentUserPrincipal();
+        $calendarOwner = $node->getOwner();
+        // Same rule as PrivateEventPlugin: a delegate (not the calendar owner)
+        // only sees a sanitized version of PRIVATE / CONFIDENTIAL events.
+        $sanitizeForDelegate = $currentUser !== null && $calendarOwner !== null && $calendarOwner !== $currentUser;
+
+        $result = [];
+        foreach ($node->getBackend()->calendarQueryWithAllData($node->getFullCalendarId(), $report->filters) as $object) {
+            $properties = [];
+
+            if ($wantsCalendarData) {
+                $properties[$calendarDataProp] = $this->renderCalendarData($object, $node, $currentUser, $sanitizeForDelegate, $needsJson);
+            }
+            if ($wantsEtag) {
+                $properties[$etagProp] = $object['etag'];
+            }
+
+            $result[] = [
+                200 => $properties,
+                404 => [],
+                'href' => $path . '/' . $object['uri']
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Renders the calendar-data of a single query result, applying the same
+     * private-event sanitization PrivateEventPlugin would apply on the standard
+     * propFind path. Non-private objects are returned verbatim without being
+     * parsed, so their serialization is byte-for-byte identical to the standard
+     * path.
+     *
+     * @param array $object Query result with uri/calendardata/etag/classification
+     * @param SharedCalendar $node
+     * @param string|null $currentUser
+     * @param bool $sanitizeForDelegate
+     * @param bool $needsJson
+     * @return string
+     */
+    private function renderCalendarData($object, SharedCalendar $node, $currentUser, $sanitizeForDelegate, $needsJson) {
+        $classification = isset($object['classification']) ? strtoupper($object['classification']) : null;
+        $needsSanitization = $sanitizeForDelegate
+            && ($classification === 'PRIVATE' || $classification === 'CONFIDENTIAL');
+
+        if (!$needsJson && !$needsSanitization) {
+            return $object['calendardata'];
+        }
+
+        $vObject = isset($object['vObject']) && $object['vObject'] !== null
+            ? $object['vObject']
+            : Reader::read($object['calendardata']);
+
+        $rendered = $vObject;
+        if ($needsSanitization) {
+            $rendered = \ESN\Utils\Utils::hidePrivateEventInfoForUser($vObject, $node, $currentUser);
+        }
+
+        $data = $needsJson ? json_encode($rendered->jsonSerialize()) : $rendered->serialize();
+
+        if ($rendered !== $vObject) {
+            $rendered->destroy();
+        }
+        $vObject->destroy();
+
+        return $data;
+    }
+
+    private function getCurrentUserPrincipal() {
+        $authPlugin = $this->server->getPlugin('auth');
+
+        return $authPlugin ? $authPlugin->getCurrentPrincipal() : null;
     }
 
 }

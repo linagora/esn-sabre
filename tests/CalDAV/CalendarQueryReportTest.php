@@ -151,6 +151,42 @@ class CalendarQueryReportTest extends \ESN\DAV\ServerMock {
         $this->assertArrayHasKey('/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event2.ics', $items);
     }
 
+    function testFilterlessReportReturnsFullPrivateDataToOwner() {
+        $privateEvent = implode("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:owner-private',
+            'SUMMARY:Secret meeting',
+            'LOCATION:Paris',
+            'CLASS:PRIVATE',
+            'DTSTART:20130401T090000Z',
+            'DTEND:20130401T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]) . "\r\n";
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'owner-private.ics', $privateEvent);
+
+        $response = $this->reportRequest(
+            '/calendars/54b64eadf6d7d8e41d263e0f/calendar1',
+            $this->filterlessQuery()
+        );
+
+        $this->assertEquals(207, $response->status);
+
+        $items = $this->parseMultiStatus($response->getBodyAsString());
+        $href = '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/owner-private.ics';
+
+        $this->assertArrayHasKey($href, $items);
+
+        // The authenticated user owns the calendar, so private details are
+        // returned untouched (no "Busy" sanitization).
+        $vObject = \Sabre\VObject\Reader::read($items[$href]['calendar-data']);
+        $this->assertEquals('Secret meeting', (string) $vObject->VEVENT->SUMMARY);
+        $this->assertEquals('Paris', (string) $vObject->VEVENT->LOCATION);
+    }
+
     function testDepthZeroOnCalendarIsRejected() {
         $response = $this->reportRequest(
             '/calendars/54b64eadf6d7d8e41d263e0f/calendar1',

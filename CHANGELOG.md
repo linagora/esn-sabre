@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Bug Fixes
+
+ - ISSUE-404 Fix duplicated `DAV`/`X-Sabre-Version` headers in DAV responses — the nginx capability headers are now only emitted for the OPTIONS short-circuit, letting Sabre emit them once (with consistent casing) for proxied responses (#404)
+
 ## [2.1.0] - 2026-05-07
 
 This release focusses on hardening asynchronous scheduling and various bug fixes.

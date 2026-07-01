@@ -9,6 +9,8 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
     const OTHER_DOMAIN_PRINCIPAL = 'principals/domains/999';
     const RESOURCE_PRINCIPAL = 'principals/resources/resource-1';
     const OTHER_RESOURCE_PRINCIPAL = 'principals/resources/resource-2';
+    const TEAM_CALENDAR_PRINCIPAL = 'principals/team-calendars/team-calendar-1';
+    const OTHER_TEAM_CALENDAR_PRINCIPAL = 'principals/team-calendars/team-calendar-2';
 
     function testGetPrincipalsByPrefixShouldExposeOnlyCurrentUserAndCurrentUserDomains() {
         $backend = $this->newPrivateBackend(self::USER_PRINCIPAL);
@@ -107,6 +109,41 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
         );
     }
 
+    function testGetPrincipalsByPrefixShouldExposeOnlyCurrentTeamCalendarForTeamCalendarPrincipal() {
+        $backend = $this->newPrivateBackend(self::TEAM_CALENDAR_PRINCIPAL);
+
+        $this->assertEquals(
+            [$this->principal(self::TEAM_CALENDAR_PRINCIPAL, 'Sales Team', 'sales@example.com')],
+            $backend->getPrincipalsByPrefix('principals/team-calendars')
+        );
+        $this->assertEquals([], $backend->getPrincipalsByPrefix('principals/users'));
+        $this->assertEquals([], $backend->getPrincipalsByPrefix('principals/resources'));
+        $this->assertEquals([], $backend->getPrincipalsByPrefix('principals/domains'));
+    }
+
+    function testSearchPrincipalsShouldExposeOnlyCurrentTeamCalendarForTeamCalendarPrincipal() {
+        $backend = $this->newPrivateBackend(self::TEAM_CALENDAR_PRINCIPAL);
+
+        $this->assertEquals(
+            [self::TEAM_CALENDAR_PRINCIPAL],
+            $backend->searchPrincipals(
+                'principals/team-calendars',
+                ['{http://sabredav.org/ns}email-address' => 'team-calendar-1@example.com']
+            )
+        );
+        $this->assertEquals(
+            [],
+            $backend->searchPrincipals(
+                'principals/team-calendars',
+                ['{http://sabredav.org/ns}email-address' => 'team-calendar-2@example.com']
+            )
+        );
+        $this->assertEquals(
+            [],
+            $backend->searchPrincipals('principals/resources', ['{DAV:}displayname' => 'Room One'])
+        );
+    }
+
     function testSearchPrincipalsShouldDelegateForTechnicalPrincipal() {
         $searchProperties = ['{DAV:}displayname' => 'Bob'];
         $mongo = $this->getMockBuilder(Mongo::class)
@@ -200,11 +237,12 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
     function testShouldExposeCustomMongoLookupMethods() {
         $mongo = $this->getMockBuilder(Mongo::class)
             ->disableOriginalConstructor()
-            ->onlyMethods(['setAuthTenant', 'getAuthTenantByEmail', 'getAuthTenantByResourceEmail'])
+            ->onlyMethods(['setAuthTenant', 'getAuthTenantByEmail', 'getAuthTenantByResourceEmail', 'getAuthTenantByTeamCalendarEmail'])
             ->getMock();
 
         $tenant = new \ESN\Utils\AuthTenant('123', 'domain-id');
         $resourceTenant = new \ESN\Utils\AuthTenant('456', 'domain-id', \ESN\Utils\TenantType::Resources);
+        $teamCalendarTenant = new \ESN\Utils\AuthTenant('789', 'domain-id', \ESN\Utils\TenantType::TeamCalendars);
 
         $mongo->expects($this->once())
             ->method('setAuthTenant')
@@ -217,6 +255,10 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
             ->method('getAuthTenantByResourceEmail')
             ->with('resource@example.com')
             ->willReturn($resourceTenant);
+        $mongo->expects($this->once())
+            ->method('getAuthTenantByTeamCalendarEmail')
+            ->with('team-calendar@example.com')
+            ->willReturn($teamCalendarTenant);
 
         $backend = new PrivatePrincipalBackend($mongo, function() {
             return 'principals/users/123';
@@ -226,6 +268,7 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
         $this->assertNull($backend->setAuthTenant($tenant));
         $this->assertSame($tenant, $backend->getAuthTenantByEmail('user@example.com'));
         $this->assertSame($resourceTenant, $backend->getAuthTenantByResourceEmail('resource@example.com'));
+        $this->assertSame($teamCalendarTenant, $backend->getAuthTenantByTeamCalendarEmail('team-calendar@example.com'));
     }
 
     private function newPrivateBackend($currentPrincipal) {
@@ -242,7 +285,9 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
                 self::DOMAIN_PRINCIPAL => $this->principal(self::DOMAIN_PRINCIPAL, 'Acme Domain'),
                 self::OTHER_DOMAIN_PRINCIPAL => $this->principal(self::OTHER_DOMAIN_PRINCIPAL, 'Other Domain'),
                 self::RESOURCE_PRINCIPAL => $this->principal(self::RESOURCE_PRINCIPAL, 'Room One', 'resource-1@example.com'),
-                self::OTHER_RESOURCE_PRINCIPAL => $this->principal(self::OTHER_RESOURCE_PRINCIPAL, 'Room Two', 'resource-2@example.com')
+                self::OTHER_RESOURCE_PRINCIPAL => $this->principal(self::OTHER_RESOURCE_PRINCIPAL, 'Room Two', 'resource-2@example.com'),
+                self::TEAM_CALENDAR_PRINCIPAL => $this->principal(self::TEAM_CALENDAR_PRINCIPAL, 'Sales Team', 'sales@example.com'),
+                self::OTHER_TEAM_CALENDAR_PRINCIPAL => $this->principal(self::OTHER_TEAM_CALENDAR_PRINCIPAL, 'Other Sales Team', 'other-sales@example.com')
             ],
             [
                 self::USER_PRINCIPAL => [self::DOMAIN_PRINCIPAL],

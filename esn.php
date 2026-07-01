@@ -23,6 +23,7 @@ define('PRINCIPALS_COLLECTION', 'principals');
 define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');
 define('PRINCIPALS_RESOURCES', 'principals/resources');
+define('PRINCIPALS_TEAM_CALENDARS', 'principals/team-calendars');
 define('PRINCIPALS_DOMAINS', 'principals/domains');
 define('JSON_ROOT', 'json');
 
@@ -93,6 +94,7 @@ $tree = [
     new Sabre\DAV\SimpleCollection(PRINCIPALS_COLLECTION, [
       new ESN\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_USERS),
       new ESN\CalDAV\Principal\ResourceCollection($principalBackend, PRINCIPALS_RESOURCES),
+      new ESN\CalDAV\Principal\TeamCalendarCollection($principalBackend, PRINCIPALS_TEAM_CALENDARS),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_TECHNICAL_USER),
       new Sabre\CalDAV\Principal\Collection($principalBackend, PRINCIPALS_DOMAINS)
     ]),

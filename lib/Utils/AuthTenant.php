@@ -12,7 +12,8 @@ class AuthTenant
     protected $prefixes = [
         TenantType::User->value => 'principals/users/',
         TenantType::Technical->value => 'principals/users/',
-        TenantType::Resources->value => 'principals/resources/'
+        TenantType::Resources->value => 'principals/resources/',
+        TenantType::TeamCalendars->value => 'principals/team-calendars/'
     ];
 
     public function __construct(

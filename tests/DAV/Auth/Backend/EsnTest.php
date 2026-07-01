@@ -485,6 +485,37 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals('principals/resources/888888888888888888888888', $msg);
     }
 
+    function testAdminImpersonationWithTeamCalendarEmail() {
+        putenv('SABRE_IMPERSONATION_ENABLED=true');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $esnDb = $esnauth->getDb();
+        $teamCalendarId = new \MongoDB\BSON\ObjectId('777777777777777777777777');
+        $domainId = new \MongoDB\BSON\ObjectId('098765432109876543210987');
+        $esnDb->team_calendars->insertOne([
+            '_id' => $teamCalendarId,
+            'domainId' => $domainId,
+            'domainName' => 'example.com',
+            'name' => 'sales',
+            'displayName' => 'Sales Team'
+        ]);
+
+        $teamCalendarEmail = '777777777777777777777777@example.com';
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'admin&' . $teamCalendarEmail,
+            'PHP_AUTH_PW'   => 'test-admin-password',
+            'REQUEST_URI'   => '/',
+            'REQUEST_METHOD'=> 'GET',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        [$rv, $msg] = $esnauth->check($request, $response);
+
+        $this->assertTrue($rv);
+        $this->assertEquals('principals/team-calendars/777777777777777777777777', $msg);
+    }
+
     function testAdminImpersonationWithResourceEmailNotFound() {
         putenv('SABRE_IMPERSONATION_ENABLED=true');
 

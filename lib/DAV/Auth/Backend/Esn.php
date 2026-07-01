@@ -130,6 +130,10 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         if($tenant)
             return $tenant;
 
+        $tenant = $this->principalBackend->getAuthTenantByTeamCalendarEmail($impersonationResult);
+        if($tenant)
+            return $tenant;
+
         error_log("User not found for email: $impersonationResult");
         throw new AuthException("User not found");
     }

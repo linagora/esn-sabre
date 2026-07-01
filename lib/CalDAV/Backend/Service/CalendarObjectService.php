@@ -347,7 +347,7 @@ class CalendarObjectService {
      */
     private function buildProjection($requirePostFilter, $returnFullData) {
         if ($returnFullData) {
-            return ['uri' => 1, 'calendardata' => 1, 'etag' => 1];
+            return ['uri' => 1, 'calendardata' => 1, 'etag' => 1, 'classification' => 1];
         }
 
         if ($requirePostFilter) {
@@ -383,6 +383,7 @@ class CalendarObjectService {
                 'uri' => $row['uri'],
                 'calendardata' => $row['calendardata'],
                 'etag' => '"' . $row['etag'] . '"',
+                'classification' => isset($row['classification']) ? $row['classification'] : null,
                 'vObject' => $vObject
             ];
         }

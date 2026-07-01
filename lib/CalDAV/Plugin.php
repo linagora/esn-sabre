@@ -91,4 +91,21 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return;
     }
 
+    /**
+     * This function handles the calendar-query REPORT.
+     *
+     * The ESN specific overrides live in {@see Report} so that the report
+     * handling stays isolated from the rest of the plugin. We only keep the
+     * override entrypoint here (Sabre dispatches the report to this method) and
+     * delegate, providing the stock implementation as a fallback.
+     *
+     * @param \Sabre\CalDAV\Xml\Request\CalendarQueryReport $report
+     * @return void
+     */
+    function calendarQueryReport($report) {
+        (new Report($this->server))->calendarQueryReport($report, function () use ($report) {
+            parent::calendarQueryReport($report);
+        });
+    }
+
 }

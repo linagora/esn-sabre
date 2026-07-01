@@ -72,7 +72,7 @@ class Esn extends Mongo {
         $properties = [];
         $principalExploded = explode('/', $principalUri);
 
-        if (Utils::isResourceFromPrincipal($principalUri)) {
+        if (Utils::isResourceFromPrincipal($principalUri) || Utils::isTeamCalendarFromPrincipal($principalUri)) {
             $principal = $this->principalBackend->getPrincipalByPath($principalUri);
             $properties['{DAV:}displayname'] = $principal['{DAV:}displayname'];
         }

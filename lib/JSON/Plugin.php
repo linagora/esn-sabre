@@ -257,17 +257,23 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         // Handle sync-token based requests
         if (isset($jsonData->{'sync-token'})) {
+            $this->assertCanReadReportPath($path);
             list($code, $body) = $this->handleSyncTokenReport($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+            $this->assertCanReadReportPath($path);
             list($code, $body) = $this->getCalendarObjectHandler()->getCalendarObjectByUID($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
             // Check Subscription before ICalendarObjectContainer since Subscription now implements it
+            $this->assertCanReadReportPath($path);
             list($code, $body) = $this->getSubscriptionHandler()->getCalendarObjectsForSubscription($node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
+            $this->assertCanReadReportPath($path);
             list($code, $body) = $this->getCalendarObjectHandler()->getCalendarObjects($path, $node, $jsonData);
         } else if ($node instanceof \ESN\CalDAV\CalendarRoot) {
+            $this->assertCanReadReportEventPaths($jsonData);
             list($code, $body) = $this->getCalendarObjectHandler()->getMultipleCalendarObjectsFromPaths($path, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\ICalendarObject) {
+            $this->assertCanReadReportPath($path);
             list($code, $body) = $this->handleCalendarObjectReport($path, $node, $jsonData);
         } else {
             $code = 200;
@@ -275,6 +281,27 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return $this->send($code, $body);
+    }
+
+    private function assertCanReadReportPath($path) {
+        $aclPlugin = $this->server->getPlugin('acl');
+        if ($aclPlugin) {
+            // JSON REPORT bypasses Sabre's XML REPORT pipeline, so enforce ACL here.
+            $aclPlugin->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT);
+        }
+    }
+
+    private function assertCanReadReportEventPaths($jsonData) {
+        if (!isset($jsonData->eventPaths)) {
+            return;
+        }
+
+        foreach ($jsonData->eventPaths as $eventPath) {
+            list($calendarPath) = Utils::splitEventPath($eventPath);
+            if ($calendarPath) {
+                $this->assertCanReadReportPath($calendarPath);
+            }
+        }
     }
 
     private function handleSyncTokenReport($path, $node, $jsonData) {

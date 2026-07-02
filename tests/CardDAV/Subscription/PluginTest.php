@@ -29,6 +29,7 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
                 '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/' . $this->userTestId1 . '/book1', false)
             ]
         );
+        $this->authBackend->setPrincipal('principals/users/' . $this->userTestId2);
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPFIND',

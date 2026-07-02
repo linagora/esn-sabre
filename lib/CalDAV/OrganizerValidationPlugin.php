@@ -26,7 +26,9 @@ class OrganizerValidationPlugin extends ServerPlugin {
         RequestInterface $request,
         ResponseInterface $response,
         VCalendar $vCal,
-        $calendarPath
+        $calendarPath,
+        &$modified,
+        $isNew
     ) {
         if ($request->getMethod() === 'ITIP') {
             return;
@@ -42,7 +44,50 @@ class OrganizerValidationPlugin extends ServerPlugin {
             return;
         }
 
+        // An attendee's copy of an invitation keeps the inviter as ORGANIZER, so
+        // updates (e.g. PARTSTAT changes) are allowed as long as the ORGANIZER is
+        // unchanged from the stored object: a foreign organizer can only be there
+        // because scheduling delivered it or a previously validated PUT wrote it.
+        if (!$isNew && $organizerUri === $this->getExistingOrganizerUri($request->getPath())) {
+            return;
+        }
+
         $this->validateOrganizerAuthorized($organizerUri, $calendarPath);
+    }
+
+    private function getExistingOrganizerUri(string $objectPath): ?string {
+        try {
+            $node = $this->server->tree->getNodeForPath($objectPath);
+        } catch (\Sabre\DAV\Exception $e) {
+            return null;
+        }
+
+        if (!$node instanceof \Sabre\CalDAV\ICalendarObject) {
+            return null;
+        }
+
+        try {
+            $data = $node->get();
+            if (is_resource($data)) {
+                $data = stream_get_contents($data);
+            }
+            $existingVCal = \Sabre\VObject\Reader::read($data);
+        } catch (\Exception $e) {
+            return null;
+        }
+
+        $organizerValues = [];
+        foreach ($existingVCal->select('VEVENT') as $vevent) {
+            if (isset($vevent->ORGANIZER)) {
+                $organizerValues[] = strtolower((string) $vevent->ORGANIZER);
+            }
+        }
+
+        if (count(array_unique($organizerValues)) !== 1) {
+            return null;
+        }
+
+        return reset($organizerValues);
     }
 
     private function extractOrganizerUri(array $vevents): ?string {

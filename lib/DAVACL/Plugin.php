@@ -10,7 +10,23 @@ class Plugin extends \ESN\JSON\BasePlugin {
     function initialize(DAV\Server $server) {
         parent::initialize($server);
 
+        $server->on('beforeMethod:PROPFIND', [$this, 'beforePropFind'], 20);
         $server->on('method:PROPFIND', [$this, 'propFind'], 80);
+    }
+
+    public function beforePropFind($request, $response) {
+        $path = $request->getPath();
+        if (!$this->server->tree->nodeExists($path)) {
+            return true;
+        }
+
+        $aclPlugin = $this->server->getPlugin('acl');
+        if ($aclPlugin) {
+            // Sabre's propFind marks unreadable properties as 403 but still emits child hrefs.
+            $aclPlugin->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT);
+        }
+
+        return true;
     }
 
     public function propFind($request, $response) {

@@ -6,11 +6,20 @@ use Sabre\DAV;
 
 #[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
+    private const REPORT_READ_PRIVILEGES = [
+        '{DAV:}sync-collection' => '{DAV:}read',
+        '{urn:ietf:params:xml:ns:caldav}calendar-query' => '{DAV:}read',
+        '{urn:ietf:params:xml:ns:caldav}calendar-multiget' => '{DAV:}read',
+        '{urn:ietf:params:xml:ns:caldav}free-busy-query' => '{urn:ietf:params:xml:ns:caldav}read-free-busy',
+        '{urn:ietf:params:xml:ns:carddav}addressbook-query' => '{DAV:}read',
+        '{urn:ietf:params:xml:ns:carddav}addressbook-multiget' => '{DAV:}read',
+    ];
 
     function initialize(DAV\Server $server) {
         parent::initialize($server);
 
         $server->on('beforeMethod:PROPFIND', [$this, 'beforePropFind'], 20);
+        $server->on('report', [$this, 'beforeReport'], 20);
         $server->on('method:PROPFIND', [$this, 'propFind'], 80);
     }
 
@@ -27,6 +36,31 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return true;
+    }
+
+    public function beforeReport($reportName, $report, $path) {
+        if (!isset(self::REPORT_READ_PRIVILEGES[$reportName])) {
+            return true;
+        }
+
+        $paths = isset($report->hrefs) ? $report->hrefs : [$path];
+        foreach ($paths as $reportPath) {
+            $this->assertCanReadExistingPath($reportPath, self::REPORT_READ_PRIVILEGES[$reportName]);
+        }
+
+        return true;
+    }
+
+    private function assertCanReadExistingPath($path, $privilege) {
+        if (!$this->server->tree->nodeExists($path)) {
+            return;
+        }
+
+        $aclPlugin = $this->server->getPlugin('acl');
+        if ($aclPlugin) {
+            // Some REPORT handlers synthesize responses directly, bypassing propFind ACL checks.
+            $aclPlugin->checkPrivileges($path, $privilege, \Sabre\DAVACL\Plugin::R_PARENT);
+        }
     }
 
     public function propFind($request, $response) {

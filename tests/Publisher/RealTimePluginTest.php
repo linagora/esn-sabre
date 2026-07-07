@@ -52,4 +52,36 @@ class RealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
         $this->plugin->publishMessages();
     }
+
+    function testPublishMessagesInjectsConnectedUser() {
+        $authPlugin = $this->createMock(\Sabre\DAV\Auth\Plugin::class);
+        $authPlugin->method('getCurrentPrincipal')->willReturn('principals/users/alice');
+        $server = $this->createMock(\Sabre\DAV\Server::class);
+        $server->method('getPlugin')->with('auth')->willReturn($authPlugin);
+        $this->plugin->initialize($server);
+
+        $data = ['foo' => 'bar'];
+        $this->plugin->expects($this->any())->method('buildData')->with($data)->willReturn($data);
+
+        $this->publisher->expects($this->once())->method('publish')
+            ->with('topic', json_encode(['foo' => 'bar', 'connectedUser' => 'principals/users/alice']));
+
+        $this->plugin->createMessage('topic', $data);
+        $this->plugin->publishMessages();
+    }
+
+    function testPublishMessagesInjectsNullConnectedUserWhenNotAuthenticated() {
+        $server = $this->createMock(\Sabre\DAV\Server::class);
+        $server->method('getPlugin')->with('auth')->willReturn(null);
+        $this->plugin->initialize($server);
+
+        $data = ['foo' => 'bar'];
+        $this->plugin->expects($this->any())->method('buildData')->with($data)->willReturn($data);
+
+        $this->publisher->expects($this->once())->method('publish')
+            ->with('topic', json_encode(['foo' => 'bar', 'connectedUser' => null]));
+
+        $this->plugin->createMessage('topic', $data);
+        $this->plugin->publishMessages();
+    }
 }

@@ -35,7 +35,7 @@ class SubscriptionRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->publisher
             ->expects($this->once())
             ->method('publish')
-            ->with('calendar:subscription:created', json_encode(["calendarPath" => self::PATH, "calendarSourcePath" => null]));
+            ->with('calendar:subscription:created', json_encode(["calendarPath" => self::PATH, "calendarSourcePath" => null, "connectedUser" => null]));
         $this->plugin->subscriptionCreated(self::PATH);
     }
 
@@ -44,7 +44,7 @@ class SubscriptionRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->publisher
             ->expects($this->once())
             ->method('publish')
-            ->with('calendar:subscription:deleted', json_encode(["calendarPath" => self::PATH, "calendarSourcePath" => $sourcePath]));
+            ->with('calendar:subscription:deleted', json_encode(["calendarPath" => self::PATH, "calendarSourcePath" => $sourcePath, "connectedUser" => null]));
         $this->plugin->subscriptionDeleted(self::PATH, $sourcePath);
     }
 
@@ -52,7 +52,7 @@ class SubscriptionRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->publisher
             ->expects($this->once())
             ->method('publish')
-            ->with('calendar:subscription:updated', json_encode(["calendarPath" => self::PATH, "calendarSourcePath" => null]));
+            ->with('calendar:subscription:updated', json_encode(["calendarPath" => self::PATH, "calendarSourcePath" => null, "connectedUser" => null]));
         $this->plugin->subscriptionUpdated(self::PATH);
     }
 }

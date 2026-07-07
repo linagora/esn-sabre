@@ -272,7 +272,19 @@ class Utils {
             return $node->getSourceOwner() !== $userPrincipal;
         }
 
+        if (self::isTeamCalendarSharedInstance($node, $userPrincipal)) {
+            return false;
+        }
+
         return $node->getOwner() !== $userPrincipal;
+    }
+
+    private static function isTeamCalendarSharedInstance($node, $userPrincipal) {
+        if ($userPrincipal === null || !method_exists($node, 'getOwner') || !method_exists($node, 'isSharedInstance')) {
+            return false;
+        }
+
+        return self::isTeamCalendarFromPrincipal($node->getOwner()) && $node->isSharedInstance();
     }
 
     /**

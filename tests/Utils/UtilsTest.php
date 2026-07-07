@@ -307,6 +307,36 @@ ICS;
         $this->assertFalse(Utils::isHiddenPrivateEvent($vevent, $node, $userPrincipal));
     }
 
+    function testIsHiddenPrivateEventForTeamCalendarMember() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:private-team-calendar-event-test',
+            'DTSTART:20260110T100000Z',
+            'DTEND:20260110T110000Z',
+            'SUMMARY:Secret Team Meeting',
+            'CLASS:PRIVATE',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+        $vevent = $vcalendar->VEVENT;
+
+        $node = new class('principals/team-calendars/team-calendar-id') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+            public function isSharedInstance() { return true; }
+        };
+
+        $userPrincipal = 'principals/users/member';
+
+        $this->assertFalse(Utils::isHiddenPrivateEvent($vevent, $node, $userPrincipal));
+    }
+
     /**
      * Test that CONFIDENTIAL events are identified as hidden for non-owners
      */

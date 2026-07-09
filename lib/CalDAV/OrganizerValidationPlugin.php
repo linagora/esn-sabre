@@ -34,6 +34,10 @@ class OrganizerValidationPlugin extends ServerPlugin {
             return;
         }
 
+        if ($request->getMethod() === 'PUT' && array_key_exists('import', $request->getQueryParameters())) {
+            return;
+        }
+
         $vevents = $vCal->select('VEVENT');
         if (empty($vevents)) {
             return;

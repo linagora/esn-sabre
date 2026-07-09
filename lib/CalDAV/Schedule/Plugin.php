@@ -54,6 +54,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     protected function scheduleReply(RequestInterface $request) {
 
+        if ($request->getMethod() === 'PUT' && array_key_exists('import', $request->getQueryParameters())) {
+            return false;
+        }
+
         $scheduleReply = $request->getHeader('Schedule-Reply');
         return $scheduleReply!=='F';
 

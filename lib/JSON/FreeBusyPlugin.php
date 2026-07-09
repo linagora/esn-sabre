@@ -18,7 +18,10 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
     function initialize(Server $server) {
         parent::initialize($server);
 
-        $server->on('method:POST', [$this, 'httpPost'], 80);
+        // Priority 75 so this runs before the handlers that resolve the request
+        // path in the DAV tree: 'calendars/freebusy' is a virtual route, they
+        // would 404 on it.
+        $server->on('method:POST', [$this, 'httpPost'], 75);
     }
 
     /**

@@ -327,9 +327,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $code = null;
         $body = null;
 
-        if ($path == 'query') {
+        if ($path == 'query' || $path == 'query.json') {
             $jsonData = json_decode($request->getBodyAsString());
-            list($code, $body) = $this->getCalendarObjectHandler()->queryCalendarObjects($path, null, $jsonData);
+            list($code, $body) = $this->getCalendarObjectHandler()->queryCalendarObjects('query', null, $jsonData);
             return $this->send($code, $body);
         }
 

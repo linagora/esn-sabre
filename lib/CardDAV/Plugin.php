@@ -21,7 +21,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $server->on('method:GET', [$this, 'httpGet'], 80);
         $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
         $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
-        $server->on('method:POST', [$this, 'httpPost'], 80);
+        // Runs after the plugins serving virtual POST routes (JSON 'query',
+        // FreeBusy 'calendars/freebusy', iTip 'itip'): httpPost resolves the
+        // request path in the DAV tree, which 404s on those non-node paths.
+        $server->on('method:POST', [$this, 'httpPost'], 85);
         $server->on('method:HEAD', [$this, 'httpHead'], 80);
         $server->on('auth:success',
                     function(AuthTenant $authTenant) {

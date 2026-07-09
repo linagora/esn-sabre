@@ -19,8 +19,10 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         $this->server = $server;
         $server->on('method:ITIP', [$this, 'iTip'], 80);
         // Also handle POST /itip — the Twake Calendar Side Service consumer
-        // uses standard POST rather than the custom ITIP verb.
-        $server->on('method:POST', [$this, 'handlePost'], 80);
+        // uses standard POST rather than the custom ITIP verb. Priority 75 so
+        // this runs before the handlers that resolve the request path in the
+        // DAV tree: 'itip' is a virtual route, they would 404 on it.
+        $server->on('method:POST', [$this, 'handlePost'], 75);
     }
 
     function handlePost($request, $response)

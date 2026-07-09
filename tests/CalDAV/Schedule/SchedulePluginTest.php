@@ -846,6 +846,133 @@ END:VCALENDAR
 ";
     }
 
+    function testShouldNotSkipOccurrenceWhenOnlyVideoConferenceLinkChanged() {
+        $oldObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-visio
+DTSTART:20260322T090000Z
+DTEND:20260322T100000Z
+RRULE:FREQ=DAILY;COUNT=3
+SUMMARY:Daily meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+BEGIN:VEVENT
+UID:event-visio
+RECURRENCE-ID:20260323T090000Z
+DTSTART:20260323T090000Z
+DTEND:20260323T100000Z
+SUMMARY:Daily meeting
+X-OPENPAAS-VIDEOCONFERENCE;VALUE=UNKNOWN:https://meet.linagora.com/old-room
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $newObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-visio
+DTSTART:20260322T090000Z
+DTEND:20260322T100000Z
+RRULE:FREQ=DAILY;COUNT=3
+SUMMARY:Daily meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+BEGIN:VEVENT
+UID:event-visio
+RECURRENCE-ID:20260323T090000Z
+DTSTART:20260323T090000Z
+DTEND:20260323T100000Z
+SUMMARY:Daily meeting
+X-OPENPAAS-VIDEOCONFERENCE;VALUE=UNKNOWN:https://meet.linagora.com/fei-xrji
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $message = new Message();
+        $message->method = 'REQUEST';
+        $message->recipient = 'mailto:cedric@example.org';
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:event-visio
+RECURRENCE-ID:20260323T090000Z
+DTSTART:20260323T090000Z
+DTEND:20260323T100000Z
+SUMMARY:Daily meeting
+X-OPENPAAS-VIDEOCONFERENCE;VALUE=UNKNOWN:https://meet.linagora.com/fei-xrji
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $shouldSkip = $this->invokeShouldSkipUnchangedOccurrence($message, $oldObject, $newObject);
+        $this->assertFalse($shouldSkip);
+    }
+
+    function testBrokerShouldMarkVideoConferenceLinkChangeAsChange() {
+        $oldObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-visio-single
+DTSTART:20260322T090000Z
+DTEND:20260322T100000Z
+SUMMARY:Meeting
+X-OPENPAAS-VIDEOCONFERENCE;VALUE=UNKNOWN:https://meet.linagora.com/old-room
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $newObject = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-visio-single
+DTSTART:20260322T090000Z
+DTEND:20260322T100000Z
+SUMMARY:Meeting
+X-OPENPAAS-VIDEOCONFERENCE;VALUE=UNKNOWN:https://meet.linagora.com/fei-xrji
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $broker = new \ReflectionMethod(Plugin::class, 'createBroker');
+        $broker->setAccessible(true);
+        $messages = $broker->invoke($this->plugin)->parseEvent($newObject, ['mailto:bob@example.org'], $oldObject);
+
+        $this->assertCount(1, $messages);
+        $this->assertSame('mailto:cedric@example.org', $messages[0]->recipient);
+        $this->assertTrue($messages[0]->hasChange);
+    }
+
     private function invokeShouldSkipUnchangedOccurrence($message, $oldObject, $newObject) {
         $method = new \ReflectionMethod(Plugin::class, 'shouldSkipUnchangedOccurrence');
         $method->setAccessible(true);

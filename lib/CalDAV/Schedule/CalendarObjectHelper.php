@@ -13,7 +13,7 @@ use Sabre\VObject\Reader;
 class CalendarObjectHelper {
     const MASTER_EVENT = 'master';
 
-    private const OCCURRENCE_COMPARED_PROPERTIES = ['DTSTART', 'DTEND', 'SUMMARY', 'LOCATION', 'DESCRIPTION', 'STATUS', 'EXDATE'];
+    private const OCCURRENCE_COMPARED_PROPERTIES = ['DTSTART', 'DTEND', 'SUMMARY', 'LOCATION', 'DESCRIPTION', 'STATUS', 'EXDATE', 'X-OPENPAAS-VIDEOCONFERENCE', 'X-OPENPAAS-BOOKING-LINK'];
 
     /**
      * Parses raw iCalendar data into a VCalendar, returning null when the

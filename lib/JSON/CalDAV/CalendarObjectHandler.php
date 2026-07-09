@@ -47,6 +47,7 @@ class CalendarObjectHandler {
                 $calendarPath = substr($calendarPath, 0, -5);
             }
 
+            $calendarPath = ltrim($calendarPath, '/');
             $node = $this->server->tree->getNodeForPath($calendarPath);
 
             if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {

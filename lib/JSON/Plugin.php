@@ -181,6 +181,13 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $this->currentUser = $newUser;
 
+        if ($request->getMethod() === 'POST' && $this->acceptJson() &&
+            ($request->getPath() === 'query' || $request->getPath() === 'query.json')) {
+            $jsonData = json_decode($request->getBodyAsString());
+            list($code, $body) = $this->getCalendarObjectHandler()->queryCalendarObjects('query', null, $jsonData);
+            return $this->send($code, $body);
+        }
+
         $calendarHandler = $this->getCalendarHandler();
         if ($calendarHandler->isOldDefaultCalendarUriNotFound($request->getPath())) {
             $defaultCalendarUri = $calendarHandler->getDefaultCalendarUri($this->currentUser, $request->getPath());

@@ -4,6 +4,7 @@ namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
 use Sabre\DAV\Server;
+use Sabre\HTTP\Request;
 use Sabre\VObject\ITip\Message;
 use Sabre\VObject\Reader;
 
@@ -73,6 +74,18 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->plugin->deliver($message);
 
         $this->assertSame('', $message->recipient);
+    }
+
+    function testShouldSkipSchedulingForImportPutRequests() {
+        $request = new Request('PUT', '/calendars/user/calendar/event.ics?import');
+
+        $this->assertFalse($this->invokeScheduleReply($request));
+    }
+
+    function testShouldScheduleRegularPutRequests() {
+        $request = new Request('PUT', '/calendars/user/calendar/event.ics');
+
+        $this->assertTrue($this->invokeScheduleReply($request));
     }
 
     function testShouldEnableEmailVALARMRecipientSchedulingByDefault() {
@@ -1082,5 +1095,12 @@ ICS
         $method->setAccessible(true);
 
         return $method->invoke($this->plugin, $message);
+    }
+
+    private function invokeScheduleReply(Request $request): bool {
+        $method = new \ReflectionMethod(Plugin::class, 'scheduleReply');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $request);
     }
 }

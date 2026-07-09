@@ -123,6 +123,11 @@ pipeline {
 
     post {
         always {
+            /* Drop the test images and the layers they pinned, on success as well
+               as on failure: a surviving esn_sabre_test would be reused by the
+               next build's --skip-build stages instead of the one it just built. */
+            sh 'docker image rm -f esn_sabre_test esn-sabre-ldap-test || true'
+            sh 'docker image prune -f || true'
             deleteDir() /* clean up our workspace */
         }
     }

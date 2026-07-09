@@ -16,6 +16,11 @@ SKIP_JAVA=false
 SKIP_PHP=false
 SKIP_BUILD=false
 MANUAL_MODE=false
+CLEANUP_IMAGES=false
+
+# Images built by this script. They are named (not tagged per-run), so an image
+# left behind by a previous run is silently reused by --skip-build invocations.
+BUILT_IMAGES=(esn_sabre_test esn-sabre-ldap-test)
 
 for arg in "$@"; do
   case $arg in
@@ -39,9 +44,13 @@ for arg in "$@"; do
       MANUAL_MODE=true
       shift
       ;;
+    --cleanup-images)
+      CLEANUP_IMAGES=true
+      shift
+      ;;
     *)
       echo "Unknown option: $arg"
-      echo "Usage: $0 [--filter=TestClassName] [--skip-java] [--skip-php] [--skip-build]"
+      echo "Usage: $0 [--filter=TestClassName] [--skip-java] [--skip-php] [--skip-build] [--cleanup-images]"
       exit 1
       ;;
   esac
@@ -51,6 +60,15 @@ cleanup() {
   echo "Cleaning up..."
   rm -rf it-tests
   docker compose -f docker-compose.test.yaml down --volumes --remove-orphans || true
+
+  # Not done by default: the Jenkins pipeline builds once, then runs the PHP and
+  # Java stages with --skip-build, so they need the images to survive. Only the
+  # last stage of a pipeline should pass --cleanup-images.
+  if [ "$CLEANUP_IMAGES" = true ]; then
+    echo "Removing built images and dangling build layers..."
+    docker image rm -f "${BUILT_IMAGES[@]}" >/dev/null 2>&1 || true
+    docker image prune -f >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT  # finally: sera exécuté *quoi qu'il arrive*
 
@@ -66,8 +84,19 @@ docker compose -f docker-compose.test.yaml down --volumes --remove-orphans || tr
 
 # Build Docker images
 if [ "$SKIP_BUILD" = false ]; then
-  docker build -t esn-sabre-ldap-test -f Dockerfile.ldap . || exit 1
-  docker build -t esn_sabre_test -f Dockerfile.test . || exit 1
+  # Drop images from previous runs first: otherwise a failed build leaves the
+  # old image in place and the test stages run against it without saying so.
+  docker image rm -f "${BUILT_IMAGES[@]}" >/dev/null 2>&1 || true
+
+  docker build --pull -t esn-sabre-ldap-test -f Dockerfile.ldap . || exit 1
+  docker build --pull -t esn_sabre_test -f Dockerfile.test . || exit 1
+else
+  for image in "${BUILT_IMAGES[@]}"; do
+    if [ -z "$(docker images -q "$image" 2>/dev/null)" ]; then
+      echo "Image '$image' is missing: build it first, or drop --skip-build." >&2
+      exit 1
+    fi
+  done
 fi
 
 # PHP tests

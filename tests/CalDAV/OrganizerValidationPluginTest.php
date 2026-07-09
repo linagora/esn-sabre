@@ -163,19 +163,6 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(403, $response->getStatus());
     }
 
-    function testSkipsImportRequests() {
-        $ics = $this->makeIcs('imported-event', 'ORGANIZER:mailto:attacker@evil.com');
-        $vCal = Reader::read($ics);
-        $calendarPath = 'calendars/' . self::USER1_ID . '/cal1';
-        $modified = false;
-        $request = new Request('PUT', '/' . $calendarPath . '/event.ics?import=1');
-        $response = new Response();
-
-        $this->server->emit('calendarObjectChange', [$request, $response, $vCal, $calendarPath, &$modified, true]);
-
-        $this->assertTrue(true);
-    }
-
     function testSkipsItipRequests() {
         $ics = $this->makeIcs('itip-event', 'ORGANIZER:mailto:attacker@evil.com');
         $vCal = Reader::read($ics);

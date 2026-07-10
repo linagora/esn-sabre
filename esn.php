@@ -149,6 +149,7 @@ $aclPlugin->allowUnauthenticatedAccess = false;
 $aclPlugin->principalCollectionSet = [
     PRINCIPALS_USERS,
     PRINCIPALS_RESOURCES,
+    PRINCIPALS_TEAM_CALENDARS,
     PRINCIPALS_DOMAINS
 ];
 $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;

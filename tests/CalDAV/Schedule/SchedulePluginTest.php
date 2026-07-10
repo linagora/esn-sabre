@@ -4,6 +4,7 @@ namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
 use Sabre\DAV\Server;
+use Sabre\DAV\SimpleCollection;
 use Sabre\HTTP\Request;
 use Sabre\VObject\ITip\Message;
 use Sabre\VObject\Reader;
@@ -351,6 +352,45 @@ ICS
         );
 
         $this->assertSame(2, $this->invokeCountEventAttendees($calendar));
+    }
+
+    function testShouldResolveTeamCalendarIdForReplyWhenTeamCalendarContainsEventUid() {
+        $this->initializePluginWithTeamCalendar(
+            'team-calendar-1',
+            'event-team',
+            $this->newCalendarObject('event-team', 'bob@example.org')
+        );
+
+        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
+        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'team-calendar-1'));
+
+        $this->assertSame('team-calendar-1', $this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
+    }
+
+    function testShouldNotResolveTeamCalendarIdForReplyWhenTeamCalendarDoesNotContainEventUid() {
+        $this->initializePluginWithTeamCalendar(
+            'other-team-calendar',
+            'another-event',
+            $this->newCalendarObject('another-event', 'bob@example.org')
+        );
+
+        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
+        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'other-team-calendar'));
+
+        $this->assertNull($this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
+    }
+
+    function testShouldNotResolveTeamCalendarIdForReplyWhenOrganizerDoesNotMatch() {
+        $this->initializePluginWithTeamCalendar(
+            'team-calendar-1',
+            'event-team',
+            $this->newCalendarObject('event-team', 'charlie@example.org')
+        );
+
+        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
+        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'team-calendar-1'));
+
+        $this->assertNull($this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
     }
 
     function testShouldDeduplicateMasterAttendeesByNormalizedValue() {
@@ -1282,5 +1322,63 @@ ICS
         $method->setAccessible(true);
 
         return $method->invoke($this->plugin, $request);
+    }
+
+    private function invokeResolveTeamCalendarIdForReplyMessage(Message $message, $calendar): ?string {
+        $method = new \ReflectionMethod(Plugin::class, 'resolveTeamCalendarIdForReplyMessage');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $message, $calendar);
+    }
+
+    private function initializePluginWithTeamCalendar(string $teamCalendarId, string $eventUid, string $calendarData): void {
+        $server = new Server([
+            new SimpleCollection('calendars', [
+                new TeamCalendarHomeTestDouble($teamCalendarId, [$eventUid => 'event.ics'], ['event.ics' => $calendarData])
+            ])
+        ]);
+
+        $this->plugin = new Plugin();
+        $this->plugin->initialize($server);
+    }
+
+    private function newReplyMessage(string $uid, string $recipient): Message {
+        $message = new Message();
+        $message->method = 'REPLY';
+        $message->uid = $uid;
+        $message->recipient = $recipient;
+        $message->message = Reader::read($this->newCalendarObject($uid, 'bob@example.org'));
+
+        return $message;
+    }
+
+    private function newCalendarObject(string $uid, string $organizerEmail, ?string $teamCalendarId = null): string {
+        $teamCalendarProperty = $teamCalendarId ? "X-OPENPAAS-TEAM-CALENDAR-ID:$teamCalendarId\n" : '';
+
+        return "BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:$uid
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Team meeting
+{$teamCalendarProperty}ORGANIZER:mailto:$organizerEmail
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+";
+    }
+}
+
+class TeamCalendarHomeTestDouble extends SimpleCollection {
+    private $calendarObjectPathByUid;
+
+    function __construct(string $name, array $calendarObjectPathByUid, array $children = []) {
+        parent::__construct($name, $children);
+        $this->calendarObjectPathByUid = $calendarObjectPathByUid;
+    }
+
+    function getCalendarObjectByUID($uid) {
+        return $this->calendarObjectPathByUid[$uid] ?? null;
     }
 }

@@ -32,6 +32,7 @@ use Sabre\VObject\Reader;
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private const DEFAULT_REPLY_PROPAGATION_THRESHOLD = 200;
+    private const TEAM_CALENDAR_ID_PROPERTY = 'X-OPENPAAS-TEAM-CALENDAR-ID';
     private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES = ['VALARM', 'TRANSP', 'CLASS'];
     private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES_WITH_MANAGED_ALARMS = ['TRANSP', 'CLASS'];
     private const FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES = ['DTSTART', 'DTEND', 'LOCATION', 'SUMMARY', 'ORGANIZER'];
@@ -113,7 +114,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         $newFileName = 'sabredav-' . \Sabre\DAV\UUIDUtil::getUUID() . '.ics';
 
-        list($objectNode, $oldICalendarData, $currentObject) = $this->loadExistingCalendarObject($homePath, $iTipMessage->uid);
+        list($objectNode, $oldICalendarData, $currentObject) = $this->loadCalendarObjectForDelivery($homePath, $iTipMessage);
 
         if ($currentObject) {
             $this->normalizeIncomingReplyMessage($iTipMessage, $currentObject);
@@ -137,6 +138,16 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
     }
 
+    private function loadCalendarObjectForDelivery(string $homePath, ITip\Message $iTipMessage): array {
+        $result = $this->loadExistingCalendarObject($homePath, $iTipMessage->uid);
+        if ($result[0] || $iTipMessage->method !== 'REPLY' || !$iTipMessage->recipient) {
+            return $result;
+        }
+
+        $teamCalendarId = $this->extractTeamCalendarIdProperty($iTipMessage->message);
+        return $teamCalendarId ? $this->loadTeamCalendarObject($teamCalendarId, $iTipMessage->uid, $iTipMessage->recipient) : [null, null, null];
+    }
+
     /**
      * Loads the recipient's existing calendar object matching the iTIP UID.
      *
@@ -155,6 +166,41 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $oldICalendarData = $objectNode->get();
 
         return [$objectNode, $oldICalendarData, Reader::read($oldICalendarData)];
+    }
+
+    private function loadTeamCalendarObject(string $teamCalendarId, string $uid, string $organizer): array {
+        $homePath = 'calendars/' . $teamCalendarId;
+
+        try {
+            $home = $this->server->tree->getNodeForPath($homePath);
+            $result = method_exists($home, 'getCalendarObjectByUID') ? $home->getCalendarObjectByUID($uid) : null;
+            if (!$result) {
+                return [null, null, null];
+            }
+
+            $objectNode = $this->server->tree->getNodeForPath($homePath . '/' . $result);
+            $oldICalendarData = $objectNode->get();
+            $currentObject = Reader::read($oldICalendarData);
+            return $this->calendarObjectHasOrganizer($currentObject, $organizer) ? [$objectNode, $oldICalendarData, $currentObject] : [null, null, null];
+        } catch (\Throwable $e) {
+            return [null, null, null];
+        }
+    }
+
+    private function calendarObjectHasOrganizer(VCalendar $calendar, string $organizer): bool {
+        $organizer = $this->calendarAddressValue($organizer);
+        foreach ($calendar->VEVENT as $vevent) {
+            if (isset($vevent->ORGANIZER) && $this->calendarAddressValue($vevent->ORGANIZER->getValue()) === $organizer) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function calendarAddressValue($calendarAddress): ?string {
+        $calendarAddress = strtolower(trim((string)$calendarAddress));
+        return $calendarAddress === '' ? null : (strpos($calendarAddress, ':') === false ? 'mailto:' . $calendarAddress : $calendarAddress);
     }
 
     private function normalizeIncomingReplyMessage(ITip\Message $iTipMessage, VCalendar $currentObject): void {
@@ -443,7 +489,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $modified = true;
         }
 
-        $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
+        $addresses = $this->fetchSchedulingAddresses($calendarPath);
 
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
@@ -594,17 +640,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             }
 
             $this->preservePublicAgendaMetadata($message, $newObject);
-
-            // When a new attendee is added only to a RECURRENCE-ID override (not the master),
-            // the Broker iterates only $attendee['newInstances'] which contains no 'master' key,
-            // so it builds a message with just the override VEVENT. The attendee then receives
-            // an orphaned exception with no knowledge of the recurring series.
-            // Fix: inject the master VEVENT from $newObject so the attendee gets a complete
-            // iTIP payload. Also strip RRULE from override VEVENTs (RFC 5545 §3.8.5.3 forbids
-            // RRULE in a component that has RECURRENCE-ID; a misbehaving client may send it).
-            if ($message->method === 'REQUEST') {
-                $this->sanitizeOutgoingRequestMessage($message, $newObject);
-            }
+            $this->prepareOutgoingSchedulingMessage($message, $newObject);
 
             $this->deliver($message);
 
@@ -636,6 +672,29 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         );
 
         return $broker;
+    }
+
+    private function prepareOutgoingSchedulingMessage(ITip\Message $message, VCalendar $newObject): void {
+        if ($message->method === 'REQUEST') {
+            // When a new attendee is added only to a RECURRENCE-ID override (not the master),
+            // the Broker iterates only $attendee['newInstances'] which contains no 'master' key,
+            // so it builds a message with just the override VEVENT. The attendee then receives
+            // an orphaned exception with no knowledge of the recurring series.
+            // Fix: inject the master VEVENT from $newObject so the attendee gets a complete
+            // iTIP payload. Also strip RRULE from override VEVENTs (RFC 5545 §3.8.5.3 forbids
+            // RRULE in a component that has RECURRENCE-ID; a misbehaving client may send it).
+            $this->sanitizeOutgoingRequestMessage($message, $newObject);
+            return;
+        }
+
+        if ($message->method !== 'REPLY') {
+            return;
+        }
+
+        $teamCalendarId = $this->resolveTeamCalendarIdForReplyMessage($message, $newObject);
+        if ($teamCalendarId) {
+            $this->setTeamCalendarIdProperty($message->message, $teamCalendarId);
+        }
     }
 
     private function getReplyPropagationThreshold(): int {
@@ -816,7 +875,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        $addresses = $this->fetchCalendarOwnerAddresses($calendarPath);
+        $addresses = $this->fetchSchedulingAddresses($calendarPath);
 
         if (empty($addresses)) {
             return;
@@ -856,6 +915,55 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         return $this->getAddressesForPrincipalSafely($owner);
+    }
+
+    /**
+     * Team calendar scheduling must run as the connected member, not as the
+     * technical team-calendar owner, otherwise the iTIP broker cannot match
+     * ORGANIZER:mailto:<member> with the scheduling identity.
+     */
+    protected function fetchSchedulingAddresses($calendarPath): array {
+        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+        if ($calendarNode === null || !method_exists($calendarNode, 'getOwner')) {
+            return [];
+        }
+
+        if (!Utils::isTeamCalendarFromPrincipal($calendarNode->getOwner())) {
+            return $this->fetchCalendarOwnerAddresses($calendarPath);
+        }
+
+        $authPlugin = $this->server->getPlugin('auth');
+        return $authPlugin ? $this->getAddressesForPrincipalSafely($authPlugin->getCurrentPrincipal()) : [];
+    }
+
+    protected function setTeamCalendarIdProperty(VCalendar $calendar, string $teamCalendarId): bool {
+        $modified = false;
+        foreach ($calendar->VEVENT as $vevent) {
+            if (!isset($vevent->{self::TEAM_CALENDAR_ID_PROPERTY}) || $vevent->{self::TEAM_CALENDAR_ID_PROPERTY}->getValue() !== $teamCalendarId) {
+                unset($vevent->{self::TEAM_CALENDAR_ID_PROPERTY});
+                $vevent->add(self::TEAM_CALENDAR_ID_PROPERTY, $teamCalendarId);
+                $modified = true;
+            }
+        }
+
+        return $modified;
+    }
+
+    private function extractTeamCalendarIdProperty(VCalendar $calendar): ?string {
+        foreach ($calendar->VEVENT as $vevent) {
+            if (isset($vevent->{self::TEAM_CALENDAR_ID_PROPERTY})) return $vevent->{self::TEAM_CALENDAR_ID_PROPERTY}->getValue();
+        }
+
+        return null;
+    }
+
+    private function resolveTeamCalendarIdForReplyMessage(ITip\Message $message, VCalendar $calendar): ?string {
+        $teamCalendarId = $this->extractTeamCalendarIdProperty($calendar);
+        if (!$teamCalendarId || !$message->uid || !$message->recipient) {
+            return null;
+        }
+
+        return $this->loadTeamCalendarObject($teamCalendarId, $message->uid, $message->recipient)[0] ? $teamCalendarId : null;
     }
 
     /**

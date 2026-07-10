@@ -7,6 +7,7 @@ require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
 class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     const PATH = "calendars/123123/uid.ics";
+    const CONNECTED_USER = 'principals/users/connectedUser';
     protected $eventEmitter;
     protected $plugin;
     protected $publisher;
@@ -30,8 +31,13 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->server->tree->expects($this->any())->method('nodeExists')
             ->with('/'.self::PATH)
             ->willReturn(true);
+        $authPlugin = $this->createMock(\Sabre\DAV\Auth\Plugin::class);
+        $authPlugin->method('getCurrentPrincipal')->willReturn(self::CONNECTED_USER);
+        $sharingPlugin = $this->createMock(\ESN\DAV\Sharing\Plugin::class);
         $this->server->expects($this->any())->method('getPlugin')
-            ->willReturn($this->createMock(\ESN\DAV\Sharing\Plugin::class));
+            ->willReturnCallback(function($name) use ($authPlugin, $sharingPlugin) {
+                return $name === 'auth' ? $authPlugin : $sharingPlugin;
+            });
 
         $nodeMock = new class extends \Sabre\CalDAV\Calendar {
             public function __construct() {}
@@ -59,6 +65,13 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->server->tree->expects($this->any())->method('getNodeForPath')
             ->with('/'.self::PATH)
             ->willReturn($nodeMock);
+    }
+
+    private function connectedUserAuthPlugin() {
+        $authPlugin = $this->createMock(\Sabre\DAV\Auth\Plugin::class);
+        $authPlugin->method('getCurrentPrincipal')->willReturn(self::CONNECTED_USER);
+
+        return $authPlugin;
     }
 
     function testGetCalendarProps() {
@@ -108,21 +121,24 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
             'calendarPath' => '/calendars/1/uri1',
             'calendarProps' => [
                 'public_right' => 'privilege'
-            ]
+            ],
+            'connectedUser' => self::CONNECTED_USER
         ];
 
         $secondfirstExpectedData = [
             'calendarPath' => '/calendars/2/uri2',
             'calendarProps' => [
                 'public_right' => 'privilege'
-            ]
+            ],
+            'connectedUser' => self::CONNECTED_USER
         ];
 
         $thirdExpectedData = [
             'calendarPath' => '/calendars/3/uri3',
             'calendarProps' => [
                 'public_right' => 'privilege'
-            ]
+            ],
+            'connectedUser' => self::CONNECTED_USER
         ];
 
         $expectedCalls = [
@@ -150,7 +166,8 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
             'calendarPath' => '/calendars/3/uri3',
             'calendarProps' => [
                 'public_right' => 'privilege'
-            ]
+            ],
+            'connectedUser' => self::CONNECTED_USER
         ];
 
         $this->publisher
@@ -240,7 +257,9 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $sharingPlugin = $this->createMock(\ESN\DAV\Sharing\Plugin::class);
         $sharingPlugin->method('accessToRightRse')->willReturn('dav:read');
         $server = $this->createMock(\Sabre\DAV\Server::class);
-        $server->method('getPlugin')->with('sharing')->willReturn($sharingPlugin);
+        $server->method('getPlugin')->willReturnCallback(function($name) use ($sharingPlugin) {
+            return $name === 'auth' ? $this->connectedUserAuthPlugin() : $sharingPlugin;
+        });
         $this->plugin->initialize($server);
 
         $calendarInstances = [
@@ -256,11 +275,13 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $expectedCalls = [
             ['calendar:calendar:updated', json_encode([
                 'calendarPath' => '/calendars/alice/uid-alice',
-                'calendarProps' => ['access' => 'dav:read']
+                'calendarProps' => ['access' => 'dav:read'],
+                'connectedUser' => self::CONNECTED_USER
             ])],
             ['calendar:calendar:updated', json_encode([
                 'calendarPath' => '/calendars/bob/bobcal',
-                'calendarProps' => ['delegation_updated' => true]
+                'calendarProps' => ['delegation_updated' => true],
+                'connectedUser' => self::CONNECTED_USER
             ])]
         ];
         $callIndex = 0;
@@ -282,7 +303,9 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $sharingPlugin = $this->createMock(\ESN\DAV\Sharing\Plugin::class);
         $sharingPlugin->method('accessToRightRse')->willReturn('dav:read');
         $server = $this->createMock(\Sabre\DAV\Server::class);
-        $server->method('getPlugin')->with('sharing')->willReturn($sharingPlugin);
+        $server->method('getPlugin')->willReturnCallback(function($name) use ($sharingPlugin) {
+            return $name === 'auth' ? $this->connectedUserAuthPlugin() : $sharingPlugin;
+        });
         $this->plugin->initialize($server);
 
         $calendarInstances = [
@@ -304,15 +327,18 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $expectedCalls = [
             ['calendar:calendar:updated', json_encode([
                 'calendarPath' => '/calendars/alice/uid-alice',
-                'calendarProps' => ['access' => 'dav:read']
+                'calendarProps' => ['access' => 'dav:read'],
+                'connectedUser' => self::CONNECTED_USER
             ])],
             ['calendar:calendar:updated', json_encode([
                 'calendarPath' => '/calendars/bob/bobcal',
-                'calendarProps' => ['delegation_updated' => true]
+                'calendarProps' => ['delegation_updated' => true],
+                'connectedUser' => self::CONNECTED_USER
             ])],
             ['calendar:calendar:updated', json_encode([
                 'calendarPath' => '/calendars/cedric/uid-cedric',
-                'calendarProps' => ['access' => 'dav:read']
+                'calendarProps' => ['access' => 'dav:read'],
+                'connectedUser' => self::CONNECTED_USER
             ])]
         ];
         $callIndex = 0;
@@ -333,7 +359,9 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         // Given: a sharee delete with a source calendar path.
         $sharingPlugin = $this->createMock(\ESN\DAV\Sharing\Plugin::class);
         $server = $this->createMock(\Sabre\DAV\Server::class);
-        $server->method('getPlugin')->with('sharing')->willReturn($sharingPlugin);
+        $server->method('getPlugin')->willReturnCallback(function($name) use ($sharingPlugin) {
+            return $name === 'auth' ? $this->connectedUserAuthPlugin() : $sharingPlugin;
+        });
         $this->plugin->initialize($server);
 
         $calendarInstances = [
@@ -349,11 +377,13 @@ class CalendarRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $expectedCalls = [
             ['calendar:calendar:deleted', json_encode([
                 'calendarPath' => '/calendars/alice/uid-alice',
-                'calendarProps' => null
+                'calendarProps' => null,
+                'connectedUser' => self::CONNECTED_USER
             ])],
             ['calendar:calendar:updated', json_encode([
                 'calendarPath' => '/calendars/bob/bobcal',
-                'calendarProps' => ['delegation_updated' => true]
+                'calendarProps' => ['delegation_updated' => true],
+                'connectedUser' => self::CONNECTED_USER
             ])]
         ];
         $callIndex = 0;

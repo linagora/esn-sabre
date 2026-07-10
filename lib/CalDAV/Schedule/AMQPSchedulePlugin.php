@@ -145,6 +145,7 @@ class AMQPSchedulePlugin extends Plugin {
         if ($oldMessage !== null) {
             $payload['oldMessage'] = $oldMessage;
         }
+        $payload['connectedUser'] = $this->getConnectedUser();
 
         $this->amqpPublisher->publish(self::TOPIC_LOCAL_DELIVERY, json_encode($payload));
     }
@@ -328,6 +329,7 @@ class AMQPSchedulePlugin extends Plugin {
             if ($this->currentCalendarId !== null) {
                 $delivery['calendarId'] = $this->currentCalendarId;
             }
+            $delivery['connectedUser'] = $this->getConnectedUser();
             $this->amqpPublisher->publish(
                 self::TOPIC_LOCAL_DELIVERY,
                 json_encode($delivery)
@@ -336,5 +338,17 @@ class AMQPSchedulePlugin extends Plugin {
         $this->pendingDeliveries  = [];
         $this->currentOldMessage  = null;
         $this->currentCalendarId  = null;
+    }
+
+    /**
+     * Returns the principal URI of the currently authenticated user, i.e. who
+     * actually performed the action, so consumers can audit who did what (and
+     * not just deduce the resource owner). Returns null when no user is
+     * authenticated.
+     */
+    private function getConnectedUser() {
+        $authPlugin = $this->server->getPlugin('auth');
+
+        return $authPlugin ? $authPlugin->getCurrentPrincipal() : null;
     }
 }

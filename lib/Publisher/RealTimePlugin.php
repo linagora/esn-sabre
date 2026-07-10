@@ -36,10 +36,32 @@ abstract class RealTimePlugin extends ServerPlugin {
         return $this->messages;
     }
 
+    /**
+     * Returns the principal URI of the currently authenticated user, i.e. who
+     * actually performed the action that triggers this realtime message. This
+     * may differ from the resource owner (delegation, admin impersonation,
+     * technical token), which is exactly why it is worth reporting for
+     * auditability. Returns null when no user is authenticated.
+     */
+    protected function getConnectedUser() {
+        if (!$this->server) {
+            return null;
+        }
+
+        $authPlugin = $this->server->getPlugin('auth');
+
+        return $authPlugin ? $authPlugin->getCurrentPrincipal() : null;
+    }
+
     public function publishMessages() {
+        $connectedUser = $this->getConnectedUser();
+
         foreach($this->messages as $message) {
             try {
                 $message['data'] = $this->buildData($message['data']);
+                if (is_array($message['data'])) {
+                    $message['data']['connectedUser'] = $connectedUser;
+                }
                 $this->client->publish($message['topic'], json_encode($message['data']));
             } catch (\Exception $e) {
                 // Be lenient: a malformed event (e.g. an invalid RRULE UNTIL value) that cannot be

@@ -621,6 +621,17 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             ['SUMMARY', 'LOCATION', 'DESCRIPTION']
         );
 
+        // OpenPaas extension properties (video conference / booking links) are neither
+        // significant nor change properties in the RFC5546 default lists. A change limited
+        // to one of them therefore yields hasChange=false, so the update never reaches the
+        // attendee's synchronised calendar and per-attendee links can diverge. Track them as
+        // change (not significant) properties so a link change propagates without resetting
+        // participation status or re-sending the whole invitation.
+        $broker->changeProperties = array_merge(
+            $broker->changeProperties,
+            ['X-OPENPAAS-VIDEOCONFERENCE', 'X-OPENPAAS-BOOKING-LINK']
+        );
+
         return $broker;
     }
 

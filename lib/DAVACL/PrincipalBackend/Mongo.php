@@ -304,12 +304,14 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     /**
      * Auto-provision a user in the `users` collection for the given email.
      *
-     * The domain part of the email must match an existing domain, otherwise the
-     * user cannot be attached to a tenant and null is returned. The created
-     * document follows the format used by twake-calendar-side-service so that
-     * both services share the same data model.
+     * The firstname and lastname are taken from the LDAP entry that backs the
+     * user (see the auth backend). The domain part of the email must match an
+     * existing domain, otherwise the user cannot be attached to a tenant and
+     * null is returned. The created document follows the format used by
+     * twake-calendar-side-service so that both services share the same data
+     * model.
      */
-    function provisionUser(string $email, ?TenantType $tenantType = null): ?AuthTenant {
+    function provisionUser(string $email, string $firstname = '', string $lastname = '', ?TenantType $tenantType = null): ?AuthTenant {
         $tenantType = $tenantType ?? TenantType::User;
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -332,8 +334,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $userId = new \MongoDB\BSON\ObjectId();
         $document = [
             '_id' => $userId,
-            'firstname' => '',
-            'lastname' => '',
+            'firstname' => $firstname,
+            'lastname' => $lastname,
             'firstnames' => [],
             'password' => 'secret',
             // not part of the OpenPaaS data model but helps solve concurrency

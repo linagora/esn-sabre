@@ -237,12 +237,67 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
      * Needed upon migrations: instead of returning a 401 for a legitimate LDAP
      * or impersonated user that is not yet in the `users` collection, the entry
      * is created on the fly. Gated by the AUTO_PROVISION env var (default true).
+     *
+     * The user is only provisioned when it actually exists in the LDAP
+     * directory, and its firstname/lastname are taken from the LDAP entry so
+     * both services share the same content.
      */
     private function autoProvisionUser(string $email): ?AuthTenant {
         if (!$this->autoProvisionEnabled()) {
             return null;
         }
-        return $this->principalBackend->provisionUser($email);
+
+        $entry = $this->findLdapEntryByEmail($email);
+        if ($entry === null) {
+            error_log("autoProvisionUser: no LDAP entry for '$email', skipping auto-provision");
+            return null;
+        }
+
+        $firstname = $entry['givenname'][0] ?? '';
+        $lastname = $entry['sn'][0] ?? '';
+
+        return $this->principalBackend->provisionUser($email, $firstname, $lastname);
+    }
+
+    /**
+     * Look up an LDAP entry by mail, returning the raw entry or null when absent.
+     *
+     * Backs auto-provisioning: it lets us both confirm the user exists in the
+     * LDAP directory and read its content (firstname, lastname).
+     */
+    private function findLdapEntryByEmail(string $email): ?array {
+        $ldapCon = ldap_connect(LDAP_SERVER);
+        if (!$ldapCon) {
+            error_log('findLdapEntryByEmail: unable to connect to LDAP server');
+            return null;
+        }
+        try {
+            ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
+            ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
+
+            $ldapBind = ldap_bind($ldapCon, LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD);
+            if (!$ldapBind) {
+                $code = ldap_errno($ldapCon);
+                $msg  = ldap_error($ldapCon);
+                error_log("findLdapEntryByEmail: bad admin credentials. LDAP bind failed: [$code] '$msg'");
+                return null;
+            }
+
+            $safeEmail = ldap_escape($email, '', 0);
+            if (LDAP_FILTER != null) {
+                $searchResult = ldap_search($ldapCon, LDAP_BASE, "(& (mail=$safeEmail) " . LDAP_FILTER . ')');
+            } else {
+                $searchResult = ldap_search($ldapCon, LDAP_BASE, "(mail=$safeEmail)");
+            }
+            $entries = ldap_get_entries($ldapCon, $searchResult);
+        } finally {
+            ldap_close($ldapCon);
+        }
+
+        if ($entries['count'] == 0) {
+            return null;
+        }
+        return $entries[0];
     }
 
     private function autoProvisionEnabled(): bool {

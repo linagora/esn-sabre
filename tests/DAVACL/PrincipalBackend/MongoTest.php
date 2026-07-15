@@ -568,7 +568,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $backend = new Mongo(self::$esndb, self::$tenant);
         $email = 'provisioned@example.com';
 
-        $tenant = $backend->provisionUser($email);
+        $tenant = $backend->provisionUser($email, 'Jane', 'Provisioned');
 
         $this->assertNotNull($tenant);
         $this->assertEquals(self::DOMAIN_ID, (string) $tenant->domainId);
@@ -580,6 +580,9 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(self::DOMAIN_ID, (string) $created['domains'][0]['domain_id']);
         $this->assertEquals('email', $created['accounts'][0]['type']);
         $this->assertEquals((string) $created['_id'], (string) $tenant->userId);
+        // firstname/lastname are stored as provided (backed by the LDAP entry).
+        $this->assertEquals('Jane', $created['firstname']);
+        $this->assertEquals('Provisioned', $created['lastname']);
 
         // The freshly provisioned user is now resolvable like any other user.
         $resolved = $backend->getAuthTenantByEmail($email);

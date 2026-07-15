@@ -5,6 +5,7 @@ namespace ESN\DAV\Auth\Backend;
 $GLOBALS['__ldap_bind_behavior'] = 'default';
 $GLOBALS['__ldap_mock_enabled'] = false;
 $GLOBALS['__ldap_mock_email'] = 'johndoe@linagora.com';
+$GLOBALS['__ldap_mock_entries_empty'] = false;
 
 function ldap_connect($host) {
     if ($GLOBALS['__ldap_mock_enabled']) {
@@ -43,11 +44,16 @@ function ldap_search($conn, $base, $filter) {
 
 function ldap_get_entries($conn, $result) {
     if ($GLOBALS['__ldap_mock_enabled']) {
+        if ($GLOBALS['__ldap_mock_entries_empty']) {
+            return [ 'count' => 0 ];
+        }
         return [
             'count' => 1,
             0 => [
                 'mail' => [$GLOBALS['__ldap_mock_email'], 'count' => 1],
-                'count' => 1
+                'givenname' => ['John', 'count' => 1],
+                'sn' => ['Doe', 'count' => 1],
+                'count' => 3
             ]
         ];
     }
@@ -566,6 +572,9 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals('principals/users/' . (string) $created['_id'], $msg);
         $this->assertEquals('johndoe@linagora.com', $created['email']);
         $this->assertEquals($domainId, $created['domains'][0]['domain_id']);
+        // firstname/lastname are backed by the LDAP entry content.
+        $this->assertEquals('John', $created['firstname']);
+        $this->assertEquals('Doe', $created['lastname']);
 
         $GLOBALS['__ldap_mock_enabled'] = false;
     }
@@ -628,6 +637,8 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
     function testAutoProvisionOnImpersonationWhenUserMissing() {
         putenv('SABRE_IMPERSONATION_ENABLED=true');
         putenv('AUTO_PROVISION=true');
+        // The impersonated user must exist in the LDAP directory to be provisioned.
+        $GLOBALS['__ldap_mock_enabled'] = true;
 
         $esnauth = new EsnMock('http://localhost:8080/');
 
@@ -655,7 +666,46 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->assertNotNull($created);
         $this->assertEquals('principals/users/' . (string) $created['_id'], $msg);
         $this->assertEquals($domainId, $created['domains'][0]['domain_id']);
+        $this->assertEquals('John', $created['firstname']);
+        $this->assertEquals('Doe', $created['lastname']);
 
+        $GLOBALS['__ldap_mock_enabled'] = false;
+        putenv('AUTO_PROVISION');
+        putenv('SABRE_IMPERSONATION_ENABLED=false');
+    }
+
+    function testAutoProvisionSkippedWhenUserNotInLdap() {
+        putenv('SABRE_IMPERSONATION_ENABLED=true');
+        putenv('AUTO_PROVISION=true');
+        // The LDAP directory returns no entry: the user must not be provisioned.
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        $GLOBALS['__ldap_mock_entries_empty'] = true;
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $esnDb = $esnauth->getDb();
+        $domainId = new \MongoDB\BSON\ObjectId('888888888888888888888888');
+        $esnDb->domains->insertOne([
+            '_id' => $domainId,
+            'name' => 'example.com',
+            'administrators' => []
+        ]);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'admin&ghost@example.com',
+            'PHP_AUTH_PW'   => 'test-admin-password',
+            'REQUEST_URI'   => '/',
+            'REQUEST_METHOD'=> 'GET',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        [$rv, $msg] = $esnauth->check($request, $response);
+
+        $this->assertFalse($rv);
+        $this->assertNull($esnDb->users->findOne([ 'accounts.emails' => 'ghost@example.com' ]));
+
+        $GLOBALS['__ldap_mock_entries_empty'] = false;
+        $GLOBALS['__ldap_mock_enabled'] = false;
         putenv('AUTO_PROVISION');
         putenv('SABRE_IMPERSONATION_ENABLED=false');
     }

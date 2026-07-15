@@ -534,6 +534,132 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->assertFalse($rv);
     }
 
+    function testAutoProvisionOnLdapWhenUserMissing() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        putenv('AUTO_PROVISION');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        // The domain exists but the user does not yet: it must be auto-provisioned.
+        $esnDb = $esnauth->getDb();
+        $domainId = new \MongoDB\BSON\ObjectId('098765432109876543210987');
+        $esnDb->domains->insertOne([
+            '_id' => $domainId,
+            'name' => 'linagora.com',
+            'administrators' => []
+        ]);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'PHP_AUTH_USER' => 'username',
+            'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
+        ));
+        $response = new \Sabre\HTTP\Response();
+
+        list($rv, $msg) = $esnauth->check($request, $response);
+
+        $this->assertTrue($rv);
+
+        $created = $esnDb->users->findOne([ 'accounts.emails' => 'johndoe@linagora.com' ]);
+        $this->assertNotNull($created);
+        $this->assertEquals('principals/users/' . (string) $created['_id'], $msg);
+        $this->assertEquals('johndoe@linagora.com', $created['email']);
+        $this->assertEquals($domainId, $created['domains'][0]['domain_id']);
+
+        $GLOBALS['__ldap_mock_enabled'] = false;
+    }
+
+    function testAutoProvisionDisabledReturns401() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        putenv('AUTO_PROVISION=false');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $esnDb = $esnauth->getDb();
+        $domainId = new \MongoDB\BSON\ObjectId('098765432109876543210987');
+        $esnDb->domains->insertOne([
+            '_id' => $domainId,
+            'name' => 'linagora.com',
+            'administrators' => []
+        ]);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'PHP_AUTH_USER' => 'username',
+            'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
+        ));
+        $response = new \Sabre\HTTP\Response();
+
+        list($rv, $msg) = $esnauth->check($request, $response);
+
+        $this->assertFalse($rv);
+        $this->assertNull($esnDb->users->findOne([ 'accounts.emails' => 'johndoe@linagora.com' ]));
+
+        putenv('AUTO_PROVISION');
+        $GLOBALS['__ldap_mock_enabled'] = false;
+    }
+
+    function testAutoProvisionSkippedWhenDomainMissing() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        putenv('AUTO_PROVISION=true');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+        // No domain inserted: the user cannot be attached to a tenant.
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'PHP_AUTH_USER' => 'username',
+            'PHP_AUTH_PW' => 'password',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
+        ));
+        $response = new \Sabre\HTTP\Response();
+
+        list($rv, $msg) = $esnauth->check($request, $response);
+
+        $this->assertFalse($rv);
+        $this->assertNull($esnauth->getDb()->users->findOne([ 'accounts.emails' => 'johndoe@linagora.com' ]));
+
+        putenv('AUTO_PROVISION');
+        $GLOBALS['__ldap_mock_enabled'] = false;
+    }
+
+    function testAutoProvisionOnImpersonationWhenUserMissing() {
+        putenv('SABRE_IMPERSONATION_ENABLED=true');
+        putenv('AUTO_PROVISION=true');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $esnDb = $esnauth->getDb();
+        $domainId = new \MongoDB\BSON\ObjectId('888888888888888888888888');
+        $esnDb->domains->insertOne([
+            '_id' => $domainId,
+            'name' => 'example.com',
+            'administrators' => []
+        ]);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'admin&newcomer@example.com',
+            'PHP_AUTH_PW'   => 'test-admin-password',
+            'REQUEST_URI'   => '/',
+            'REQUEST_METHOD'=> 'GET',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        [$rv, $msg] = $esnauth->check($request, $response);
+
+        $this->assertTrue($rv);
+
+        $created = $esnDb->users->findOne([ 'accounts.emails' => 'newcomer@example.com' ]);
+        $this->assertNotNull($created);
+        $this->assertEquals('principals/users/' . (string) $created['_id'], $msg);
+        $this->assertEquals($domainId, $created['domains'][0]['domain_id']);
+
+        putenv('AUTO_PROVISION');
+        putenv('SABRE_IMPERSONATION_ENABLED=false');
+    }
+
     function testAdminImpersonationDisabled() {
         putenv('SABRE_IMPERSONATION_ENABLED=false');
 

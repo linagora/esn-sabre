@@ -59,6 +59,10 @@ class PrivatePrincipalBackend extends AbstractBackend {
         return $this->principalBackend->getAuthTenantByResourceEmail($email, $tenantType ?? TenantType::Resources);
     }
 
+    function provisionUser(string $email, ?TenantType $tenantType = null): ?AuthTenant {
+        return $this->principalBackend->provisionUser($email, $tenantType ?? TenantType::User);
+    }
+
     function getAuthTenantByTeamCalendarEmail($email, ?TenantType $tenantType = null): ?AuthTenant {
         return $this->principalBackend->getAuthTenantByTeamCalendarEmail($email, $tenantType ?? TenantType::TeamCalendars);
     }

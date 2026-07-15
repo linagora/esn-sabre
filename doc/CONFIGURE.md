@@ -42,6 +42,14 @@ Feature flag to enable or disable admin impersonation.
    This flag allows disabling admin impersonation entirely on public Sabre deployments
    to prevent impersonation over the internet.
 
+Feature flag to auto-provision users upon a DAV request.
+ - AUTO_PROVISION
+
+   - unset or `true`: when an LDAP or impersonated user authenticates successfully but has no entry in the `users` collection yet, the entry is created on the fly instead of returning a `401` (default)
+   - `false`: keep the legacy behaviour and return `401` when the user does not exist
+
+   The domain part of the user's email must match an existing domain, otherwise the user cannot be provisioned. Needed upon migrations.
+
 Feature flag to restrict DAV principal discovery.
  - PRINCIPAL_PRIVACY
 

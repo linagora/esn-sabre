@@ -134,6 +134,10 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         if($tenant)
             return $tenant;
 
+        $tenant = $this->autoProvisionUser($impersonationResult);
+        if($tenant)
+            return $tenant;
+
         error_log("User not found for email: $impersonationResult");
         throw new AuthException("User not found");
     }
@@ -218,10 +222,35 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
         $tenant = $this->principalBackend->getAuthTenantByEmail($mail);
         if (!$tenant) {
+            $tenant = $this->autoProvisionUser($mail);
+        }
+        if (!$tenant) {
             error_log("User not found for email: $mail");
             throw new  AuthException("User not found");
         }
         return $tenant;
+    }
+
+    /**
+     * Auto-provision a user upon a DAV request when it does not yet exist.
+     *
+     * Needed upon migrations: instead of returning a 401 for a legitimate LDAP
+     * or impersonated user that is not yet in the `users` collection, the entry
+     * is created on the fly. Gated by the AUTO_PROVISION env var (default true).
+     */
+    private function autoProvisionUser(string $email): ?AuthTenant {
+        if (!$this->autoProvisionEnabled()) {
+            return null;
+        }
+        return $this->principalBackend->provisionUser($email);
+    }
+
+    private function autoProvisionEnabled(): bool {
+        $env = getenv('AUTO_PROVISION');
+        if ($env === false || $env === '') {
+            return true;
+        }
+        return filter_var($env, FILTER_VALIDATE_BOOLEAN);
     }
 
     private function impersonationEnabled(): bool {

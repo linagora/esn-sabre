@@ -145,7 +145,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         $teamCalendarId = $this->extractTeamCalendarIdProperty($iTipMessage->message);
-        return $teamCalendarId ? $this->loadTeamCalendarObject($teamCalendarId, $iTipMessage->uid, $iTipMessage->recipient) : [null, null, null];
+        return $teamCalendarId ? $this->loadWritableTeamCalendarObject($teamCalendarId, $iTipMessage->uid, $iTipMessage->recipient) : [null, null, null];
     }
 
     /**
@@ -169,22 +169,42 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     private function loadTeamCalendarObject(string $teamCalendarId, string $uid, string $organizer): array {
-        $homePath = 'calendars/' . $teamCalendarId;
+        $objectPath = $this->findTeamCalendarObjectPath($teamCalendarId, $uid);
+        return $objectPath ? $this->loadTeamCalendarObjectAtPath($objectPath, $organizer) : [null, null, null];
+    }
 
-        try {
-            $home = $this->server->tree->getNodeForPath($homePath);
-            $result = method_exists($home, 'getCalendarObjectByUID') ? $home->getCalendarObjectByUID($uid) : null;
-            if (!$result) {
-                return [null, null, null];
-            }
-
-            $objectNode = $this->server->tree->getNodeForPath($homePath . '/' . $result);
-            $oldICalendarData = $objectNode->get();
-            $currentObject = Reader::read($oldICalendarData);
-            return $this->calendarObjectHasOrganizer($currentObject, $organizer) ? [$objectNode, $oldICalendarData, $currentObject] : [null, null, null];
-        } catch (\Throwable $e) {
+    private function loadWritableTeamCalendarObject(string $teamCalendarId, string $uid, string $organizer): array {
+        $objectPath = $this->findTeamCalendarObjectPath($teamCalendarId, $uid);
+        if (!$objectPath || !$this->canWriteCalendarObject($objectPath)) {
             return [null, null, null];
         }
+
+        return $this->loadTeamCalendarObjectAtPath($objectPath, $organizer);
+    }
+
+    private function findTeamCalendarObjectPath(string $teamCalendarId, string $uid): ?string {
+        $homePath = 'calendars/' . $teamCalendarId;
+        if (!$this->server->tree->nodeExists($homePath)) {
+            return null;
+        }
+
+        $home = $this->server->tree->getNodeForPath($homePath);
+        $result = method_exists($home, 'getCalendarObjectByUID') ? $home->getCalendarObjectByUID($uid) : null;
+
+        return $result ? $homePath . '/' . $result : null;
+    }
+
+    private function canWriteCalendarObject(string $objectPath): bool {
+        $aclPlugin = $this->server->getPlugin('acl');
+        return !$aclPlugin || $aclPlugin->checkPrivileges($objectPath, '{DAV:}write', \Sabre\DAVACL\Plugin::R_PARENT, false);
+    }
+
+    private function loadTeamCalendarObjectAtPath(string $objectPath, string $organizer): array {
+        $objectNode = $this->server->tree->getNodeForPath($objectPath);
+        $oldICalendarData = $objectNode->get();
+        $currentObject = Reader::read($oldICalendarData);
+
+        return $this->calendarObjectHasOrganizer($currentObject, $organizer) ? [$objectNode, $oldICalendarData, $currentObject] : [null, null, null];
     }
 
     private function calendarObjectHasOrganizer(VCalendar $calendar, string $organizer): bool {

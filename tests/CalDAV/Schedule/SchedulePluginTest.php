@@ -78,6 +78,7 @@ DTEND:20260227T003000Z
 SUMMARY:Test event
 X-PUBLICLY-CREATED:true
 X-PUBLICLY-CREATOR:creator@example.org
+X-PUBLICLY-DELETED:true
 X-OPENPAAS-BOOKING-LINK:booking-link-id
 ORGANIZER:mailto:alice@example.org
 ATTENDEE;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:alice@example.org
@@ -108,6 +109,7 @@ ICS
         $serializedMessage = $message->message->serialize();
         $this->assertStringContainsString('X-PUBLICLY-CREATED:TRUE', $serializedMessage);
         $this->assertStringContainsString('X-PUBLICLY-CREATOR:creator@example.org', $serializedMessage);
+        $this->assertStringContainsString('X-PUBLICLY-DELETED:TRUE', $serializedMessage);
         $this->assertStringContainsString('X-OPENPAAS-BOOKING-LINK:booking-link-id', $serializedMessage);
     }
 

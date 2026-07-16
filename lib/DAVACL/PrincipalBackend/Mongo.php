@@ -301,6 +301,64 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         return new AuthTenant($user['_id'], (string) $domainObjectId, $tenantType);
     }
 
+    /**
+     * Auto-provision a user in the `users` collection for the given email.
+     *
+     * The firstname and lastname are taken from the LDAP entry that backs the
+     * user (see the auth backend). The domain part of the email must match an
+     * existing domain, otherwise the user cannot be attached to a tenant and
+     * null is returned. The created document follows the format used by
+     * twake-calendar-side-service so that both services share the same data
+     * model.
+     */
+    function provisionUser(string $email, string $firstname = '', string $lastname = '', ?TenantType $tenantType = null): ?AuthTenant {
+        $tenantType = $tenantType ?? TenantType::User;
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+
+        $email = strtolower($email);
+        $domainName = explode('@', $email)[1];
+
+        $domain = $this->db->domains->findOne(
+            [ 'name' => $domainName ],
+            [ 'projection' => [ '_id' => 1 ] ]
+        );
+        if (!$domain) {
+            error_log("provisionUser: no domain '$domainName' found, cannot auto-provision '$email'");
+            return null;
+        }
+        $domainObjectId = $domain['_id'];
+
+        $userId = new \MongoDB\BSON\ObjectId();
+        $document = [
+            '_id' => $userId,
+            'firstname' => $firstname,
+            'lastname' => $lastname,
+            'firstnames' => [],
+            'password' => 'secret',
+            // not part of the OpenPaaS data model but helps solve concurrency
+            'email' => $email,
+            'domains' => [
+                [ 'domain_id' => $domainObjectId ]
+            ],
+            'accounts' => [
+                [ 'type' => 'email', 'emails' => [ $email ] ]
+            ]
+        ];
+
+        try {
+            $this->db->users->insertOne($document);
+        } catch (\MongoDB\Driver\Exception\BulkWriteException $e) {
+            // A concurrent request likely provisioned the same user; re-read it.
+            error_log("provisionUser: concurrent insert for '$email', re-reading: " . $e->getMessage());
+            return $this->getAuthTenantByEmail($email, $tenantType);
+        }
+
+        return new AuthTenant($userId, (string) $domainObjectId, $tenantType);
+    }
+
     function getAuthTenantByResourceEmail($email, ?TenantType $tenantType = null) {
         $tenantType = $tenantType ?? TenantType::Resources;
 

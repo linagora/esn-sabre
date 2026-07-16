@@ -563,4 +563,57 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
         $this->assertNull($backend->getAuthTenantByTeamCalendarEmail('notanemail'));
     }
+
+    function testProvisionUserCreatesUserAndReturnsTenant() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $email = 'provisioned@example.com';
+
+        $tenant = $backend->provisionUser($email, 'Jane', 'Provisioned');
+
+        $this->assertNotNull($tenant);
+        $this->assertEquals(self::DOMAIN_ID, (string) $tenant->domainId);
+        $this->assertEquals(\ESN\Utils\TenantType::User, $tenant->tenantType);
+
+        $created = self::$esndb->users->findOne([ 'accounts.emails' => $email ]);
+        $this->assertNotNull($created);
+        $this->assertEquals($email, $created['email']);
+        $this->assertEquals(self::DOMAIN_ID, (string) $created['domains'][0]['domain_id']);
+        $this->assertEquals('email', $created['accounts'][0]['type']);
+        $this->assertEquals((string) $created['_id'], (string) $tenant->userId);
+        // firstname/lastname are stored as provided (backed by the LDAP entry).
+        $this->assertEquals('Jane', $created['firstname']);
+        $this->assertEquals('Provisioned', $created['lastname']);
+
+        // The freshly provisioned user is now resolvable like any other user.
+        $resolved = $backend->getAuthTenantByEmail($email);
+        $this->assertNotNull($resolved);
+        $this->assertEquals((string) $created['_id'], (string) $resolved->userId);
+
+        self::$esndb->users->deleteOne([ '_id' => $created['_id'] ]);
+    }
+
+    function testProvisionUserLowercasesEmail() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $tenant = $backend->provisionUser('MixedCase@Example.com');
+
+        $this->assertNotNull($tenant);
+        $created = self::$esndb->users->findOne([ 'accounts.emails' => 'mixedcase@example.com' ]);
+        $this->assertNotNull($created);
+
+        self::$esndb->users->deleteOne([ '_id' => $created['_id'] ]);
+    }
+
+    function testProvisionUserReturnsNullWhenDomainMissing() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertNull($backend->provisionUser('someone@unknown-domain.test'));
+        $this->assertNull(self::$esndb->users->findOne([ 'accounts.emails' => 'someone@unknown-domain.test' ]));
+    }
+
+    function testProvisionUserReturnsNullWhenEmailIsNotValid() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertNull($backend->provisionUser('notanemail'));
+    }
 }

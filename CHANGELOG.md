@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### New Features
+
+ - ISSUE-425 Auto-provision users upon a DAV request — when an LDAP or impersonated user authenticates successfully but has no entry in the `users` collection yet, the entry is created on the fly (following the twake-calendar-side-service document format) instead of returning a `401`. Gated by the `AUTO_PROVISION` env var (default `true`). Needed upon migrations (#425)
+
 ### Bug Fixes
 
  - ISSUE-404 Fix duplicated `DAV`/`X-Sabre-Version` headers in DAV responses — the nginx capability headers are now only emitted for the OPTIONS short-circuit, letting Sabre emit them once (with consistent casing) for proxied responses (#404)

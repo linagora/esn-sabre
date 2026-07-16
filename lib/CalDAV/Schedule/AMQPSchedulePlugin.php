@@ -253,6 +253,7 @@ class AMQPSchedulePlugin extends Plugin {
         // Fix: fetch the organizer's full calendar (which has the master VEVENT + the override
         // with this attendee) and pass it to the Broker so it can generate a proper REPLY.
         $nodeIcs = $this->resolveFullCalendarForBroker($nodeIcs) ?: $nodeIcs;
+        $sourceCalendar = CalendarObjectHelper::readCalendarObject($nodeIcs);
 
         $broker = new ITip\Broker();
         $broker->significantChangeProperties = array_merge(
@@ -262,6 +263,9 @@ class AMQPSchedulePlugin extends Plugin {
         $messages = $broker->parseEvent(null, $addresses, $nodeIcs);
 
         foreach ($messages as $message) {
+            if ($sourceCalendar) {
+                $this->preservePublicAgendaMetadata($message, $sourceCalendar);
+            }
             $this->deliver($message);
         }
         // flushDeliveries() is called in afterUnbind.

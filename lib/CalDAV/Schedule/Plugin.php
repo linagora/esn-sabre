@@ -35,6 +35,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES = ['VALARM', 'TRANSP', 'CLASS'];
     private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES_WITH_MANAGED_ALARMS = ['TRANSP', 'CLASS'];
     private const FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES = ['DTSTART', 'DTEND', 'LOCATION', 'SUMMARY', 'ORGANIZER'];
+    private const PUBLIC_AGENDA_METADATA_PROPERTIES = ['X-PUBLICLY-CREATED', 'X-PUBLICLY-CREATOR', 'X-OPENPAAS-BOOKING-LINK'];
     private const ENFORCE_RFC_6638_ENV = 'SABRE_ENFORCE_RFC_6638';
     private const EMAIL_VALARM_RECIPIENT_SCHEDULING_ENV = 'SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING';
 
@@ -592,6 +593,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 continue;
             }
 
+            $this->preservePublicAgendaMetadata($message, $newObject);
+
             // When a new attendee is added only to a RECURRENCE-ID override (not the master),
             // the Broker iterates only $attendee['newInstances'] which contains no 'master' key,
             // so it builds a message with just the override VEVENT. The attendee then receives
@@ -712,6 +715,27 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
     }
 
+    protected function preservePublicAgendaMetadata(ITip\Message $message, VCalendar $sourceCalendar): void {
+        $sourceEvents = CalendarObjectHelper::indexEventsByRecurrenceKey($sourceCalendar);
+
+        foreach ($message->message->select('VEVENT') as $messageEvent) {
+            $sourceEvent = $sourceEvents[CalendarObjectHelper::recurrenceKey($messageEvent)] ?? null;
+            if (!$sourceEvent) {
+                continue;
+            }
+
+            foreach (self::PUBLIC_AGENDA_METADATA_PROPERTIES as $propertyName) {
+                if ($messageEvent->select($propertyName)) {
+                    continue;
+                }
+
+                foreach ($sourceEvent->select($propertyName) as $property) {
+                    $messageEvent->add(clone $property);
+                }
+            }
+        }
+    }
+
     /**
      * Sanitises an outgoing REQUEST message that concerns a RECURRENCE-ID
      * override whose attendee is not present in the master VEVENT.
@@ -798,9 +822,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        $messages = $this->createBroker()->parseEvent(null, $addresses, $node->get());
+        $oldObject = Reader::read($node->get());
+        $messages = $this->createBroker()->parseEvent(null, $addresses, $oldObject);
 
         foreach ($messages as $message) {
+            $this->preservePublicAgendaMetadata($message, $oldObject);
             $this->deliver($message);
         }
     }

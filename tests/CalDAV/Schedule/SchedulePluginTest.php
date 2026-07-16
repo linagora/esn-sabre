@@ -67,6 +67,50 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertFalse($shouldSkip);
     }
 
+    function testShouldPreservePublicAgendaMetadataOnOutgoingMinimalMessage() {
+        $sourceCalendar = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:test-public-agenda-metadata
+DTSTART:20260227T000000Z
+DTEND:20260227T003000Z
+SUMMARY:Test event
+X-PUBLICLY-CREATED:true
+X-PUBLICLY-CREATOR:creator@example.org
+X-OPENPAAS-BOOKING-LINK:booking-link-id
+ORGANIZER:mailto:alice@example.org
+ATTENDEE;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:alice@example.org
+ATTENDEE;PARTSTAT=NEEDS-ACTION;ROLE=REQ-PARTICIPANT:mailto:bob@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+        $message = new Message();
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:CANCEL
+BEGIN:VEVENT
+UID:test-public-agenda-metadata
+DTSTART:20260227T000000Z
+DTEND:20260227T003000Z
+SUMMARY:Test event
+ORGANIZER:mailto:alice@example.org
+ATTENDEE:mailto:bob@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->invokePreservePublicAgendaMetadata($message, $sourceCalendar);
+
+        $serializedMessage = $message->message->serialize();
+        $this->assertStringContainsString('X-PUBLICLY-CREATED:TRUE', $serializedMessage);
+        $this->assertStringContainsString('X-PUBLICLY-CREATOR:creator@example.org', $serializedMessage);
+        $this->assertStringContainsString('X-OPENPAAS-BOOKING-LINK:booking-link-id', $serializedMessage);
+    }
+
     function testDeliverShouldNotCrashWhenRecipientIsNull() {
         $message = $this->newItipMessage('1');
         $message->recipient = null;
@@ -1009,6 +1053,13 @@ ICS
 
     private function invokeSanitizeOutgoingRequestMessage(Message $message, $sourceCalendar): void {
         $method = new \ReflectionMethod(Plugin::class, 'sanitizeOutgoingRequestMessage');
+        $method->setAccessible(true);
+
+        $method->invoke($this->plugin, $message, $sourceCalendar);
+    }
+
+    private function invokePreservePublicAgendaMetadata(Message $message, $sourceCalendar): void {
+        $method = new \ReflectionMethod(Plugin::class, 'preservePublicAgendaMetadata');
         $method->setAccessible(true);
 
         $method->invoke($this->plugin, $message, $sourceCalendar);

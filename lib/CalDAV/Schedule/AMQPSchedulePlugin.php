@@ -202,7 +202,10 @@ class AMQPSchedulePlugin extends Plugin {
             $modified = true;
         }
 
-        $addresses = $this->fetchSchedulingAddresses($calendarPath);
+        $isTeamCalendar = $this->isTeamCalendarPath($calendarPath);
+        $actorAddresses = $this->fetchSchedulingAddresses($calendarPath, $isTeamCalendar);
+        $organizerAddress = $this->extractSingleOrganizerAddress($vCal);
+        $schedulingAddresses = $isTeamCalendar && $organizerAddress ? [$organizerAddress] : $actorAddresses;
 
         $this->currentOldMessage = null;
         $this->currentCalendarId = basename($calendarPath);
@@ -213,11 +216,11 @@ class AMQPSchedulePlugin extends Plugin {
             $oldObj = \Sabre\VObject\Reader::read($this->currentOldMessage);
         }
 
-        if ($oldObj) {
-            $this->assertAllowedAttendeeSchedulingObjectChange($oldObj, $vCal, $addresses);
+        if ($oldObj && $this->shouldValidateAttendeeSchedulingObjectChange($request->getPath(), $isTeamCalendar)) {
+            $this->assertAllowedAttendeeSchedulingObjectChange($oldObj, $vCal, $actorAddresses);
         }
 
-        $this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
+        $this->processICalendarChange($oldObj, $vCal, $schedulingAddresses, [], $modified);
         // flushDeliveries() is called in afterCreateFile/afterWriteContent.
     }
 

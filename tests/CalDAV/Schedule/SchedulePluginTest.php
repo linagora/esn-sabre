@@ -4,6 +4,9 @@ namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
 use Sabre\DAV\Server;
+use Sabre\DAV\SimpleCollection;
+use Sabre\DAV\SimpleFile;
+use Sabre\DAV\IProperties;
 use Sabre\HTTP\Request;
 use Sabre\VObject\ITip\Message;
 use Sabre\VObject\Reader;
@@ -351,6 +354,74 @@ ICS
         );
 
         $this->assertSame(2, $this->invokeCountEventAttendees($calendar));
+    }
+
+    function testShouldResolveTeamCalendarIdForReplyWhenTeamCalendarContainsEventUid() {
+        $this->initializePluginWithTeamCalendar(
+            'team-calendar-1',
+            'event-team',
+            $this->newCalendarObject('event-team', 'bob@example.org'),
+            ['{DAV:}write']
+        );
+
+        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
+        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'team-calendar-1'));
+
+        $this->assertSame('team-calendar-1', $this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
+    }
+
+    function testShouldNotResolveTeamCalendarIdForReplyWhenTeamCalendarDoesNotContainEventUid() {
+        $this->initializePluginWithTeamCalendar(
+            'other-team-calendar',
+            'another-event',
+            $this->newCalendarObject('another-event', 'bob@example.org'),
+            ['{DAV:}write']
+        );
+
+        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
+        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'other-team-calendar'));
+
+        $this->assertNull($this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
+    }
+
+    function testShouldResolveTeamCalendarIdForReplyWithoutWritePrivilege() {
+        $this->initializePluginWithTeamCalendar(
+            'team-calendar-1',
+            'event-team',
+            $this->newCalendarObject('event-team', 'bob@example.org'),
+            ['{DAV:}read']
+        );
+
+        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
+        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'team-calendar-1'));
+
+        $this->assertSame('team-calendar-1', $this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
+    }
+
+    function testShouldFailITipReplyWhenRecipientCannotWriteTeamCalendar() {
+        $teamEvent = $this->initializePluginForTeamCalendarDelivery(['{DAV:}read']);
+        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
+        $message->sender = 'mailto:alice@example.org';
+        $message->message = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'team-calendar-1'));
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertSame('5.0;iTip message was not processed by the server, likely because we didn\'t understand it.', $message->scheduleStatus);
+        $this->assertSame(0, $teamEvent->putCount);
+    }
+
+    function testShouldNotResolveTeamCalendarIdForReplyWhenOrganizerDoesNotMatch() {
+        $this->initializePluginWithTeamCalendar(
+            'team-calendar-1',
+            'event-team',
+            $this->newCalendarObject('event-team', 'charlie@example.org'),
+            ['{DAV:}write']
+        );
+
+        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
+        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'team-calendar-1'));
+
+        $this->assertNull($this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
     }
 
     function testShouldDeduplicateMasterAttendeesByNormalizedValue() {
@@ -1282,5 +1353,161 @@ ICS
         $method->setAccessible(true);
 
         return $method->invoke($this->plugin, $request);
+    }
+
+    private function invokeResolveTeamCalendarIdForReplyMessage(Message $message, $calendar): ?string {
+        $method = new \ReflectionMethod(Plugin::class, 'resolveTeamCalendarIdForReplyMessage');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $message, $calendar);
+    }
+
+    private function initializePluginWithTeamCalendar(string $teamCalendarId, string $eventUid, string $calendarData, ?array $teamCalendarPrivileges = null): void {
+        $server = new Server([
+            new SimpleCollection('calendars', [
+                new TeamCalendarHomeTestDouble($teamCalendarId, [$eventUid => 'event.ics'], ['event.ics' => $calendarData])
+            ])
+        ]);
+        if ($teamCalendarPrivileges !== null) {
+            $server->addPlugin(new TeamCalendarAclPluginTestDouble(['calendars/' . $teamCalendarId . '/event.ics' => $teamCalendarPrivileges]));
+        }
+
+        $this->plugin = new Plugin();
+        $this->plugin->initialize($server);
+    }
+
+    private function initializePluginForTeamCalendarDelivery(array $teamCalendarPrivileges): WritableCalendarObjectTestDouble {
+        $teamEvent = new WritableCalendarObjectTestDouble('event.ics', $this->newCalendarObject('event-team', 'bob@example.org'));
+        $server = new Server([
+            new SimpleCollection('principals', [
+                new SimpleCollection('users', [
+                    new PrincipalPropertiesTestDouble('bob', [
+                        '{urn:ietf:params:xml:ns:caldav}calendar-home-set' => new \Sabre\DAV\Xml\Property\Href('calendars/bob'),
+                        '{urn:ietf:params:xml:ns:caldav}schedule-inbox-URL' => new \Sabre\DAV\Xml\Property\Href('calendars/bob/inbox'),
+                        '{urn:ietf:params:xml:ns:caldav}schedule-default-calendar-URL' => new \Sabre\DAV\Xml\Property\Href('calendars/bob/default'),
+                    ])
+                ])
+            ]),
+            new SimpleCollection('calendars', [
+                new CalendarHomeTestDouble('bob', [
+                    new WritableCollectionTestDouble('inbox'),
+                    new WritableCollectionTestDouble('default')
+                ]),
+                new TeamCalendarHomeTestDouble('team-calendar-1', ['event-team' => 'event.ics'], [$teamEvent])
+            ])
+        ]);
+        $server->httpRequest = new Request('ITIP', '/itip');
+        $server->addPlugin(new TeamCalendarAclPluginTestDouble(['calendars/team-calendar-1/event.ics' => $teamCalendarPrivileges], ['mailto:bob@example.org' => 'principals/users/bob']));
+
+        $this->plugin = new Plugin();
+        $this->plugin->initialize($server);
+
+        return $teamEvent;
+    }
+
+    private function newReplyMessage(string $uid, string $recipient): Message {
+        $message = new Message();
+        $message->method = 'REPLY';
+        $message->uid = $uid;
+        $message->recipient = $recipient;
+        $message->message = Reader::read($this->newCalendarObject($uid, 'bob@example.org'));
+
+        return $message;
+    }
+
+    private function newCalendarObject(string $uid, string $organizerEmail, ?string $teamCalendarId = null): string {
+        $teamCalendarProperty = $teamCalendarId ? "X-OPENPAAS-TEAM-CALENDAR-ID:$teamCalendarId\n" : '';
+
+        return "BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:$uid
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Team meeting
+{$teamCalendarProperty}ORGANIZER:mailto:$organizerEmail
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+";
+    }
+}
+
+class TeamCalendarHomeTestDouble extends SimpleCollection {
+    private $calendarObjectPathByUid;
+
+    function __construct(string $name, array $calendarObjectPathByUid, array $children = []) {
+        parent::__construct($name, $children);
+        $this->calendarObjectPathByUid = $calendarObjectPathByUid;
+    }
+
+    function getCalendarObjectByUID($uid) {
+        return $this->calendarObjectPathByUid[$uid] ?? null;
+    }
+}
+
+class WritableCalendarObjectTestDouble extends SimpleFile {
+    public $putCount = 0;
+
+    function put($data) {
+        $this->putCount++;
+    }
+}
+
+class WritableCollectionTestDouble extends SimpleCollection {
+    function createFile($name, $data = null) {
+        $this->addChild(new SimpleFile($name, (string)$data));
+    }
+}
+
+class CalendarHomeTestDouble extends SimpleCollection {
+    function getCalendarObjectByUID($uid) {
+        return null;
+    }
+}
+
+class PrincipalPropertiesTestDouble extends SimpleCollection implements IProperties {
+    private $properties;
+
+    function __construct(string $name, array $properties) {
+        parent::__construct($name);
+        $this->properties = $properties;
+    }
+
+    function propPatch(\Sabre\DAV\PropPatch $propPatch) {
+    }
+
+    function getProperties($properties) {
+        return $this->properties;
+    }
+}
+
+#[\AllowDynamicProperties]
+class TeamCalendarAclPluginTestDouble extends \Sabre\DAV\ServerPlugin {
+    private $privilegesByPath;
+    private $principalMap;
+
+    function __construct(array $privilegesByPath, array $principalMap = []) {
+        $this->privilegesByPath = $privilegesByPath;
+        $this->principalMap = $principalMap;
+    }
+
+    function getPluginName() {
+        return 'acl';
+    }
+
+    function initialize(\Sabre\DAV\Server $server) {
+        $this->server = $server;
+    }
+
+    function checkPrivileges($path, $privilege, $recursion = null, $throwExceptions = null): bool {
+        return in_array($privilege, $this->privilegesByPath[ltrim((string)$path, '/')] ?? [], true);
+    }
+
+    function getPrincipalByUri($uri) {
+        return $this->principalMap[strtolower((string)$uri)] ?? null;
+    }
+
+    function propFind() {
     }
 }

@@ -2,6 +2,8 @@
 
 namespace ESN\CalDAV;
 
+use ESN\DAV\Sharing\Plugin as SharingPlugin;
+use ESN\Utils\Utils;
 use Sabre\DAV\Exception\Forbidden;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
@@ -52,7 +54,7 @@ class OrganizerValidationPlugin extends ServerPlugin {
         // updates (e.g. PARTSTAT changes) are allowed as long as the ORGANIZER is
         // unchanged from the stored object: a foreign organizer can only be there
         // because scheduling delivered it or a previously validated PUT wrote it.
-        if (!$isNew && $organizerUri === $this->getExistingOrganizerUri($request->getPath())) {
+        if (!$isNew && !$this->isTeamCalendarPath($calendarPath) && $organizerUri === $this->getExistingOrganizerUri($request->getPath())) {
             return;
         }
 
@@ -132,6 +134,14 @@ class OrganizerValidationPlugin extends ServerPlugin {
             throw new Forbidden('The ORGANIZER must be either the calendar owner or the authenticated user.');
         }
 
+        if ($this->isTeamCalendarPath($calendarPath)) {
+            if ($this->isWriteEnabledCalendarSharee($organizerPrincipal, $calendarPath)) {
+                return;
+            }
+
+            throw new Forbidden('The ORGANIZER must be a write-enabled team calendar member.');
+        }
+
         if ($organizerPrincipal === $this->getCalendarOwner($calendarPath)) {
             return;
         }
@@ -145,17 +155,51 @@ class OrganizerValidationPlugin extends ServerPlugin {
         throw new Forbidden('The ORGANIZER must be either the calendar owner or the authenticated user.');
     }
 
-    private function getCalendarOwner($calendarPath) {
-        try {
-            $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
-        } catch (\Sabre\DAV\Exception\NotFound $e) {
-            return null;
+    private function isTeamCalendarPath($calendarPath): bool {
+        $calendarNode = $this->getCalendarNode($calendarPath);
+        $owner = ($calendarNode && method_exists($calendarNode, 'getOwner')) ? $calendarNode->getOwner() : null;
+
+        return Utils::isTeamCalendarFromPrincipal($owner);
+    }
+
+    private function isWriteEnabledCalendarSharee(string $organizerPrincipal, $calendarPath): bool {
+        $calendarNode = $this->getCalendarNode($calendarPath);
+        if (!$calendarNode || !method_exists($calendarNode, 'getInvites')) {
+            return false;
         }
 
-        if (!method_exists($calendarNode, 'getOwner')) {
+        foreach ($calendarNode->getInvites() as $sharee) {
+            if ($this->normalizePrincipal($sharee->principal ?? null) === $this->normalizePrincipal($organizerPrincipal)
+                && $this->isWriteEnabledAccess((int) ($sharee->access ?? 0))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isWriteEnabledAccess(int $access): bool {
+        return in_array($access, [SharingPlugin::ACCESS_READWRITE, SharingPlugin::ACCESS_ADMINISTRATION], true);
+    }
+
+    private function getCalendarOwner($calendarPath) {
+        $calendarNode = $this->getCalendarNode($calendarPath);
+        if (!$calendarNode || !method_exists($calendarNode, 'getOwner')) {
             return null;
         }
 
         return $calendarNode->getOwner();
+    }
+
+    private function getCalendarNode($calendarPath) {
+        try {
+            return $this->server->tree->getNodeForPath($calendarPath);
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            return null;
+        }
+    }
+
+    private function normalizePrincipal(?string $principal): ?string {
+        return $principal === null ? null : trim($principal, '/');
     }
 }

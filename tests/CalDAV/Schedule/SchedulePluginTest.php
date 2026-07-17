@@ -410,6 +410,49 @@ ICS
         $this->assertSame(0, $teamEvent->putCount);
     }
 
+    function testShouldSkipAttendeeSchedulingValidationWhenTeamCalendarActorCanWriteEvent() {
+        $this->initializePluginWithTeamCalendar(
+            'team-calendar-1',
+            'event-team',
+            $this->newCalendarObject('event-team', 'bob@example.org'),
+            ['{DAV:}write']
+        );
+
+        $this->assertFalse($this->invokeShouldValidateAttendeeSchedulingObjectChange(
+            'calendars/team-calendar-1/event.ics',
+            true
+        ));
+    }
+
+    function testShouldKeepAttendeeSchedulingValidationWhenTeamCalendarActorCannotWriteEvent() {
+        $this->initializePluginWithTeamCalendar(
+            'team-calendar-1',
+            'event-team',
+            $this->newCalendarObject('event-team', 'bob@example.org'),
+            ['{DAV:}read']
+        );
+
+        $this->assertTrue($this->invokeShouldValidateAttendeeSchedulingObjectChange(
+            'calendars/team-calendar-1/event.ics',
+            true
+        ));
+    }
+
+    function testShouldExtractSingleOrganizerAddress() {
+        $this->initializePluginWithTeamCalendar(
+            'team-calendar-1',
+            'event-team',
+            $this->newCalendarObject('event-team', 'bob@example.org'),
+            ['{DAV:}write']
+        );
+
+        $address = $this->invokeExtractSingleOrganizerAddress(
+            Reader::read($this->newCalendarObject('event-team', 'bob@example.org'))
+        );
+
+        $this->assertSame('mailto:bob@example.org', $address);
+    }
+
     function testShouldNotResolveTeamCalendarIdForReplyWhenOrganizerDoesNotMatch() {
         $this->initializePluginWithTeamCalendar(
             'team-calendar-1',
@@ -1362,6 +1405,20 @@ ICS
         return $method->invoke($this->plugin, $message, $calendar);
     }
 
+    private function invokeShouldValidateAttendeeSchedulingObjectChange(string $objectPath, bool $isTeamCalendar): bool {
+        $method = new \ReflectionMethod(Plugin::class, 'shouldValidateAttendeeSchedulingObjectChange');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $objectPath, $isTeamCalendar);
+    }
+
+    private function invokeExtractSingleOrganizerAddress($calendar): ?string {
+        $method = new \ReflectionMethod(Plugin::class, 'extractSingleOrganizerAddress');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $calendar);
+    }
+
     private function initializePluginWithTeamCalendar(string $teamCalendarId, string $eventUid, string $calendarData, ?array $teamCalendarPrivileges = null): void {
         $server = new Server([
             new SimpleCollection('calendars', [
@@ -1443,6 +1500,10 @@ class TeamCalendarHomeTestDouble extends SimpleCollection {
 
     function getCalendarObjectByUID($uid) {
         return $this->calendarObjectPathByUid[$uid] ?? null;
+    }
+
+    function getOwner() {
+        return 'principals/team-calendars/' . $this->getName();
     }
 }
 

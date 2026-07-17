@@ -509,7 +509,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $modified = true;
         }
 
-        $addresses = $this->fetchSchedulingAddresses($calendarPath);
+        $isTeamCalendar = $this->isTeamCalendarPath($calendarPath);
+        $actorAddresses = $this->fetchSchedulingAddresses($calendarPath, $isTeamCalendar);
+        $organizerAddress = $this->extractSingleOrganizerAddress($vCal);
+        $schedulingAddresses = $isTeamCalendar && $organizerAddress ? [$organizerAddress] : $actorAddresses;
 
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
@@ -518,12 +521,12 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $oldObj = null;
         }
 
-        if ($oldObj) {
+        if ($oldObj && $this->shouldValidateAttendeeSchedulingObjectChange($request->getPath(), $isTeamCalendar)) {
             // RFC 6638 permits attendee-local updates, but not organizer-controlled event fields.
-            $this->assertAllowedAttendeeSchedulingObjectChange($oldObj, $vCal, $addresses);
+            $this->assertAllowedAttendeeSchedulingObjectChange($oldObj, $vCal, $actorAddresses);
         }
 
-        $this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
+        $this->processICalendarChange($oldObj, $vCal, $schedulingAddresses, [], $modified);
     }
 
     protected function assertAllowedAttendeeSchedulingObjectChange(VCalendar $oldObject, VCalendar $newObject, array $addresses): void {
@@ -942,18 +945,44 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * technical team-calendar owner, otherwise the iTIP broker cannot match
      * ORGANIZER:mailto:<member> with the scheduling identity.
      */
-    protected function fetchSchedulingAddresses($calendarPath): array {
-        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
-        if ($calendarNode === null || !method_exists($calendarNode, 'getOwner')) {
-            return [];
+    protected function fetchSchedulingAddresses($calendarPath, ?bool $isTeamCalendar = null): array {
+        if ($isTeamCalendar === null) {
+            $isTeamCalendar = $this->isTeamCalendarPath($calendarPath);
         }
 
-        if (!Utils::isTeamCalendarFromPrincipal($calendarNode->getOwner())) {
+        if (!$isTeamCalendar) {
             return $this->fetchCalendarOwnerAddresses($calendarPath);
         }
 
         $authPlugin = $this->server->getPlugin('auth');
         return $authPlugin ? $this->getAddressesForPrincipalSafely($authPlugin->getCurrentPrincipal()) : [];
+    }
+
+    protected function isTeamCalendarPath(string $calendarPath): bool {
+        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+        $owner = ($calendarNode !== null && method_exists($calendarNode, 'getOwner')) ? $calendarNode->getOwner() : null;
+
+        return Utils::isTeamCalendarFromPrincipal($owner);
+    }
+
+    protected function shouldValidateAttendeeSchedulingObjectChange(string $objectPath, bool $isTeamCalendar): bool {
+        return !$isTeamCalendar || !$this->canWriteCalendarObject($objectPath);
+    }
+
+    protected function extractSingleOrganizerAddress(VCalendar $vCal): ?string {
+        $organizerAddresses = [];
+        foreach ($vCal->select('VEVENT') as $vevent) {
+            if (isset($vevent->ORGANIZER)) {
+                $organizerAddresses[] = $vevent->ORGANIZER->getNormalizedValue();
+            }
+        }
+
+        $uniqueOrganizerAddresses = array_unique(array_map('strtolower', $organizerAddresses));
+        if (count($uniqueOrganizerAddresses) !== 1) {
+            return null;
+        }
+
+        return reset($organizerAddresses);
     }
 
     protected function setTeamCalendarIdProperty(VCalendar $calendar, string $teamCalendarId): bool {

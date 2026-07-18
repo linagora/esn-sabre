@@ -93,10 +93,99 @@ ICS;
         
         $eventNode = \Sabre\VObject\Reader::read($data);
 
-        list(, , $event1, $event2) = $eventNode->children();
+        [$event1, $event2] = $this->extractMasterAndOverrideEvents($eventNode);
 
-        $this->assertEquals($event1->ATTENDEE['PARTSTAT']->getValue(), 'ACCEPTED');
-        $this->assertEquals($event2->ATTENDEE['PARTSTAT']->getValue(), 'ACCEPTED');
+        $this->assertNotNull($event1);
+        $this->assertNotNull($event2);
+        $this->assertEquals('ACCEPTED', $event1->ATTENDEE['PARTSTAT']->getValue());
+        $this->assertEquals('ACCEPTED', $event2->ATTENDEE['PARTSTAT']->getValue());
+    }
+
+    function testProcessICalendarParticipationShouldIgnoreRecurringOverrideWithoutAttendees() {
+        $oldCal = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=White;PARTSTAT=NEEDS-ACTION:mailto:robertocarlos@realmadrid.com
+ATTENDEE;CN=Two:mailto:two@example.org
+DTSTART:20140716T120000Z
+DURATION:PT1H
+RRULE:FREQ=DAILY
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20140718T120000Z
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+DTSTART:20140718T120000Z
+DURATION:PT1H
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $data = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=White;PARTSTAT=ACCEPTED:mailto:robertocarlos@realmadrid.com
+ATTENDEE;CN=Two:mailto:two@example.org
+DTSTART:20140716T120000Z
+DURATION:PT1H
+RRULE:FREQ=DAILY
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:20140718T120000Z
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+DTSTART:20140718T120000Z
+DURATION:PT1H
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $calendarData = [
+            'uri' => 'participationRecurringCal',
+            'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f'
+        ];
+        $objectData = [
+            'uri' => 'recurring-objecturi.ics',
+            'calendardata' => $oldCal
+        ];
+
+        $calendarData['id'] = $this->caldavBackend->createCalendar($calendarData['principaluri'], $calendarData['uri'], $calendarData);
+        $this->caldavBackend->createCalendarObject($calendarData['id'], $objectData['uri'], $oldCal);
+
+        $modified = false;
+        $path = "calendars/54b64eadf6d7d8e41d263e0f/participationRecurringCal/recurring-objecturi.ics";
+        $node = $this->server->tree->getNodeForPath($path);
+
+        $this->assertTrue($this->server->emit('beforeWriteContent', [$path, $node, &$data, &$modified]));
+
+        $eventNode = \Sabre\VObject\Reader::read($data);
+        [$masterEvent, $overrideEvent] = $this->extractMasterAndOverrideEvents($eventNode);
+
+        $this->assertNotNull($masterEvent);
+        $this->assertNotNull($overrideEvent);
+        $this->assertEquals('ACCEPTED', $masterEvent->ATTENDEE['PARTSTAT']->getValue());
+        $this->assertFalse(isset($overrideEvent->ATTENDEE));
+    }
+
+    private function extractMasterAndOverrideEvents(\Sabre\VObject\Component\VCalendar $calendar): array {
+        $masterEvent = null;
+        $overrideEvent = null;
+
+        foreach ($calendar->select('VEVENT') as $vevent) {
+            if (isset($vevent->{'RECURRENCE-ID'})) {
+                $overrideEvent = $vevent;
+            } else {
+                $masterEvent = $vevent;
+            }
+        }
+
+        return [$masterEvent, $overrideEvent];
     }
  
 }

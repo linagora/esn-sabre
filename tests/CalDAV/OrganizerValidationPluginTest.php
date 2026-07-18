@@ -17,6 +17,7 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
     private $server;
     private $caldavBackend;
     private $authBackend;
+    private $teamCalendarId;
 
     const USER1_ID = '54b64eadf6d7d8e41d263e0f';
     const USER1_EMAIL = 'alice@example.org';
@@ -27,6 +28,8 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
     const USER2_PRINCIPAL = 'principals/users/54b64eadf6d7d8e41d263e0e';
 
     const DOMAIN_ID = '54b64eadf6d7d8e41d263e7a';
+    const TEAM_CALENDAR_ID = '64b64eadf6d7d8e41d263e0f';
+    const TEAM_CALENDAR_PRINCIPAL = 'principals/team-calendars/64b64eadf6d7d8e41d263e0f';
 
     function setUp(): void {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
@@ -64,6 +67,17 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
             'principaluri' => self::USER2_PRINCIPAL,
             'uri' => 'cal2',
             '{DAV:}displayname' => 'User 2 Calendar',
+        ]);
+
+        $esndb->team_calendars->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::TEAM_CALENDAR_ID),
+            'domainId' => $domainId,
+            'name' => 'Team Calendar',
+        ]);
+        $this->teamCalendarId = $this->caldavBackend->createCalendar(self::TEAM_CALENDAR_PRINCIPAL, self::TEAM_CALENDAR_ID, [
+            'principaluri' => self::TEAM_CALENDAR_PRINCIPAL,
+            'uri' => self::TEAM_CALENDAR_ID,
+            '{DAV:}displayname' => 'Team Calendar',
         ]);
     }
 
@@ -203,6 +217,55 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $ics = $this->makeIcs('self-cal-wrong-org', 'ORGANIZER:mailto:' . self::USER2_EMAIL);
         $response = $this->putIcs(self::USER1_ID, 'cal1', 'event.ics', $ics);
         $this->assertEquals(403, $response->getStatus());
+    }
+
+    function testTeamCalendarAcceptsOrganizerMatchingWriteEnabledMember() {
+        $this->shareTeamCalendarWith(self::USER2_EMAIL, self::USER2_PRINCIPAL, \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE);
+
+        $ics = $this->makeIcs('team-write-member-org', 'ORGANIZER:mailto:' . self::USER2_EMAIL);
+        $this->emitCalendarObjectChange($this->teamCalendarPath(), $ics);
+
+        $this->assertTrue(true);
+    }
+
+    function testTeamCalendarAcceptsOrganizerMatchingManagerMember() {
+        $this->shareTeamCalendarWith(self::USER2_EMAIL, self::USER2_PRINCIPAL, \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION);
+
+        $ics = $this->makeIcs('team-manager-member-org', 'ORGANIZER:mailto:' . self::USER2_EMAIL);
+        $this->emitCalendarObjectChange($this->teamCalendarPath(), $ics);
+
+        $this->assertTrue(true);
+    }
+
+    function testTeamCalendarRejectsOrganizerMatchingReadOnlyMember() {
+        $this->shareTeamCalendarWith(self::USER2_EMAIL, self::USER2_PRINCIPAL, \Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+
+        $ics = $this->makeIcs('team-read-member-org', 'ORGANIZER:mailto:' . self::USER2_EMAIL);
+
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+        $this->emitCalendarObjectChange($this->teamCalendarPath(), $ics);
+    }
+
+    function testTeamCalendarRejectsOrganizerMatchingCurrentUserWhenNotMember() {
+        $ics = $this->makeIcs('team-current-user-not-member-org', 'ORGANIZER:mailto:' . self::USER1_EMAIL);
+
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+        $this->emitCalendarObjectChange($this->teamCalendarPath(), $ics);
+    }
+
+    private function shareTeamCalendarWith(string $email, string $principal, int $access): void {
+        $this->caldavBackend->updateInvites($this->teamCalendarId, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => 'mailto:' . $email,
+                'principal' => $principal,
+                'access' => $access,
+                'properties' => [],
+            ])
+        ]);
+    }
+
+    private function teamCalendarPath(): string {
+        return 'calendars/' . self::TEAM_CALENDAR_ID . '/' . self::TEAM_CALENDAR_ID;
     }
 
     private function makeRecurringIcs(string $uid, string $masterOrganizer, string $overrideOrganizer): string {

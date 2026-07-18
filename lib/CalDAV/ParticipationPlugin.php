@@ -75,6 +75,10 @@ class ParticipationPlugin extends ServerPlugin {
                         continue;
                     }
 
+                    if (!isset($vevent->ATTENDEE)) {
+                        continue;
+                    }
+
                     foreach ($vevent->ATTENDEE as $attendee) {
                         if (strtolower($attendee->getValue()) == $addresses[0]) {
                             isset($attendee['PARTSTAT']) ? $attendee['PARTSTAT']->setValue($newInstances['master']['partstat']) : $attendee['PARTSTAT'] = $newInstances['master']['partstat'];

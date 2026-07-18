@@ -12,6 +12,7 @@ class VObjectPropertyRegistry {
         'X-PUBLICLY-CREATED' => Boolean::class,
         'X-PUBLICLY-CREATOR' => Text::class,
         'X-PUBLICLY-DELETED' => Boolean::class,
+        'X-PUBLICLY-CANCELLED-BY' => Text::class,
         'X-OPENPAAS-BOOKING-LINK' => Text::class,
         'X-OPENPAAS-VIDEOCONFERENCE' => NullableUri::class,
     ];

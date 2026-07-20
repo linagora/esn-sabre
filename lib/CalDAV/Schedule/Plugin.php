@@ -501,7 +501,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        if (PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($vCal)) {
+        if ($this->shouldSkipSchedulingForUnacceptedPublicAgenda($vCal)) {
             return;
         }
 
@@ -905,12 +905,20 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         $oldObject = Reader::read($node->get());
+        if ($this->shouldSkipSchedulingForUnacceptedPublicAgenda($oldObject)) {
+            return;
+        }
+
         $messages = $this->createBroker()->parseEvent(null, $addresses, $oldObject);
 
         foreach ($messages as $message) {
             $this->preservePublicAgendaMetadata($message, $oldObject);
             $this->deliver($message);
         }
+    }
+
+    protected function shouldSkipSchedulingForUnacceptedPublicAgenda(?VCalendar $calendar): bool {
+        return $calendar !== null && PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($calendar);
     }
 
     /**

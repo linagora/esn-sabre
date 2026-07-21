@@ -190,7 +190,7 @@ class AMQPSchedulePlugin extends Plugin {
             return;
         }
 
-        if (PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($vCal)) {
+        if ($this->shouldSkipSchedulingForUnacceptedPublicAgenda($vCal)) {
             return;
         }
 
@@ -267,6 +267,9 @@ class AMQPSchedulePlugin extends Plugin {
         // with this attendee) and pass it to the Broker so it can generate a proper REPLY.
         $nodeIcs = $this->resolveFullCalendarForBroker($nodeIcs) ?: $nodeIcs;
         $sourceCalendar = CalendarObjectHelper::readCalendarObject($nodeIcs);
+        if ($this->shouldSkipSchedulingForUnacceptedPublicAgenda($sourceCalendar)) {
+            return;
+        }
 
         $broker = new ITip\Broker();
         $broker->significantChangeProperties = array_merge(

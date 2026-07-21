@@ -70,6 +70,18 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertFalse($shouldSkip);
     }
 
+    function testShouldSkipSchedulingForUnacceptedPublicAgenda() {
+        $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('NEEDS-ACTION', true));
+
+        $this->assertTrue($this->invokeShouldSkipSchedulingForUnacceptedPublicAgenda($vcalendar));
+    }
+
+    function testShouldNotSkipSchedulingForAcceptedPublicAgenda() {
+        $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('ACCEPTED', true));
+
+        $this->assertFalse($this->invokeShouldSkipSchedulingForUnacceptedPublicAgenda($vcalendar));
+    }
+
     function testShouldPreservePublicAgendaMetadataOnOutgoingMinimalMessage() {
         $sourceCalendar = Reader::read(<<<'ICS'
 BEGIN:VCALENDAR
@@ -1193,6 +1205,13 @@ ICS
         $method->setAccessible(true);
 
         return $method->invoke($this->plugin);
+    }
+
+    private function invokeShouldSkipSchedulingForUnacceptedPublicAgenda($calendar): bool {
+        $method = new \ReflectionMethod(Plugin::class, 'shouldSkipSchedulingForUnacceptedPublicAgenda');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $calendar);
     }
 
     private function invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, array $addresses) {

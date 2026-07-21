@@ -141,6 +141,32 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($sharedCalendar->getACL(), $expected);
     }
 
+    function testTeamCalendarSourceACLAllowsMemberReadAccess() {
+        $props = [
+            'id'                                        => 1,
+            'share-access'                              => \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED,
+            'principaluri'                              => 'principals/team-calendars/64b64eadf6d7d8e41d263e0f',
+        ];
+        $backend = new SimpleBackendMock([$props], [], []);
+        $backend->updateInvites(1, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'       => 'mailto:bob@example.org',
+                'principal'  => 'principals/users/bob',
+                'access'     => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
+            ]),
+        ]);
+
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $expectedReadAce = [
+            'privilege' => '{DAV:}read',
+            'principal' => 'principals/users/bob',
+            'protected' => true,
+        ];
+        $this->assertContains($expectedReadAce, $sharedCalendar->getACL());
+        $this->assertContains($expectedReadAce, $sharedCalendar->getChildACL());
+    }
+
 
     function testGetChildACLAdministrationShareAccess() {
         $props = [

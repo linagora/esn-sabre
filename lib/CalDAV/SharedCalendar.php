@@ -3,6 +3,7 @@
 namespace ESN\CalDAV;
 
 use ESN\DAV\Sharing\Plugin as SPlugin;
+use ESN\Utils\Utils;
 
 #[\AllowDynamicProperties]
 class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
@@ -32,6 +33,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     function getACL() {
         $acl = parent::getACL();
 
+        $acl = $this->appendTeamCalendarMemberReadAces($acl);
         $acl = $this->appendOrganizerValidationDelegateAces($acl);
 
         switch ($this->getShareAccess()) {
@@ -152,6 +154,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     function getChildACL() {
         $childACL = parent::getChildACL();
 
+        $childACL = $this->appendTeamCalendarMemberReadAces($childACL);
         $childACL = $this->appendOrganizerValidationDelegateAces($childACL);
 
         if ($this->getShareAccess() == SPlugin::ACCESS_ADMINISTRATION) {
@@ -262,6 +265,26 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
     function getBackend() {
         return $this->caldavBackend;
+    }
+
+    private function appendTeamCalendarMemberReadAces(array $acl) {
+        if (!Utils::isTeamCalendarFromPrincipal($this->getOwner()) || $this->getShareAccess() !== SPlugin::ACCESS_NOTSHARED) {
+            return $acl;
+        }
+
+        foreach ($this->getInvites() as $sharee) {
+            if (!in_array((int) $sharee->access, [SPlugin::ACCESS_READ, SPlugin::ACCESS_READWRITE, SPlugin::ACCESS_ADMINISTRATION], true) || !$sharee->principal) {
+                continue;
+            }
+
+            $acl[] = [
+                'privilege' => '{DAV:}read',
+                'principal' => $sharee->principal,
+                'protected' => true,
+            ];
+        }
+
+        return $acl;
     }
 
     /**

@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
 ### New Features
 
+ - ISSUE-437 Expose video conference links through the standard RFC 7986 `CONFERENCE` property — events carrying `X-OPENPAAS-VIDEOCONFERENCE` are decorated upon `PUT` (and upon iTIP delivery) so that external clients (Apple Calendar, iOS, Outlook, ...) display a join button. `X-OPENPAAS-VIDEOCONFERENCE` is kept for Twake clients (#437)
  - ISSUE-425 Auto-provision users upon a DAV request — when an LDAP or impersonated user authenticates successfully but has no entry in the `users` collection yet, the entry is created on the fly (following the twake-calendar-side-service document format) instead of returning a `401`. Gated by the `AUTO_PROVISION` env var (default `true`). Needed upon migrations (#425)
 
 ### Bug Fixes

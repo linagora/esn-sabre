@@ -201,6 +201,19 @@ Three modes, selected via the `CALDAV_BINARY_ATTACHMENT_MODE` environment variab
 - `reject`: requests carrying an inline binary attachment are rejected with `403 Forbidden`.
 - `allow`: the object is stored as-is, inline binary attachments included.
 
+### ESN\CalDAV\VideoConferencePlugin
+
+Exposes the video conference link of an event through the standard [RFC 7986](https://datatracker.ietf.org/doc/html/rfc7986#section-5.11) `CONFERENCE` property:
+
+```
+X-OPENPAAS-VIDEOCONFERENCE;VALUE=UNKNOWN:https://meet.example.com/room
+CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Join video call:https://meet.example.com/room
+```
+
+`X-OPENPAAS-VIDEOCONFERENCE` is only understood by Twake clients, `CONFERENCE` is what external clients (Apple Calendar, iOS, Outlook, ...) use to display a join button. The OpenPaaS property remains the source of truth and is left untouched, `CONFERENCE` is derived from it upon `PUT` (before scheduling, so that the iTIP messages sent to the attendees carry it too) and upon incoming iTIP delivery.
+
+Each `VEVENT` is handled on its own, recurrence master and overridden instances alike. A `CONFERENCE` set by a client on an event which has no `X-OPENPAAS-VIDEOCONFERENCE` property is never touched, and neither are the conferences of another feature (a phone bridge for instance).
+
 ### ESN\CalDAV\TextPlugin
 
 CF https://ci.linagora.com/linagora/lgs/openpaas/linagora.esn.calendar/-/issues/1175

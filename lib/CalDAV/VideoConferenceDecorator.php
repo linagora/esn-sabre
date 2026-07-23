@@ -7,13 +7,15 @@ use Sabre\VObject\Component\VEvent;
 use Sabre\VObject\Property;
 
 /**
- * Mirrors the OpenPaaS specific X-OPENPAAS-VIDEOCONFERENCE property into the standard
- * RFC 7986 CONFERENCE property.
+ * Keeps the OpenPaaS specific X-OPENPAAS-VIDEOCONFERENCE property and the standard
+ * RFC 7986 CONFERENCE property in sync, in both directions.
  *
  * X-OPENPAAS-VIDEOCONFERENCE is only understood by Twake clients: external clients
  * (Apple Calendar, iOS, Outlook, ...) only render a "join" button when the event carries a
- * CONFERENCE property. X-OPENPAAS-VIDEOCONFERENCE stays the source of truth and is left
- * untouched, CONFERENCE is derived from it.
+ * CONFERENCE property. An event carrying the OpenPaaS property gets its CONFERENCE derived
+ * from it, an event created by an external client with a video CONFERENCE and no OpenPaaS
+ * property gets the latter derived from the former: whichever client created the event, both
+ * families see its video conference link.
  */
 class VideoConferenceDecorator {
     private static string $VIDEOCONFERENCE_PROPERTY = 'X-OPENPAAS-VIDEOCONFERENCE';
@@ -22,7 +24,7 @@ class VideoConferenceDecorator {
     private static array $CONFERENCE_FEATURES = ['AUDIO', 'VIDEO'];
 
     /**
-     * Derives the CONFERENCE property of every VEVENT of the calendar object (recurrence
+     * Syncs the video conference properties of every VEVENT of the calendar object (recurrence
      * master and overridden instances alike), in place. Each VEVENT is handled on its own:
      * a component without a video conference link of its own does not get one.
      *
@@ -35,12 +37,16 @@ class VideoConferenceDecorator {
     }
 
     private static function decorateEvent(VEvent $vevent): bool {
-        if (!isset($vevent->{self::$VIDEOCONFERENCE_PROPERTY})) {
-            // Nothing tells us whether the event has a video conference: leave any
-            // CONFERENCE set by an external client alone.
-            return false;
-        }
+        return isset($vevent->{self::$VIDEOCONFERENCE_PROPERTY})
+            ? self::deriveConference($vevent)
+            : self::deriveVideoConferenceLink($vevent);
+    }
 
+    /**
+     * The OpenPaaS property is the source of truth: it is left untouched and the CONFERENCE
+     * property is aligned on it.
+     */
+    private static function deriveConference(VEvent $vevent): bool {
         $videoConferenceUri = trim((string) $vevent->{self::$VIDEOCONFERENCE_PROPERTY});
 
         // Conferences of a previous link have to go, otherwise clients would offer to join
@@ -61,6 +67,26 @@ class VideoConferenceDecorator {
         return true;
     }
 
+    /**
+     * Reverse direction: an event created by an external client advertises its video
+     * conference through CONFERENCE only. Twake clients read X-OPENPAAS-VIDEOCONFERENCE, so
+     * it is derived from the first video conference of the event.
+     */
+    private static function deriveVideoConferenceLink(VEvent $vevent): bool {
+        $videoConferenceUris = array_filter(
+            array_map(fn(Property $conference) => trim((string) $conference), self::videoConferences($vevent)),
+            fn(string $uri) => $uri !== ''
+        );
+
+        if ($videoConferenceUris === []) {
+            return false;
+        }
+
+        $vevent->add(self::$VIDEOCONFERENCE_PROPERTY, reset($videoConferenceUris));
+
+        return true;
+    }
+
     private static function hasConferenceFor(VEvent $vevent, string $videoConferenceUri): bool {
         $conferenceUris = array_map(fn(Property $conference) => trim((string) $conference), $vevent->select(self::$CONFERENCE_PROPERTY));
 
@@ -69,8 +95,8 @@ class VideoConferenceDecorator {
 
     private static function removeOutdatedVideoConferences(VEvent $vevent, string $videoConferenceUri): bool {
         $outdated = array_filter(
-            $vevent->select(self::$CONFERENCE_PROPERTY),
-            fn(Property $conference) => self::advertisesVideo($conference) && trim((string) $conference) !== $videoConferenceUri
+            self::videoConferences($vevent),
+            fn(Property $conference) => trim((string) $conference) !== $videoConferenceUri
         );
 
         foreach ($outdated as $conference) {
@@ -81,9 +107,15 @@ class VideoConferenceDecorator {
     }
 
     /**
-     * Only the conferences this server derives from X-OPENPAAS-VIDEOCONFERENCE are video
-     * ones: a phone bridge or a chat room added by another client is left alone.
+     * Only the conferences advertising the VIDEO feature are video ones: a phone bridge or a
+     * chat room added by another client is neither replaced nor mirrored back.
+     *
+     * @return Property[]
      */
+    private static function videoConferences(VEvent $vevent): array {
+        return array_filter($vevent->select(self::$CONFERENCE_PROPERTY), fn(Property $conference) => self::advertisesVideo($conference));
+    }
+
     private static function advertisesVideo(Property $conference): bool {
         $features = array_map('trim', explode(',', strtoupper((string) ($conference['FEATURE'] ?? ''))));
 

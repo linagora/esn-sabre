@@ -210,9 +210,12 @@ X-OPENPAAS-VIDEOCONFERENCE;VALUE=UNKNOWN:https://meet.example.com/room
 CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Join video call:https://meet.example.com/room
 ```
 
-`X-OPENPAAS-VIDEOCONFERENCE` is only understood by Twake clients, `CONFERENCE` is what external clients (Apple Calendar, iOS, Outlook, ...) use to display a join button. The OpenPaaS property remains the source of truth and is left untouched, `CONFERENCE` is derived from it upon `PUT` (before scheduling, so that the iTIP messages sent to the attendees carry it too) and upon incoming iTIP delivery.
+`X-OPENPAAS-VIDEOCONFERENCE` is only understood by Twake clients, `CONFERENCE` is what external clients (Apple Calendar, iOS, Outlook, ...) use to display a join button. Both properties are kept in sync upon `PUT` (before scheduling, so that the iTIP messages sent to the attendees carry the result too) and upon incoming iTIP delivery:
 
-Each `VEVENT` is handled on its own, recurrence master and overridden instances alike. A `CONFERENCE` set by a client on an event which has no `X-OPENPAAS-VIDEOCONFERENCE` property is never touched, and neither are the conferences of another feature (a phone bridge for instance).
+- when the event carries `X-OPENPAAS-VIDEOCONFERENCE`, it remains the source of truth and is left untouched: `CONFERENCE` is derived from it;
+- when the event carries no `X-OPENPAAS-VIDEOCONFERENCE` (it was created by an external client), it is derived from the first `CONFERENCE` of the event advertising the `VIDEO` feature, so that Twake clients display the link as well.
+
+Each `VEVENT` is handled on its own, recurrence master and overridden instances alike. Conferences of another feature (a phone bridge for instance) are never touched nor mirrored back, and neither are those advertising no feature at all: nothing tells us they are video ones.
 
 ### ESN\CalDAV\TextPlugin
 

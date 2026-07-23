@@ -62,13 +62,97 @@ class VideoConferenceDecoratorTest extends \PHPUnit\Framework\TestCase {
         $this->assertCount(0, $vCal->VEVENT->select('CONFERENCE'));
     }
 
-    function testShouldNotTouchAConferenceSetByAClientWhenEventHasNoVideoConferenceLink() {
+    function testShouldDeriveTheVideoConferenceLinkFromAConferenceSetByAnExternalClient() {
         $vCal = $this->readEvent([
             'CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Join:https://teams.example.com/room'
         ]);
 
-        $this->assertFalse(VideoConferenceDecorator::decorate($vCal));
+        $this->assertTrue(VideoConferenceDecorator::decorate($vCal));
+
+        $this->assertSame('https://teams.example.com/room', (string) $vCal->VEVENT->{'X-OPENPAAS-VIDEOCONFERENCE'});
         $this->assertSame('https://teams.example.com/room', (string) $vCal->VEVENT->CONFERENCE);
+    }
+
+    function testShouldSerializeTheDerivedVideoConferenceLinkAsAUri() {
+        $vCal = $this->readEvent([
+            'CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Join:https://teams.example.com/room'
+        ]);
+
+        VideoConferenceDecorator::decorate($vCal);
+        $reparsed = Reader::read($vCal->serialize());
+
+        $videoConference = $reparsed->VEVENT->{'X-OPENPAAS-VIDEOCONFERENCE'};
+        $this->assertInstanceOf(NullableUri::class, $videoConference);
+        $this->assertSame('https://teams.example.com/room', (string) $videoConference);
+    }
+
+    function testShouldDeriveTheVideoConferenceLinkFromTheFirstVideoConferenceOnly() {
+        $vCal = $this->readEvent([
+            'CONFERENCE;VALUE=URI;FEATURE=VIDEO;LABEL=Join:https://teams.example.com/room',
+            'CONFERENCE;VALUE=URI;FEATURE=VIDEO;LABEL=Join:https://meet.example.com/other-room'
+        ]);
+
+        $this->assertTrue(VideoConferenceDecorator::decorate($vCal));
+
+        $this->assertCount(1, $vCal->VEVENT->select('X-OPENPAAS-VIDEOCONFERENCE'));
+        $this->assertSame('https://teams.example.com/room', (string) $vCal->VEVENT->{'X-OPENPAAS-VIDEOCONFERENCE'});
+    }
+
+    function testShouldNotDeriveTheVideoConferenceLinkFromAConferenceOfAnotherFeature() {
+        $vCal = $this->readEvent([
+            'CONFERENCE;VALUE=URI;FEATURE=PHONE;LABEL=Dial in:tel:+33-123-456'
+        ]);
+
+        $this->assertFalse(VideoConferenceDecorator::decorate($vCal));
+        $this->assertCount(0, $vCal->VEVENT->select('X-OPENPAAS-VIDEOCONFERENCE'));
+    }
+
+    function testShouldNotDeriveTheVideoConferenceLinkFromAConferenceWithoutFeature() {
+        $vCal = $this->readEvent([
+            'CONFERENCE;VALUE=URI;LABEL=Join:https://teams.example.com/room'
+        ]);
+
+        $this->assertFalse(VideoConferenceDecorator::decorate($vCal));
+        $this->assertCount(0, $vCal->VEVENT->select('X-OPENPAAS-VIDEOCONFERENCE'));
+    }
+
+    function testShouldNotDeriveAnEmptyVideoConferenceLink() {
+        $vCal = $this->readEvent([
+            'CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Join:'
+        ]);
+
+        $this->assertFalse(VideoConferenceDecorator::decorate($vCal));
+        $this->assertCount(0, $vCal->VEVENT->select('X-OPENPAAS-VIDEOCONFERENCE'));
+    }
+
+    function testShouldDeriveTheVideoConferenceLinkOfEachOverriddenInstanceOnItsOwn() {
+        $vCal = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:recurring-event
+DTSTART:20260322T090000Z
+DTEND:20260322T100000Z
+RRULE:FREQ=DAILY;COUNT=3
+SUMMARY:Daily meeting
+END:VEVENT
+BEGIN:VEVENT
+UID:recurring-event
+RECURRENCE-ID:20260323T090000Z
+DTSTART:20260323T090000Z
+DTEND:20260323T100000Z
+SUMMARY:Daily meeting
+CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Join:https://teams.example.com/instance-room
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->assertTrue(VideoConferenceDecorator::decorate($vCal));
+
+        $vevents = $vCal->select('VEVENT');
+        $this->assertCount(0, $vevents[0]->select('X-OPENPAAS-VIDEOCONFERENCE'));
+        $this->assertSame('https://teams.example.com/instance-room', (string) $vevents[1]->{'X-OPENPAAS-VIDEOCONFERENCE'});
     }
 
     function testShouldNotDuplicateAnAlreadyExistingConference() {

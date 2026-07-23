@@ -154,11 +154,13 @@ class CalendarService {
      */
     public function updateCalendar($calendarId, \Sabre\DAV\PropPatch $propPatch) {
         list($calendarId, $instanceId) = $calendarId;
+        $displayNameProperty = '{DAV:}displayname';
+        $oldInstance = $this->calendarInstanceDAO->findInstanceById($instanceId, ['displayname' => 1, 'access' => 1]);
 
         $supportedProperties = array_keys($this->propertyMap);
         $supportedProperties[] = '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}schedule-calendar-transp';
 
-        $propPatch->handle($supportedProperties, function($mutations) use ($calendarId, $instanceId) {
+        $propPatch->handle($supportedProperties, function($mutations) use ($calendarId, $instanceId, $displayNameProperty, $oldInstance) {
             $newValues = [];
             foreach($mutations as $propertyName => $propertyValue) {
                 switch($propertyName) {
@@ -172,6 +174,9 @@ class CalendarService {
             }
 
             $this->calendarInstanceDAO->updateInstanceById($instanceId, $newValues);
+
+            $this->updateSharedDisplayNamesStillMatchingSource($calendarId, $oldInstance, $mutations, $displayNameProperty);
+
             $this->addChange($calendarId, "", 2);
 
             $projection = ['uri' => 1, 'principaluri' => 1];
@@ -181,6 +186,27 @@ class CalendarService {
 
             return true;
         });
+    }
+
+    private function updateSharedDisplayNamesStillMatchingSource($calendarId, $oldInstance, $mutations, $displayNameProperty) {
+        if (!array_key_exists($displayNameProperty, $mutations) ||
+                (int) ($oldInstance['access'] ?? 0) !== \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER ||
+                ($oldInstance['displayname'] ?? null) === $mutations[$displayNameProperty]) {
+            return;
+        }
+
+        try {
+            $oldDisplayName = $oldInstance['displayname'] ?? null;
+            $newDisplayName = $mutations[$displayNameProperty];
+
+            foreach($this->calendarInstanceDAO->findInvitesByCalendarId($calendarId, ['principaluri' => 1, 'access' => 1]) as $invite) {
+                if (!empty($invite['principaluri']) && (int) $invite['access'] > \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER) {
+                    $this->calendarInstanceDAO->updateSharedDisplayNameForPrincipalMatching($calendarId, $invite['principaluri'], $oldDisplayName, $newDisplayName);
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('Failed to propagate calendar displayname to shared instances for calendar ' . $calendarId . ': ' . $e->getMessage());
+        }
     }
 
     /**

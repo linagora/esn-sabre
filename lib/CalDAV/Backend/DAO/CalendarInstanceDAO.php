@@ -49,6 +49,18 @@ class CalendarInstanceDAO extends BaseDAO {
         );
     }
 
+    public function updateSharedDisplayNameForPrincipalMatching($calendarId, $principalUri, $oldDisplayName, $newDisplayName) {
+        return $this->updateOne(
+            [
+                'principaluri' => $principalUri,
+                'calendarid' => new \MongoDB\BSON\ObjectId($calendarId),
+                'access' => ['$gt' => Plugin::ACCESS_SHAREDOWNER],
+                'displayname' => $oldDisplayName
+            ],
+            ['$set' => ['displayname' => $newDisplayName]]
+        );
+    }
+
     public function findInstanceById($instanceId, array $projection = []) {
         $options = empty($projection) ? [] : ['projection' => $projection];
         return $this->findOne(['_id' => new \MongoDB\BSON\ObjectId($instanceId)], $options);

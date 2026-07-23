@@ -93,6 +93,78 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         }
     }
 
+    function testUpdateSourceCalendarDisplayNameShouldUpdateUncustomizedSharedInstances() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/user1/userID', 'shared-calendar', [
+            '{DAV:}displayname' => 'Initial Calendar Name',
+        ]);
+        $calendar = $backend->getCalendarsForUser('principals/user1/userID')[0];
+
+        $backend->updateInvites(
+            $calendar['id'],
+            [
+                new Sharee([
+                    'href'         => 'mailto:user2@example.org',
+                    'principal'    => 'principals/user2/userID',
+                    'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+                    'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+                ])
+            ]
+        );
+
+        $propPatch = new PropPatch([
+            '{DAV:}displayname' => 'Renamed Calendar',
+        ]);
+
+        $backend->updateCalendar($calendarId, $propPatch);
+        $this->assertTrue($propPatch->commit());
+
+        $sourceCalendar = $backend->getCalendarsForUser('principals/user1/userID')[0];
+        $sharedCalendar = $backend->getCalendarsForUser('principals/user2/userID')[0];
+
+        $this->assertEquals('Renamed Calendar', $sourceCalendar['{DAV:}displayname']);
+        $this->assertEquals('Renamed Calendar', $sharedCalendar['{DAV:}displayname']);
+    }
+
+    function testUpdateSourceCalendarDisplayNameShouldNotOverwriteCustomizedSharedInstanceName() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/user1/userID', 'shared-calendar', [
+            '{DAV:}displayname' => 'Initial Calendar Name',
+        ]);
+        $calendar = $backend->getCalendarsForUser('principals/user1/userID')[0];
+
+        $backend->updateInvites(
+            $calendar['id'],
+            [
+                new Sharee([
+                    'href'         => 'mailto:user2@example.org',
+                    'principal'    => 'principals/user2/userID',
+                    'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+                    'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+                ])
+            ]
+        );
+
+        $sharedCalendar = $backend->getCalendarsForUser('principals/user2/userID')[0];
+        $customDisplayName = new PropPatch([
+            '{DAV:}displayname' => 'Custom Shared Calendar Name',
+        ]);
+        $backend->updateCalendar($sharedCalendar['id'], $customDisplayName);
+        $this->assertTrue($customDisplayName->commit());
+
+        $sourceDisplayName = new PropPatch([
+            '{DAV:}displayname' => 'Renamed Calendar',
+        ]);
+        $backend->updateCalendar($calendarId, $sourceDisplayName);
+        $this->assertTrue($sourceDisplayName->commit());
+
+        $sourceCalendar = $backend->getCalendarsForUser('principals/user1/userID')[0];
+        $sharedCalendar = $backend->getCalendarsForUser('principals/user2/userID')[0];
+
+        $this->assertEquals('Renamed Calendar', $sourceCalendar['{DAV:}displayname']);
+        $this->assertEquals('Custom Shared Calendar Name', $sharedCalendar['{DAV:}displayname']);
+    }
+
     /**
      * @depends testUpdateCalendarAndFetch
      */

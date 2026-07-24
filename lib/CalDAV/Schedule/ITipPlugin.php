@@ -3,6 +3,7 @@
 namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\SharedCalendar;
+use ESN\CalDAV\VideoConferenceDecorator;
 use \Sabre\VObject;
 use \Sabre\VObject\ITip\Message;
 use \Sabre\DAV;
@@ -71,6 +72,9 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         $message->method = $issetdef('method', 'REQUEST');
         $message->sequence = $issetdef('sequence', '0');
         $message->message = VObject\Reader::read($payload->ical);
+        // Events coming from an external system carry the video conference link in the
+        // OpenPaaS property only: expose it to the recipient's clients as well.
+        VideoConferenceDecorator::decorate($message->message);
         $message->sender = $this->resolveSenderFromItipMessage($message, $issetdef('replyTo', $payload->sender));
         $message->recipient = 'mailto:' . $payload->recipient;
 

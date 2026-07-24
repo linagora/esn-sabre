@@ -176,6 +176,9 @@ $server->addPlugin($freeBusyPlugin);
 $caldavPlugin = new ESN\CalDAV\Plugin();
 $server->addPlugin($caldavPlugin);
 
+// RFC 7986 CONFERENCE property derived from X-OPENPAAS-VIDEOCONFERENCE
+$server->addPlugin(new ESN\CalDAV\VideoConferencePlugin());
+
 // Private event sanitization for delegated calendars
 $privateEventPlugin = new ESN\CalDAV\PrivateEventPlugin();
 $server->addPlugin($privateEventPlugin);

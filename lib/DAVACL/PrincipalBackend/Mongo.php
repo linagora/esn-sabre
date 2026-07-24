@@ -249,6 +249,37 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             $principals[] = 'principals/domains/' . (string)$domain['domain_id'];
         }
 
+        return array_merge($principals, $this->administeredResourcePrincipals($id));
+    }
+
+    /**
+     * Resource principals the given user administers.
+     *
+     * A resource administrator is a member of the resource principal, so the
+     * resource calendar's owner privileges (read/write) apply to them and they
+     * can update participation on behalf of the resource (issue #441). The
+     * `administrators.id` field may be stored either as an ObjectId or as its
+     * string representation depending on the provisioning path, so both forms
+     * are matched.
+     */
+    private function administeredResourcePrincipals(string $userId): array {
+        $adminId = [ $userId ];
+        try {
+            $adminId[] = new \MongoDB\BSON\ObjectId($userId);
+        } catch (\MongoDB\Driver\Exception\Exception $e) {
+            // Not an ObjectId-shaped id: only match the string form.
+        }
+
+        $resources = $this->db->resources->find(
+            [ 'administrators.id' => [ '$in' => $adminId ] ],
+            [ 'projection' => [ '_id' => 1 ] ]
+        );
+
+        $principals = [];
+        foreach ($resources as $resource) {
+            $principals[] = 'principals/resources/' . (string)$resource['_id'];
+        }
+
         return $principals;
     }
 

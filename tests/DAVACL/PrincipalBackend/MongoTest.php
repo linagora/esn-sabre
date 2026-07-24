@@ -145,7 +145,10 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         self::$esndb->resources->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_ID),
             'name' => 'resource',
-            'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
+            'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
+            'administrators' => [
+                [ 'objectType' => 'user', 'id' => new \MongoDB\BSON\ObjectId(self::USER_ID) ]
+            ]
         ]);
         self::$esndb->team_calendars->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::TEAM_CALENDAR_ID),
@@ -210,6 +213,11 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
                     'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
                     'members' => self::$domainMembers
+                ],
+                [
+                    'uri' => 'principals/resources/' . self::RESOURCE_ID,
+                    'administrators' => [],
+                    'members' => []
                 ]
             ]
         ];
@@ -428,10 +436,23 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     function testGetGroupMembership() {
         $backend  = new Mongo(self::$esndb, self::$tenant);
 
+        // A user is a member of their domains and of every resource they
+        // administer, so resource calendar privileges apply to them (issue #441).
+        $expected = array(
+            'principals/domains/' . self::DOMAIN_ID,
+            'principals/resources/' . self::RESOURCE_ID
+        );
+        $this->assertEquals($expected,$backend->getGroupMembership('principals/users/' . self::USER_ID));
+    }
+
+    function testGetGroupMembershipExcludesResourcesNotAdministered() {
+        $backend  = new Mongo(self::$esndb, self::$tenant);
+
+        // USER_WITH_ACCOUNT_ID does not administer any resource.
         $expected = array(
             'principals/domains/' . self::DOMAIN_ID
         );
-        $this->assertEquals($expected,$backend->getGroupMembership('principals/users/' . self::USER_ID));
+        $this->assertEquals($expected,$backend->getGroupMembership('principals/users/' . self::USER_WITH_ACCOUNT_ID));
     }
 
     function testSetGroupMemberSetPRoject() {

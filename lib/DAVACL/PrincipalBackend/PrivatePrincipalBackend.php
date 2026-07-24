@@ -116,7 +116,10 @@ class PrivatePrincipalBackend extends AbstractBackend {
         }
 
         if ($prefixPath === 'principals/domains' && $this->isUserPrincipalPath($currentPrincipal)) {
-            return $this->principalBackend->getGroupMembership($currentPrincipal);
+            return array_values(array_filter(
+                $this->principalBackend->getGroupMembership($currentPrincipal),
+                fn($principalPath) => str_starts_with($principalPath, 'principals/domains/')
+            ));
         }
         return [];
     }

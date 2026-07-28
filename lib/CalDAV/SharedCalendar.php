@@ -289,7 +289,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
     /**
      * When ORGANIZER validation is enabled (CALDAV_ORGANIZER_VALIDATION=true),
-     * delegates with read-write rights are allowed to write directly into the
+     * delegates with write-enabled rights are allowed to write directly into the
      * owner's source calendar (e.g. PUT /calendars/{owner}/{owner}/x.ics). The
      * OrganizerValidationPlugin then enforces that the ORGANIZER is either the
      * calendar owner or the authenticated user.
@@ -311,7 +311,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         }
 
         foreach ($this->getInvites() as $sharee) {
-            if ((int) $sharee->access !== SPlugin::ACCESS_READWRITE || !$sharee->principal) {
+            if (!$this->isWriteEnabledAccess((int) $sharee->access) || !$sharee->principal) {
                 continue;
             }
 
@@ -328,6 +328,10 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         }
 
         return $acl;
+    }
+
+    private function isWriteEnabledAccess(int $access): bool {
+        return in_array($access, [SPlugin::ACCESS_READWRITE, SPlugin::ACCESS_ADMINISTRATION], true);
     }
 
 }

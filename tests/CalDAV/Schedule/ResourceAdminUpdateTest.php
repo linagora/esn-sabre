@@ -183,7 +183,7 @@ class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
 
     function testResourceAdministratorCanWriteCanonicalResourceCalendarObjectByAcl() {
         $previous = getenv('CALDAV_ORGANIZER_VALIDATION');
-        putenv('CALDAV_ORGANIZER_VALIDATION=true');
+        putenv('CALDAV_ORGANIZER_VALIDATION=false');
 
         try {
             $eventUid = 'canonical-resource-admin-write';

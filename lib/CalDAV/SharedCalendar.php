@@ -34,7 +34,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         $acl = parent::getACL();
 
         $acl = $this->appendTeamCalendarMemberReadAces($acl);
-        $acl = $this->appendOrganizerValidationDelegateAces($acl);
+        $acl = $this->appendSourceCalendarDelegateWriteAces($acl);
 
         switch ($this->getShareAccess()) {
             case SPlugin::ACCESS_ADMINISTRATION :
@@ -155,7 +155,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         $childACL = parent::getChildACL();
 
         $childACL = $this->appendTeamCalendarMemberReadAces($childACL);
-        $childACL = $this->appendOrganizerValidationDelegateAces($childACL);
+        $childACL = $this->appendSourceCalendarDelegateWriteAces($childACL);
 
         if ($this->getShareAccess() == SPlugin::ACCESS_ADMINISTRATION) {
             $childACL[] = [
@@ -287,26 +287,8 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         return $acl;
     }
 
-    /**
-     * When ORGANIZER validation is enabled (CALDAV_ORGANIZER_VALIDATION=true),
-     * delegates with write-enabled rights are allowed to write directly into the
-     * owner's source calendar (e.g. PUT /calendars/{owner}/{owner}/x.ics). The
-     * OrganizerValidationPlugin then enforces that the ORGANIZER is either the
-     * calendar owner or the authenticated user.
-     *
-     * Without the flag the strict default applies: the source calendar is only
-     * writable by its owner, and delegates must go through their own delegated
-     * calendar instance.
-     *
-     * The grant only targets the owner's source instance (ACCESS_NOTSHARED);
-     * delegated instances keep their own access level untouched.
-     */
-    private function appendOrganizerValidationDelegateAces(array $acl) {
-        if (getenv('CALDAV_ORGANIZER_VALIDATION') !== 'true') {
-            return $acl;
-        }
-
-        if ($this->getShareAccess() !== SPlugin::ACCESS_NOTSHARED) {
+    private function appendSourceCalendarDelegateWriteAces(array $acl) {
+        if (!$this->shouldAppendSourceCalendarDelegateWriteAces()) {
             return $acl;
         }
 
@@ -328,6 +310,14 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         }
 
         return $acl;
+    }
+
+    private function shouldAppendSourceCalendarDelegateWriteAces(): bool {
+        if ($this->getShareAccess() !== SPlugin::ACCESS_NOTSHARED) {
+            return false;
+        }
+
+        return Utils::isResourceFromPrincipal($this->getOwner()) || getenv('CALDAV_ORGANIZER_VALIDATION') === 'true';
     }
 
     private function isWriteEnabledAccess(int $access): bool {

@@ -96,6 +96,7 @@ class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
             [
                 new \Sabre\DAV\Xml\Element\Sharee([
                     'href' => 'mailto:' . $this->adminEmail,
+                    'principal' => 'principals/users/' . $this->adminId,
                     'access' => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
                     'properties' => []
                 ])
@@ -178,6 +179,39 @@ class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
         // Verify the email format
         $expectedEmail = 'mailto:' . $this->resourceId . '@linagora.com';
         $this->assertEquals($expectedEmail, $addresses[0], 'Resource email should be correctly formatted');
+    }
+
+    function testResourceAdministratorCanWriteCanonicalResourceCalendarObjectByAcl() {
+        $previous = getenv('CALDAV_ORGANIZER_VALIDATION');
+        putenv('CALDAV_ORGANIZER_VALIDATION=false');
+
+        try {
+            $eventUid = 'canonical-resource-admin-write';
+            $this->caldavBackend->createCalendarObject($this->resourceCalendar['id'], $eventUid . '.ics', <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:$eventUid
+DTSTART:20260725T090000Z
+DTEND:20260725T093000Z
+SUMMARY:Booking
+END:VEVENT
+END:VCALENDAR
+ICS);
+
+            $aclPlugin = $this->server->getPlugin('acl');
+            $this->server->getPlugin('auth')->beforeMethod($this->server->httpRequest, $this->server->httpResponse);
+            $path = 'calendars/' . $this->resourceId . '/' . $this->resourceId . '/' . $eventUid . '.ics';
+
+            $this->assertTrue(
+                $aclPlugin->checkPrivileges($path, '{DAV:}write', 0, false),
+                'Resource administrator should be able to write the canonical resource calendar object through ACL'
+            );
+        } finally {
+            $previous === false
+                ? putenv('CALDAV_ORGANIZER_VALIDATION')
+                : putenv('CALDAV_ORGANIZER_VALIDATION=' . $previous);
+        }
     }
 
     /**
@@ -289,7 +323,8 @@ ICS;
 
         $tree[] = new \Sabre\DAV\SimpleCollection('principals', [
             new \Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/users'),
-            new \ESN\CalDAV\Principal\ResourceCollection($principalBackend, 'principals/resources')
+            new \ESN\CalDAV\Principal\ResourceCollection($principalBackend, 'principals/resources'),
+            new \Sabre\CalDAV\Principal\Collection($principalBackend, 'principals/domains')
         ]);
         $calendarRoot = new \ESN\CalDAV\CalendarRoot(
             $principalBackend,
@@ -319,7 +354,7 @@ ICS;
         $this->server->addPlugin($authPlugin);
 
         $aclPlugin = new \Sabre\DAVACL\Plugin();
-        $aclPlugin->principalCollectionSet = ['principals/users', 'principals/resources'];
+        $aclPlugin->principalCollectionSet = ['principals/users', 'principals/resources', 'principals/domains'];
         $this->server->addPlugin($aclPlugin);
 
         return [$caldavBackend, $authBackend];
@@ -331,6 +366,14 @@ ICS;
  */
 class TestAuthBackendMock extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     protected $currentUser;
+
+    public function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
+        if ($this->currentUser) {
+            return [true, $this->currentUser];
+        }
+
+        return [false, 'No current test principal configured'];
+    }
 
     public function validateUserPass($username, $password) {
         return true;

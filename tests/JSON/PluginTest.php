@@ -979,6 +979,55 @@ END:VCALENDAR
         $this->assertEquals(sizeof($jsonResponse->_embedded->{'dav:item'}), 3);
     }
 
+    function testGetAllEventsAnonymizesPrivateEventsForNonOwner() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json?allEvents=true',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(1, $items);
+        $this->assertStringNotContainsString('RecurringPrivate', $items[0]->data);
+
+        $vcalendar = \Sabre\VObject\Reader::read($items[0]->data);
+        $vevents = $vcalendar->select('VEVENT');
+        $this->assertCount(2, $vevents);
+        $this->assertEquals('Busy', $vevents[0]->SUMMARY->getValue());
+        $this->assertEquals('PRIVATE', $vevents[0]->CLASS->getValue());
+        $this->assertFalse(isset($vevents[0]->LOCATION));
+        $this->assertEquals('Exception', $vevents[1]->SUMMARY->getValue());
+    }
+
+    function testGetAllEventsKeepsPrivateEventDetailsForOwner() {
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0e');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json?allEvents=true',
+        ));
+
+        $response = $this->request($request);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals($response->status, 200);
+
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(1, $items);
+
+        $vcalendar = \Sabre\VObject\Reader::read($items[0]->data);
+        $vevents = $vcalendar->select('VEVENT');
+        $this->assertCount(2, $vevents);
+        $this->assertEquals('RecurringPrivate', $vevents[0]->SUMMARY->getValue());
+        $this->assertEquals('Paris', $vevents[0]->LOCATION->getValue());
+    }
+
     function testCreateCalendar() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',

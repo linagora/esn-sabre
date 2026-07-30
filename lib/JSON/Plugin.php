@@ -406,7 +406,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             foreach ($children as $child) {
                 $items[] = [
                     '_links' => [ 'self' => [ 'href' => '/' . $path . '/' . $child->getName() ] ],
-                    'data' => $child->get()
+                    'data' => $this->sanitizePrivateEvents($child->get(), $node)
                 ];
             }
 
@@ -424,6 +424,31 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $withRights = $this->getBooleanParameter($queryParams, 'withRights');
         return $this->getCalendarHandler()->getCalendarInformation($path, $node, $withRights);
+    }
+
+    private function sanitizePrivateEvents($calendarData, $calendarNode) {
+        if (is_resource($calendarData)) {
+            $calendarData = stream_get_contents($calendarData);
+        }
+
+        try {
+            $vCalendar = VObject\Reader::read($calendarData);
+        } catch (\Exception $e) {
+            return $calendarData;
+        }
+
+        if (!isset($vCalendar->VEVENT)) {
+            $vCalendar->destroy();
+            return $calendarData;
+        }
+
+        $sanitizedCalendar = Utils::hidePrivateEventInfoForUser($vCalendar, $calendarNode, $this->currentUser);
+        $result = $sanitizedCalendar->serialize();
+
+        $vCalendar->destroy();
+        $sanitizedCalendar->destroy();
+
+        return $result;
     }
 
     private function getSubscription($path, $node, $queryParams) {

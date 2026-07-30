@@ -26,50 +26,6 @@ class CalendarObjectHandler {
         $this->currentUser = $currentUser;
     }
 
-    public function queryCalendarObjects($nodePath, $node, $jsonData) {
-        if (!isset($jsonData) || !isset($jsonData->scope) ||
-            !isset($jsonData->scope->calendars)) {
-            return [400, null];
-        }
-
-        $calendars = $jsonData->scope->calendars;
-        $baseUri = $this->server->getBaseUri();
-        $baseUriLen = strlen($baseUri);
-        $items = [];
-        $calendarHandler = new CalendarHandler($this->server, $this->currentUser);
-
-        foreach ($calendars as $calendarPath) {
-            if (substr($calendarPath, 0, $baseUriLen) == $baseUri) {
-                $calendarPath = substr($calendarPath, $baseUriLen);
-            }
-
-            if (substr($calendarPath, -5) == '.json') {
-                $calendarPath = substr($calendarPath, 0, -5);
-            }
-
-            $node = $this->server->tree->getNodeForPath($calendarPath);
-
-            if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
-                $calendar = $calendarHandler->calendarToJson($calendarPath, $node);
-                list(, $calendarObjects) = $this->getCalendarObjects($calendarPath, $node, $jsonData);
-                $calendar['_embedded'] = [
-                    'dav:item' => $calendarObjects['_embedded']['dav:item']
-                ];
-                $items[] = $calendar;
-            }
-        }
-
-        $requestPath = $this->server->getBaseUri() . $nodePath . '.json';
-        $result = [
-            '_links' => [
-              'self' => [ 'href' => $requestPath ]
-            ],
-            '_embedded' => [ 'dav:calendar' => $items ]
-        ];
-
-        return [200, $result];
-    }
-
     public function getCalendarObjectByUID($nodePath, $node, $jsonData) {
         if (!isset($jsonData->uid)) {
             return [400, null];

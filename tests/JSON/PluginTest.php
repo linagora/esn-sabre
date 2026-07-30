@@ -570,7 +570,7 @@ END:VCALENDAR
         $this->assertEquals($response->status, 404);
     }
 
-    function testMultiQuery() {
+    function testMultiQueryEndpointIsNotAvailable() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -580,61 +580,7 @@ END:VCALENDAR
 
         $request->setBody(json_encode($this->timeRangeData));
         $response = $this->request($request);
-        $this->assertEquals($response->status, 200);
-        $jsonResponse = json_decode($response->getBodyAsString());
-
-        $this->assertEquals('/query.json', $jsonResponse->_links->self->href);
-        $calendars = $jsonResponse->_embedded->{'dav:calendar'};
-        $this->assertCount(1, $calendars);
-
-        $this->assertEquals($calendars[0]->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
-        $this->assertEquals($calendars[0]->{'dav:name'}, 'Calendar');
-        $this->assertEquals($calendars[0]->{'caldav:description'}, 'description');
-        $this->assertEquals($calendars[0]->{'calendarserver:ctag'}, 'http://sabre.io/ns/sync/4');
-        $this->assertEquals($calendars[0]->{'apple:color'}, '#0190FFFF');
-        $this->assertEquals($calendars[0]->{'apple:order'}, '2');
-
-        $items = $calendars[0]->_embedded->{'dav:item'};
-        $this->assertCount(1, $items);
-    }
-
-    function testMultiQueryMissingScope() {
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/query.json',
-        ));
-
-        $data = $this->timeRangeData;
-        unset($data['scope']['calendars']);
-
-        $request->setBody(json_encode($data));
-        $response = $this->request($request);
-        $this->assertEquals($response->status, 400);
-    }
-
-    function testMultiQueryWithJsonSuffix() {
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/query.json',
-        ));
-
-        $data = $this->timeRangeData;
-        $data['scope']['calendars'][0] .= '.json';
-
-        $request->setBody(json_encode($data));
-        $response = $this->request($request);
-        $this->assertEquals($response->status, 200);
-        $jsonResponse = json_decode($response->getBodyAsString());
-
-        $calendars = $jsonResponse->_embedded->{'dav:calendar'};
-        $this->assertCount(1, $calendars);
-
-        $items = $calendars[0]->_embedded->{'dav:item'};
-        $this->assertCount(1, $items);
+        $this->assertEquals($response->status, 404);
     }
 
     private function checkCalendars($calendars) {

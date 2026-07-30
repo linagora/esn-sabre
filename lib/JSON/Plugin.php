@@ -327,12 +327,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $code = null;
         $body = null;
 
-        if ($path == 'query') {
-            $jsonData = json_decode($request->getBodyAsString());
-            list($code, $body) = $this->getCalendarObjectHandler()->queryCalendarObjects($path, null, $jsonData);
-            return $this->send($code, $body);
-        }
-
         $node = $this->server->tree->getNodeForPath($path);
 
         // Only handle calendar nodes, let other plugins handle other nodes (like addressbooks)

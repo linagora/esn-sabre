@@ -54,6 +54,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         if ($type === 'team-calendars') {
             return ['domainId' => new \MongoDB\BSON\ObjectId($domainId)];
         }
+        if ($type === 'resources') {
+            return ['domain' => new \MongoDB\BSON\ObjectId($domainId)];
+        }
 
         return [];
     }
@@ -85,6 +88,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         if ($type == 'domains') {
             $this->assertSameDomain($id, $domainId);
         } else if ($type == 'resources') {
+            $this->assertResourceBelongsToDomain($obj, $domainId);
             $obj = $this->attachResourceDomain($obj);
         } else if ($type == 'team-calendars') {
             $this->assertTeamCalendarBelongsToDomain($obj, $domainId);
@@ -96,6 +100,12 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         return $obj;
+    }
+
+    private function assertResourceBelongsToDomain($obj, string $domainId): void {
+        if (!isset($obj['domain']) || (string)$obj['domain'] !== $domainId) {
+            throw new \Sabre\DAV\Exception\Forbidden('Cross-domain resource access is not allowed');
+        }
     }
 
     private function assertSameDomain(string $id, string $domainId): void {
@@ -593,20 +603,18 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     }
                     break;
                 case '{http://sabredav.org/ns}email-address':
-                    list($possibleId) = explode('@', $value);
-
                     if ($groupName === 'team-calendars') {
                         $query[] = $this->teamCalendarEmailSearchQuery($value);
                         break;
                     }
-
-                    try {
-                        if($groupName === 'resources') {
-                            $query[] = [ '_id' =>  new \MongoDB\BSON\ObjectId($possibleId) ];
-                            break;
+                    if ($groupName === 'resources') {
+                        list($possibleId) = explode('@', $value);
+                        try {
+                            $query[] = [ '_id' => new \MongoDB\BSON\ObjectId($possibleId) ];
+                        } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
+                            $query[] = [ '_id' => null ];
                         }
-                    } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
-                        //Resource email has not the default format {resourceId}@{domain}, skipping custom query
+                        break;
                     }
 
                     $query[] = [ 'email' => [
@@ -619,6 +627,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $collection = $this->collectionMap[$groupName];
         if ($groupName === 'team-calendars') {
             return $this->queryTeamCalendarPrincipals($collection, $query, $test);
+        }
+        if ($groupName === 'resources') {
+            return $this->queryResourcePrincipals($collection, $query, $test);
         }
         return $this->queryPrincipals($groupName, $collection, $query, $test);
     }
@@ -645,6 +656,25 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
 
         return [ '_id' => $objectId ];
+    }
+
+    private function queryResourcePrincipals($collection, array $query, $test): array {
+        if (empty($query) || !in_array($test, ['allof', 'anyof'], true)) {
+            return [];
+        }
+
+        $domainFilter = [ 'domain' => new \MongoDB\BSON\ObjectId($this->requireAuthDomainId()) ];
+        $finalQuery = $test === 'anyof'
+            ? [ '$and' => [[ '$or' => $query ], $domainFilter] ]
+            : [ '$and' => array_merge($query, [$domainFilter]) ];
+
+        $principals = [];
+        $res = $collection->find($finalQuery, [ 'projection' => [ '_id' => 1 ]]);
+        foreach ($res as $obj) {
+            $principals[] = 'principals/resources/' . $obj['_id'];
+        }
+
+        return $principals;
     }
 
     private function queryTeamCalendarPrincipals($collection, array $query, $test): array {

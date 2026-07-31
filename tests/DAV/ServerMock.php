@@ -345,7 +345,8 @@ END:VCALENDAR'
         $this->esndb->resources->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId('62b64eadf6d7d8e41d263e0c'),
             'type' => 'calendar',
-            'name' => 'cal resource'
+            'name' => 'cal resource',
+            'domain' => new \MongoDB\BSON\ObjectId(SERVER_MOCK_DOMAIN_ID)
         ]);
 
         $this->esndb->domains->insertOne([

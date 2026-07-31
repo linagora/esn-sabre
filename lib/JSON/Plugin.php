@@ -399,29 +399,6 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     private function getCalendar($path, $node, $queryParams) {
-        if ($this->getBooleanParameter($queryParams, 'allEvents')) {
-            $children = $node->getChildren();
-            $items = [];
-
-            foreach ($children as $child) {
-                $items[] = [
-                    '_links' => [ 'self' => [ 'href' => '/' . $path . '/' . $child->getName() ] ],
-                    'data' => $child->get()
-                ];
-            }
-
-            $result = [
-                '_links' => [
-                    'self' => [ 'href' => '/' . $path . '.json' ]
-                ],
-                '_embedded'=> [
-                    'dav:item' => $items
-                ]
-            ];
-
-            return [200, $result];
-        }
-
         $withRights = $this->getBooleanParameter($queryParams, 'withRights');
         return $this->getCalendarHandler()->getCalendarInformation($path, $node, $withRights);
     }

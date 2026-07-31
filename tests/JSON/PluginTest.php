@@ -964,7 +964,7 @@ END:VCALENDAR
         $this->assertEquals($jsonResponse->{'apple:order'}, '2');
     }
 
-    function testGetAllEventsInCalendar() {
+    function testGetCalendarIgnoresUnsupportedAllEventsParameter() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -975,8 +975,9 @@ END:VCALENDAR
         $response = $this->request($request);
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertEquals($response->status, 200);
-        $this->assertEquals($jsonResponse->_links->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
-        $this->assertEquals(sizeof($jsonResponse->_embedded->{'dav:item'}), 3);
+        $this->assertEquals($jsonResponse->{'_links'}->self->href, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json');
+        $this->assertObjectNotHasProperty('_embedded', $jsonResponse);
+        $this->assertEquals($jsonResponse->{'dav:name'}, 'Calendar');
     }
 
     function testCreateCalendar() {

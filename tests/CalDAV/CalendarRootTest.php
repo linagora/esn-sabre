@@ -17,6 +17,8 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
     const OTHER_DOMAIN_ID = '5a095e2c46b72521d03f6d76';
     const USER_ID = '54313fcc398fef406b0041b6';
+    const RESOURCE_ID = '82113fcc398fef406b0041b7';
+    const OTHER_RESOURCE_ID = '82113fcc398fef406b0041b8';
     const TEAM_CALENDAR_ID = '64313fcc398fef406b0041b6';
     const OTHER_TEAM_CALENDAR_ID = '64313fcc398fef406b0041b7';
 
@@ -49,7 +51,14 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
             '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6'),
             'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)]]
         ]);
-        $this->esndb->resources->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('82113fcc398fef406b0041b7') ]);
+        $this->esndb->resources->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_ID),
+            'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
+        ]);
+        $this->esndb->resources->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::OTHER_RESOURCE_ID),
+            'domain' => new \MongoDB\BSON\ObjectId(self::OTHER_DOMAIN_ID)
+        ]);
         $this->esndb->team_calendars->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::TEAM_CALENDAR_ID),
             'domainId' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
@@ -77,8 +86,8 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($user->getOwner(), 'principals/users/54313fcc398fef406b0041b6');
 
         $this->assertTrue($resource instanceof \ESN\CalDAV\CalendarHome);
-        $this->assertEquals($resource->getName(), '82113fcc398fef406b0041b7');
-        $this->assertEquals($resource->getOwner(), 'principals/resources/82113fcc398fef406b0041b7');
+        $this->assertEquals($resource->getName(), self::RESOURCE_ID);
+        $this->assertEquals($resource->getOwner(), 'principals/resources/' . self::RESOURCE_ID);
 
         $this->assertTrue($teamCalendar instanceof \ESN\CalDAV\CalendarHome);
         $this->assertEquals($teamCalendar->getName(), self::TEAM_CALENDAR_ID);

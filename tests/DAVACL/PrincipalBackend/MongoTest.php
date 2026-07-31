@@ -20,6 +20,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     const USER_DOMAIN_ADMIN_ID = '54313fcc398fef406b0041c3';
     const PROJECT_ID = '54b64eadf6d7d8e41d263e0f';
     const RESOURCE_ID = '82113fcc398fef406b0041b7';
+    const OTHER_RESOURCE_ID = '82113fcc398fef406b0041ba';
     const TEAM_CALENDAR_ID = '82113fcc398fef406b0041b8';
     const OTHER_TEAM_CALENDAR_ID = '82113fcc398fef406b0041b9';
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
@@ -146,6 +147,11 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_ID),
             'name' => 'resource',
             'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
+        ]);
+        self::$esndb->resources->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::OTHER_RESOURCE_ID),
+            'name' => 'other resource',
+            'domain' => new \MongoDB\BSON\ObjectId(self::OTHER_DOMAIN_ID)
         ]);
         self::$esndb->team_calendars->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::TEAM_CALENDAR_ID),
@@ -377,6 +383,13 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame($expected['id'], $principal['id']);
     }
 
+    function testResourcePrincipalShouldRejectCrossDomainAccess() {
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $backend->getPrincipalByPath('principals/resources/' . self::OTHER_RESOURCE_ID);
+    }
+
     function testTeamCalendarPrincipalsByPrefix() {
         $backend = new Mongo(self::$esndb, self::$tenant);
 
@@ -457,6 +470,9 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
         $result = $backend->searchPrincipals('principals/resources', array('{http://sabredav.org/ns}email-address' => self::RESOURCE_ID . '@EXAMPLE.CoM'));
         $this->assertEquals(array('principals/resources/' . self::RESOURCE_ID), $result);
+
+        $result = $backend->searchPrincipals('principals/resources', array('{http://sabredav.org/ns}email-address' => self::OTHER_RESOURCE_ID . '@other.test'));
+        $this->assertEquals([], $result);
 
         $result = $backend->searchPrincipals('principals/resources', array('{http://sabredav.org/ns}email-address' => 'resource@EXAMPLE.CoM'));
         $this->assertEquals([], $result);

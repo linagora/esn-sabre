@@ -43,7 +43,10 @@ class CalendarRoot extends \Sabre\DAV\Collection {
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $user['_id'] ];
             $homes[] = new CalendarHome($this->caldavBackend, $principal);
         }
-        $res = $this->db->resources->find([], [ 'projection' => ['_id' => 1 ]]);
+        $res = $this->db->resources->find(
+            ['domain' => new \MongoDB\BSON\ObjectId($domainId)],
+            [ 'projection' => ['_id' => 1 ]]
+        );
         foreach ($res as $resource) {
             $principal = [ 'uri' => self::RESOURCES_PREFIX . '/' . $resource['_id'] ];
             $homes[] = new CalendarHome($this->caldavBackend, $principal);

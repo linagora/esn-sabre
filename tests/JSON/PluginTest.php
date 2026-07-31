@@ -626,6 +626,10 @@ END:VCALENDAR
             [],
             [ '$set' => [ 'domains' => [ [ 'domain_id' => new \MongoDB\BSON\ObjectId($DOMAIN_ID) ] ] ] ]
         );
+        $this->esndb->resources->updateMany(
+            [],
+            [ '$set' => [ 'domain' => new \MongoDB\BSON\ObjectId($DOMAIN_ID) ] ]
+        );
         $this->authBackend->setAuthTenant(new AuthTenant('technicalUser', $DOMAIN_ID, TenantType::Technical));
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(

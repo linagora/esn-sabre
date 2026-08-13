@@ -474,6 +474,54 @@ ICS;
         $this->assertFalse(isset($result->VEVENT->LOCATION));
     }
 
+    function testHidePrivateEventInfoForUserRemovesNestedComponents() {
+        $icalData = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//ESN Sabre//Security Regression Test//EN',
+            'BEGIN:VEVENT',
+            'UID:private-event-with-alarm',
+            'DTSTAMP:20260101T000000Z',
+            'DTSTART;TZID=Europe/Paris;X-SECRET=secret-start-param:20260110T100000',
+            'DTEND;TZID=Europe/Paris:20260110T110000',
+            'SUMMARY:Secret Meeting',
+            'CLASS:private',
+            'ORGANIZER;CN=Secret Organizer:mailto:boss@example.com',
+            'BEGIN:VALARM',
+            'ACTION:EMAIL',
+            'TRIGGER:-PT15M',
+            'DESCRIPTION:Secret alarm text',
+            'SUMMARY:Secret alarm subject',
+            'ATTENDEE:mailto:secret-attendee@example.com',
+            'END:VALARM',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $vcalendar = \Sabre\VObject\Reader::read($icalData);
+
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $result = Utils::hidePrivateEventInfoForUser($vcalendar, $node, 'principals/users/other');
+        $serialized = $result->serialize();
+
+        $this->assertCount(0, $result->VEVENT->select('VALARM'));
+        $this->assertStringNotContainsString('Secret alarm text', $serialized);
+        $this->assertStringNotContainsString('Secret alarm subject', $serialized);
+        $this->assertStringNotContainsString('secret-attendee@example.com', $serialized);
+        $this->assertStringNotContainsString('secret-start-param', $serialized);
+        $this->assertStringNotContainsString('Secret Organizer', $serialized);
+        $this->assertEquals('Europe/Paris', $result->VEVENT->DTSTART['TZID']->getValue());
+        $this->assertEquals('20260101T000000Z', $result->VEVENT->DTSTAMP->getValue());
+        $this->assertEquals('mailto:boss@example.com', $result->VEVENT->ORGANIZER->getValue());
+        $this->assertEmpty($result->validate(\Sabre\VObject\Node::PROFILE_CALDAV));
+    }
+
     /**
      * Test that hidePrivateEventInfoForUser masks CONFIDENTIAL event details
      */

@@ -210,79 +210,89 @@ class Utils {
         // Clone the entire VCalendar once to avoid multiple serializations
         $clonedCalendar = self::safeCloneVObject($vCalendar);
 
-        foreach ($clonedCalendar->VEVENT as $vevent) {
-            if (self::isHiddenPrivateEvent($vevent, $parentNode, $userPrincipal)) {
-                self::hidePrivateEventInfo($vevent);
-            }
+        list($events, $hasSanitizedEvent) = self::sanitizePrivateEvents(
+            $clonedCalendar,
+            $parentNode,
+            $userPrincipal
+        );
+
+        if ($hasSanitizedEvent) {
+            self::replaceCalendarEvents($clonedCalendar, $events);
         }
 
         return $clonedCalendar;
     }
 
-    private static function hidePrivateEventInfo($vevent) {
-        $properties = self::getPrivateEventPropertiesToPreserve($vevent);
-        self::removeEventProperties($vevent);
-        self::addPrivateEventProperties($vevent, $properties);
+    private static function sanitizePrivateEvents($vCalendar, $parentNode, $userPrincipal) {
+        $events = [];
+        $hasSanitizedEvent = false;
+
+        foreach ($vCalendar->select('VEVENT') as $vevent) {
+            $event = self::isHiddenPrivateEvent($vevent, $parentNode, $userPrincipal)
+                ? self::createSanitizedPrivateEvent($vCalendar, $vevent)
+                : $vevent;
+            $events[] = $event;
+            $hasSanitizedEvent = $hasSanitizedEvent || $event !== $vevent;
+        }
+
+        return [$events, $hasSanitizedEvent];
     }
 
-    private static function getPrivateEventPropertiesToPreserve($vevent) {
-        // Preserve the original read and clone order because VObject properties
-        // keep references to their parent component.
-        $uid = isset($vevent->UID) ? $vevent->UID->getValue() : null;
-        $organizer = isset($vevent->ORGANIZER) ? $vevent->ORGANIZER->getValue() : null;
-        $dtstart = isset($vevent->DTSTART) ? clone $vevent->DTSTART : null;
-        $dtend = isset($vevent->DTEND) ? clone $vevent->DTEND : null;
-        $duration = isset($vevent->DURATION) ? clone $vevent->DURATION : null;
-        $rrule = isset($vevent->RRULE) ? clone $vevent->RRULE : null;
-        $rdate = isset($vevent->RDATE) ? clone $vevent->RDATE : null;
-        $exdate = isset($vevent->EXDATE) ? clone $vevent->EXDATE : null;
-        $recurrenceId = isset($vevent->{'RECURRENCE-ID'}) ? clone $vevent->{'RECURRENCE-ID'} : null;
+    private static function replaceCalendarEvents($vCalendar, $events) {
+        $vCalendar->remove('VEVENT');
+        foreach ($events as $event) {
+            $vCalendar->add($event);
+        }
+    }
 
-        return [
-            'uid' => $uid,
-            'organizer' => $organizer,
-            'dtstart' => $dtstart,
-            'dtend' => $dtend,
-            'duration' => $duration,
-            'rrule' => $rrule,
-            'rdate' => $rdate,
-            'exdate' => $exdate,
-            'recurrenceId' => $recurrenceId
+    private static function createSanitizedPrivateEvent($vCalendar, $vevent) {
+        $sanitizedEvent = $vCalendar->createComponent('VEVENT', [], false);
+
+        // Rebuild from an allowlist so nested components such as VALARM and
+        // arbitrary custom properties cannot retain private details.
+        $allowedProperties = [
+            'UID' => [],
+            'DTSTAMP' => [],
+            'ORGANIZER' => [],
+            'DTSTART' => ['VALUE', 'TZID'],
+            'DTEND' => ['VALUE', 'TZID'],
+            'DURATION' => [],
+            'RRULE' => [],
+            'RDATE' => ['VALUE', 'TZID'],
+            'EXDATE' => ['VALUE', 'TZID'],
+            'RECURRENCE-ID' => ['VALUE', 'TZID', 'RANGE']
         ];
-    }
 
-    private static function removeEventProperties($vevent) {
-        $propertiesToRemove = [];
-        foreach ($vevent->children() as $child) {
-            if ($child instanceof \Sabre\VObject\Property) {
-                $propertiesToRemove[] = $child->name;
+        foreach ($allowedProperties as $propertyName => $parameterNames) {
+            foreach ($vevent->select($propertyName) as $property) {
+                $sanitizedEvent->add(self::clonePropertyWithAllowedParameters($property, $parameterNames));
             }
         }
 
-        foreach ($propertiesToRemove as $propName) {
-            unset($vevent->{$propName});
-        }
+        $sanitizedEvent->SUMMARY = 'Busy';
+        $sanitizedEvent->CLASS = 'PRIVATE';
+
+        return $sanitizedEvent;
     }
 
-    private static function addPrivateEventProperties($vevent, $properties) {
-        if ($properties['uid']) {
-            $vevent->UID = $properties['uid'];
-        }
-        $vevent->SUMMARY = 'Busy';
-        $vevent->CLASS = 'PRIVATE';
-        if ($properties['organizer']) {
-            $vevent->ORGANIZER = $properties['organizer'];
-        }
+    private static function clonePropertyWithAllowedParameters($property, $allowedParameters) {
+        $clonedProperty = clone $property;
+        $clonedProperty->group = null;
+        $clonedProperty->lineIndex = null;
+        $clonedProperty->lineString = null;
 
-        foreach (['dtstart', 'dtend', 'duration', 'rrule', 'rdate', 'exdate', 'recurrenceId'] as $propertyName) {
-            if ($properties[$propertyName]) {
-                $vevent->add($properties[$propertyName]);
+        foreach ($clonedProperty->parameters() as $parameter) {
+            if (!in_array($parameter->name, $allowedParameters, true)) {
+                unset($clonedProperty[$parameter->name]);
             }
         }
+
+        return $clonedProperty;
     }
 
     static function isHiddenPrivateEvent($vevent, $node, $userPrincipal) {
-        if ($vevent->CLASS != 'PRIVATE' && $vevent->CLASS != 'CONFIDENTIAL') {
+        $class = strtoupper((string) $vevent->CLASS);
+        if (!in_array($class, ['PRIVATE', 'CONFIDENTIAL'], true)) {
             return false;
         }
 

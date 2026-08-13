@@ -40,3 +40,10 @@ Please refer to [this document](doc/TESTING.md) for running project tests.
 ### Interfaces
 
 `esn-sabre` exposes a convenience [JSON API](doc/JSON-API.md).
+
+### Authorization and data isolation
+
+The [authorization and data isolation
+model](doc/AUTHORIZATION-AND-DATA-ISOLATION.md) defines the boundaries that
+apply to authentication, authorization, sharing, protocol routes, and tenant
+isolation.

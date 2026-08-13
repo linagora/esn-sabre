@@ -96,6 +96,11 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         if(!$domainId)
             throw new AuthException('decodeResponse(): unknown domainId');
         $tenant = new AuthTenant($user->_id, $domainId, $type == $this->technicalUserType ? TenantType::Technical : TenantType::User);
+
+        return $this->validateResponseIdentity($user, $tenant);
+    }
+
+    private function validateResponseIdentity($user, $tenant) {
         if (isset($user->domain)) {
             if (!filter_var($user->domain, FILTER_VALIDATE_DOMAIN)) {
                 error_log("decodeResponse: invalid domain '$user->domain' for user '$user->_id'");
@@ -156,7 +161,13 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             $user = $user[0];
         }
 
+        $entries = $this->authenticateLdapUser($user, $password);
+        $mail = $this->getMailFromLdapEntries($entries, $username, $user);
 
+        return $this->getAuthTenantByEmail($mail);
+    }
+
+    private function authenticateLdapUser($user, $password) {
         # Open LDAP connection
         $ldapCon = ldap_connect(LDAP_SERVER);
         if (!$ldapCon) {
@@ -203,6 +214,11 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         finally {
             ldap_close($ldapCon);
         }
+
+        return $entries;
+    }
+
+    private function getMailFromLdapEntries($entries, $username, $user) {
         if ($entries['count'] == 0) {
             error_log("Unable to find $username which is valid for auth!");
             throw new  AuthException("Unable to find $username which is valid for auth");
@@ -220,6 +236,10 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             throw new  AuthException("$user has incorrect mail attribute");
         }
 
+        return $mail;
+    }
+
+    private function getAuthTenantByEmail($mail): AuthTenant {
         $tenant = $this->principalBackend->getAuthTenantByEmail($mail);
         if (!$tenant) {
             $tenant = $this->autoProvisionUser($mail);
@@ -383,22 +403,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
      */
     function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): array {
         try {
-            $authorizationHeader = $request->getHeader("Authorization");
-            $bearer = null;
-            if ($authorizationHeader)
-                if(preg_match('/^Bearer\s+(\S+)$/', $authorizationHeader, $matches))
-                      $bearer = $matches[1];
-            if ($bearer) {
-                $tenant = $this->checkJWT($bearer);
-                return $this->checkSuccess($tenant);
-            }
-
-            $tCalendarToken = $request->getHeader("TwakeCalendarToken");
-            if ($tCalendarToken) {
-                $tenant = $this->checkAuthByTCalendarToken($tCalendarToken);
-                return $this->checkSuccess($tenant);
-            }
-            $tenant = $this->checkBasicAuth($request, $response);
+            $tenant = $this->authenticateRequest($request, $response);
             return $this->checkSuccess($tenant);
         } catch(AuthException $e) {
             if($this->debug)
@@ -415,32 +420,37 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         } 
     }
 
+    private function authenticateRequest(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): AuthTenant {
+        $bearer = $this->getBearerToken($request);
+        if ($bearer) {
+            return $this->checkJWT($bearer);
+        }
+
+        $tCalendarToken = $request->getHeader("TwakeCalendarToken");
+        if ($tCalendarToken) {
+            return $this->checkAuthByTCalendarToken($tCalendarToken);
+        }
+
+        return $this->checkBasicAuth($request, $response);
+    }
+
+    private function getBearerToken(\Sabre\HTTP\RequestInterface $request) {
+        $authorizationHeader = $request->getHeader("Authorization");
+        $bearer = null;
+        if ($authorizationHeader)
+            if(preg_match('/^Bearer\s+(\S+)$/', $authorizationHeader, $matches))
+                  $bearer = $matches[1];
+
+        return $bearer;
+    }
+
     /*
      * @throw ESN\DAV\Auth\Backend\AuthException in case of authentification failure
      */
     private function checkJWT(string $token) : AuthTenant {
-        // No public key = no jwt
-        if (!file_exists(ESN_PUBLIC_KEY))
-            throw new AuthException('no public key file used by checkJWT()');
-
-        $matchtoken = preg_match('/^[A-Za-z0-9_-]{2,}(?:\.[A-Za-z0-9_-]{2,}){2}$/', $token);
-        if (!$matchtoken)
-            throw new AuthException('checkJWT: weird format');
+        $this->validateJWTPreconditions($token);
         try {
-            // Load esn's public key
-            $key = file_get_contents(ESN_PUBLIC_KEY);
-            // Try to decode the token with the public key
-            $user = JWT::decode($token, new Key($key, 'RS256'));
-            // Get the user Id associated with the identifier of the token ( email in sub field )
-            if (!isset($user->sub))
-                throw new \UnexpectedValueException("checkJWT: '$user->sub' is not valid");
-            $email = $user->sub;
-            if(!filter_var($email, FILTER_VALIDATE_EMAIL))
-                throw new \UnexpectedValueException("checkJWT: email '$email' is not a valid mail");
-            $tenant = $this->principalBackend->getAuthTenantByEmail($email);
-            // No user found by that email
-            if (!$tenant)
-                throw new AuthException('checkJWT: no user found by email');
+            $tenant = $this->resolveJWTAuthTenant($token);
         } catch(AuthException $e) {
             throw $e;
         } catch(\Exception $e) {
@@ -453,6 +463,40 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             throw new AuthException($e->getMessage());
         }
         return $tenant;
+    }
+
+    private function validateJWTPreconditions(string $token) {
+        // No public key = no jwt
+        if (!file_exists(ESN_PUBLIC_KEY))
+            throw new AuthException('no public key file used by checkJWT()');
+
+        $matchtoken = preg_match('/^[A-Za-z0-9_-]{2,}(?:\.[A-Za-z0-9_-]{2,}){2}$/', $token);
+        if (!$matchtoken)
+            throw new AuthException('checkJWT: weird format');
+    }
+
+    private function resolveJWTAuthTenant(string $token) {
+        // Load esn's public key and decode the token with the expected algorithm.
+        $key = file_get_contents(ESN_PUBLIC_KEY);
+        $user = JWT::decode($token, new Key($key, 'RS256'));
+        $email = $this->getJWTEmail($user);
+        $tenant = $this->principalBackend->getAuthTenantByEmail($email);
+        // No user found by that email
+        if (!$tenant)
+            throw new AuthException('checkJWT: no user found by email');
+
+        return $tenant;
+    }
+
+    private function getJWTEmail($user) {
+        // The user identifier carried by ESN tokens is an email in the sub field.
+        if (!isset($user->sub))
+            throw new \UnexpectedValueException("checkJWT: '$user->sub' is not valid");
+        $email = $user->sub;
+        if(!filter_var($email, FILTER_VALIDATE_EMAIL))
+            throw new \UnexpectedValueException("checkJWT: email '$email' is not a valid mail");
+
+        return $email;
     }
 
 

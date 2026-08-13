@@ -111,11 +111,11 @@ class CalendarObjectHandler {
         // Use optimized method if available (Mongo backend with SharedCalendar node)
         if ($node instanceof \ESN\CalDAV\SharedCalendar && $node->getBackend() instanceof \ESN\CalDAV\Backend\Mongo) {
             // getFullCalendarId returns the full calendar id array [calendarId, instanceId]
-            return [200, $this->getMultipleDAVItemsOptimized($nodePath, $node, $filters, $start, $end)];
+            return [200, $this->getMultipleDAVItemsOptimized($nodePath, $node, $filters, [$start, $end])];
         }
 
         // Fallback to standard method for other backends
-        return [200, $this->getMultipleDAVItems($nodePath, $node, $node->calendarQuery($filters), $start, $end)];
+        return [200, $this->getMultipleDAVItems($nodePath, $node, $node->calendarQuery($filters), [$start, $end])];
     }
 
     /**
@@ -167,6 +167,50 @@ class CalendarObjectHandler {
      *               - [400, null] if calendar not found or invalid request
      */
     public function getCalendarObjectsBySyncToken($nodePath, $node, $jsonData) {
+        $syncToken = $this->getSyncTokenFromRequest($jsonData);
+
+        // Validate that sync token is numeric (empty string is valid for initial sync)
+        if (!$this->isValidSyncToken($syncToken)) {
+            return [400, null];
+        }
+
+        // Get calendar backend
+        $backend = method_exists($node, 'getBackend') ? $node->getBackend() : $node->getCalDAVBackend();
+
+        $calendarId = $this->getCalendarId($node, $backend);
+        if ($calendarId === null) {
+            return [400, null];
+        }
+
+        // Get changes from backend
+        // syncLevel 1 = include calendar object changes (added, modified, deleted)
+        $changes = $backend->getChangesForCalendar($calendarId, $syncToken, 1);
+
+        // If null is returned, the sync token is invalid
+        if ($changes === null) {
+            return [400, null];
+        }
+
+        $baseUri = $this->server->getBaseUri();
+        $items = $this->buildSyncItems($changes, $baseUri, $nodePath);
+
+        // Build sync-token URL
+        $newSyncToken = 'http://sabre.io/ns/sync/' . $changes['syncToken'];
+
+        $result = [
+            '_links' => [
+                'self' => [ 'href' => $baseUri . $nodePath . '.json' ]
+            ],
+            '_embedded' => [
+                'dav:item' => $items
+            ],
+            'sync-token' => $newSyncToken
+        ];
+
+        return [207, $result];
+    }
+
+    private function getSyncTokenFromRequest($jsonData) {
         $syncToken = isset($jsonData->{'sync-token'}) ? $jsonData->{'sync-token'} : null;
 
         // Extract numeric sync token from URL format if needed
@@ -177,19 +221,23 @@ class CalendarObjectHandler {
             $syncToken = end($parts);
         }
 
-        // Validate that sync token is numeric (empty string is valid for initial sync)
-        if ($syncToken !== '' && $syncToken !== null && !is_numeric($syncToken)) {
-            return [400, null];
+        return $syncToken;
+    }
+
+    private function isValidSyncToken($syncToken) {
+        if ($syncToken === '' || $syncToken === null) {
+            return true;
         }
 
-        // Get calendar backend
-        $backend = method_exists($node, 'getBackend') ? $node->getBackend() : $node->getCalDAVBackend();
+        return is_numeric($syncToken);
+    }
 
-        // Get calendar ID - use the same approach as getMultipleDAVItemsOptimized
+    private function getCalendarId($node, $backend) {
+        // Use the same approach as getMultipleDAVItemsOptimized
         if ($node instanceof \ESN\CalDAV\SharedCalendar) {
             $calendarId = $node->getFullCalendarId();
             if (!is_array($calendarId)) {
-                return [400, null];
+                return null;
             }
         } else {
             // For standard Sabre calendars, get ID from backend
@@ -204,7 +252,7 @@ class CalendarObjectHandler {
                 }
             }
             if ($calendarId === null) {
-                return [400, null];
+                return null;
             }
             // Ensure it's an array for getChangesForCalendar
             if (!is_array($calendarId)) {
@@ -212,16 +260,10 @@ class CalendarObjectHandler {
             }
         }
 
-        // Get changes from backend
-        // syncLevel 1 = include calendar object changes (added, modified, deleted)
-        $changes = $backend->getChangesForCalendar($calendarId, $syncToken, 1);
+        return $calendarId;
+    }
 
-        // If null is returned, the sync token is invalid
-        if ($changes === null) {
-            return [400, null];
-        }
-
-        $baseUri = $this->server->getBaseUri();
+    private function buildSyncItems($changes, $baseUri, $nodePath) {
         $items = [];
 
         // Process added and modified events
@@ -245,20 +287,7 @@ class CalendarObjectHandler {
             ];
         }
 
-        // Build sync-token URL
-        $newSyncToken = 'http://sabre.io/ns/sync/' . $changes['syncToken'];
-
-        $result = [
-            '_links' => [
-                'self' => [ 'href' => $baseUri . $nodePath . '.json' ]
-            ],
-            '_embedded' => [
-                'dav:item' => $items
-            ],
-            'sync-token' => $newSyncToken
-        ];
-
-        return [207, $result];
+        return $items;
     }
 
     /**
@@ -303,24 +332,7 @@ class CalendarObjectHandler {
         // Expand the event in the time range
         $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
 
-        // Post-filtering: Remove events outside the time range
-        $vevents = $vObject->select('VEVENT');
-        foreach ($vevents as $vevent) {
-            $eventStart = $vevent->DTSTART->getDateTime();
-
-            if (isset($vevent->DTEND)) {
-                $eventEnd = $vevent->DTEND->getDateTime();
-            } elseif (isset($vevent->DURATION)) {
-                $eventEnd = clone $eventStart;
-                $eventEnd->add($vevent->DURATION->getDateInterval());
-            } else {
-                $eventEnd = $eventStart;
-            }
-
-            if ($eventEnd <= $start || $eventStart >= $end) {
-                $vObject->remove($vevent);
-            }
-        }
+        $this->removeEventsOutsideTimeRange($vObject, $start, $end);
 
         // Get etag
         $etag = $node->getETag();
@@ -339,6 +351,27 @@ class CalendarObjectHandler {
         $vObject->destroy();
 
         return [200, $result];
+    }
+
+    private function removeEventsOutsideTimeRange($vObject, $start, $end) {
+        // Post-filtering: Remove events outside the time range
+        $vevents = $vObject->select('VEVENT');
+        foreach ($vevents as $vevent) {
+            $eventStart = $vevent->DTSTART->getDateTime();
+
+            if (isset($vevent->DTEND)) {
+                $eventEnd = $vevent->DTEND->getDateTime();
+            } elseif (isset($vevent->DURATION)) {
+                $eventEnd = clone $eventStart;
+                $eventEnd->add($vevent->DURATION->getDateInterval());
+            } else {
+                $eventEnd = $eventStart;
+            }
+
+            if ($eventEnd <= $start || $eventStart >= $end) {
+                $vObject->remove($vevent);
+            }
+        }
     }
 
     /**
@@ -366,42 +399,42 @@ class CalendarObjectHandler {
             // This happens when a user is invited to only one occurrence of a recurring event.
             // In this case, we use the original unexpanded object and normalize it.
             if (!is_object($vevent)) {
-                // Convert dates to UTC to match expand() behavior
-                // IMPORTANT: Must be done BEFORE removing VTIMEZONE, as conversion needs timezone info
-                foreach ($vObject->VEVENT as $vevent) {
-                    $this->convertDateTimeToUTC($vevent, 'DTSTART');
-                    $this->convertDateTimeToUTC($vevent, 'DTEND');
-                }
-
-                // Remove VTIMEZONE to match expand() behavior
-                unset($vObject->VTIMEZONE);
-                // Keep the original vObject instead of the empty expanded one
+                $this->normalizeEventsWithoutMaster($vObject);
             } else {
                 $vObject = $expandedObject;
-
-                if (isset($vevent->RRULE) && !isset($vevent->{'RECURRENCE-ID'})) {
-                    $recurid = clone $vevent->DTSTART;
-                    $recurid->name = 'RECURRENCE-ID';
-                    $vevent->add($recurid);
-                }
+                $this->addRecurrenceIdToFirstOccurrence($vevent);
             }
         }
 
         return $vObject;
     }
 
-    private function getMultipleDAVItems($parentNodePath, $parentNode, $calendarObjectUris, $start = false, $end = false) {
+    private function normalizeEventsWithoutMaster($vObject) {
+        // Convert dates to UTC to match expand() behavior
+        // IMPORTANT: Must be done BEFORE removing VTIMEZONE, as conversion needs timezone info
+        foreach ($vObject->VEVENT as $vevent) {
+            $this->convertDateTimeToUTC($vevent, 'DTSTART');
+            $this->convertDateTimeToUTC($vevent, 'DTEND');
+        }
+
+        // Remove VTIMEZONE to match expand() behavior
+        unset($vObject->VTIMEZONE);
+        // Keep the original vObject instead of the empty expanded one
+    }
+
+    private function addRecurrenceIdToFirstOccurrence($vevent) {
+        if (isset($vevent->RRULE) && !isset($vevent->{'RECURRENCE-ID'})) {
+            $recurid = clone $vevent->DTSTART;
+            $recurid->name = 'RECURRENCE-ID';
+            $vevent->add($recurid);
+        }
+    }
+
+    private function getMultipleDAVItems($parentNodePath, $parentNode, $calendarObjectUris, $timeRange = [false, false]) {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
-        // Retrieve the syncToken from the calendar (only for ICalendarObjectContainer nodes)
-        $syncToken = null;
-        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer && method_exists($parentNode, 'getProperties')) {
-            $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
-            $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
-                ? $calendarProps['{http://sabredav.org/ns}sync-token']
-                : null;
-        }
+        $syncToken = $this->getSyncToken($parentNode);
 
         $paths = [];
         foreach ($calendarObjectUris as $calendarObjectUri) {
@@ -412,39 +445,17 @@ class CalendarObjectHandler {
         foreach ($this->server->getPropertiesForMultiplePaths($paths, $props) as $objProps) {
             try {
                 $vObject = VObject\Reader::read($objProps[200][$props[0]]);
-                $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
-                $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+                $vObject = $this->normalizeCalendarObject($vObject, $parentNode, $timeRange);
                 $objProps[200][$props[0]] = $vObject->jsonSerialize();
                 $vObject->destroy();
 
                 $propertyList[] = $objProps;
             } catch (\Exception $e) {
-                // Be lenient on read: a single malformed event (e.g. an invalid RRULE UNTIL value)
-                // must not make the whole report fail. Log it and filter it out of the result.
-                error_log('CalendarObjectHandler: skipping malformed calendar object during expansion: '
-                    . $e->getMessage());
+                $this->logMalformedCalendarObject($e);
             }
         }
 
-        $embedded = [
-            'dav:item' => Utils::generateJSONMultiStatus([
-                'fileProperties' => $propertyList,
-                'dataKey' => $props[0],
-                'baseUri' => $baseUri
-            ])
-        ];
-
-        // Add the syncToken if it exists
-        if ($syncToken !== null) {
-            $embedded['sync-token'] = 'http://sabre.io/ns/sync/' . $syncToken;
-        }
-
-        return [
-            '_links' => [
-                'self' => [ 'href' => $baseUri . $parentNodePath . '.json']
-            ],
-            '_embedded' => $embedded
-        ];
+        return $this->buildMultipleDAVItemsResponse($baseUri, $parentNodePath, $propertyList, $syncToken);
     }
 
     /**
@@ -453,23 +464,15 @@ class CalendarObjectHandler {
      *
      * @param string $parentNodePath
      * @param mixed $parentNode
-     * @param array $calendarObjects Array of objects with 'uri', 'calendardata', and 'etag' keys
-     * @param \DateTime|false $start
-     * @param \DateTime|false $end
+     * @param array $filters Calendar query filters
+     * @param array $timeRange Start and end dates for expansion
      * @return array
      */
-    private function getMultipleDAVItemsOptimized($parentNodePath, $parentNode, $filters, $start = false, $end = false) {
+    private function getMultipleDAVItemsOptimized($parentNodePath, $parentNode, $filters, $timeRange = [false, false]) {
         $baseUri = $this->server->getBaseUri();
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
-        // Retrieve the syncToken from the calendar (only for ICalendarObjectContainer nodes)
-        $syncToken = null;
-        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer && method_exists($parentNode, 'getProperties')) {
-            $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
-            $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
-                ? $calendarProps['{http://sabredav.org/ns}sync-token']
-                : null;
-        }
+        $syncToken = $this->getSyncToken($parentNode);
 
         $propertyList = [];
         $backend = $parentNode->getBackend();
@@ -478,8 +481,7 @@ class CalendarObjectHandler {
             try {
                 // Use pre-parsed VObject if available (from requirePostFilter), otherwise parse now
                 $vObject = $calendarObject['vObject'] ?? VObject\Reader::read($calendarObject['calendardata']);
-                $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
-                $vObject = Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+                $vObject = $this->normalizeCalendarObject($vObject, $parentNode, $timeRange);
 
                 // Build the property list in the same format as getPropertiesForMultiplePaths would return
                 $objProps = [
@@ -494,17 +496,46 @@ class CalendarObjectHandler {
 
                 $propertyList[] = $objProps;
             } catch (\Exception $e) {
-                // Be lenient on read: a single malformed event (e.g. an invalid RRULE UNTIL value)
-                // must not make the whole report fail. Log it and filter it out of the result.
-                error_log('CalendarObjectHandler: skipping malformed calendar object during expansion: '
-                    . $e->getMessage());
+                $this->logMalformedCalendarObject($e);
             }
         }
 
+        return $this->buildMultipleDAVItemsResponse($baseUri, $parentNodePath, $propertyList, $syncToken);
+    }
+
+    private function getSyncToken($parentNode) {
+        // Retrieve the syncToken from the calendar (only for ICalendarObjectContainer nodes)
+        $syncToken = null;
+        if ($parentNode instanceof \Sabre\CalDAV\ICalendarObjectContainer && method_exists($parentNode, 'getProperties')) {
+            $calendarProps = $parentNode->getProperties(['{http://sabredav.org/ns}sync-token']);
+            $syncToken = isset($calendarProps['{http://sabredav.org/ns}sync-token'])
+                ? $calendarProps['{http://sabredav.org/ns}sync-token']
+                : null;
+        }
+
+        return $syncToken;
+    }
+
+    private function normalizeCalendarObject($vObject, $parentNode, $timeRange) {
+        [$start, $end] = $timeRange;
+        $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
+
+        return Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+    }
+
+    private function logMalformedCalendarObject($exception) {
+        // Be lenient on read: a single malformed event (e.g. an invalid RRULE UNTIL value)
+        // must not make the whole report fail. Log it and filter it out of the result.
+        error_log('CalendarObjectHandler: skipping malformed calendar object during expansion: '
+            . $exception->getMessage());
+    }
+
+    private function buildMultipleDAVItemsResponse($baseUri, $parentNodePath, $propertyList, $syncToken) {
+        $dataKey = '{' . self::NS_CALDAV . '}calendar-data';
         $embedded = [
             'dav:item' => Utils::generateJSONMultiStatus([
                 'fileProperties' => $propertyList,
-                'dataKey' => $props[0],
+                'dataKey' => $dataKey,
                 'baseUri' => $baseUri
             ])
         ];

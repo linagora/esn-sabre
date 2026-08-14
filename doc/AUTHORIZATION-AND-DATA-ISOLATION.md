@@ -64,7 +64,9 @@ The DAV authentication backend currently supports the following mechanisms, in
 this order:
 
 1. `Authorization: Bearer <JWT>`: the token is verified with the configured
-   RS256 public key and its `sub` email is resolved to a user tenant.
+   RS256 public key and its `sub` email is resolved to a user tenant. This
+   legacy OpenPaaS frontend compatibility path is deprecated and should be
+   removed when those frontends no longer depend on it.
 2. `TwakeCalendarToken: <token>`: the token is introspected by the calendar side
    service and produces a technical or user tenant.
 3. HTTP Basic authentication: credentials are checked against LDAP. When
@@ -75,6 +77,24 @@ Successful authentication produces an `AuthTenant` containing an identity,
 domain ID, and tenant type. This context is propagated on `auth:success` to the
 principal and calendar backends. Authorization code must not run with a missing
 or stale tenant context.
+
+### Administrator impersonation
+
+Impersonation is a trusted authentication boundary, not a general ACL bypass:
+
+- It is enabled only by `SABRE_IMPERSONATION_ENABLED` and is intended for
+  internal, non-public deployments.
+- Basic credentials use
+  `{SABRE_ADMIN_LOGIN}&{targetEmail}:{SABRE_ADMIN_PASSWORD}`. Resolution tries
+  user, resource, then team-calendar identities; a missing user is provisioned
+  only after LDAP and domain validation.
+- Success assumes the target principal, tenant type, and domain. The credential
+  may select a target in another tenant, but each request has one target
+  `AuthTenant`, never an administrator-wide data scope.
+- Downstream authorization uses only this target context; it cannot retain an
+  administrator identity or authorize data outside the target domain.
+- Invalid credentials, a disabled feature, or an unresolved target fail without
+  disclosing target data or creating side effects.
 
 ## Calendar authorization
 
@@ -167,8 +187,8 @@ The following invariants apply independently to each access level:
 ### Resource and team calendars
 
 Resources and team calendars are principals with their own calendar homes, not
-ordinary user calendars. Review them separately because their administrator or
-member may act on behalf of the owning principal.
+ordinary user calendars. Their authorization model covers an administrator or
+member acting on behalf of the owning principal.
 
 - A resource administrator can perform only the documented operations and
   loses access immediately after revocation.
@@ -272,8 +292,23 @@ Tenant isolation obeys these invariants:
   domain membership.
 - A missing `AuthTenant` fails closed and never disables domain filtering.
 - Cache keys and deduplication keys are tenant-qualified.
-- Explicit cross-domain sharing features are narrow, documented exceptions and
-  do not provide a general tenant-isolation bypass.
+- Explicit cross-tenant flows are narrow, documented exceptions and do not
+  provide a general tenant-isolation bypass.
+
+### Explicit cross-tenant features
+
+| Flow | Boundary |
+|---|---|
+| Administrator impersonation | May select a target in another tenant, but the request assumes only that target `AuthTenant`; it creates no global tenant view. |
+| Cross-domain scheduling | iTIP/iMIP may carry the scheduling payload needed for an invitation, update, cancellation, or reply. It grants no direct access to the foreign principal or calendar. |
+| Direct CalDAV/CardDAV, JSON, free/busy, and public resources | Foreign-tenant access is not supported. "Public" means visible within the authenticated tenant. |
+| Sharing, delegation, and subscriptions | Tenant-local; cross-domain sharees are rejected and copied collections do not bypass tenant checks. |
+| Technical, resource, and team-calendar principals | Tenant-local even when technically privileged; the domain in `AuthTenant` remains mandatory. |
+| Multi-domain users | Each request selects one domain; memberships do not merge tenant views. |
+
+Any new cross-tenant flow must define the allowed data, identity checks,
+revocation, protocol surfaces, and side effects. Reviews also cover discovery,
+cached identifiers, denial responses, and asynchronous messages.
 
 ## CardDAV and address books
 

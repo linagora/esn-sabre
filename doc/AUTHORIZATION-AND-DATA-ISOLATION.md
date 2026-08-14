@@ -292,19 +292,23 @@ Tenant isolation obeys these invariants:
   domain membership.
 - A missing `AuthTenant` fails closed and never disables domain filtering.
 - Cache keys and deduplication keys are tenant-qualified.
-- Explicit cross-tenant flows are narrow, documented exceptions and do not
-  provide a general tenant-isolation bypass.
+- Scheduling payloads that cross domain boundaries remain subject to identity
+  checks and do not bypass tenant isolation.
 
-### Explicit cross-tenant features
+### Cross-domain behavior
 
-| Flow | Boundary |
+Cross-domain scheduling may use iTIP/iMIP for invitations, updates,
+cancellations, and replies. Identity checks still apply, and scheduling grants
+no direct access to a foreign principal or calendar.
+
+For other features, authorization remains scoped to the authenticated tenant:
+
+| Feature | Cross-domain behavior |
 |---|---|
-| Administrator impersonation | May select a target in another tenant, but the request assumes only that target `AuthTenant`; it creates no global tenant view. |
-| Cross-domain scheduling | iTIP/iMIP may carry the scheduling payload needed for an invitation, update, cancellation, or reply. It grants no direct access to the foreign principal or calendar. |
-| Direct CalDAV/CardDAV, JSON, free/busy, and public resources | Foreign-tenant access is not supported. "Public" means visible within the authenticated tenant. |
-| Sharing, delegation, and subscriptions | Tenant-local; cross-domain sharees are rejected and copied collections do not bypass tenant checks. |
-| Technical, resource, and team-calendar principals | Tenant-local even when technically privileged; the domain in `AuthTenant` remains mandatory. |
-| Multi-domain users | Each request selects one domain; memberships do not merge tenant views. |
+| Direct CalDAV/CardDAV, JSON, and free/busy | Reject foreign principals, homes, collections, and objects |
+| Public resources | Remain visible only within the authenticated tenant |
+| Sharing, delegation, and subscriptions | Reject cross-domain sharees; copied collections do not bypass tenant checks |
+| Impersonation and technical, resource, or team-calendar principals | Authorize only within their `AuthTenant` domain |
 
 Any new cross-tenant flow must define the allowed data, identity checks,
 revocation, protocol surfaces, and side effects. Reviews also cover discovery,

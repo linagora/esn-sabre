@@ -190,9 +190,10 @@ class AMQPSchedulePlugin extends Plugin {
             return;
         }
 
-        if ($this->shouldSkipSchedulingForUnacceptedPublicAgenda($vCal)) {
-            return;
-        }
+        // A public agenda booking the chair organizer has not accepted yet is only
+        // scheduled towards the booker: the invited attendees must stay unaware of a
+        // booking that may still be turned down.
+        $restrictToBooker = $this->shouldSkipSchedulingForUnacceptedPublicAgenda($vCal);
 
         if ($this->shouldEnableEmailValarmRecipientScheduling() && $this->ensureValarmUids($vCal)) {
             $modified = true;
@@ -220,7 +221,11 @@ class AMQPSchedulePlugin extends Plugin {
             $this->assertAllowedAttendeeSchedulingObjectChange($oldObj, $vCal, $actorAddresses);
         }
 
-        $this->processICalendarChange($oldObj, $vCal, $schedulingAddresses, [], $modified);
+        $ignore = $restrictToBooker
+            ? PublicAgendaScheduleUtils::recipientsExceptBooker([$oldObj, $vCal])
+            : [];
+
+        $this->processICalendarChange($oldObj, $vCal, $schedulingAddresses, $ignore, $modified);
         // flushDeliveries() is called in afterCreateFile/afterWriteContent.
     }
 
@@ -267,9 +272,14 @@ class AMQPSchedulePlugin extends Plugin {
         // with this attendee) and pass it to the Broker so it can generate a proper REPLY.
         $nodeIcs = $this->resolveFullCalendarForBroker($nodeIcs) ?: $nodeIcs;
         $sourceCalendar = CalendarObjectHelper::readCalendarObject($nodeIcs);
-        if ($this->shouldSkipSchedulingForUnacceptedPublicAgenda($sourceCalendar)) {
-            return;
-        }
+
+        // Cancelling a booking the chair organizer never accepted still has to reach the
+        // booker, who is waiting on an answer; the attendees never saw the booking.
+        // $sourceCalendar (not $node->get()) is what the Broker parses once
+        // resolveFullCalendarForBroker() has had its say, so both see the same recipients.
+        $ignore = $this->shouldSkipSchedulingForUnacceptedPublicAgenda($sourceCalendar)
+            ? PublicAgendaScheduleUtils::recipientsExceptBooker([$sourceCalendar])
+            : [];
 
         $broker = new ITip\Broker();
         $broker->significantChangeProperties = array_merge(
@@ -279,6 +289,10 @@ class AMQPSchedulePlugin extends Plugin {
         $messages = $broker->parseEvent(null, $addresses, $nodeIcs);
 
         foreach ($messages as $message) {
+            if (in_array($message->recipient, $ignore)) {
+                continue;
+            }
+
             if ($sourceCalendar) {
                 $this->preservePublicAgendaMetadata($message, $sourceCalendar);
             }

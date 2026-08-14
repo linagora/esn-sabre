@@ -501,9 +501,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        if ($this->shouldSkipSchedulingForUnacceptedPublicAgenda($vCal)) {
-            return;
-        }
+        // A public agenda booking the chair organizer has not accepted yet is only
+        // scheduled towards the booker: the invited attendees must stay unaware of a
+        // booking that may still be turned down.
+        $restrictToBooker = $this->shouldSkipSchedulingForUnacceptedPublicAgenda($vCal);
 
         if ($this->shouldEnableEmailValarmRecipientScheduling() && $this->ensureValarmUids($vCal)) {
             $modified = true;
@@ -526,7 +527,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $this->assertAllowedAttendeeSchedulingObjectChange($oldObj, $vCal, $actorAddresses);
         }
 
-        $this->processICalendarChange($oldObj, $vCal, $schedulingAddresses, [], $modified);
+        $ignore = $restrictToBooker
+            ? PublicAgendaScheduleUtils::recipientsExceptBooker([$oldObj, $vCal])
+            : [];
+
+        $this->processICalendarChange($oldObj, $vCal, $schedulingAddresses, $ignore, $modified);
     }
 
     protected function assertAllowedAttendeeSchedulingObjectChange(VCalendar $oldObject, VCalendar $newObject, array $addresses): void {
@@ -905,13 +910,20 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         $oldObject = Reader::read($node->get());
-        if ($this->shouldSkipSchedulingForUnacceptedPublicAgenda($oldObject)) {
-            return;
-        }
+
+        // Cancelling a booking the chair organizer never accepted still has to reach the
+        // booker, who is waiting on an answer; the attendees never saw the booking.
+        $ignore = $this->shouldSkipSchedulingForUnacceptedPublicAgenda($oldObject)
+            ? PublicAgendaScheduleUtils::recipientsExceptBooker([$oldObject])
+            : [];
 
         $messages = $this->createBroker()->parseEvent(null, $addresses, $oldObject);
 
         foreach ($messages as $message) {
+            if (in_array($message->recipient, $ignore)) {
+                continue;
+            }
+
             $this->preservePublicAgendaMetadata($message, $oldObject);
             $this->deliver($message);
         }

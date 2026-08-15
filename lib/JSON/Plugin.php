@@ -6,6 +6,7 @@ use ESN\CalDAV\VObjectPropertyRegistry;
 use ESN\JSON\CalDAV\CalendarHandler;
 use ESN\JSON\CalDAV\CalendarObjectHandler;
 use ESN\JSON\CalDAV\SubscriptionHandler;
+use ESN\JSON\CardDAV\AddressBookHandler;
 use ESN\Utils\Utils;
 use \Sabre\DAV\Exception\Forbidden;
 use \Sabre\VObject,
@@ -33,6 +34,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     protected $calendarHandler;
     protected $calendarObjectHandler;
     protected $subscriptionHandler;
+    protected $addressBookHandler;
 
     protected ?AuthTenant $authTenant = null;
 
@@ -79,6 +81,13 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $this->subscriptionHandler = new SubscriptionHandler($this->server, $this->currentUser);
         }
         return $this->subscriptionHandler;
+    }
+
+    protected function getAddressBookHandler() {
+        if (!$this->addressBookHandler) {
+            $this->addressBookHandler = new AddressBookHandler($this->server);
+        }
+        return $this->addressBookHandler;
     }
 
     function afterMethodReport($request, $response) {
@@ -177,6 +186,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             $this->calendarHandler = null;
             $this->calendarObjectHandler = null;
             $this->subscriptionHandler = null;
+            $this->addressBookHandler = null;
         }
 
         $this->currentUser = $newUser;
@@ -305,6 +315,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     private function handleSyncTokenReport($path, $node, $jsonData) {
+        if ($node instanceof \Sabre\CardDAV\IAddressBook) {
+            return $this->getAddressBookHandler()->getCardsBySyncToken($path, $node, $jsonData);
+        }
         if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
             return $this->getCalendarObjectHandler()->getCalendarObjectsBySyncToken($path, $node, $jsonData);
         }

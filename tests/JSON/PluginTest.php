@@ -2298,4 +2298,128 @@ END:VCALENDAR
         // Should have 0 events since event2 is outside the requested time-range
         $this->assertCount(0, $vevents);
     }
+
+    private function addressBookSyncTokenRequest($syncToken) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
+        ));
+
+        $request->setBody(json_encode(['sync-token' => $syncToken]));
+        return $this->request($request);
+    }
+
+    function testAddressBookSyncTokenInitialSync() {
+        $response = $this->addressBookSyncTokenRequest('');
+
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+
+        $this->assertTrue(isset($jsonResponse->_embedded->{'dav:item'}));
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(count($this->carddavCards), $items);
+
+        foreach ($items as $item) {
+            $this->assertEquals(200, $item->status);
+        }
+
+        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+        $this->assertStringContainsString('http://sabre.io/ns/sync/', $jsonResponse->{'sync-token'});
+    }
+
+    function testAddressBookSyncTokenIncrementalSync() {
+        $response = $this->addressBookSyncTokenRequest('');
+        $syncToken = json_decode($response->getBodyAsString())->{'sync-token'};
+
+        $this->carddavBackend->createCard(
+            $this->carddavAddressBook['id'],
+            'sync-new.vcf',
+            "BEGIN:VCARD\r\nFN:New\r\nEND:VCARD\r\n"
+        );
+
+        $response = $this->addressBookSyncTokenRequest($syncToken);
+
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $items = $jsonResponse->_embedded->{'dav:item'};
+
+        $this->assertCount(1, $items);
+        $this->assertEquals(200, $items[0]->status);
+        $this->assertStringContainsString('sync-new.vcf', $items[0]->{'_links'}->{'self'}->{'href'});
+
+        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+        $this->assertNotEquals($syncToken, $jsonResponse->{'sync-token'});
+    }
+
+    function testAddressBookSyncTokenUpdate() {
+        $response = $this->addressBookSyncTokenRequest('');
+        $syncToken = json_decode($response->getBodyAsString())->{'sync-token'};
+
+        $this->carddavBackend->updateCard(
+            $this->carddavAddressBook['id'],
+            'card1',
+            "BEGIN:VCARD\r\nFN:Updated\r\nEND:VCARD\r\n"
+        );
+
+        $response = $this->addressBookSyncTokenRequest($syncToken);
+
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $items = $jsonResponse->_embedded->{'dav:item'};
+
+        $this->assertCount(1, $items);
+        $this->assertEquals(200, $items[0]->status);
+        $this->assertStringContainsString('card1', $items[0]->{'_links'}->{'self'}->{'href'});
+    }
+
+    function testAddressBookSyncTokenDelete() {
+        $response = $this->addressBookSyncTokenRequest('');
+        $syncToken = json_decode($response->getBodyAsString())->{'sync-token'};
+
+        $this->carddavBackend->deleteCard($this->carddavAddressBook['id'], 'card1');
+
+        $response = $this->addressBookSyncTokenRequest($syncToken);
+
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $items = $jsonResponse->_embedded->{'dav:item'};
+
+        $this->assertCount(1, $items);
+        $this->assertEquals(404, $items[0]->status);
+        $this->assertStringContainsString('card1', $items[0]->{'_links'}->{'self'}->{'href'});
+    }
+
+    function testAddressBookSyncTokenNoUpdate() {
+        // A future sync-token: no changes happened since, expect an empty list.
+        $response = $this->addressBookSyncTokenRequest('http://sabre.io/ns/sync/999999999');
+
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertCount(0, $jsonResponse->_embedded->{'dav:item'});
+        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+    }
+
+    function testAddressBookSyncTokenUrlFormat() {
+        // sync-token provided in URL format must be extracted to its numeric part.
+        $response = $this->addressBookSyncTokenRequest('http://sabre.io/ns/sync/1');
+
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+    }
+
+    function testAddressBookSyncTokenInvalidReturns400() {
+        // Non-numeric sync-token must be rejected with 400.
+        $response = $this->addressBookSyncTokenRequest('not-a-token');
+
+        $this->assertEquals(400, $response->status);
+    }
 }

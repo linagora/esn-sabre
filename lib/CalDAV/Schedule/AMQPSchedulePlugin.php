@@ -198,10 +198,6 @@ class AMQPSchedulePlugin extends Plugin {
             $modified = true;
         }
 
-        if ($this->addTeamCalendarIdProperty($vCal, $calendarPath)) {
-            $modified = true;
-        }
-
         $isTeamCalendar = $this->isTeamCalendarPath($calendarPath);
         $actorAddresses = $this->fetchSchedulingAddresses($calendarPath, $isTeamCalendar);
         $organizerAddress = $this->extractSingleOrganizerAddress($vCal);
@@ -222,12 +218,6 @@ class AMQPSchedulePlugin extends Plugin {
 
         $this->processICalendarChange($oldObj, $vCal, $schedulingAddresses, [], $modified);
         // flushDeliveries() is called in afterCreateFile/afterWriteContent.
-    }
-
-    private function addTeamCalendarIdProperty(VCalendar $calendar, string $calendarPath): bool {
-        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
-        $owner = ($calendarNode !== null && method_exists($calendarNode, 'getOwner')) ? $calendarNode->getOwner() : null;
-        return Utils::isTeamCalendarFromPrincipal($owner) ? $this->setTeamCalendarIdProperty($calendar, basename($owner)) : false;
     }
 
     /**

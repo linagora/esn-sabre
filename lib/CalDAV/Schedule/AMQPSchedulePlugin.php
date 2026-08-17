@@ -9,6 +9,7 @@ use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\ITip;
+use Sabre\VObject\Reader;
 
 /**
  * Async scheduling plugin — the sole scheduling plugin registered in esn.php.
@@ -33,6 +34,7 @@ class AMQPSchedulePlugin extends Plugin {
     private $pendingDeliveries = [];
     private $currentOldMessage = null;
     private $currentCalendarId = null;
+    private $localRecipientsOnly = false;
 
     public function __construct($amqpPublisher, $principalBackend = null) {
         parent::__construct($principalBackend);
@@ -45,6 +47,7 @@ class AMQPSchedulePlugin extends Plugin {
         $server->on('afterCreateFile',   [$this, 'afterWrite']);
         $server->on('afterWriteContent', [$this, 'afterWrite']);
         $server->on('afterUnbind',       [$this, 'afterUnbindFlush']);
+        $server->on('calendarObjectUpdatedByServer', [$this, 'scheduleServerUpdate']);
     }
 
     function afterWrite() {
@@ -53,6 +56,38 @@ class AMQPSchedulePlugin extends Plugin {
 
     function afterUnbindFlush() {
         $this->flushDeliveries();
+    }
+
+    function scheduleServerUpdate(string $oldCalendarData, string $newCalendarData, string $calendarPath,
+                                  array $changeProperties = [], bool $localRecipientsOnly = false) {
+        if (!$this->scheduleReply($this->server->httpRequest)) {
+            return;
+        }
+
+        $oldCalendar = CalendarObjectHelper::readCalendarObject($oldCalendarData);
+        $newCalendar = CalendarObjectHelper::readCalendarObject($newCalendarData);
+        if (!$oldCalendar || !$newCalendar) {
+            return;
+        }
+
+        $this->localRecipientsOnly = $localRecipientsOnly;
+        try {
+            // Server-originated changes are scheduled as the organizer, not the actor.
+            $organizer = $this->extractSingleOrganizerAddress($newCalendar);
+            if (!$organizer) {
+                return;
+            }
+
+            $this->currentOldMessage = $oldCalendarData;
+            $this->currentCalendarId = basename($calendarPath);
+            $modified = false;
+            $this->processICalendarChange($oldCalendar, $newCalendar, [$organizer], [], $modified, $changeProperties);
+            $this->flushDeliveries();
+        } finally {
+            $this->localRecipientsOnly = false;
+            $oldCalendar->destroy();
+            $newCalendar->destroy();
+        }
     }
 
     /**
@@ -80,6 +115,12 @@ class AMQPSchedulePlugin extends Plugin {
             // POST /itip) — use synchronous delivery.
             // EventRealTimePlugin will fire via the 'iTip' hook and publish real-time notifications.
             parent::scheduleLocalDelivery($iTipMessage);
+            return;
+        }
+
+        if ($this->localRecipientsOnly
+            && !Utils::getPrincipalByUri($iTipMessage->recipient, $this->server)) {
+            $iTipMessage->scheduleStatus = '1.0';
             return;
         }
 
@@ -209,7 +250,7 @@ class AMQPSchedulePlugin extends Plugin {
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
             $this->currentOldMessage = $node->get();
-            $oldObj = \Sabre\VObject\Reader::read($this->currentOldMessage);
+            $oldObj = Reader::read($this->currentOldMessage);
         }
 
         if ($oldObj && $this->shouldValidateAttendeeSchedulingObjectChange($request->getPath(), $isTeamCalendar)) {
@@ -286,7 +327,7 @@ class AMQPSchedulePlugin extends Plugin {
      * permission error, not found) — callers must fall back to the original ICS.
      */
     private function resolveFullCalendarForBroker(string $ics): ?string {
-        $vCal = \Sabre\VObject\Reader::read($ics);
+        $vCal = Reader::read($ics);
 
         $hasMaster = false;
         foreach ($vCal->VEVENT as $vevent) {

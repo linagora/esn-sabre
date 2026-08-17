@@ -350,6 +350,50 @@ A dav:addressbook resource, with items expanded. The resource may also contain
 a next link, if the offset/limit query parameters are used.
 
 
+## REPORT /addressbooks/{addressbookHomeId}/{addressbookId}.json
+
+Synchronize an address book using a sync-token. This is the JSON equivalent of
+the WebDAV XML `sync-collection` REPORT and returns the contacts that were
+created, updated or deleted since the given sync-token.
+
+**Request JSON Object:**
+
+```json
+{
+    "sync-token": "http://sabre.io/ns/sync/{token}"
+}
+```
+
+The `sync-token` may be omitted or set to an empty string for the initial
+sync, in which case all current contacts are returned. Both the bare numeric
+form (`"123"`) and the URL form (`"http://sabre.io/ns/sync/123"`) are accepted.
+
+**Status Codes:**
+
+- 207 Multi-Status: Sync succeeded and the response body lists the changes
+- 400 Bad Request: The sync-token is invalid or unsupported
+
+**Response:**
+
+A multistatus resource. Created/updated contacts have status `200`, deleted
+contacts have status `404`. The new `sync-token` is returned for the next sync.
+
+```json
+{
+    "_links": { "self": { "href": "/addressbooks/{addressbookHomeId}/{addressbookId}.json" } },
+    "_embedded": {
+        "dav:item": [
+            { "_links": { "self": { "href": "/addressbooks/{...}/card1.vcf" } }, "status": 200 },
+            { "_links": { "self": { "href": "/addressbooks/{...}/gone.vcf" } }, "status": 404 }
+        ]
+    },
+    "sync-token": "http://sabre.io/ns/sync/124"
+}
+```
+
+The same `{DAV:}read` permissions as other JSON REPORT requests are enforced.
+
+
 ## POST /addressbooks/{addressbookHomeId}/{addressbookId}.json
 
 #### Publish an address book

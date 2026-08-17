@@ -18,6 +18,7 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
     private $caldavBackend;
     private $authBackend;
     private $teamCalendarId;
+    private $user2CalendarId;
 
     const USER1_ID = '54b64eadf6d7d8e41d263e0f';
     const USER1_EMAIL = 'alice@example.org';
@@ -63,7 +64,7 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
             'uri' => 'cal1',
             '{DAV:}displayname' => 'User 1 Calendar',
         ]);
-        $this->caldavBackend->createCalendar(self::USER2_PRINCIPAL, 'cal2', [
+        $this->user2CalendarId = $this->caldavBackend->createCalendar(self::USER2_PRINCIPAL, 'cal2', [
             'principaluri' => self::USER2_PRINCIPAL,
             'uri' => 'cal2',
             '{DAV:}displayname' => 'User 2 Calendar',
@@ -253,6 +254,30 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $this->emitCalendarObjectChange($this->teamCalendarPath(), $ics);
     }
 
+    function testMoveToTeamCalendarAcceptsWriteEnabledMemberAsOrganizer() {
+        $this->shareTeamCalendarWith(self::USER2_EMAIL, self::USER2_PRINCIPAL, \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE);
+        $this->authBackend->setPrincipal(self::USER2_PRINCIPAL);
+        $sourcePath = $this->createUser2Event('move-valid', 'ORGANIZER:mailto:' . self::USER2_EMAIL);
+
+        $this->server->emit('beforeMove', [$sourcePath, $this->teamCalendarPath() . '/event.ics']);
+
+        $this->assertTrue($this->server->tree->nodeExists($sourcePath));
+    }
+
+    function testMoveToTeamCalendarRejectsUnauthorizedOrganizerBeforeSourceDeletion() {
+        $this->shareTeamCalendarWith(self::USER2_EMAIL, self::USER2_PRINCIPAL, \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE);
+        $this->authBackend->setPrincipal(self::USER2_PRINCIPAL);
+        $sourcePath = $this->createUser2Event('move-invalid', 'ORGANIZER:mailto:attacker@evil.com');
+
+        try {
+            $this->server->emit('beforeMove', [$sourcePath, $this->teamCalendarPath() . '/event.ics']);
+            $this->fail('MOVE should reject an organizer that is not a write-enabled team calendar member.');
+        } catch (\Sabre\DAV\Exception\Forbidden) {
+            $this->assertTrue($this->server->tree->nodeExists($sourcePath));
+            $this->assertFalse($this->server->tree->nodeExists($this->teamCalendarPath() . '/event.ics'));
+        }
+    }
+
     private function shareTeamCalendarWith(string $email, string $principal, int $access): void {
         $this->caldavBackend->updateInvites($this->teamCalendarId, [
             new \Sabre\DAV\Xml\Element\Sharee([
@@ -266,6 +291,11 @@ class OrganizerValidationPluginTest extends \PHPUnit\Framework\TestCase {
 
     private function teamCalendarPath(): string {
         return 'calendars/' . self::TEAM_CALENDAR_ID . '/' . self::TEAM_CALENDAR_ID;
+    }
+
+    private function createUser2Event(string $uid, string $organizer): string {
+        $this->caldavBackend->createCalendarObject($this->user2CalendarId, 'event.ics', $this->makeIcs($uid, $organizer));
+        return 'calendars/' . self::USER2_ID . '/cal2/event.ics';
     }
 
     private function makeRecurringIcs(string $uid, string $masterOrganizer, string $overrideOrganizer): string {

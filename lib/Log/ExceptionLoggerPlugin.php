@@ -13,11 +13,7 @@ class ExceptionLoggerPlugin extends DAV\ServerPlugin
 
     public function __construct($logger) {
         $this->logger = $logger;
-        $env = getenv('LOG_TRACE');
-        if ($env !== false) {
-            $env = strtolower(trim($env));
-            $this->logTrace = in_array($env, ['1','true','yes','on'], true);
-        }
+        $this->logTrace = \ESN\Utils\Env::getBoolean('LOG_TRACE', false);
     }
 
     function initialize(DAV\Server $server) {

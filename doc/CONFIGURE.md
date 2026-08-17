@@ -1,38 +1,105 @@
-## ENV variables
+## Configuration sources
 
-The Docker image relies on ENV variables to generate its configuration through [this script](../scripts/generate_config.sh).
+Every setting below can be provided either in `config.json` or as an ENV variable. They are
+resolved in this order:
 
-The following ENV variables needs to be set:
+1. the `environment` section of `config.json`
+2. the process environment
+3. the built-in default documented in the tables below
 
- - SABRE_MONGO_HOST
- - SABRE_MONGO_PORT
- - SABRE_MONGO_DBNAME
- - ESN_MONGO_HOST
- - ESN_MONGO_PORT
- - ESN_MONGO_DBNAME
- - MONGO_TIMEOUT
- - ESN_HOST
- - ESN_PORT
- - AMQP_HOST
- - AMQP_PORT
- - AMQP_LOGIN
- - AMQP_PASSWORD
- - SABRE_ENV
+Blank values (`""` or `null`) in `config.json` count as *not set* and fall through to the
+environment, so an empty entry never shadows an exported variable. A setting can therefore not
+be forced to the empty string — that matches the historical behaviour, where an unset variable
+and an empty one were equivalent.
 
- Additionally LDAP setup is done solely by ENV variables:
+In the Docker image, [`scripts/generate_config.sh`](../scripts/generate_config.sh) writes
+`config.json` from the variables exported to the container, `environment` section included, so
+exporting an ENV variable and setting the matching `config.json` key are equivalent.
+[`config.json.default`](../config.json.default) lists every key with its default value.
 
- - LDAP_ADMIN_DN
- - LDAP_ADMIN_PASSWORD
- - LDAP_BASE
- - LDAP_BASE_WITH_MAIL
- - LDAP_SERVER
- - LDAP_USERNAME_MODE
- - LDAP_FILTER (optional)
+Booleans accept `true` / `1` / `yes` / `on` and `false` / `0` / `no` / `off`, in any case, as a
+JSON string (`"true"`) or as a JSON native (`true`). Unset, empty and unparseable values all
+fall back to the default, so a flag that defaults to enabled can only be turned off by an
+explicit false-ish value.
 
-Credentials for impersonation are also set by ENV variables:
+## Infrastructure variables
 
- - SABRE_ADMIN_LOGIN
- - SABRE_ADMIN_PASSWORD
+These are read by the generation script only: they end up in the regular `config.json` sections,
+not in `environment`. Setting the target key in `config.json` directly has the same effect.
+
+| Variable | Default | Ends up in |
+|---|---|---|
+| `SABRE_MONGO_HOST` | `sabre_mongo` | `database.sabre.connectionString` |
+| `SABRE_MONGO_PORT` | `27017` | `database.sabre.connectionString` |
+| `SABRE_MONGO_DBNAME` | `sabre` | `database.sabre.connectionString` |
+| `SABRE_MONGO_URI` | unset — falls back to `host:port/dbname` | `database.sabre.connectionString` |
+| `SABRE_MONGO_USER` | unset — no credentials in the URI | `database.sabre.connectionString` |
+| `SABRE_MONGO_PASSWORD` | unset | `database.sabre.connectionString` |
+| `ESN_MONGO_HOST` | `esn_mongo` | `database.esn.connectionString` |
+| `ESN_MONGO_PORT` | `27017` | `database.esn.connectionString` |
+| `ESN_MONGO_DBNAME` | `esn` | `database.esn.connectionString` |
+| `ESN_MONGO_URI` | unset — falls back to `host:port/dbname` | `database.esn.connectionString` |
+| `ESN_MONGO_USER` | unset — no credentials in the URI | `database.esn.connectionString` |
+| `ESN_MONGO_PASSWORD` | unset | `database.esn.connectionString` |
+| `MONGO_TIMEOUT` | `10000` | `database.*.connectionOptions.connectTimeoutMS` |
+| `ESN_HOST` | `esn_host` | `esn.apiRoot`, `esn.calendarRoot` |
+| `ESN_PORT` | `8080` | `esn.apiRoot`, `esn.calendarRoot` |
+| `AMQP_HOST` | `amqp_host` | `amqp.host` |
+| `AMQP_PORT` | `5672` | `amqp.port` |
+| `AMQP_LOGIN` | `guest` | `amqp.login` |
+| `AMQP_PASSWORD` | `guest` | `amqp.password` |
+| `AMQP_VHOST` | `/` | `amqp.vhost` |
+| `AMQP_SSL_ENABLED` | `false` | `amqp.sslEnabled` |
+| `AMQP_SSL_TRUST_ALL_CERTS` | `false` | `amqp.sslTrustAllCerts` |
+
+## Runtime settings
+
+These are read by PHP on demand, through `ESN\Utils\Env`, and live in the `environment` section
+of `config.json`.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SABRE_ENV` | `production` | `dev` adds stack traces to error responses and enables dev-only plugins |
+| `LDAP_SERVER` | unset | LDAP server URL; required for LDAP authentication |
+| `LDAP_BASE` | unset | Base DN for the user bind and the directory search |
+| `LDAP_FILTER` | unset — no extra filter | Filter ANDed into the search, e.g. `(objectClass=inetOrgPerson)` |
+| `LDAP_ADMIN_DN` | unset | Bind account used to search the directory after the user bind |
+| `LDAP_ADMIN_PASSWORD` | unset | Password of that bind account |
+| `LDAP_USERNAME_MODE` | unset — bind with the full address | Set to `username` to strip the `@domain` part before binding |
+| `SABRE_ADMIN_LOGIN` | unset — impersonation unavailable | Admin login used for impersonation |
+| `SABRE_ADMIN_PASSWORD` | unset — impersonation unavailable | Admin password used for impersonation |
+| `SABRE_IMPERSONATION_ENABLED` | `false` | Master switch for admin impersonation |
+| `AUTO_PROVISION` | `true` | Create missing users on successful authentication |
+| `PRINCIPAL_PRIVACY` | `true` | Restrict DAV principal discovery |
+| `CALDAV_BINARY_ATTACHMENT_MODE` | `filter` | Inline binary attachment policy: `allow`, `reject` or `filter` |
+| `CALDAV_ORGANIZER_VALIDATION` | `false` | Enforce `ORGANIZER` validation on calendar objects |
+| `SABRE_ENFORCE_RFC_6638` | `true` | Reject attendee updates to organizer-controlled scheduling fields |
+| `SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING` | `true` | Recipient-aware scheduling for `ACTION:EMAIL` `VALARM` components |
+| `TW_CAL_REPLY_PROPAGATION_THRESHOLD` | `200` | Attendee count above which reply propagation is skipped |
+| `SHOULD_CREATE_INDEX` | `true` | Provision MongoDB indexes on every request |
+| `LOG_TRACE` | `false` | Add exception stack traces to the logs |
+
+Both spellings are equivalent — as an ENV variable:
+
+```bash
+docker run -d -p 8001:80 \
+  -e SABRE_IMPERSONATION_ENABLED=true \
+  -e PRINCIPAL_PRIVACY=false \
+  linagora/esn-sabre
+```
+
+or in `config.json`:
+
+```json
+{
+  "environment": {
+    "SABRE_IMPERSONATION_ENABLED": true,
+    "PRINCIPAL_PRIVACY": false
+  }
+}
+```
+
+The rest of this section details the flags whose behaviour needs more than one line.
 
 Feature flag to enable or disable admin impersonation.
  - SABRE_IMPERSONATION_ENABLED
@@ -76,7 +143,7 @@ Feature flag to control how inline binary attachments (`ATTACH;ENCODING=BASE64;V
 When an attendee sends a `REPLY` such as accepting or declining an event, Sabre always updates the organizer calendar. It may also propagate that attendee `PARTSTAT` change to the other attendees. 
 If the event attendee count is greater than or equal to `TW_CAL_REPLY_PROPAGATION_THRESHOLD`, this propagation to the other attendees is skipped to avoid large fan-out work.
 
-- Default: `200`
+- Default: `200`. Unset, empty, or non-numeric values are treated as `200`.
 - Set to `0` or a negative value to disable this skip and always propagate replies.
 
 `SABRE_ENFORCE_RFC_6638` controls whether Sabre rejects attendee updates to scheduling fields that must remain organizer-controlled.
@@ -107,6 +174,15 @@ docker run -d -p 8001:80 \
   -e NGINX_RATE_BURST=30 \
   linagora/esn-sabre
 ```
+
+## Nginx basic authentication
+
+ - `NGINX_AUTH_BASIC` — unset by default, which leaves the server open. When set, its content is
+   written to `/etc/nginx/.htpasswd` and basic authentication is enabled. Commas separate the
+   entries, one `user:hashed_password` pair each.
+
+The rate-limiting and basic-authentication settings above are applied to the Nginx configuration
+by the container entrypoint, before PHP starts, so they have no `config.json` equivalent.
 
 ## create the configuration file
 

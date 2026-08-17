@@ -7,18 +7,11 @@ use Sabre\Event\EventEmitter;
 use \Firebase\JWT\JWT;
 use \Firebase\JWT\Key;
 use \ESN\Utils\AuthTenant;
+use \ESN\Utils\Env;
 use \ESN\Utils\Principal;
 use \ESN\Utils\TenantType;
 
 define('ESN_PUBLIC_KEY', __DIR__ . '/../../../../config/esn.key.pub');
-
-define('LDAP_ADMIN_DN', getenv("LDAP_ADMIN_DN"));
-define('LDAP_ADMIN_PASSWORD', getenv("LDAP_ADMIN_PASSWORD"));
-define('LDAP_BASE', getenv("LDAP_BASE"));
-define('LDAP_SERVER', getenv("LDAP_SERVER"));
-define('LDAP_FILTER', getenv("LDAP_FILTER"));
-define('SABRE_ADMIN_LOGIN', getenv("SABRE_ADMIN_LOGIN"));
-define('SABRE_ADMIN_PASSWORD', getenv("SABRE_ADMIN_PASSWORD"));
 
 #[\AllowDynamicProperties]
 class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
@@ -155,8 +148,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 return $this->doImpersonation($impersonationResult);
         }
 
-        $env_ldap_username_mode = getenv('LDAP_USERNAME_MODE');
-        if ($env_ldap_username_mode == 'username') {
+        if (Env::getString('LDAP_USERNAME_MODE') === 'username') {
             $user = explode('@', $user);
             $user = $user[0];
         }
@@ -168,8 +160,11 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     }
 
     private function authenticateLdapUser($user, $password) {
+        $ldapBase = Env::getString('LDAP_BASE');
+        $ldapFilter = Env::getString('LDAP_FILTER');
+
         # Open LDAP connection
-        $ldapCon = ldap_connect(LDAP_SERVER);
+        $ldapCon = ldap_connect(Env::getString('LDAP_SERVER'));
         if (!$ldapCon) {
             error_log('Unable to connect to LDAP server');
             throw new AuthException('Unable to connect to LDAP server');
@@ -182,7 +177,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             $safeUser = ldap_escape($user, '', 0);
 
             try {
-                $ldapBind = ldap_bind($ldapCon, "uid=$safeUser," . LDAP_BASE, $password);
+                $ldapBind = ldap_bind($ldapCon, "uid=$safeUser," . $ldapBase, $password);
             } catch (\ErrorException $e) {
                 error_log("LDAP bind user failed for $user: " . $e->getMessage());
                 throw new  AuthException("Bad credentials");
@@ -194,7 +189,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 throw new AuthException("Bad credentials");
             }
 
-            $ldapBind2 = ldap_bind($ldapCon, LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD);
+            $ldapBind2 = ldap_bind($ldapCon, Env::getString('LDAP_ADMIN_DN'), Env::getString('LDAP_ADMIN_PASSWORD'));
             if (!$ldapBind2) {
                 $code = ldap_errno($ldapCon);
                 $msg  = ldap_error($ldapCon);
@@ -204,10 +199,10 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
             # Get real mail
             $searchResult = null;
-            if (LDAP_FILTER != null) {
-                $searchResult = ldap_search($ldapCon, LDAP_BASE, "(& (uid=$safeUser) " . LDAP_FILTER . ')');
+            if ($ldapFilter !== null) {
+                $searchResult = ldap_search($ldapCon, $ldapBase, "(& (uid=$safeUser) " . $ldapFilter . ')');
             } else {
-                $searchResult = ldap_search($ldapCon, LDAP_BASE, "(uid=$safeUser)");
+                $searchResult = ldap_search($ldapCon, $ldapBase, "(uid=$safeUser)");
             }
             $entries = ldap_get_entries($ldapCon, $searchResult);
         }
@@ -286,7 +281,10 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
      * LDAP directory and read its content (firstname, lastname).
      */
     private function findLdapEntryByEmail(string $email): ?array {
-        $ldapCon = ldap_connect(LDAP_SERVER);
+        $ldapBase = Env::getString('LDAP_BASE');
+        $ldapFilter = Env::getString('LDAP_FILTER');
+
+        $ldapCon = ldap_connect(Env::getString('LDAP_SERVER'));
         if (!$ldapCon) {
             error_log('findLdapEntryByEmail: unable to connect to LDAP server');
             return null;
@@ -295,7 +293,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
             ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
 
-            $ldapBind = ldap_bind($ldapCon, LDAP_ADMIN_DN, LDAP_ADMIN_PASSWORD);
+            $ldapBind = ldap_bind($ldapCon, Env::getString('LDAP_ADMIN_DN'), Env::getString('LDAP_ADMIN_PASSWORD'));
             if (!$ldapBind) {
                 $code = ldap_errno($ldapCon);
                 $msg  = ldap_error($ldapCon);
@@ -304,10 +302,10 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             }
 
             $safeEmail = ldap_escape($email, '', 0);
-            if (LDAP_FILTER != null) {
-                $searchResult = ldap_search($ldapCon, LDAP_BASE, "(& (mail=$safeEmail) " . LDAP_FILTER . ')');
+            if ($ldapFilter !== null) {
+                $searchResult = ldap_search($ldapCon, $ldapBase, "(& (mail=$safeEmail) " . $ldapFilter . ')');
             } else {
-                $searchResult = ldap_search($ldapCon, LDAP_BASE, "(mail=$safeEmail)");
+                $searchResult = ldap_search($ldapCon, $ldapBase, "(mail=$safeEmail)");
             }
             $entries = ldap_get_entries($ldapCon, $searchResult);
         } finally {
@@ -321,23 +319,22 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     }
 
     private function autoProvisionEnabled(): bool {
-        $env = getenv('AUTO_PROVISION');
-        if ($env === false || $env === '') {
-            return true;
-        }
-        return filter_var($env, FILTER_VALIDATE_BOOLEAN);
+        return Env::getBoolean('AUTO_PROVISION', true);
     }
 
     private function impersonationEnabled(): bool {
-        return filter_var(getenv('SABRE_IMPERSONATION_ENABLED'), FILTER_VALIDATE_BOOLEAN);
+        return Env::getBoolean('SABRE_IMPERSONATION_ENABLED', false);
     }
 
     protected function getAdminCredential(): ?array {
-        if (!SABRE_ADMIN_LOGIN || !SABRE_ADMIN_PASSWORD) {
+        $adminLogin = Env::getString('SABRE_ADMIN_LOGIN');
+        $adminPassword = Env::getString('SABRE_ADMIN_PASSWORD');
+
+        if (!$adminLogin || !$adminPassword) {
             return null;
         }
 
-        return [SABRE_ADMIN_LOGIN, SABRE_ADMIN_PASSWORD];
+        return [$adminLogin, $adminPassword];
     }
 
     private function attemptAdminImpersonation(string $username, string $password): ?string {

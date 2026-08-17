@@ -37,5 +37,30 @@
   "esn": {
     "apiRoot": "http://esn_host:8080",
     "calendarRoot": "http://esn_host:8080/calendar/api"
+  },
+  "environment": {
+    "SABRE_ENV": "production",
+
+    "LDAP_SERVER": "",
+    "LDAP_BASE": "",
+    "LDAP_FILTER": "",
+    "LDAP_ADMIN_DN": "",
+    "LDAP_ADMIN_PASSWORD": "",
+    "LDAP_USERNAME_MODE": "",
+
+    "SABRE_ADMIN_LOGIN": "",
+    "SABRE_ADMIN_PASSWORD": "",
+    "SABRE_IMPERSONATION_ENABLED": false,
+    "AUTO_PROVISION": true,
+    "PRINCIPAL_PRIVACY": true,
+
+    "CALDAV_BINARY_ATTACHMENT_MODE": "filter",
+    "CALDAV_ORGANIZER_VALIDATION": false,
+    "SABRE_ENFORCE_RFC_6638": true,
+    "SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING": true,
+    "TW_CAL_REPLY_PROPAGATION_THRESHOLD": 200,
+
+    "SHOULD_CREATE_INDEX": true,
+    "LOG_TRACE": false
   }
 }

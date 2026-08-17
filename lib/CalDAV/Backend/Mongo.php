@@ -369,11 +369,9 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     }
 
     private function ensureIndex() {
-        // Skip index creation if disabled via environment variable
+        // Skip index creation if disabled through configuration
         // Rational: calling createIndex on every request doesn't make sense in production
-        $shouldCreateIndex = getenv('SHOULD_CREATE_INDEX');
-        $isUndefined = $shouldCreateIndex === false;
-        if ($isUndefined || $shouldCreateIndex === 'true') {
+        if (\ESN\Utils\Env::getBoolean('SHOULD_CREATE_INDEX', true)) {
             $this->calendarDAO->ensureIndexes();
             $this->calendarInstanceDAO->ensureIndexes();
             $this->calendarObjectDAO->ensureIndexes();

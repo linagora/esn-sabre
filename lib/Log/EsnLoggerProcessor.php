@@ -15,7 +15,7 @@ class EsnLoggerProcessor implements \Monolog\Processor\ProcessorInterface
         $extras = [];
 
         foreach ($fields as $key => $value) {
-            $extras[$key] = getenv($value);
+            $extras[$key] = \ESN\Utils\Env::getString($value);
         }
 
         $this->envFields = $extras;

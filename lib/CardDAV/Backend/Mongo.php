@@ -1044,11 +1044,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     private function ensureIndex() {
-        // Skip index creation if disabled via environment variable
+        // Skip index creation if disabled through configuration
         // Rational: calling createIndex on every request doesn't make sense in production
-        $shouldCreateIndex = getenv('SHOULD_CREATE_INDEX');
-        $isUndefined = $shouldCreateIndex === false;
-        if ($isUndefined || $shouldCreateIndex === 'true') {
+        if (\ESN\Utils\Env::getBoolean('SHOULD_CREATE_INDEX', true)) {
             // create a unique compound index on 'principaluri' and 'uri' for address book collection
             $addressBookCollection = $this->db->selectCollection($this->addressBooksTableName);
             $addressBookCollection->createIndex(

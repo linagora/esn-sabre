@@ -11,10 +11,15 @@ if (!$config) {
     throw new Exception("Could not load config.json from " . realpath(CONFIG_PATH) . ", Error " . json_last_error());
 }
 $dbConfig = $config['database'];
+
+// Every setting that used to be read from the process environment now goes
+// through ESN\Utils\Env: config.json first, environment second, default last.
+\ESN\Utils\Env::init(isset($config['environment']) ? $config['environment'] : null);
+
 define('SABRE_ENV_PRODUCTION', 'production');
 define('SABRE_ENV_DEV', 'dev');
 
-define('SABRE_ENV', (!empty($config['environment']) && !empty($config['environment']['SABRE_ENV'])) ? $config['environment']['SABRE_ENV'] : SABRE_ENV_PRODUCTION);
+define('SABRE_ENV', \ESN\Utils\Env::getString('SABRE_ENV', SABRE_ENV_PRODUCTION));
 
 // settings
 date_default_timezone_set('UTC');
@@ -185,14 +190,13 @@ $server->addPlugin($privateEventPlugin);
 
 // Inline binary attachment policy (ATTACH;VALUE=BINARY)
 // CALDAV_BINARY_ATTACHMENT_MODE = allow | reject | filter (default: filter)
-$binaryAttachmentMode = getenv('CALDAV_BINARY_ATTACHMENT_MODE');
 $binaryAttachmentPlugin = new ESN\CalDAV\BinaryAttachmentPlugin(
-    $binaryAttachmentMode !== false ? $binaryAttachmentMode : ESN\CalDAV\BinaryAttachmentPlugin::MODE_FILTER
+    \ESN\Utils\Env::getString('CALDAV_BINARY_ATTACHMENT_MODE', ESN\CalDAV\BinaryAttachmentPlugin::MODE_FILTER)
 );
 $server->addPlugin($binaryAttachmentPlugin);
 
-// ORGANIZER validation (opt-in via CALDAV_ORGANIZER_VALIDATION=true)
-if (getenv('CALDAV_ORGANIZER_VALIDATION') === 'true') {
+// ORGANIZER validation (opt-in via CALDAV_ORGANIZER_VALIDATION)
+if (\ESN\Utils\Env::getBoolean('CALDAV_ORGANIZER_VALIDATION', false)) {
     $server->addPlugin(new ESN\CalDAV\OrganizerValidationPlugin());
 }
 
@@ -287,16 +291,9 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 $server->exec();
 
 function principalPrivacyEnabled() {
-    $rawPrivacyEnv = getenv('PRINCIPAL_PRIVACY');
-
-    if ($rawPrivacyEnv === false || trim($rawPrivacyEnv) === '') {
-        // Missing or empty env keeps privacy enabled; only an explicit false disables it.
-        return true;
-    }
-
-    $privacyEnabled = filter_var($rawPrivacyEnv, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-
-    return $privacyEnabled ?? true;
+    // Missing, empty or invalid setting keeps privacy enabled; only an
+    // explicit false disables it.
+    return \ESN\Utils\Env::getBoolean('PRINCIPAL_PRIVACY', true);
 }
 
 function currentPrincipalProvider(&$server) {

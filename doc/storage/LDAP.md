@@ -1,6 +1,10 @@
 # LDAP
 
-## Environment variables
+## Settings
+
+All of them are unset by default, and can be given either as ENV variables or in the
+`environment` section of `config.json` — see [CONFIGURE.md](../CONFIGURE.md) for the resolution
+order.
 
 | Variable              | Purpose |
 |-----------------------|---------|

@@ -644,8 +644,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      *
      * As suggested by chibenwa in PR #142 review.
      */
-    protected function processICalendarChange($oldObject, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false) {
-        $messages = $this->createBroker()->parseEvent($newObject, $addresses, $oldObject);
+    protected function processICalendarChange($oldObject, VCalendar $newObject, array $addresses, array $ignore = [], &$modified = false, array $changeProperties = []) {
+        $messages = $this->createBroker($changeProperties)->parseEvent($newObject, $addresses, $oldObject);
 
         if ($messages) $modified = true;
 
@@ -674,7 +674,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     /**
      * Builds an iTIP broker with the ESN-specific significant change properties.
      */
-    private function createBroker(): ITip\Broker {
+    private function createBroker(array $changeProperties = []): ITip\Broker {
         $broker = new ITip\Broker();
         // Add SUMMARY, LOCATION, DESCRIPTION to significant change properties
         // These are important for email notifications even though they're not in RFC5546 list
@@ -691,7 +691,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         // participation status or re-sending the whole invitation.
         $broker->changeProperties = array_merge(
             $broker->changeProperties,
-            ['X-OPENPAAS-VIDEOCONFERENCE', 'X-OPENPAAS-BOOKING-LINK']
+            ['X-OPENPAAS-VIDEOCONFERENCE', 'X-OPENPAAS-BOOKING-LINK'],
+            $changeProperties
         );
 
         return $broker;

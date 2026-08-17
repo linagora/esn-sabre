@@ -4,12 +4,15 @@ namespace ESN\CalDAV;
 
 use ESN\DAV\Sharing\Plugin as SharingPlugin;
 use ESN\Utils\Utils;
+use Sabre\CalDAV\ICalendarObject;
+use Sabre\CalDAV\Schedule\ISchedulingObject;
 use Sabre\DAV\Exception\Forbidden;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Component\VCalendar;
+use Sabre\VObject\Reader;
 
 class OrganizerValidationPlugin extends ServerPlugin {
 
@@ -18,6 +21,7 @@ class OrganizerValidationPlugin extends ServerPlugin {
     function initialize(Server $server) {
         $this->server = $server;
         $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], Plugin::PRIORITY_BEFORE_SCHEDULING - 10);
+        $server->on('beforeMove', [$this, 'beforeMove'], 45);
     }
 
     function getPluginName() {
@@ -40,23 +44,46 @@ class OrganizerValidationPlugin extends ServerPlugin {
             return;
         }
 
-        $vevents = $vCal->select('VEVENT');
-        if (empty($vevents)) {
-            return;
-        }
-
-        $organizerUri = $this->extractOrganizerUri($vevents);
-        if ($organizerUri === null) {
-            return;
-        }
-
         // An attendee's copy of an invitation keeps the inviter as ORGANIZER, so
         // updates (e.g. PARTSTAT changes) are allowed as long as the ORGANIZER is
         // unchanged from the stored object: a foreign organizer can only be there
         // because scheduling delivered it or a previously validated PUT wrote it.
-        if (!$isNew && !$this->isTeamCalendarPath($calendarPath) && $organizerUri === $this->getExistingOrganizerUri($request->getPath())) {
+        $existingOrganizerUri = !$isNew && !$this->isTeamCalendarPath($calendarPath)
+            ? $this->getExistingOrganizerUri($request->getPath())
+            : null;
+        $this->validateCalendarOrganizer($vCal, $calendarPath, $existingOrganizerUri);
+    }
+
+    function beforeMove($sourcePath, $destinationPath) {
+        list($calendarPath,) = Utils::splitEventPath('/' . ltrim($destinationPath, '/'));
+        if (!$calendarPath || !$this->isTeamCalendarPath($calendarPath)) return;
+
+        try {
+            $source = $this->server->tree->getNodeForPath($sourcePath);
+        } catch (\Sabre\DAV\Exception) {
             return;
         }
+        if (!$source instanceof ICalendarObject || $source instanceof ISchedulingObject) return;
+
+        $calendarData = $source->get();
+        if (is_resource($calendarData)) $calendarData = stream_get_contents($calendarData);
+        $calendar = Reader::read($calendarData);
+        if (!$calendar instanceof VCalendar) {
+            $calendar->destroy();
+            return;
+        }
+
+        try {
+            $this->validateCalendarOrganizer($calendar, $calendarPath);
+        } finally {
+            $calendar->destroy();
+        }
+    }
+
+    private function validateCalendarOrganizer(VCalendar $calendar, $calendarPath, ?string $existingOrganizerUri = null): void {
+        $vevents = $calendar->select('VEVENT');
+        if (empty($vevents) || !($organizerUri = $this->extractOrganizerUri($vevents))) return;
+        if ($existingOrganizerUri !== null && $organizerUri === $existingOrganizerUri) return;
 
         $this->validateOrganizerAuthorized($organizerUri, $calendarPath);
     }

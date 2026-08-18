@@ -19,6 +19,19 @@ class PublicAgendaScheduleUtils {
         return in_array($partstat, self::$NOT_ACCEPTED_PARTSTATS, true);
     }
 
+    /**
+     * A booking nobody has answered yet, as opposed to one the chair organizer has
+     * explicitly refused: the former is scheduled to nobody, the latter still owes the
+     * booker an answer.
+     */
+    public static function isPubliclyCreatedAndChairOrganizerNeedsAction(VCalendar $vCal): bool {
+        if (self::parsePubliclyCreatedFlag($vCal) !== true) {
+            return false;
+        }
+
+        return self::getChairOrganizerPartstat($vCal) === 'NEEDS-ACTION';
+    }
+
     public static function isChairOrganizerAcceptedTransition(VCalendar $formerEvent, VCalendar $currentEvent): bool {
         if (self::parsePubliclyCreatedFlag($currentEvent) !== true) {
             return false;

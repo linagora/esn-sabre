@@ -190,10 +190,14 @@ class AMQPSchedulePlugin extends Plugin {
             return;
         }
 
-        // A public agenda booking the chair organizer has not accepted yet is only
-        // scheduled towards the booker: the invited attendees must stay unaware of a
-        // booking that may still be turned down.
-        $restrictToBooker = $this->shouldSkipSchedulingForUnacceptedPublicAgenda($vCal);
+        // A public agenda booking nobody has answered yet is scheduled to nobody at all.
+        if ($this->shouldSkipSchedulingForPendingPublicAgenda($vCal)) {
+            return;
+        }
+
+        // Once the chair organizer refuses it, only the booker is told: the invited
+        // attendees never learnt about a booking that got turned down.
+        $restrictToBooker = $this->shouldRestrictSchedulingToBooker($vCal);
 
         if ($this->shouldEnableEmailValarmRecipientScheduling() && $this->ensureValarmUids($vCal)) {
             $modified = true;
@@ -277,7 +281,7 @@ class AMQPSchedulePlugin extends Plugin {
         // booker, who is waiting on an answer; the attendees never saw the booking.
         // $sourceCalendar (not $node->get()) is what the Broker parses once
         // resolveFullCalendarForBroker() has had its say, so both see the same recipients.
-        $ignore = $this->shouldSkipSchedulingForUnacceptedPublicAgenda($sourceCalendar)
+        $ignore = $this->shouldRestrictSchedulingToBooker($sourceCalendar)
             ? PublicAgendaScheduleUtils::recipientsExceptBooker([$sourceCalendar])
             : [];
 

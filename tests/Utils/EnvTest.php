@@ -2,6 +2,8 @@
 
 namespace ESN\Utils;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 #[\AllowDynamicProperties]
 class EnvTest extends \PHPUnit\Framework\TestCase {
 
@@ -127,9 +129,7 @@ class EnvTest extends \PHPUnit\Framework\TestCase {
         $this->assertTrue(Env::getBoolean(self::NAME, false));
     }
 
-    /**
-     * @dataProvider truthyValuesProvider
-     */
+    #[DataProvider('truthyValuesProvider')]
     function testGetBooleanAcceptsTruthySpellings($value) {
         Env::init([self::NAME => $value]);
 
@@ -140,9 +140,7 @@ class EnvTest extends \PHPUnit\Framework\TestCase {
         return [['true'], ['TRUE'], ['True'], ['1'], ['yes'], ['on'], [' true ']];
     }
 
-    /**
-     * @dataProvider falsyValuesProvider
-     */
+    #[DataProvider('falsyValuesProvider')]
     function testGetBooleanAcceptsFalsySpellings($value) {
         Env::init([self::NAME => $value]);
 

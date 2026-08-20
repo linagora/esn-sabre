@@ -70,16 +70,34 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertFalse($shouldSkip);
     }
 
-    function testShouldSkipSchedulingForUnacceptedPublicAgenda() {
+    function testShouldRestrictSchedulingToBookerWhenChairOrganizerNeedsAction() {
         $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('NEEDS-ACTION', true));
 
-        $this->assertTrue($this->invokeShouldSkipSchedulingForUnacceptedPublicAgenda($vcalendar));
+        $this->assertTrue($this->invokeShouldRestrictSchedulingToBooker($vcalendar));
+    }
+
+    function testShouldRestrictSchedulingToBookerWhenChairOrganizerDeclined() {
+        $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('DECLINED', true));
+
+        $this->assertTrue($this->invokeShouldRestrictSchedulingToBooker($vcalendar));
     }
 
     function testShouldNotSkipSchedulingForAcceptedPublicAgenda() {
         $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('ACCEPTED', true));
 
-        $this->assertFalse($this->invokeShouldSkipSchedulingForUnacceptedPublicAgenda($vcalendar));
+        $this->assertFalse($this->invokeShouldRestrictSchedulingToBooker($vcalendar));
+    }
+
+    function testShouldSkipAllSchedulingWhilePublicAgendaIsPending() {
+        $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('NEEDS-ACTION', true));
+
+        $this->assertTrue($this->invokeShouldSkipSchedulingForPendingPublicAgenda($vcalendar));
+    }
+
+    function testShouldNotSkipAllSchedulingOnceChairOrganizerDeclined() {
+        $vcalendar = Reader::read($this->newCalendarWithOrganizerChairPartstat('DECLINED', true));
+
+        $this->assertFalse($this->invokeShouldSkipSchedulingForPendingPublicAgenda($vcalendar));
     }
 
     function testShouldPreservePublicAgendaMetadataOnOutgoingMinimalMessage() {
@@ -1207,8 +1225,15 @@ ICS
         return $method->invoke($this->plugin);
     }
 
-    private function invokeShouldSkipSchedulingForUnacceptedPublicAgenda($calendar): bool {
-        $method = new \ReflectionMethod(Plugin::class, 'shouldSkipSchedulingForUnacceptedPublicAgenda');
+    private function invokeShouldRestrictSchedulingToBooker($calendar): bool {
+        $method = new \ReflectionMethod(Plugin::class, 'shouldRestrictSchedulingToBooker');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $calendar);
+    }
+
+    private function invokeShouldSkipSchedulingForPendingPublicAgenda($calendar): bool {
+        $method = new \ReflectionMethod(Plugin::class, 'shouldSkipSchedulingForPendingPublicAgenda');
         $method->setAccessible(true);
 
         return $method->invoke($this->plugin, $calendar);

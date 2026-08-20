@@ -502,9 +502,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        if ($this->shouldSkipSchedulingForUnacceptedPublicAgenda($vCal)) {
+        // A public agenda booking nobody has answered yet is scheduled to nobody at all.
+        if ($this->shouldSkipSchedulingForPendingPublicAgenda($vCal)) {
             return;
         }
+
+        // Once the chair organizer refuses it, only the booker is told: the invited
+        // attendees never learnt about a booking that got turned down.
+        $restrictToBooker = $this->shouldRestrictSchedulingToBooker($vCal);
 
         if ($this->shouldEnableEmailValarmRecipientScheduling() && $this->ensureValarmUids($vCal)) {
             $modified = true;
@@ -527,7 +532,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $this->assertAllowedAttendeeSchedulingObjectChange($oldObj, $vCal, $actorAddresses);
         }
 
-        $this->processICalendarChange($oldObj, $vCal, $schedulingAddresses, [], $modified);
+        $ignore = $restrictToBooker
+            ? PublicAgendaScheduleUtils::recipientsExceptBooker([$oldObj, $vCal])
+            : [];
+
+        $this->processICalendarChange($oldObj, $vCal, $schedulingAddresses, $ignore, $modified);
     }
 
     protected function assertAllowedAttendeeSchedulingObjectChange(VCalendar $oldObject, VCalendar $newObject, array $addresses): void {
@@ -898,19 +907,38 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         $oldObject = Reader::read($node->get());
-        if ($this->shouldSkipSchedulingForUnacceptedPublicAgenda($oldObject)) {
-            return;
-        }
+
+        // Cancelling a booking the chair organizer never accepted still has to reach the
+        // booker, who is waiting on an answer; the attendees never saw the booking.
+        $ignore = $this->shouldRestrictSchedulingToBooker($oldObject)
+            ? PublicAgendaScheduleUtils::recipientsExceptBooker([$oldObject])
+            : [];
 
         $messages = $this->createBroker()->parseEvent(null, $addresses, $oldObject);
 
         foreach ($messages as $message) {
+            if (in_array($message->recipient, $ignore)) {
+                continue;
+            }
+
             $this->preservePublicAgendaMetadata($message, $oldObject);
             $this->deliver($message);
         }
     }
 
-    protected function shouldSkipSchedulingForUnacceptedPublicAgenda(?VCalendar $calendar): bool {
+    /**
+     * True while a public agenda booking is still awaiting the chair organizer's answer,
+     * i.e. while nothing has happened worth telling anyone about.
+     */
+    protected function shouldSkipSchedulingForPendingPublicAgenda(?VCalendar $calendar): bool {
+        return $calendar !== null && PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNeedsAction($calendar);
+    }
+
+    /**
+     * True once a public agenda booking has been refused or is being cancelled: the
+     * booker is owed an answer, the invited attendees were never told about it.
+     */
+    protected function shouldRestrictSchedulingToBooker(?VCalendar $calendar): bool {
         return $calendar !== null && PublicAgendaScheduleUtils::isPubliclyCreatedAndChairOrganizerNotAccepted($calendar);
     }
 

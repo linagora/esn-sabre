@@ -50,6 +50,48 @@ else
   sabre_mongo_connectionstring="mongodb://${SABRE_MONGO_URI:-${sabre_mongo_host}:${sabre_mongo_port}/${sabre_mongo_dbname}}"
 fi
 
+# Escape a value so it can be embedded in a JSON string. Newlines are folded
+# into spaces: none of these settings is expected to span lines, and a raw
+# newline would make the whole config.json unparseable.
+json_escape() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | tr '\n\r' '  '
+}
+
+# Settings read at runtime by PHP through ESN\Utils\Env. Only the variables
+# that are actually set get written out: anything absent keeps the default
+# documented in doc/CONFIGURE.md.
+runtime_env_vars="LDAP_SERVER
+LDAP_BASE
+LDAP_FILTER
+LDAP_ADMIN_DN
+LDAP_ADMIN_PASSWORD
+LDAP_USERNAME_MODE
+SABRE_ADMIN_LOGIN
+SABRE_ADMIN_PASSWORD
+SABRE_IMPERSONATION_ENABLED
+AUTO_PROVISION
+PRINCIPAL_PRIVACY
+CALDAV_BINARY_ATTACHMENT_MODE
+CALDAV_ORGANIZER_VALIDATION
+SABRE_ENFORCE_RFC_6638
+SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING
+TW_CAL_REPLY_PROPAGATION_THRESHOLD
+SHOULD_CREATE_INDEX
+LOG_TRACE"
+
+environment_entries="    \"SABRE_ENV\": \"$(json_escape "${sabre_env}")\""
+
+for env_var in ${runtime_env_vars}
+do
+  eval "env_value=\${${env_var}}"
+
+  if [ ! -z "${env_value}" ]
+  then
+    environment_entries="${environment_entries},
+    \"${env_var}\": \"$(json_escape "${env_value}")\""
+  fi
+done
+
 config="{
   \"webserver\": {
     \"baseUri\": \"/\",
@@ -88,8 +130,10 @@ config="{
     \"calendarRoot\": \"http://${esn_host}:${esn_port}/calendar/api\"
   },
   \"environment\": {
-    \"SABRE_ENV\": \"${sabre_env}\"
+${environment_entries}
   }
 }"
 
-echo "$config"
+# printf, not echo: dash's echo expands backslash sequences and would undo the
+# JSON escaping done above.
+printf '%s\n' "$config"

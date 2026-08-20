@@ -3,6 +3,7 @@ namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
 use ESN\CalDAV\VObjectPropertyRegistry;
+use ESN\Utils\Env;
 use ESN\Utils\Utils;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
@@ -401,7 +402,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     // Email VALARM recipient scheduling
     protected function shouldEnableEmailValarmRecipientScheduling(): bool {
-        return $this->envBoolean(self::EMAIL_VALARM_RECIPIENT_SCHEDULING_ENV, true);
+        return Env::getBoolean(self::EMAIL_VALARM_RECIPIENT_SCHEDULING_ENV, true);
     }
 
     protected function ensureValarmUids(VCalendar $calendarObject): bool {
@@ -568,14 +569,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     private function shouldEnforceRfc6638(): bool {
-        return $this->envBoolean(self::ENFORCE_RFC_6638_ENV, true);
-    }
-
-    private function envBoolean(string $name, bool $default): bool {
-        $value = getenv($name);
-        return $value === false || trim($value) === ''
-            ? $default
-            : filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default;
+        return Env::getBoolean(self::ENFORCE_RFC_6638_ENV, true);
     }
 
     /**
@@ -722,13 +716,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     private function getReplyPropagationThreshold(): int {
-        $raw = getenv('TW_CAL_REPLY_PROPAGATION_THRESHOLD');
+        $threshold = Env::getInteger(
+            'TW_CAL_REPLY_PROPAGATION_THRESHOLD',
+            self::DEFAULT_REPLY_PROPAGATION_THRESHOLD
+        );
 
-        if ($raw === false || $raw === '') {
-            return self::DEFAULT_REPLY_PROPAGATION_THRESHOLD;
-        }
-
-        $threshold = (int)$raw;
         if ($threshold < 0) {
             return 0;
         }

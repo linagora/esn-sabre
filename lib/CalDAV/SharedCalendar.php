@@ -3,6 +3,7 @@
 namespace ESN\CalDAV;
 
 use ESN\DAV\Sharing\Plugin as SPlugin;
+use ESN\Utils\Env;
 use ESN\Utils\Utils;
 
 #[\AllowDynamicProperties]
@@ -317,7 +318,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
             return false;
         }
 
-        return Utils::isResourceFromPrincipal($this->getOwner()) || getenv('CALDAV_ORGANIZER_VALIDATION') === 'true';
+        return Utils::isResourceFromPrincipal($this->getOwner()) || Env::getBoolean('CALDAV_ORGANIZER_VALIDATION', false);
     }
 
     private function isWriteEnabledAccess(int $access): bool {

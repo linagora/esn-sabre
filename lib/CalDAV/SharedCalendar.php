@@ -318,7 +318,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
             return false;
         }
 
-        return Utils::isResourceFromPrincipal($this->getOwner()) || Env::getBoolean('CALDAV_ORGANIZER_VALIDATION', false);
+        return Utils::isResourceFromPrincipal($this->getOwner()) || Utils::isTeamCalendarFromPrincipal($this->getOwner()) || Env::getBoolean('CALDAV_ORGANIZER_VALIDATION', false);
     }
 
     private function isWriteEnabledAccess(int $access): bool {

@@ -301,6 +301,120 @@ END:VCALENDAR
         );
     }
 
+    function testFreeBusyShouldIgnoreATransparentEvent() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'transparent.ics',
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:transparent-event
+SUMMARY:Does not block the calendar
+TRANSP:TRANSPARENT
+DTSTART:20181101T090000Z
+DTEND:20181101T100000Z
+END:VEVENT
+END:VCALENDAR
+');
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'opaque.ics',
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:opaque-event
+SUMMARY:Blocks the calendar
+TRANSP:OPAQUE
+DTSTART:20181101T100000Z
+DTEND:20181101T110000Z
+END:VEVENT
+END:VCALENDAR
+');
+
+        $jsonResponse = $this->requestFreeBusy([
+            'start' => '20181101T080000Z',
+            'end' => '20181101T120000Z',
+            'users' => [self::USER1_ID]
+        ]);
+
+        $this->assertEquals(
+            [(object) ['uid' => 'opaque-event', 'start' => '20181101T100000Z', 'end' => '20181101T110000Z']],
+            $jsonResponse->users[0]->calendars[0]->busy
+        );
+    }
+
+    function testFreeBusyShouldIgnoreACancelledEvent() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'cancelled.ics',
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:cancelled-event
+SUMMARY:Called off
+STATUS:CANCELLED
+DTSTART:20181201T090000Z
+DTEND:20181201T100000Z
+END:VEVENT
+END:VCALENDAR
+');
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'confirmed.ics',
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:confirmed-event
+SUMMARY:Still on
+STATUS:CONFIRMED
+DTSTART:20181201T100000Z
+DTEND:20181201T110000Z
+END:VEVENT
+END:VCALENDAR
+');
+
+        $jsonResponse = $this->requestFreeBusy([
+            'start' => '20181201T080000Z',
+            'end' => '20181201T120000Z',
+            'users' => [self::USER1_ID]
+        ]);
+
+        $this->assertEquals(
+            [(object) ['uid' => 'confirmed-event', 'start' => '20181201T100000Z', 'end' => '20181201T110000Z']],
+            $jsonResponse->users[0]->calendars[0]->busy
+        );
+    }
+
+    function testFreeBusyShouldIgnoreOnlyTheCancelledOccurrenceOfARecurringEvent() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'cancelled-occurrence.ics',
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:partly-cancelled-event
+SUMMARY:Daily standup
+DTSTART:20190101T090000Z
+DTEND:20190101T100000Z
+RRULE:FREQ=DAILY;COUNT=3
+END:VEVENT
+BEGIN:VEVENT
+UID:partly-cancelled-event
+RECURRENCE-ID:20190102T090000Z
+SUMMARY:Daily standup
+STATUS:CANCELLED
+DTSTART:20190102T090000Z
+DTEND:20190102T100000Z
+END:VEVENT
+END:VCALENDAR
+');
+
+        $jsonResponse = $this->requestFreeBusy([
+            'start' => '20190101T000000Z',
+            'end' => '20190104T000000Z',
+            'users' => [self::USER1_ID],
+            'uids' => ['recur']
+        ]);
+
+        $this->assertEquals(
+            [
+                (object) ['uid' => 'partly-cancelled-event', 'start' => '20190101T090000Z', 'end' => '20190101T100000Z'],
+                (object) ['uid' => 'partly-cancelled-event', 'start' => '20190103T090000Z', 'end' => '20190103T100000Z']
+            ],
+            $jsonResponse->users[0]->calendars[0]->busy
+        );
+    }
+
     function testFreeBusyShouldReturnAJsonArrayWhenAnEventIsFilteredOutWithoutUids() {
         // The declined event is created first, so dropping it leaves a hole in
         // the keys of the busy list unless they are reindexed.

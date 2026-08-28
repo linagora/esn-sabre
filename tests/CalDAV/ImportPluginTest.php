@@ -91,7 +91,7 @@ END:VCALENDAR
 
         $message->component = 'VEVENT';
         $message->uid = 'UID';
-        $message->sequence = $sequence;
+        $message->sequence = (int) $sequence;
         $message->method = 'REQUEST';
         $message->sender = 'mailto:a@a.com';
         $message->recipient = 'mailto:b@b.com';

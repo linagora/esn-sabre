@@ -146,9 +146,9 @@ ICS
         $this->assertStringContainsString('X-OPENPAAS-BOOKING-LINK:booking-link-id', $serializedMessage);
     }
 
-    function testDeliverShouldNotCrashWhenRecipientIsNull() {
+    function testDeliverShouldNotCrashWhenRecipientIsMissing() {
         $message = $this->newItipMessage('1');
-        $message->recipient = null;
+        unset($message->recipient);
 
         $this->plugin->deliver($message);
 
@@ -1019,7 +1019,7 @@ END:VCALENDAR
 
         $message->component = 'VEVENT';
         $message->uid = 'UID';
-        $message->sequence = $sequence;
+        $message->sequence = $sequence === '' ? null : (int) $sequence;
         $message->method = 'REQUEST';
         $message->sender = 'mailto:a@a.com';
         $message->recipient = 'mailto:b@b.com';
@@ -1508,6 +1508,7 @@ ICS
 
     private function newReplyMessage(string $uid, string $recipient): Message {
         $message = new Message();
+        $message->component = 'VEVENT';
         $message->method = 'REPLY';
         $message->uid = $uid;
         $message->recipient = $recipient;

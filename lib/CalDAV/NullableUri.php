@@ -8,7 +8,7 @@ use Sabre\VObject\Property\Uri;
 class NullableUri extends Uri
 {
     #[\ReturnTypeWillChange]
-    public function offsetSet($name, $value)
+    public function offsetSet($name, $value): void
     {
         if (!$this->isNullableProperty()
             && strtoupper((string)$name) === 'VALUE'
@@ -20,7 +20,7 @@ class NullableUri extends Uri
         parent::offsetSet($name, $value);
     }
 
-    public function setJsonValue(array $value)
+    public function setJsonValue(array $value): void
     {
         parent::setJsonValue($this->isNullableProperty() && [null] === $value ? [''] : $value);
     }

@@ -70,7 +70,7 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         $message->component = 'VEVENT';
         $message->uid = $payload->uid;
         $message->method = $issetdef('method', 'REQUEST');
-        $message->sequence = $issetdef('sequence', '0');
+        $message->sequence = (int) $issetdef('sequence', 0);
         $message->message = VObject\Reader::read($payload->ical);
         // Events coming from an external system carry the video conference link in the
         // OpenPaaS property only: expose it to the recipient's clients as well.

@@ -146,7 +146,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
                 $items[] = (object) [
                     'id' => $calendar->getName(),
                     // array_values() unconditionally: array_filter() preserves keys, and
-                    // json_encode() turns a array with a hole in its keys into an object.
+                    // json_encode() turns an array with a hole in its keys into an object.
                     // 'busy' must always serialize as a JSON array.
                     'busy' => array_values($busyEvents)
                 ];
@@ -185,8 +185,12 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
 
         $busyPeriods = [];
         foreach ($expandedVObject->select('VEVENT') as $vevent) {
-            // Checked per occurrence: an override may carry a different PARTSTAT
-            // than the master event.
+            // Both checks are per occurrence: an override may carry a different
+            // PARTSTAT, TRANSP or STATUS than its master event.
+            if ($this->doesNotOccupyTime($vevent)) {
+                continue;
+            }
+
             if ($vevent->ATTENDEE && Utils::isPrincipalNotAttendingEvent($vevent, $email)) {
                 continue;
             }
@@ -195,6 +199,22 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
         }
 
         return $busyPeriods;
+    }
+
+    /**
+     * Tells whether an occurrence should be left out of the busy periods
+     * because it does not consume any time, the way RFC 4791 section 7.10
+     * builds a free-busy report: an event marked TRANSPARENT is explicitly
+     * excluded from free/busy, and a CANCELLED one no longer takes place.
+     *
+     * @return bool
+     */
+    private function doesNotOccupyTime($vevent) {
+        if (isset($vevent->TRANSP) && strtoupper(trim((string) $vevent->TRANSP)) === 'TRANSPARENT') {
+            return true;
+        }
+
+        return isset($vevent->STATUS) && strtoupper(trim((string) $vevent->STATUS)) === 'CANCELLED';
     }
 
     /**

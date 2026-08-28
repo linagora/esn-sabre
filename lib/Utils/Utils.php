@@ -396,14 +396,22 @@ class Utils {
     }
 
     /**
-     * @param VEVENT $vevent    the event object VEVENT.
-     * @param String $email     the user email to be used in the participation check.
+     * Tells whether a principal turned an event down.
      *
-     * @return Boolean          true if he is not attending the event, false otherwise.
+     * An event sitting in a calendar occupies it, so only an explicit refusal
+     * frees the slot back up. Everything else answers false: an unanswered
+     * invitation holds the slot until its recipient declines it, and so does an
+     * event the principal is not even listed as an ATTENDEE of, which is what a
+     * booking in a team calendar looks like.
+     *
+     * @param VEVENT $vevent    the event object VEVENT.
+     * @param String $email     the email of the principal, as mailto: address.
+     *
+     * @return Boolean          true if the principal declined the event, false otherwise.
      */
-    static function isPrincipalNotAttendingEvent($vevent, $email) {
+    static function hasPrincipalDeclinedEvent($vevent, $email) {
         if (empty($email)) {
-            return true;
+            return false;
         }
 
         $emailLower = strtolower($email);
@@ -414,20 +422,11 @@ class Utils {
 
             // Return on the first matching attendee to avoid scanning events
             // with hundreds of attendees, as the original implementation did.
-            return self::isAttendeeNotParticipating($attendee);
+            return isset($attendee['PARTSTAT'])
+                && strtoupper(trim($attendee['PARTSTAT']->getValue())) === 'DECLINED';
         }
 
-        return true;
-    }
-
-    private static function isAttendeeNotParticipating($attendee) {
-        if (!isset($attendee['PARTSTAT'])) {
-            return true;
-        }
-
-        $partstat = strtoupper(trim($attendee['PARTSTAT']->getValue()));
-
-        return ($partstat === 'NEEDS-ACTION' || $partstat === 'DECLINED');
+        return false;
     }
 
     /**

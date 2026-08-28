@@ -129,7 +129,7 @@ class UtilsTest extends \ESN\DAV\ServerMock {
         $this->assertEquals($result, 'sabredav-63884fc4-e0ea-456f-97f6-36e0e274f703.ics');
     }
 
-    function testIsPrincipalNotAttendingEvent() {
+    function testHasPrincipalDeclinedEvent() {
         $event = <<<ICS
 BEGIN:VCALENDAR
 VERSION:2.0
@@ -140,6 +140,7 @@ ORGANIZER;CN=Strunk:mailto:strunk@example.org
 ATTENDEE;CN=White;PARTSTAT=NEEDS-ACTION:mailto:user1@example.com
 ATTENDEE;CN=White;PARTSTAT=ACCEPTED:mailto:user2@example.com
 ATTENDEE;CN=White;PARTSTAT=DECLINED:mailto:user3@example.com
+ATTENDEE;CN=White:mailto:user4@example.com
 DTSTART:20140718T120000Z
 DURATION:PT1H
 END:VEVENT
@@ -149,14 +150,19 @@ ICS;
         $eventNode = \Sabre\VObject\Reader::read($event);
         $vevent = $eventNode->VEVENT;
 
-        $result = Utils::isPrincipalNotAttendingEvent($vevent, 'mailto:user1@example.com');
-        $this->assertTrue($result);
+        // Only an explicit refusal counts as declined.
+        $this->assertFalse(Utils::hasPrincipalDeclinedEvent($vevent, 'mailto:user1@example.com'));
+        $this->assertFalse(Utils::hasPrincipalDeclinedEvent($vevent, 'mailto:user2@example.com'));
+        $this->assertTrue(Utils::hasPrincipalDeclinedEvent($vevent, 'mailto:user3@example.com'));
 
-        $result = Utils::isPrincipalNotAttendingEvent($vevent, 'mailto:user2@example.com');
-        $this->assertFalse($result);
+        // An attendee without a PARTSTAT has not declined.
+        $this->assertFalse(Utils::hasPrincipalDeclinedEvent($vevent, 'mailto:user4@example.com'));
 
-        $result = Utils::isPrincipalNotAttendingEvent($vevent, 'mailto:user3@example.com');
-        $this->assertTrue($result);
+        // Neither has someone the event does not even list as an attendee.
+        $this->assertFalse(Utils::hasPrincipalDeclinedEvent($vevent, 'mailto:stranger@example.com'));
+
+        // Nor an unknown principal.
+        $this->assertFalse(Utils::hasPrincipalDeclinedEvent($vevent, ''));
     }
 
     function testGetPrincipalEmail() {

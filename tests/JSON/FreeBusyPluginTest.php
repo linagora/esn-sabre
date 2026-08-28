@@ -13,6 +13,7 @@ class FreeBusyPluginTest extends \ESN\DAV\ServerMock {
     use \Sabre\VObject\PHPUnitAssertions;
 
     const USER1_ID = '54b64eadf6d7d8e41d263e0f';
+    const USER1_EMAIL = 'robertocarlos@realmadrid.com';
 
     protected $freebusyBulkData = [
         'start' => '20120101T000000Z',
@@ -138,22 +139,20 @@ END:VCALENDAR
     function testFreeBusyWithDurationEvent() {
         $this->caldavBackend->createCalendarObject($this->cal['id'], 'event4.ics', $this->acceptedDurationEvent);
 
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/calendars/freebusy',
-        ));
+        $jsonResponse = $this->requestFreeBusy($this->freebusyBulkWithDurationEvent);
 
-        $request->setBody(json_encode($this->freebusyBulkWithDurationEvent));
-        $response = $this->request($request);
-
-        $jsonResponse = json_decode($response->getBodyAsString());
-
-        $this->assertEquals($response->status, 200);
         $this->assertCount(1, $jsonResponse->users);
         $this->assertCount(count($this->user1Calendars['ownedCalendars']), $jsonResponse->users[0]->calendars);
-        $this->assertCount(1, $jsonResponse->users[0]->calendars[0]->busy);
+
+        // Both the NEEDS-ACTION and the ACCEPTED copy hold their slot, and
+        // DURATION:PT3H gives them an end three hours after their DTSTART.
+        $durationPeriod = (object) [
+            'uid' => '28CCB90C-0F2F-48FC-B1D9-33A2BA3D9595',
+            'start' => '20180401T000000Z',
+            'end' => '20180401T030000Z'
+        ];
+
+        $this->assertEquals([$durationPeriod, $durationPeriod], $jsonResponse->users[0]->calendars[0]->busy);
     }
 
     function testFreeBusyWithRecurringEvent() {
@@ -488,105 +487,158 @@ END:VCALENDAR
     }
 
     /**
-     * Test for issue #172: Free/Busy should ignore DECLINED events
+     * An event sitting in a calendar occupies it. Only an explicit refusal by
+     * the principal being asked about frees the slot back up: issue #172 used
+     * to drop NEEDS-ACTION events too, which let a proposed booking slot be
+     * booked a second time.
      */
-    function testFreeBusyShouldIgnoreDeclinedEvent() {
-        $declinedEvent = 'BEGIN:VCALENDAR
-VERSION:2.0
-BEGIN:VEVENT
-CREATED:20180313T142342Z
-UID:test-declined-event
-TRANSP:OPAQUE
-SUMMARY:Declined Meeting
-DTSTART:20180401T110000Z
-DTEND:20180401T120000Z
-DTSTAMP:20180313T142416Z
-SEQUENCE:1
-ORGANIZER;CN=Boss:mailto:boss@example.com
-ATTENDEE;PARTSTAT=DECLINED;RSVP=FALSE;CN=Roberto Carlos:mailto:robertocarlos@realmadrid.com
-END:VEVENT
-END:VCALENDAR
-';
+    function testFreeBusyShouldIgnoreADeclinedEvent() {
+        $this->createEventWithAttendees('declined.ics', 'declined-event', '20190201T090000Z', '20190201T100000Z', [
+            'ATTENDEE;PARTSTAT=DECLINED;CN=Roberto Carlos:mailto:' . self::USER1_EMAIL
+        ]);
 
-        $this->caldavBackend->createCalendarObject($this->cal['id'], 'declined.ics', $declinedEvent);
+        $this->assertEquals([], $this->getBusyPeriods('20190201T080000Z', '20190201T110000Z'));
+    }
 
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/calendars/freebusy',
-        ));
+    function testFreeBusyShouldKeepANeedsActionEvent() {
+        $this->createEventWithAttendees('needs-action.ics', 'needs-action-event', '20190202T090000Z', '20190202T100000Z', [
+            'ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Roberto Carlos:mailto:' . self::USER1_EMAIL
+        ]);
 
-        $freebusyData = [
-            'start' => '20180401T100000Z',
-            'end' => '20180401T130000Z',
-            'users' => ['54b64eadf6d7d8e41d263e0f']
-        ];
+        $this->assertEquals(
+            [(object) ['uid' => 'needs-action-event', 'start' => '20190202T090000Z', 'end' => '20190202T100000Z']],
+            $this->getBusyPeriods('20190202T080000Z', '20190202T110000Z')
+        );
+    }
 
-        $request->setBody(json_encode($freebusyData));
-        $response = $this->request($request);
+    function testFreeBusyShouldKeepAnAcceptedEvent() {
+        $this->createEventWithAttendees('accepted.ics', 'accepted-event', '20190203T090000Z', '20190203T100000Z', [
+            'ATTENDEE;PARTSTAT=ACCEPTED;CN=Roberto Carlos:mailto:' . self::USER1_EMAIL
+        ]);
 
-        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertEquals(
+            [(object) ['uid' => 'accepted-event', 'start' => '20190203T090000Z', 'end' => '20190203T100000Z']],
+            $this->getBusyPeriods('20190203T080000Z', '20190203T110000Z')
+        );
+    }
 
-        $this->assertEquals($response->status, 200);
+    function testFreeBusyShouldKeepAnEventWhoseAttendeeHasNoPartstat() {
+        $this->createEventWithAttendees('no-partstat.ics', 'no-partstat-event', '20190204T090000Z', '20190204T100000Z', [
+            'ATTENDEE;CN=Roberto Carlos:mailto:' . self::USER1_EMAIL
+        ]);
 
-        // The declined event should NOT appear in busy list
-        $busyEvents = $jsonResponse->users[0]->calendars[0]->busy;
-        foreach ($busyEvents as $event) {
-            $this->assertNotEquals('test-declined-event', $event->uid,
-                'Declined events should not appear in free/busy response');
-        }
+        $this->assertEquals(
+            [(object) ['uid' => 'no-partstat-event', 'start' => '20190204T090000Z', 'end' => '20190204T100000Z']],
+            $this->getBusyPeriods('20190204T080000Z', '20190204T110000Z')
+        );
     }
 
     /**
-     * Test for issue #172: Free/Busy should also ignore NEEDS-ACTION events
+     * What a booking in a team calendar looks like: the attendees are the owner
+     * of the booking link and whoever booked it, never the address of the team
+     * calendar the event lands in. The slot it takes must still show as busy to
+     * the other members, otherwise it can be booked over and over.
      */
-    function testFreeBusyShouldIgnoreNeedsActionEvent() {
-        $needsActionEvent = 'BEGIN:VCALENDAR
+    function testFreeBusyShouldKeepAnEventThePrincipalIsNotAnAttendeeOf() {
+        $this->createEventWithAttendees('other-attendees.ics', 'other-attendees-event', '20190205T090000Z', '20190205T100000Z', [
+            'ATTENDEE;PARTSTAT=ACCEPTED;CN=Boss:mailto:boss@example.com',
+            'ATTENDEE;PARTSTAT=DECLINED;CN=Someone Else:mailto:someone-else@example.com'
+        ]);
+
+        $this->assertEquals(
+            [(object) ['uid' => 'other-attendees-event', 'start' => '20190205T090000Z', 'end' => '20190205T100000Z']],
+            $this->getBusyPeriods('20190205T080000Z', '20190205T110000Z')
+        );
+    }
+
+    function testFreeBusyShouldKeepAnEventWhenThePrincipalEmailIsUnknown() {
+        $this->createEventWithAttendees('unknown-email.ics', 'unknown-email-event', '20190206T090000Z', '20190206T100000Z', [
+            'ATTENDEE;PARTSTAT=DECLINED;CN=Roberto Carlos:mailto:' . self::USER1_EMAIL
+        ]);
+
+        $nodePath = 'calendars/' . self::USER1_ID;
+        $params = (object) ['start' => '20190206T080000Z', 'end' => '20190206T110000Z'];
+
+        // Not knowing whose calendar this is says nothing about a refusal, so
+        // the event keeps its slot.
+        $calendars = $this->server->getPlugin('caldav-freebusy')->getFreeBusyCalendars(
+            $nodePath,
+            $this->server->tree->getNodeForPath($nodePath),
+            $params,
+            ''
+        );
+
+        $this->assertEquals(
+            [(object) ['uid' => 'unknown-email-event', 'start' => '20190206T090000Z', 'end' => '20190206T100000Z']],
+            $calendars[0]->busy
+        );
+    }
+
+    function testFreeBusyShouldIgnoreOnlyTheDeclinedOccurrenceOfARecurringEvent() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'declined-occurrence.ics',
+            'BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
-CREATED:20180313T142342Z
-UID:test-needs-action-event
-TRANSP:OPAQUE
-SUMMARY:Pending Meeting
-DTSTART:20180401T140000Z
-DTEND:20180401T150000Z
-DTSTAMP:20180313T142416Z
-SEQUENCE:1
+UID:partly-declined-event
+SUMMARY:Daily standup
+DTSTART:20190301T090000Z
+DTEND:20190301T100000Z
+RRULE:FREQ=DAILY;COUNT=3
 ORGANIZER;CN=Boss:mailto:boss@example.com
-ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Roberto Carlos:mailto:robertocarlos@realmadrid.com
+ATTENDEE;PARTSTAT=ACCEPTED;CN=Roberto Carlos:mailto:robertocarlos@realmadrid.com
+END:VEVENT
+BEGIN:VEVENT
+UID:partly-declined-event
+RECURRENCE-ID:20190302T090000Z
+SUMMARY:Daily standup
+DTSTART:20190302T090000Z
+DTEND:20190302T100000Z
+ORGANIZER;CN=Boss:mailto:boss@example.com
+ATTENDEE;PARTSTAT=DECLINED;CN=Roberto Carlos:mailto:robertocarlos@realmadrid.com
 END:VEVENT
 END:VCALENDAR
-';
+');
 
-        $this->caldavBackend->createCalendarObject($this->cal['id'], 'needs-action.ics', $needsActionEvent);
+        $this->assertEquals(
+            [
+                (object) ['uid' => 'partly-declined-event', 'start' => '20190301T090000Z', 'end' => '20190301T100000Z'],
+                (object) ['uid' => 'partly-declined-event', 'start' => '20190303T090000Z', 'end' => '20190303T100000Z']
+            ],
+            $this->getBusyPeriods('20190301T000000Z', '20190304T000000Z', ['recur'])
+        );
+    }
 
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'POST',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/calendars/freebusy',
-        ));
+    /**
+     * Creates an event in user1's first calendar, with the given ATTENDEE lines.
+     */
+    private function createEventWithAttendees($uri, $uid, $dtstart, $dtend, $attendees) {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], $uri, implode("\n", array_merge([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:' . $uid,
+            'SUMMARY:' . $uid,
+            'DTSTART:' . $dtstart,
+            'DTEND:' . $dtend,
+            'ORGANIZER;CN=Boss:mailto:boss@example.com'
+        ], $attendees, [
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ])));
+    }
 
-        $freebusyData = [
-            'start' => '20180401T130000Z',
-            'end' => '20180401T160000Z',
-            'users' => ['54b64eadf6d7d8e41d263e0f']
-        ];
+    /**
+     * Returns the busy periods of user1's first calendar over the given window.
+     */
+    private function getBusyPeriods($start, $end, $uids = null) {
+        $data = ['start' => $start, 'end' => $end, 'users' => [self::USER1_ID]];
 
-        $request->setBody(json_encode($freebusyData));
-        $response = $this->request($request);
-
-        $jsonResponse = json_decode($response->getBodyAsString());
-
-        $this->assertEquals($response->status, 200);
-
-        // The needs-action event should NOT appear in busy list
-        $busyEvents = $jsonResponse->users[0]->calendars[0]->busy;
-        foreach ($busyEvents as $event) {
-            $this->assertNotEquals('test-needs-action-event', $event->uid,
-                'NEEDS-ACTION events should not appear in free/busy response');
+        if (!is_null($uids)) {
+            $data['uids'] = $uids;
         }
+
+        return $this->requestFreeBusy($data)->users[0]->calendars[0]->busy;
     }
 
     /**

@@ -202,7 +202,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
                 continue;
             }
 
-            if ($vevent->ATTENDEE && Utils::isPrincipalNotAttendingEvent($vevent, $email)) {
+            if ($vevent->ATTENDEE && Utils::hasPrincipalDeclinedEvent($vevent, $email)) {
                 continue;
             }
 

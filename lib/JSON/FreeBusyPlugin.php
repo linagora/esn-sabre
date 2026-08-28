@@ -103,6 +103,8 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
 
     function getFreeBusyCalendars($nodePath, $node, $params, $email) {
         $calendars = $node->getChildren();
+        $start = new \DateTime($params->start);
+        $end = new \DateTime($params->end);
 
         $items = [];
         foreach ($calendars as $calendar) {
@@ -116,8 +118,8 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
                             'prop-filters'   => [],
                             'is-not-defined' => false,
                             'time-range'     => [
-                                'start' => new \DateTime($params->start),
-                                'end'   => new \DateTime($params->end),
+                                'start' => $start,
+                                'end'   => $end,
                             ],
                         ],
                     ],
@@ -126,51 +128,106 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
                     'time-range'     => null,
                 ]);
 
-                $busyEvents = array_map(function($eventUri) use ($calendar, $email) {
-                    $obj = $calendar->getChild($eventUri)->get();
-                    $vObject = VObject\Reader::read($obj);
-                    $vevent = $vObject->VEVENT;
-
-                    if ($vevent->ATTENDEE && Utils::isPrincipalNotAttendingEvent($vevent, $email)) {
-                        return;
+                $busyEvents = [];
+                foreach ($busyEventUris as $eventUri) {
+                    foreach ($this->getBusyPeriods($calendar, $eventUri, $start, $end, $email) as $busyPeriod) {
+                        $busyEvents[] = $busyPeriod;
                     }
+                }
 
-                    $timeZone = new DateTimeZone('UTC');
-
-                    $freebusy = [
-                        'uid' => $vevent->UID->getValue(),
-                        'start' => $vevent->DTSTART->getDateTime()->format('Ymd\\THis\\Z')
-                    ];
-
-                    if (isset($vevent->DTEND)) {
-                        $endDate = $vevent->DTEND->getDateTime();
-                    } elseif (isset($vevent->DURATION)) {
-                        $endDate = clone $vevent->DTSTART->getDateTime();
-                        $endDate = $endDate->add(VObject\DateTimeParser::parse($vevent->DURATION->getValue()));
-                    }
-
-                    if (isset($endDate)) {
-                        $freebusy['end'] = $endDate->format('Ymd\\THis\\Z');
-                    }
-
-                    return (object) $freebusy;
-                }, $busyEventUris);
-
-                $busyEvents = array_filter($busyEvents);
-                $filteredBusyEvent = isset($params->uids)
-                    ? array_values(array_filter($busyEvents, function ($busy) use ($params) {
+                if (isset($params->uids)) {
+                    // The uid of an occurrence is the one of its master event, so
+                    // this excludes every occurrence of a filtered out event.
+                    $busyEvents = array_filter($busyEvents, function($busy) use ($params) {
                         return !in_array($busy->uid, $params->uids);
-                    }))
-                    : $busyEvents;
+                    });
+                }
 
                 $items[] = (object) [
                     'id' => $calendar->getName(),
-                    'busy' =>$filteredBusyEvent
+                    // array_values() unconditionally: array_filter() preserves keys, and
+                    // json_encode() turns a array with a hole in its keys into an object.
+                    // 'busy' must always serialize as a JSON array.
+                    'busy' => array_values($busyEvents)
                 ];
             }
         }
 
         return $items;
+    }
+
+    /**
+     * Returns the busy periods a single calendar object occupies within the
+     * requested window, one per occurrence.
+     *
+     * A recurring event has to be expanded: its master VEVENT only carries the
+     * dates of the first occurrence, which are usually nowhere near the window
+     * the caller asked about. VCalendar::expand() returns one VEVENT per
+     * occurrence, converted to UTC, with the RECURRENCE-ID overrides and the
+     * EXDATEs applied.
+     *
+     * @return array the busy periods, possibly empty
+     */
+    private function getBusyPeriods($calendar, $eventUri, $start, $end, $email) {
+        $vObject = VObject\Reader::read($calendar->getChild($eventUri)->get());
+
+        try {
+            $expandedVObject = $vObject->expand($start, $end);
+        } catch (VObject\InvalidDataException $e) {
+            // A recurring VEVENT without a UID cannot be expanded. Drop that one
+            // calendar object rather than failing the whole bulk request.
+            $this->server->getLogger()->error(
+                'Free/busy: ignoring ' . $calendar->getName() . '/' . $eventUri . ': ' . $e->getMessage()
+            );
+
+            return [];
+        }
+
+        $busyPeriods = [];
+        foreach ($expandedVObject->select('VEVENT') as $vevent) {
+            // Checked per occurrence: an override may carry a different PARTSTAT
+            // than the master event.
+            if ($vevent->ATTENDEE && Utils::isPrincipalNotAttendingEvent($vevent, $email)) {
+                continue;
+            }
+
+            $busyPeriods[] = $this->buildBusyPeriod($vevent);
+        }
+
+        return $busyPeriods;
+    }
+
+    /**
+     * Builds the busy period of a single, already expanded, occurrence.
+     *
+     * Both dates are converted to UTC before being formatted, so that the
+     * trailing Z of the response is not a lie for an event carrying a TZID.
+     *
+     * A VEVENT with neither DTEND nor DURATION is given the duration RFC 5545
+     * section 3.6.1 defines for it: none when DTSTART is a DATE-TIME, one full
+     * day when DTSTART is a DATE.
+     *
+     * @return object the busy period, as {uid, start, end}
+     */
+    private function buildBusyPeriod($vevent) {
+        $utc = new DateTimeZone('UTC');
+        $startDate = $vevent->DTSTART->getDateTime($utc);
+
+        if (isset($vevent->DTEND)) {
+            $endDate = $vevent->DTEND->getDateTime($utc);
+        } elseif (isset($vevent->DURATION)) {
+            $endDate = (clone $startDate)->add(VObject\DateTimeParser::parse($vevent->DURATION->getValue()));
+        } elseif (!$vevent->DTSTART->hasTime()) {
+            $endDate = (clone $startDate)->modify('+1 day');
+        } else {
+            $endDate = clone $startDate;
+        }
+
+        return (object) [
+            'uid' => (string) $vevent->UID,
+            'start' => $startDate->setTimezone($utc)->format('Ymd\\THis\\Z'),
+            'end' => $endDate->setTimezone($utc)->format('Ymd\\THis\\Z')
+        ];
     }
 
     function isCalendar($calendar) {

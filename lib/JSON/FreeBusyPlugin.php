@@ -102,58 +102,69 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function getFreeBusyCalendars($nodePath, $node, $params, $email) {
-        $calendars = $node->getChildren();
         $start = new \DateTime($params->start);
         $end = new \DateTime($params->end);
 
         $items = [];
-        foreach ($calendars as $calendar) {
-            if ($this->isCalendar($calendar) && $this->hasFreebusyRight($nodePath, $calendar)) {
-                $busyEventUris = $calendar->calendarQuery([
-                    'name'         => 'VCALENDAR',
-                    'comp-filters' => [
-                        [
-                            'name'           => 'VEVENT',
-                            'comp-filters'   => [],
-                            'prop-filters'   => [],
-                            'is-not-defined' => false,
-                            'time-range'     => [
-                                'start' => $start,
-                                'end'   => $end,
-                            ],
-                        ],
-                    ],
-                    'prop-filters'   => [],
-                    'is-not-defined' => false,
-                    'time-range'     => null,
-                ]);
-
-                $busyEvents = [];
-                foreach ($busyEventUris as $eventUri) {
-                    foreach ($this->getBusyPeriods($calendar, $eventUri, $start, $end, $email) as $busyPeriod) {
-                        $busyEvents[] = $busyPeriod;
-                    }
-                }
-
-                if (isset($params->uids)) {
-                    // The uid of an occurrence is the one of its master event, so
-                    // this excludes every occurrence of a filtered out event.
-                    $busyEvents = array_filter($busyEvents, function($busy) use ($params) {
-                        return !in_array($busy->uid, $params->uids);
-                    });
-                }
-
-                $items[] = (object) [
-                    'id' => $calendar->getName(),
-                    // array_values() unconditionally: array_filter() preserves keys, and
-                    // json_encode() turns an array with a hole in its keys into an object.
-                    // 'busy' must always serialize as a JSON array.
-                    'busy' => array_values($busyEvents)
-                ];
+        foreach ($node->getChildren() as $calendar) {
+            if (!$this->isCalendar($calendar) || !$this->hasFreebusyRight($nodePath, $calendar)) {
+                continue;
             }
+
+            $items[] = (object) [
+                'id' => $calendar->getName(),
+                'busy' => $this->getCalendarBusyPeriods($calendar, $params, $start, $end, $email)
+            ];
         }
 
         return $items;
+    }
+
+    /**
+     * Returns the busy periods of one calendar over the requested window.
+     *
+     * @return array the busy periods, possibly empty
+     */
+    private function getCalendarBusyPeriods($calendar, $params, $start, $end, $email) {
+        $busyEventUris = $calendar->calendarQuery([
+            'name'         => 'VCALENDAR',
+            'comp-filters' => [
+                [
+                    'name'           => 'VEVENT',
+                    'comp-filters'   => [],
+                    'prop-filters'   => [],
+                    'is-not-defined' => false,
+                    'time-range'     => [
+                        'start' => $start,
+                        'end'   => $end,
+                    ],
+                ],
+            ],
+            'prop-filters'   => [],
+            'is-not-defined' => false,
+            'time-range'     => null,
+        ]);
+
+        $busyPeriods = [];
+        foreach ($busyEventUris as $eventUri) {
+            $busyPeriods = array_merge(
+                $busyPeriods,
+                $this->getEventBusyPeriods($calendar, $eventUri, $start, $end, $email)
+            );
+        }
+
+        if (isset($params->uids)) {
+            // The uid of an occurrence is the one of its master event, so this
+            // excludes every occurrence of a filtered out event.
+            $busyPeriods = array_filter($busyPeriods, function($busy) use ($params) {
+                return !in_array($busy->uid, $params->uids);
+            });
+        }
+
+        // array_values() unconditionally: array_filter() preserves keys, and
+        // json_encode() turns an array with a hole in its keys into an object.
+        // 'busy' must always serialize as a JSON array.
+        return array_values($busyPeriods);
     }
 
     /**
@@ -168,7 +179,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
      *
      * @return array the busy periods, possibly empty
      */
-    private function getBusyPeriods($calendar, $eventUri, $start, $end, $email) {
+    private function getEventBusyPeriods($calendar, $eventUri, $start, $end, $email) {
         $vObject = VObject\Reader::read($calendar->getChild($eventUri)->get());
 
         try {

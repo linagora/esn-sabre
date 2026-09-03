@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+use ESN\CalDAV\Exception\UnauthorizedOrganizer;
 use ESN\DAV\Sharing\Plugin as SharingPlugin;
 use ESN\Utils\Utils;
 use Sabre\CalDAV\ICalendarObject;
@@ -22,6 +23,7 @@ class OrganizerValidationPlugin extends ServerPlugin {
         $this->server = $server;
         $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], Plugin::PRIORITY_BEFORE_SCHEDULING - 10);
         $server->on('beforeMove', [$this, 'beforeMove'], 45);
+        $server->on('beforeCopy', [$this, 'beforeCopy'], 45);
     }
 
     function getPluginName() {
@@ -55,8 +57,23 @@ class OrganizerValidationPlugin extends ServerPlugin {
     }
 
     function beforeMove($sourcePath, $destinationPath) {
+        $this->validateTransferredOrganizer($sourcePath, $destinationPath);
+    }
+
+    function beforeCopy($sourcePath, $destinationPath, $depth = null) {
+        $this->validateTransferredOrganizer($sourcePath, $destinationPath);
+    }
+
+    /**
+     * SabreDAV runs COPY and MOVE through Tree::copy()/Tree::move(), which never emit
+     * calendarObjectChange and therefore skip the validation a PUT goes through. Validate the
+     * transferred object against the destination calendar, so that a transfer cannot introduce
+     * an ORGANIZER that a PUT to that same calendar would have rejected.
+     */
+    private function validateTransferredOrganizer($sourcePath, $destinationPath): void {
         list($calendarPath,) = Utils::splitEventPath('/' . ltrim($destinationPath, '/'));
-        if (!$calendarPath || !$this->isTeamCalendarPath($calendarPath)) return;
+        // Not a calendar object path: collection level transfers are left to the ACL plugin.
+        if (!$calendarPath) return;
 
         try {
             $source = $this->server->tree->getNodeForPath($sourcePath);
@@ -75,9 +92,38 @@ class OrganizerValidationPlugin extends ServerPlugin {
 
         try {
             $this->validateCalendarOrganizer($calendar, $calendarPath);
+        } catch (UnauthorizedOrganizer $e) {
+            // An attendee's copy of an invitation keeps the inviter as ORGANIZER, so rearranging
+            // one within a single calendar home stays allowed: the object is already there and
+            // the transfer hands it to nobody new.
+            if (!$this->isTransferWithinSameCalendarHome($sourcePath, $calendarPath)) {
+                throw $e;
+            }
         } finally {
             $calendar->destroy();
         }
+    }
+
+    private function isTransferWithinSameCalendarHome($sourcePath, $destinationCalendarPath): bool {
+        list($sourceCalendarPath,) = Utils::splitEventPath('/' . ltrim($sourcePath, '/'));
+        if (!$sourceCalendarPath) return false;
+
+        if ($this->calendarHomeOf($sourceCalendarPath) !== $this->calendarHomeOf($destinationCalendarPath)) {
+            return false;
+        }
+        
+        return !$this->isSharedInstance($destinationCalendarPath);
+    }
+
+    private function calendarHomeOf(string $calendarPath): string {
+        // $calendarPath is 'calendars/{baseId}/{calendarUri}'.
+        return explode('/', $calendarPath)[1];
+    }
+
+    private function isSharedInstance($calendarPath): bool {
+        $calendarNode = $this->getCalendarNode($calendarPath);
+
+        return $calendarNode instanceof SharedCalendar && $calendarNode->isSharedInstance();
     }
 
     private function validateCalendarOrganizer(VCalendar $calendar, $calendarPath, ?string $existingOrganizerUri = null): void {
@@ -158,7 +204,7 @@ class OrganizerValidationPlugin extends ServerPlugin {
 
         $organizerPrincipal = $aclPlugin->getPrincipalByUri($organizerUri);
         if ($organizerPrincipal === null) {
-            throw new Forbidden('The ORGANIZER must be either the calendar owner or the authenticated user.');
+            throw new UnauthorizedOrganizer('The ORGANIZER must be either the calendar owner or the authenticated user.');
         }
 
         if ($this->isTeamCalendarPath($calendarPath)) {
@@ -166,7 +212,7 @@ class OrganizerValidationPlugin extends ServerPlugin {
                 return;
             }
 
-            throw new Forbidden('The ORGANIZER must be a write-enabled team calendar member.');
+            throw new UnauthorizedOrganizer('The ORGANIZER must be a write-enabled team calendar member.');
         }
 
         if ($organizerPrincipal === $this->getCalendarOwner($calendarPath)) {

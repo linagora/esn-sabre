@@ -185,13 +185,13 @@ copy. A personal alarm:
 - MUST NOT propagate to the organizer or other attendees;
 - MAY target the attendee's primary address or another personal address;
 - MUST be preserved when organizer-managed alarms are updated;
-- when created by a Twake client, MUST use a UID different from every
+- when assigned by a Twake client, MUST use a UID different from every
   organizer-managed alarm on the event.
 
 Editing an organizer-managed alarm and creating a personal alarm are different
-operations. Twake clients SHOULD create a new `VALARM` with a new UID when a
-user chooses a personal reminder instead of mutating the organizer-managed
-component into a personal one.
+operations. Twake clients SHOULD create a new `VALARM` when a user chooses a
+personal reminder instead of mutating the organizer-managed component into a
+personal one. They MAY assign a UID or let esn-sabre generate it.
 
 ## UID rules
 
@@ -200,20 +200,22 @@ alarms without UID for compatibility.
 
 When `SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING` is enabled, esn-sabre MUST
 generate a UID for every `VALARM` missing one before persisting and scheduling
-the event. Generated UIDs MUST use the `alarm-{uuid}` format with a UUID v4
-value. If the client already provides a UID, esn-sabre MUST preserve it.
+the event. Generated email alarm UIDs MUST use `alarm-organizer-{uuid}` for
+organizer alarms and `alarm-personal-{uuid}` for attendee-local alarms. If the
+client already provides a UID, esn-sabre MUST preserve it. Clients MAY omit the
+UID, but SHOULD preserve the server-generated value returned by subsequent
+event reads for later full-resource writes.
 
-UID provides stable identity for matching alarm updates. It does not express
-ownership by itself:
+UID provides stable identity for matching alarm updates. For server-generated
+email alarms, its prefix also expresses ownership:
 
 - alarms projected from the organizer source are organizer-managed;
 - alarms created only in an attendee copy are personal.
 
-UID SHOULD be used to match an old organizer-managed alarm with its updated
-version. Legacy UID-less alarms MAY be compared against previous and current
-organizer projections, but identical UID-less organizer and personal alarms are
-inherently ambiguous. Clients avoid that ambiguity by assigning a new UID to
-personal alarms.
+When applying an organizer `REQUEST`, an attendee copy MUST discard old email
+alarms whose UID starts with `alarm-organizer-`, or the same UID as an incoming
+organizer alarm, before adding the latest projection. Remaining alarms are
+preserved.
 
 ## Recurring events
 

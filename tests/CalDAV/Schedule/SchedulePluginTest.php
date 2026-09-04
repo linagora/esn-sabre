@@ -592,7 +592,7 @@ END:VALARM
 BEGIN:VALARM
 UID:alice-personal-reminder@example.org
 ACTION:EMAIL
-ATTENDEE:mailto:alias@example.org
+ATTENDEE:mailto:alice@example.org
 TRIGGER:-PT10M
 DESCRIPTION:Personal reminder
 SUMMARY:Personal alarm notification
@@ -636,7 +636,7 @@ ICS
             $this->assertEquals('-PT20M', $alarmsByUid['organizer-reminder@example.org']->TRIGGER->getValue());
             $this->assertEquals('mailto:alice@example.org', $alarmsByUid['organizer-reminder@example.org']->ATTENDEE->getNormalizedValue());
             $this->assertEquals('-PT10M', $alarmsByUid['alice-personal-reminder@example.org']->TRIGGER->getValue());
-            $this->assertEquals('mailto:alias@example.org', $alarmsByUid['alice-personal-reminder@example.org']->ATTENDEE->getNormalizedValue());
+            $this->assertEquals('mailto:alice@example.org', $alarmsByUid['alice-personal-reminder@example.org']->ATTENDEE->getNormalizedValue());
         });
     }
 
@@ -653,7 +653,7 @@ SUMMARY:Original meeting
 ORGANIZER:mailto:bob@example.org
 ATTENDEE:mailto:alice@example.org
 BEGIN:VALARM
-UID:organizer-reminder@example.org
+UID:alarm-organizer-11111111-1111-4111-8111-111111111111
 ACTION:EMAIL
 ATTENDEE:mailto:alice@example.org
 TRIGGER:-PT5M
@@ -700,6 +700,13 @@ TRIGGER:-PT5M
 DESCRIPTION:Missing UID reminder
 END:VALARM
 BEGIN:VALARM
+ACTION:EMAIL
+ATTENDEE:mailto:alice@example.org
+TRIGGER:-PT7M
+DESCRIPTION:Missing organizer UID reminder
+SUMMARY:Alarm notification
+END:VALARM
+BEGIN:VALARM
 UID:client-reminder
 ACTION:EMAIL
 ATTENDEE:mailto:alice@example.org
@@ -712,12 +719,89 @@ END:VCALENDAR
 ICS
         );
 
-        $modified = $this->invokeEnsureValarmUids($calendar);
+        $modified = $this->invokeEnsureValarmUids($calendar, false);
 
         $alarms = $calendar->VEVENT->select('VALARM');
         $this->assertTrue($modified);
         $this->assertMatchesRegularExpression('/^alarm-[0-9a-fA-F-]{36}$/', $alarms[0]->UID->getValue());
-        $this->assertEquals('client-reminder', $alarms[1]->UID->getValue());
+        $this->assertMatchesRegularExpression('/^alarm-organizer-[0-9a-fA-F-]{36}$/', $alarms[1]->UID->getValue());
+        $this->assertEquals('client-reminder', $alarms[2]->UID->getValue());
+    }
+
+    function testShouldGeneratePersonalUIDAndPreserveProvidedUIDsOnAttendeeWrite() {
+        $organizerUid = 'alarm-organizer-11111111-1111-4111-8111-111111111111';
+        $forgedOrganizerUid = 'alarm-organizer-22222222-2222-4222-8222-222222222222';
+        $calendar = Reader::read(str_replace(
+            ['{organizerUid}', '{forgedOrganizerUid}'],
+            [$organizerUid, $forgedOrganizerUid],
+            <<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-attendee-valarm-uids
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+UID:{organizerUid}
+ACTION:EMAIL
+ATTENDEE:mailto:alice@example.org
+TRIGGER:-PT5M
+END:VALARM
+BEGIN:VALARM
+ACTION:EMAIL
+ATTENDEE:mailto:alice@example.org
+TRIGGER:-PT10M
+END:VALARM
+BEGIN:VALARM
+UID:{forgedOrganizerUid}
+ACTION:EMAIL
+ATTENDEE:mailto:alice@example.org
+TRIGGER:-PT15M
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+        ));
+
+        $modified = $this->invokeEnsureValarmUids($calendar, true);
+
+        $alarms = $calendar->VEVENT->select('VALARM');
+        $this->assertTrue($modified);
+        $this->assertEquals($organizerUid, $alarms[0]->UID->getValue());
+        $this->assertMatchesRegularExpression('/^alarm-personal-[0-9a-fA-F-]{36}$/', $alarms[1]->UID->getValue());
+        $this->assertEquals($forgedOrganizerUid, $alarms[2]->UID->getValue());
+    }
+
+    function testShouldPreserveProvidedPersonalUIDOnOrganizerWrite() {
+        $calendar = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-organizer-valarm-uids
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+BEGIN:VALARM
+UID:alarm-personal-33333333-3333-4333-8333-333333333333
+ACTION:EMAIL
+ATTENDEE:mailto:alice@example.org
+TRIGGER:-PT5M
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $modified = $this->invokeEnsureValarmUids($calendar, false);
+
+        $this->assertFalse($modified);
+        $this->assertEquals(
+            'alarm-personal-33333333-3333-4333-8333-333333333333',
+            $calendar->VEVENT->VALARM->UID->getValue()
+        );
     }
 
     function testShouldRejectForbiddenAttendeeSchedulingObjectChanges() {
@@ -1211,11 +1295,11 @@ ICS
         $method->invoke($this->plugin, $message, $sourceCalendar);
     }
 
-    private function invokeEnsureValarmUids($calendarObject): bool {
+    private function invokeEnsureValarmUids($calendarObject, bool $isAttendeeCalendarWrite): bool {
         $method = new \ReflectionMethod(Plugin::class, 'ensureValarmUids');
         $method->setAccessible(true);
 
-        return $method->invoke($this->plugin, $calendarObject);
+        return $method->invoke($this->plugin, $calendarObject, $isAttendeeCalendarWrite);
     }
 
     private function invokeShouldEnableEmailValarmRecipientScheduling(): bool {

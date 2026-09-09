@@ -211,6 +211,25 @@ class CalendarObjectService {
         $addChangeCallback($calendarId, $objectUri, 3);
     }
 
+    public function getSchedulingRecipient($calendarId, $objectUri): ?string {
+        $calendarId = is_array($calendarId) ? $calendarId[0] : $calendarId;
+        $row = $this->calendarObjectDAO->getSchedulingRecipient($calendarId, $objectUri);
+
+        return $row['scheduling']['recipientPrincipalUri'] ?? null;
+    }
+
+    public function setSchedulingRecipient($calendarId, $objectUri, string $recipientPrincipalUri): void {
+        $calendarId = is_array($calendarId) ? $calendarId[0] : $calendarId;
+        $result = $this->calendarObjectDAO->setSchedulingRecipient($calendarId, $objectUri, $recipientPrincipalUri);
+        if ($result->getMatchedCount() !== 1) {
+            throw new \RuntimeException('Calendar object not found while storing scheduling recipient metadata');
+        }
+    }
+
+    public function findByUidAndSchedulingRecipient(string $uid, string $recipientPrincipalUri): array {
+        return iterator_to_array($this->calendarObjectDAO->findByUidAndSchedulingRecipient($uid, $recipientPrincipalUri));
+    }
+
     /**
      * Perform a calendar query returning URIs
      *

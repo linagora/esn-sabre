@@ -37,6 +37,22 @@ class CalendarInstanceDAO extends BaseDAO {
         return $this->findOne($query, ['projection' => $projection]);
     }
 
+    public function findVisibleInstanceByPrincipalUriAndUri($principalUri, $calendarUri) {
+        return $this->findOne([
+            'principaluri' => $principalUri,
+            'uri' => $calendarUri,
+            'hidden' => ['$ne' => true]
+        ], ['projection' => ['calendarid' => 1, 'uri' => 1, 'access' => 1]]);
+    }
+
+    public function findVisibleInstanceByPrincipalUriAndCalendarId($principalUri, $calendarId) {
+        return $this->findOne([
+            'principaluri' => $principalUri,
+            'calendarid' => new \MongoDB\BSON\ObjectId((string) $calendarId),
+            'hidden' => ['$ne' => true]
+        ], ['projection' => ['calendarid' => 1, 'uri' => 1, 'access' => 1]]);
+    }
+
     public function createInstance(array $instanceData) {
         $result = $this->insertOne($instanceData);
         return (string) $result->getInsertedId();

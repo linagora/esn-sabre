@@ -171,6 +171,31 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $this->calendarObjectService->deleteCalendarObject($calendarId, $objectUri, [$this, 'addChange']);
     }
 
+    function getCalendarObjectSchedulingRecipient($calendarId, $objectUri): ?string {
+        return $this->calendarObjectService->getSchedulingRecipient($calendarId, $objectUri);
+    }
+
+    function setCalendarObjectSchedulingRecipient($calendarId, $objectUri, string $recipientPrincipalUri): void {
+        $this->calendarObjectService->setSchedulingRecipient($calendarId, $objectUri, $recipientPrincipalUri);
+    }
+
+    function findCalendarObjectsBySchedulingRecipient(string $uid, string $recipientPrincipalUri): array {
+        $result = [];
+        foreach ($this->calendarObjectService->findByUidAndSchedulingRecipient($uid, $recipientPrincipalUri) as $object) {
+            $result[] = [
+                'calendarid' => $object['calendarid'],
+                'uri' => $object['uri'],
+                'calendarPath' => $this->calendarService->getWritableCalendarPath($recipientPrincipalUri, $object['calendarid'])
+            ];
+        }
+
+        return $result;
+    }
+
+    function getCalendarStorageId(string $principalUri, string $calendarUri) {
+        return $this->calendarService->getCalendarStorageId($principalUri, $calendarUri);
+    }
+
     function calendarQuery($calendarId, array $filters) {
         $this->_assertIsArray($calendarId);
         return $this->calendarObjectService->calendarQuery($calendarId, $filters);

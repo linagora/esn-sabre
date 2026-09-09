@@ -30,6 +30,30 @@ class CalendarObjectDAO extends BaseDAO {
         );
     }
 
+    public function getSchedulingRecipient($calendarId, $objectUri) {
+        return $this->findOne(
+            ['calendarid' => $calendarId, 'uri' => $objectUri],
+            ['projection' => ['scheduling.recipientPrincipalUri' => 1]]
+        );
+    }
+
+    public function setSchedulingRecipient($calendarId, $objectUri, string $recipientPrincipalUri) {
+        return $this->updateOne(
+            ['calendarid' => $calendarId, 'uri' => $objectUri],
+            ['$set' => ['scheduling.recipientPrincipalUri' => $recipientPrincipalUri]]
+        );
+    }
+
+    public function findByUidAndSchedulingRecipient(string $uid, string $recipientPrincipalUri) {
+        return $this->find(
+            [
+                'uid' => $uid,
+                'scheduling.recipientPrincipalUri' => $recipientPrincipalUri
+            ],
+            ['projection' => ['calendarid' => 1, 'uri' => 1]]
+        );
+    }
+
     public function deleteCalendarObject($calendarId, $objectUri) {
         return $this->deleteOne(['calendarid' => $calendarId, 'uri' => $objectUri]);
     }

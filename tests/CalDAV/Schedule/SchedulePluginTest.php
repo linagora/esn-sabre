@@ -400,6 +400,56 @@ ICS
         $this->assertSame('team-calendar-1', $this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
     }
 
+    function testRequestShouldLoadObjectBySchedulingRecipientMetadata() {
+        $event = new WritableCalendarObjectTestDouble(
+            'event.ics', $this->newCalendarObject('event-team', 'bob@example.org'));
+        $this->initializePluginWithSchedulingMetadata([
+            ['uri' => 'event.ics', 'calendarPath' => '/calendars/alice/team-calendar']
+        ], $event);
+        $message = $this->newReplyMessage('event-team', 'mailto:alice@example.org');
+        $message->method = 'REQUEST';
+
+        $result = $this->invokeLoadCalendarObjectForDelivery(
+            'calendars/alice', 'principals/users/alice', $message);
+
+        $this->assertSame($event, $result[0]);
+        $this->assertSame('calendars/alice/team-calendar/event.ics', $result[3]);
+        $this->assertTrue($result[4]);
+    }
+
+    function testRequestShouldRejectAmbiguousSchedulingRecipientMetadata() {
+        $event = new WritableCalendarObjectTestDouble(
+            'event.ics', $this->newCalendarObject('event-team', 'bob@example.org'));
+        $this->initializePluginWithSchedulingMetadata([
+            ['uri' => 'event.ics', 'calendarPath' => '/calendars/alice/team-calendar'],
+            ['uri' => 'event-copy.ics', 'calendarPath' => '/calendars/alice/team-calendar']
+        ], $event);
+        $message = $this->newReplyMessage('event-team', 'mailto:alice@example.org');
+        $message->method = 'REQUEST';
+
+        $result = $this->invokeLoadCalendarObjectForDelivery(
+            'calendars/alice', 'principals/users/alice', $message);
+
+        $this->assertFalse($result[4]);
+        $this->assertStringStartsWith('5.0;', $message->scheduleStatus);
+    }
+
+    function testRequestShouldRejectSchedulingTargetWhenRecipientLostWriteAccess() {
+        $event = new WritableCalendarObjectTestDouble(
+            'event.ics', $this->newCalendarObject('event-team', 'bob@example.org'));
+        $this->initializePluginWithSchedulingMetadata([
+            ['uri' => 'event.ics', 'calendarPath' => null]
+        ], $event);
+        $message = $this->newReplyMessage('event-team', 'mailto:alice@example.org');
+        $message->method = 'REQUEST';
+
+        $result = $this->invokeLoadCalendarObjectForDelivery(
+            'calendars/alice', 'principals/users/alice', $message);
+
+        $this->assertFalse($result[4]);
+        $this->assertStringStartsWith('3.8;', $message->scheduleStatus);
+    }
+
     function testShouldNotResolveTeamCalendarIdForReplyWhenTeamCalendarDoesNotContainEventUid() {
         $this->initializePluginWithTeamCalendar(
             'other-team-calendar',
@@ -1533,6 +1583,14 @@ ICS
         return $method->invoke($this->plugin, $message);
     }
 
+    private function invokeLoadCalendarObjectForDelivery(string $homePath, string $recipientPrincipalUri,
+                                                         Message $message): array {
+        $method = new \ReflectionMethod(Plugin::class, 'loadCalendarObjectForDelivery');
+        $method->setAccessible(true);
+
+        return $method->invoke($this->plugin, $homePath, $recipientPrincipalUri, $message);
+    }
+
     private function invokeScheduleReply(Request $request): bool {
         $method = new \ReflectionMethod(Plugin::class, 'scheduleReply');
         $method->setAccessible(true);
@@ -1572,6 +1630,18 @@ ICS
         }
 
         $this->plugin = new Plugin();
+        $this->plugin->initialize($server);
+    }
+
+    private function initializePluginWithSchedulingMetadata(array $matches, WritableCalendarObjectTestDouble $event): void {
+        $server = new Server([
+            new SimpleCollection('calendars', [
+                new CalendarHomeTestDouble('alice', [
+                    new SimpleCollection('team-calendar', [$event])
+                ])
+            ])
+        ]);
+        $this->plugin = new Plugin(null, new SchedulingMetadataBackendTestDouble($matches));
         $this->plugin->initialize($server);
     }
 
@@ -1713,5 +1783,17 @@ class TeamCalendarAclPluginTestDouble extends \Sabre\DAV\ServerPlugin {
     }
 
     function propFind() {
+    }
+}
+
+class SchedulingMetadataBackendTestDouble {
+    private $matches;
+
+    function __construct(array $matches) {
+        $this->matches = $matches;
+    }
+
+    function findCalendarObjectsBySchedulingRecipient(string $_uid, string $_recipientPrincipalUri): array {
+        return $this->matches;
     }
 }

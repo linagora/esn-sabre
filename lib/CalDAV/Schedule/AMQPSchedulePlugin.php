@@ -36,8 +36,8 @@ class AMQPSchedulePlugin extends Plugin {
     private $currentCalendarId = null;
     private $localRecipientsOnly = false;
 
-    public function __construct($amqpPublisher, $principalBackend = null) {
-        parent::__construct($principalBackend);
+    public function __construct($amqpPublisher, $principalBackend = null, $calendarBackend = null) {
+        parent::__construct($principalBackend, $calendarBackend);
         $this->amqpPublisher = $amqpPublisher;
     }
 

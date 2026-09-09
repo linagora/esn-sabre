@@ -99,6 +99,28 @@ class TeamCalendarMetadataPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertTrue($change[4]);
     }
 
+    function testMoveOfSchedulingRecipientCopyShouldNotEmitOrganizerUpdate() {
+        $backend = new TeamCalendarMetadataBackendTestDouble('principals/users/alice');
+        list($server, $destinationCalendar, $sourceCalendar) = $this->newServer(
+            'principals/team-calendars/team-calendar-id', $backend);
+        $sourceCalendar->addChild(new TeamCalendarMetadataEventTestDouble('event.ics', $this->event()));
+        $destinationEvent = new TeamCalendarMetadataEventTestDouble('event.ics', $this->event());
+        $destinationCalendar->addChild($destinationEvent);
+        $change = null;
+        $server->on('calendarObjectUpdatedByServer', function () use (&$change) {
+            $change = true;
+        });
+
+        $sourcePath = 'calendars/personal-home/personal/event.ics';
+        $destinationPath = 'calendars/team-home/team-calendar/event.ics';
+        $server->emit('beforeMove', [$sourcePath, $destinationPath]);
+        $server->emit('afterMove', [$sourcePath, $destinationPath]);
+
+        $this->assertNull($change);
+        $this->assertSame('team-calendar-id', Reader::read($destinationEvent->get())
+            ->VEVENT->{TeamCalendarMetadataPlugin::PROPERTY}->getValue());
+    }
+
     function testMoveShouldNotTrustMatchingMarkerFromPersonalCalendar() {
         list($server, $destinationCalendar, $sourceCalendar) = $this->newServer('principals/team-calendars/team-calendar-id');
         $sourceCalendar->addChild(new TeamCalendarMetadataEventTestDouble('event.ics', $this->event('team-calendar-id')));
@@ -132,16 +154,16 @@ class TeamCalendarMetadataPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame('forged-id', $calendar->VEVENT->{TeamCalendarMetadataPlugin::PROPERTY}->getValue());
     }
 
-    private function newServer(string $owner): array {
+    private function newServer(string $owner, $backend = null): array {
         $calendar = new TeamCalendarMetadataCalendarTestDouble('team-calendar', $owner);
         $personalCalendar = new SimpleCollection('personal');
         $server = new Server([
             new SimpleCollection('calendars', [
-                new SimpleCollection('team-home', [$calendar]),
-                new SimpleCollection('personal-home', [$personalCalendar]),
+                new TeamCalendarMetadataHomeTestDouble('team-home', 'principals/users/alice', [$calendar]),
+                new TeamCalendarMetadataHomeTestDouble('personal-home', 'principals/users/alice', [$personalCalendar]),
             ]),
         ]);
-        $server->addPlugin(new TeamCalendarMetadataPlugin());
+        $server->addPlugin(new TeamCalendarMetadataPlugin($backend));
 
         return [$server, $calendar, $personalCalendar];
     }
@@ -194,5 +216,34 @@ class TeamCalendarMetadataEventTestDouble extends SimpleFile implements \Sabre\C
         $this->putCount++;
 
         return $this->getETag();
+    }
+}
+
+class TeamCalendarMetadataHomeTestDouble extends SimpleCollection {
+    private $principalUri;
+
+    function __construct(string $name, string $principalUri, array $children) {
+        parent::__construct($name, $children);
+        $this->principalUri = $principalUri;
+    }
+
+    function getPrincipalUri(): string {
+        return $this->principalUri;
+    }
+}
+
+class TeamCalendarMetadataBackendTestDouble {
+    private $recipientPrincipalUri;
+
+    function __construct(string $recipientPrincipalUri) {
+        $this->recipientPrincipalUri = $recipientPrincipalUri;
+    }
+
+    function getCalendarStorageId(string $_principalUri, string $_calendarUri): string {
+        return 'calendar-id';
+    }
+
+    function getCalendarObjectSchedulingRecipient($_calendarId, $_objectUri): string {
+        return $this->recipientPrincipalUri;
     }
 }

@@ -7,6 +7,7 @@ use ESN\CalDAV\Backend\DAO\CalendarInstanceDAO;
 use ESN\CalDAV\Backend\DAO\CalendarObjectDAO;
 use ESN\CalDAV\Backend\DAO\CalendarChangeDAO;
 use Sabre\Event\EventEmitter;
+use Sabre\DAV\Sharing\Plugin as SharingPlugin;
 
 /**
  * Calendar Service
@@ -481,6 +482,25 @@ class CalendarService {
         }
 
         return $calendarUris;
+    }
+
+    public function getCalendarStorageId(string $principalUri, string $calendarUri) {
+        $instance = $this->calendarInstanceDAO->findVisibleInstanceByPrincipalUriAndUri($principalUri, $calendarUri);
+
+        return $instance ? (string) $instance['calendarid'] : null;
+    }
+
+    public function getWritableCalendarPath(string $principalUri, $calendarId): ?string {
+        $instance = $this->calendarInstanceDAO->findVisibleInstanceByPrincipalUriAndCalendarId($principalUri, $calendarId);
+        if (!$instance || !in_array((int) $instance['access'], [
+            SharingPlugin::ACCESS_SHAREDOWNER,
+            SharingPlugin::ACCESS_READWRITE,
+            \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION
+        ], true)) {
+            return null;
+        }
+
+        return $this->getCalendarPath($principalUri, (string) $instance['uri']);
     }
 
     /**

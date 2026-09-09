@@ -46,16 +46,22 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     private $logger;
     private $principalBackend;
+    private $calendarBackend;
+    private $movedSchedulingRecipients = [];
 
-    public function __construct($principalBackend = null) {
+    public function __construct($principalBackend = null, $calendarBackend = null) {
         $this->logger = new Logger('esn-sabre');
         $this->logger->pushHandler(new StreamHandler('php://stderr', Logger::DEBUG));
         $this->principalBackend = $principalBackend;
+        $this->calendarBackend = $calendarBackend;
     }
 
     function initialize(Server $server) {
         VObjectPropertyRegistry::register();
         parent::initialize($server);
+        $server->on('beforeMove', [$this, 'beforeMoveSchedulingMetadata'], 40);
+        $server->on('afterMove', [$this, 'afterMoveSchedulingMetadata'], 40);
+        $server->on('afterMethod:MOVE', [$this, 'clearMovedSchedulingMetadata']);
     }
 
     protected function scheduleReply(RequestInterface $request) {
@@ -110,7 +116,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         if (!$deliveryPaths) {
             return;
         }
-        list($homePath, $inboxPath, $calendarPath) = $deliveryPaths;
+        list($homePath, $inboxPath, $calendarPath, $recipientPrincipalUri) = $deliveryPaths;
 
         if (!$this->hasDeliveryPrivilege($aclPlugin, $inboxPath, $iTipMessage)) {
             return;
@@ -118,7 +124,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         $newFileName = 'sabredav-' . \Sabre\DAV\UUIDUtil::getUUID() . '.ics';
 
-        list($objectNode, $oldICalendarData, $currentObject) = $this->loadCalendarObjectForDelivery($homePath, $iTipMessage);
+        list($objectNode, $oldICalendarData, $currentObject, $objectPath, $canDeliver) =
+            $this->loadCalendarObjectForDelivery($homePath, $recipientPrincipalUri, $iTipMessage);
+        if (!$canDeliver) {
+            return;
+        }
 
         if ($currentObject) {
             $this->normalizeIncomingReplyMessage($iTipMessage, $currentObject);
@@ -136,52 +146,101 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         if (!$objectNode) {
-            $this->deliverToNewObject($iTipMessage, $calendarPath, $newFileName, $newObject);
+            $objectPath = $this->deliverToNewObject($iTipMessage, $calendarPath, $newFileName, $newObject)
+                ? $calendarPath . '/' . $newFileName
+                : null;
         } else {
             $this->deliverToExistingObject($iTipMessage, $objectNode, $oldICalendarData, $newObject);
+        }
+        if ($objectPath && in_array($iTipMessage->method, ['REQUEST', 'CANCEL'], true)
+            && !$this->recipientIsOrganizer($recipientPrincipalUri, $newObject)) {
+            $this->storeSchedulingRecipient($objectPath, $recipientPrincipalUri);
         }
         $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
     }
 
-    private function loadCalendarObjectForDelivery(string $homePath, ITip\Message $iTipMessage): array {
+    private function loadCalendarObjectForDelivery(string $homePath, string $recipientPrincipalUri, ITip\Message $iTipMessage): array {
+        if (in_array($iTipMessage->method, ['REQUEST', 'CANCEL'], true)) {
+            $metadataResult = $this->loadCalendarObjectBySchedulingRecipient($iTipMessage, $recipientPrincipalUri);
+            if ($metadataResult !== null) {
+                return $metadataResult;
+            }
+        }
+
         $result = $this->loadExistingCalendarObject($homePath, $iTipMessage->uid);
+        if ($result[0] && in_array($iTipMessage->method, ['REQUEST', 'CANCEL'], true)) {
+            $storedRecipient = $this->schedulingRecipientForPath($result[3]);
+            if ($storedRecipient !== null && $storedRecipient !== $recipientPrincipalUri) {
+                $iTipMessage->scheduleStatus = '5.0;Calendar object belongs to another scheduling recipient.';
+                return [null, null, null, null, false];
+            }
+        }
         if ($result[0] || $iTipMessage->method !== 'REPLY' || !$iTipMessage->recipient) {
             return $result;
         }
 
         $teamCalendarId = $this->extractTeamCalendarIdProperty($iTipMessage->message);
-        return $teamCalendarId ? $this->loadWritableTeamCalendarObject($teamCalendarId, $iTipMessage->uid, $iTipMessage->recipient) : [null, null, null];
+        return $teamCalendarId ? $this->loadWritableTeamCalendarObject($teamCalendarId, $iTipMessage->uid, $iTipMessage->recipient) : [null, null, null, null, true];
+    }
+
+    private function loadCalendarObjectBySchedulingRecipient(ITip\Message $message, string $recipientPrincipalUri): ?array {
+        if (!$this->calendarBackend || !method_exists($this->calendarBackend, 'findCalendarObjectsBySchedulingRecipient')) {
+            return null;
+        }
+
+        $matches = $this->calendarBackend->findCalendarObjectsBySchedulingRecipient($message->uid, $recipientPrincipalUri);
+        if (!$matches) {
+            return null;
+        }
+        if (count($matches) !== 1) {
+            $message->scheduleStatus = '5.0;Multiple calendar objects claim the same scheduling recipient.';
+            $this->logger->error('Ambiguous scheduling recipient metadata', ['uid' => $message->uid, 'recipient' => $recipientPrincipalUri]);
+            return [null, null, null, null, false];
+        }
+
+        $match = reset($matches);
+        if (!$match['calendarPath']) {
+            $message->scheduleStatus = '3.8;Recipient no longer has write access to the calendar object.';
+            return [null, null, null, null, false];
+        }
+
+        $objectPath = trim($match['calendarPath'], '/') . '/' . $match['uri'];
+        if (!$this->server->tree->nodeExists($objectPath)) {
+            $message->scheduleStatus = '5.0;Scheduling target no longer exists.';
+            return [null, null, null, null, false];
+        }
+
+        return $this->loadCalendarObjectAtPath($objectPath);
     }
 
     /**
      * Loads the recipient's existing calendar object matching the iTIP UID.
      *
-     * @return array [$objectNode, $oldICalendarData, $currentObject], all null
-     *               when the recipient has no copy of the event yet.
+     * @return array [$objectNode, $oldICalendarData, $currentObject, $objectPath, $canDeliver]
      */
     private function loadExistingCalendarObject(string $homePath, string $uid): array {
         $home = $this->server->tree->getNodeForPath($homePath);
 
         $result = $home->getCalendarObjectByUID($uid);
         if (!$result) {
-            return [null, null, null];
+            return [null, null, null, null, true];
         }
 
         $objectNode = $this->server->tree->getNodeForPath($homePath . '/' . $result);
         $oldICalendarData = $objectNode->get();
 
-        return [$objectNode, $oldICalendarData, Reader::read($oldICalendarData)];
+        return [$objectNode, $oldICalendarData, Reader::read($oldICalendarData), $homePath . '/' . $result, true];
     }
 
     private function loadTeamCalendarObject(string $teamCalendarId, string $uid, string $organizer): array {
         $objectPath = $this->findTeamCalendarObjectPath($teamCalendarId, $uid);
-        return $objectPath ? $this->loadTeamCalendarObjectAtPath($objectPath, $organizer) : [null, null, null];
+        return $objectPath ? $this->loadTeamCalendarObjectAtPath($objectPath, $organizer) : [null, null, null, null, true];
     }
 
     private function loadWritableTeamCalendarObject(string $teamCalendarId, string $uid, string $organizer): array {
         $objectPath = $this->findTeamCalendarObjectPath($teamCalendarId, $uid);
         if (!$objectPath || !$this->canWriteCalendarObject($objectPath)) {
-            return [null, null, null];
+            return [null, null, null, null, true];
         }
 
         return $this->loadTeamCalendarObjectAtPath($objectPath, $organizer);
@@ -209,7 +268,16 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $oldICalendarData = $objectNode->get();
         $currentObject = Reader::read($oldICalendarData);
 
-        return $this->calendarObjectHasOrganizer($currentObject, $organizer) ? [$objectNode, $oldICalendarData, $currentObject] : [null, null, null];
+        return $this->calendarObjectHasOrganizer($currentObject, $organizer)
+            ? [$objectNode, $oldICalendarData, $currentObject, $objectPath, true]
+            : [null, null, null, null, true];
+    }
+
+    private function loadCalendarObjectAtPath(string $objectPath): array {
+        $objectNode = $this->server->tree->getNodeForPath($objectPath);
+        $oldICalendarData = $objectNode->get();
+
+        return [$objectNode, $oldICalendarData, Reader::read($oldICalendarData), $objectPath, true];
     }
 
     private function calendarObjectHasOrganizer(VCalendar $calendar, string $organizer): bool {
@@ -226,6 +294,133 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private function calendarAddressValue($calendarAddress): ?string {
         $calendarAddress = strtolower(trim((string)$calendarAddress));
         return $calendarAddress === '' ? null : (strpos($calendarAddress, ':') === false ? 'mailto:' . $calendarAddress : $calendarAddress);
+    }
+
+    private function recipientIsOrganizer(string $recipientPrincipalUri, VCalendar $calendar): bool {
+        $aclPlugin = $this->server->getPlugin('acl');
+        if (!$aclPlugin) {
+            return false;
+        }
+
+        foreach ($calendar->VEVENT as $event) {
+            if (isset($event->ORGANIZER) && $aclPlugin->getPrincipalByUri((string) $event->ORGANIZER) === $recipientPrincipalUri) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function schedulingRecipientForPath(string $objectPath): ?string {
+        $location = $this->calendarObjectStorageLocation($objectPath);
+        if (!$location || !$this->calendarBackend
+            || !method_exists($this->calendarBackend, 'getCalendarObjectSchedulingRecipient')) {
+            return null;
+        }
+
+        return $this->calendarBackend->getCalendarObjectSchedulingRecipient($location[0], $location[1]);
+    }
+
+    private function storeSchedulingRecipient(string $objectPath, string $recipientPrincipalUri): void {
+        $location = $this->calendarObjectStorageLocation($objectPath);
+        if (!$location || !$this->calendarBackend
+            || !method_exists($this->calendarBackend, 'setCalendarObjectSchedulingRecipient')) {
+            return;
+        }
+
+        $storedRecipient = $this->calendarBackend->getCalendarObjectSchedulingRecipient($location[0], $location[1]);
+        if ($storedRecipient !== null && $storedRecipient !== $recipientPrincipalUri) {
+            throw new \RuntimeException('Refusing to overwrite calendar object scheduling recipient metadata');
+        }
+        if ($storedRecipient === null) {
+            $this->calendarBackend->setCalendarObjectSchedulingRecipient($location[0], $location[1], $recipientPrincipalUri);
+        }
+    }
+
+    private function calendarObjectStorageLocation(string $objectPath): ?array {
+        list($calendarPath, $objectUri) = Utils::splitEventPath('/' . ltrim($objectPath, '/'));
+        if (!$calendarPath || !$this->calendarBackend || !method_exists($this->calendarBackend, 'getCalendarStorageId')) {
+            return null;
+        }
+
+        $homePath = dirname($calendarPath);
+        $home = $this->server->tree->getNodeForPath($homePath);
+        $calendar = $this->server->tree->getNodeForPath($calendarPath);
+        if (!method_exists($home, 'getPrincipalUri')) {
+            return null;
+        }
+
+        $calendarId = $this->calendarBackend->getCalendarStorageId($home->getPrincipalUri(), $calendar->getName());
+
+        return $calendarId ? [$calendarId, $objectUri] : null;
+    }
+
+    function beforeMoveSchedulingMetadata($sourcePath, $destinationPath): void {
+        if (!$this->calendarBackend || !($source = $this->calendarObjectAtPath($sourcePath))) {
+            return;
+        }
+
+        $recipientPrincipalUri = $this->schedulingRecipientForPath($sourcePath);
+        if ($recipientPrincipalUri === null) {
+            $recipientPrincipalUri = $this->inferPersonalCalendarSchedulingRecipient($sourcePath, $source);
+        }
+        if ($recipientPrincipalUri !== null) {
+            $this->movedSchedulingRecipients[$destinationPath] = $recipientPrincipalUri;
+        }
+    }
+
+    function afterMoveSchedulingMetadata($_sourcePath, $destinationPath): void {
+        $recipientPrincipalUri = $this->movedSchedulingRecipients[$destinationPath] ?? null;
+        unset($this->movedSchedulingRecipients[$destinationPath]);
+        if ($recipientPrincipalUri !== null) {
+            $this->storeSchedulingRecipient($destinationPath, $recipientPrincipalUri);
+        }
+    }
+
+    function clearMovedSchedulingMetadata(): void {
+        $this->movedSchedulingRecipients = [];
+    }
+
+    private function calendarObjectAtPath(string $path): ?ICalendarObject {
+        try {
+            $object = $this->server->tree->getNodeForPath($path);
+        } catch (\Sabre\DAV\Exception) {
+            return null;
+        }
+
+        return $object instanceof ICalendarObject && !$object instanceof ISchedulingObject ? $object : null;
+    }
+
+    private function inferPersonalCalendarSchedulingRecipient(string $sourcePath, ICalendarObject $source): ?string {
+        list($calendarPath,) = Utils::splitEventPath('/' . ltrim($sourcePath, '/'));
+        if (!$calendarPath) {
+            return null;
+        }
+
+        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+        $owner = method_exists($calendarNode, 'getOwner') ? $calendarNode->getOwner() : null;
+        if (!$owner || Utils::isTeamCalendarFromPrincipal($owner)) {
+            return null;
+        }
+
+        $calendar = Reader::read($source->get());
+        $aclPlugin = $this->server->getPlugin('acl');
+        try {
+            if (!$aclPlugin || $this->recipientIsOrganizer($owner, $calendar)) {
+                return null;
+            }
+            foreach ($calendar->VEVENT as $event) {
+                foreach ($event->select('ATTENDEE') as $attendee) {
+                    if ($aclPlugin->getPrincipalByUri((string) $attendee) === $owner) {
+                        return $owner;
+                    }
+                }
+            }
+        } finally {
+            $calendar->destroy();
+        }
+
+        return null;
     }
 
     private function normalizeIncomingReplyMessage(ITip\Message $iTipMessage, VCalendar $currentObject): void {
@@ -293,6 +488,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $result[$caldavNS . 'calendar-home-set']->getHref(),
             $result[$caldavNS . 'schedule-inbox-URL']->getHref(),
             $result[$caldavNS . 'schedule-default-calendar-URL']->getHref(),
+            $principalUri,
         ];
     }
 
@@ -324,17 +520,18 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         return true;
     }
 
-    private function deliverToNewObject(ITip\Message $iTipMessage, string $calendarPath, string $newFileName, VCalendar $newObject): void {
+    private function deliverToNewObject(ITip\Message $iTipMessage, string $calendarPath, string $newFileName, VCalendar $newObject): bool {
         // Do not re-create the event when the attendee already declined (issue-347).
         // An attendee who deleted their copy sends REPLY DECLINED; the organizer's
         // copy then reflects PARTSTAT=DECLINED.  Subsequent REQUEST messages (e.g.
         // reschedule, new attendee added, partstat propagation) must not resurrect
         // the event in the attendee's calendar.
         if ($iTipMessage->method === 'REQUEST' && $this->recipientHasDeclinedInMessage($iTipMessage)) {
-            return;
+            return false;
         }
         $calendar = $this->server->tree->getNodeForPath($calendarPath);
         $calendar->createFile($newFileName, $newObject->serialize());
+        return true;
     }
 
     private function deliverToExistingObject(ITip\Message $iTipMessage, $objectNode, $oldICalendarData, VCalendar $newObject): void {

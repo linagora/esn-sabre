@@ -346,6 +346,35 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         $this->assertNull($data);
     }
 
+    function testCalendarObjectSchedulingRecipientMetadataShouldRemainInternalAndSurviveContentUpdate() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'alice', []);
+        $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:event-1\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $updatedObject = str_replace('20120101', '20120102', $object);
+        $backend->createCalendarObject($calendarId, 'event-1.ics', $object);
+
+        $backend->setCalendarObjectSchedulingRecipient($calendarId, 'event-1.ics', 'principals/users/alice');
+        $backend->updateCalendarObject($calendarId, 'event-1.ics', $updatedObject);
+
+        $this->assertSame('principals/users/alice',
+            $backend->getCalendarObjectSchedulingRecipient($calendarId, 'event-1.ics'));
+        $this->assertArrayNotHasKey('scheduling', $backend->getCalendarObject($calendarId, 'event-1.ics'));
+    }
+
+    function testFindCalendarObjectsBySchedulingRecipientShouldReturnWritableRecipientPath() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'alice', []);
+        $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:event-1\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $backend->createCalendarObject($calendarId, 'event-1.ics', $object);
+        $backend->setCalendarObjectSchedulingRecipient($calendarId, 'event-1.ics', 'principals/users/alice');
+
+        $matches = $backend->findCalendarObjectsBySchedulingRecipient('event-1', 'principals/users/alice');
+
+        $this->assertCount(1, $matches);
+        $this->assertSame('/calendars/alice/alice', $matches[0]['calendarPath']);
+        $this->assertSame('event-1.ics', $matches[0]['uri']);
+    }
+
     function testCalendarQueryNoResult() {
         $backend  = $this->getBackend();
         $filters = array(

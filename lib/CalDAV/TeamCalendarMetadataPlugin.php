@@ -19,7 +19,11 @@ use Sabre\VObject\Reader;
 class TeamCalendarMetadataPlugin extends ServerPlugin {
     const PROPERTY = 'X-OPENPAAS-TEAM-CALENDAR-ID';
 
-    private $server, $movedObjectOldMessages = [];
+    private $server, $calendarBackend, $movedObjectOldMessages = [];
+
+    function __construct($calendarBackend = null) {
+        $this->calendarBackend = $calendarBackend;
+    }
 
     function initialize(Server $server) {
         $this->server = $server;
@@ -75,6 +79,7 @@ class TeamCalendarMetadataPlugin extends ServerPlugin {
 
         list($calendarData, $modified) = $normalized;
         if (!$modified && $source['teamCalendarId'] === $this->teamCalendarId($calendarPath)) return;
+        if ($this->hasSchedulingRecipient($destinationPath, $calendarPath)) return;
 
         $this->server->emit('calendarObjectUpdatedByServer',
             [$source['calendarData'], $calendarData, $calendarPath, [self::PROPERTY], true]);
@@ -133,5 +138,22 @@ class TeamCalendarMetadataPlugin extends ServerPlugin {
 
     private function calendarData(ICalendarObject $object): string {
         return is_resource($data = $object->get()) ? (string) stream_get_contents($data) : (string) $data;
+    }
+
+    private function hasSchedulingRecipient(string $objectPath, string $calendarPath): bool {
+        if (!$this->calendarBackend || !method_exists($this->calendarBackend, 'getCalendarObjectSchedulingRecipient')
+            || !method_exists($this->calendarBackend, 'getCalendarStorageId')) {
+            return false;
+        }
+
+        $home = $this->server->tree->getNodeForPath(dirname($calendarPath));
+        $calendar = $this->server->tree->getNodeForPath($calendarPath);
+        if (!method_exists($home, 'getPrincipalUri')) return false;
+
+        $calendarId = $this->calendarBackend->getCalendarStorageId($home->getPrincipalUri(), $calendar->getName());
+        list(, $objectUri) = Utils::splitEventPath('/' . ltrim($objectPath, '/'));
+
+        return $calendarId && $objectUri
+            && $this->calendarBackend->getCalendarObjectSchedulingRecipient($calendarId, $objectUri) !== null;
     }
 }

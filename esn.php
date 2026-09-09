@@ -195,10 +195,8 @@ $binaryAttachmentPlugin = new ESN\CalDAV\BinaryAttachmentPlugin(
 );
 $server->addPlugin($binaryAttachmentPlugin);
 
-// ORGANIZER validation (opt-in via CALDAV_ORGANIZER_VALIDATION)
-if (\ESN\Utils\Env::getBoolean('CALDAV_ORGANIZER_VALIDATION', false)) {
-    $server->addPlugin(new ESN\CalDAV\OrganizerValidationPlugin());
-}
+// ORGANIZER must be a write-enabled member of the team calendar it is stored in
+$server->addPlugin(new ESN\CalDAV\OrganizerValidationPlugin());
 
 // CardDAV support
 $carddavPlugin = new Sabre\CardDAV\Plugin();

@@ -168,33 +168,31 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testResourceSourceChildACLAllowsWriteEnabledDelegates() {
-        $this->withOrganizerValidation('false', function () {
-            foreach ([\Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE, \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION] as $access) {
-                $props = [
-                    'id'           => $access,
-                    'principaluri' => 'principals/resources/64b64eadf6d7d8e41d263e0f',
-                ];
-                $backend = new SimpleBackendMock([$props], [], []);
-                $backend->updateInvites($access, [
-                    new \Sabre\DAV\Xml\Element\Sharee([
-                        'href'      => 'mailto:admin@example.org',
-                        'principal' => 'principals/users/admin',
-                        'access'    => $access,
-                    ]),
-                ]);
+        foreach ([\Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE, \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION] as $access) {
+            $props = [
+                'id'           => $access,
+                'principaluri' => 'principals/resources/64b64eadf6d7d8e41d263e0f',
+            ];
+            $backend = new SimpleBackendMock([$props], [], []);
+            $backend->updateInvites($access, [
+                new \Sabre\DAV\Xml\Element\Sharee([
+                    'href'      => 'mailto:admin@example.org',
+                    'principal' => 'principals/users/admin',
+                    'access'    => $access,
+                ]),
+            ]);
 
-                $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+            $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
 
-                $this->assertContains(
-                    [
-                        'privilege' => '{DAV:}write',
-                        'principal' => 'principals/users/admin',
-                        'protected' => true,
-                    ],
-                    $sharedCalendar->getChildACL()
-                );
-            }
-        });
+            $this->assertContains(
+                [
+                    'privilege' => '{DAV:}write',
+                    'principal' => 'principals/users/admin',
+                    'protected' => true,
+                ],
+                $sharedCalendar->getChildACL()
+            );
+        }
     }
 
     function testResourceSourceChildACLRejectsReadOnlyDelegates() {
@@ -224,73 +222,32 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
     }
 
 
-    function testUserSourceChildACLRejectsWriteEnabledDelegatesWhenOrganizerValidationDisabled() {
-        $this->withOrganizerValidation('false', function () {
-            $props = [
-                'id'           => 1,
-                'principaluri' => 'principals/users/64b64eadf6d7d8e41d263e0f',
-            ];
-            $backend = new SimpleBackendMock([$props], [], []);
-            $backend->updateInvites(1, [
-                new \Sabre\DAV\Xml\Element\Sharee([
-                    'href'      => 'mailto:admin@example.org',
-                    'principal' => 'principals/users/admin',
-                    'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
-                ]),
-            ]);
+    function testUserSourceChildACLRejectsWriteEnabledDelegates() {
+        $props = [
+            'id'           => 1,
+            'principaluri' => 'principals/users/64b64eadf6d7d8e41d263e0f',
+        ];
+        $backend = new SimpleBackendMock([$props], [], []);
+        $backend->updateInvites(1, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'      => 'mailto:admin@example.org',
+                'principal' => 'principals/users/admin',
+                'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+            ]),
+        ]);
 
-            $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
 
-            $this->assertNotContains(
-                [
-                    'privilege' => '{DAV:}write',
-                    'principal' => 'principals/users/admin',
-                    'protected' => true,
-                ],
-                $sharedCalendar->getChildACL()
-            );
-        });
-    }
-
-    function testUserSourceChildACLAllowsWriteEnabledDelegatesWhenOrganizerValidationEnabled() {
-        $this->withOrganizerValidation('true', function () {
-            $props = [
-                'id'           => 1,
-                'principaluri' => 'principals/users/64b64eadf6d7d8e41d263e0f',
-            ];
-            $backend = new SimpleBackendMock([$props], [], []);
-            $backend->updateInvites(1, [
-                new \Sabre\DAV\Xml\Element\Sharee([
-                    'href'      => 'mailto:admin@example.org',
-                    'principal' => 'principals/users/admin',
-                    'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
-                ]),
-            ]);
-
-            $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
-
-            $this->assertContains(
-                [
-                    'privilege' => '{DAV:}write',
-                    'principal' => 'principals/users/admin',
-                    'protected' => true,
-                ],
-                $sharedCalendar->getChildACL()
-            );
-        });
-    }
-
-    private function withOrganizerValidation(string $value, callable $callback) {
-        $previous = getenv('CALDAV_ORGANIZER_VALIDATION');
-        putenv('CALDAV_ORGANIZER_VALIDATION=' . $value);
-
-        try {
-            $callback();
-        } finally {
-            $previous === false
-                ? putenv('CALDAV_ORGANIZER_VALIDATION')
-                : putenv('CALDAV_ORGANIZER_VALIDATION=' . $previous);
-        }
+        // A delegate of a user calendar writes through their own mirror, never through the
+        // canonical URL: only resource and team calendars grant write on the source itself.
+        $this->assertNotContains(
+            [
+                'privilege' => '{DAV:}write',
+                'principal' => 'principals/users/admin',
+                'protected' => true,
+            ],
+            $sharedCalendar->getChildACL()
+        );
     }
 
 

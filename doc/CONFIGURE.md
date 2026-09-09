@@ -72,7 +72,6 @@ of `config.json`.
 | `AUTO_PROVISION` | `true` | Create missing users on successful authentication |
 | `PRINCIPAL_PRIVACY` | `true` | Restrict DAV principal discovery |
 | `CALDAV_BINARY_ATTACHMENT_MODE` | `filter` | Inline binary attachment policy: `allow`, `reject` or `filter` |
-| `CALDAV_ORGANIZER_VALIDATION` | `false` | Enforce `ORGANIZER` validation on calendar objects |
 | `SABRE_ENFORCE_RFC_6638` | `true` | Reject attendee updates to organizer-controlled scheduling fields |
 | `SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING` | `true` | Recipient-aware scheduling for `ACTION:EMAIL` `VALARM` components |
 | `TW_CAL_REPLY_PROPAGATION_THRESHOLD` | `200` | Attendee count above which reply propagation is skipped |

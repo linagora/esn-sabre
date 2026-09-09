@@ -182,12 +182,8 @@ class ResourceAdminUpdateTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testResourceAdministratorCanWriteCanonicalResourceCalendarObjectByAcl() {
-        $previous = getenv('CALDAV_ORGANIZER_VALIDATION');
-        putenv('CALDAV_ORGANIZER_VALIDATION=false');
-
-        try {
-            $eventUid = 'canonical-resource-admin-write';
-            $this->caldavBackend->createCalendarObject($this->resourceCalendar['id'], $eventUid . '.ics', <<<ICS
+        $eventUid = 'canonical-resource-admin-write';
+        $this->caldavBackend->createCalendarObject($this->resourceCalendar['id'], $eventUid . '.ics', <<<ICS
 BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
@@ -199,19 +195,14 @@ END:VEVENT
 END:VCALENDAR
 ICS);
 
-            $aclPlugin = $this->server->getPlugin('acl');
-            $this->server->getPlugin('auth')->beforeMethod($this->server->httpRequest, $this->server->httpResponse);
-            $path = 'calendars/' . $this->resourceId . '/' . $this->resourceId . '/' . $eventUid . '.ics';
+        $aclPlugin = $this->server->getPlugin('acl');
+        $this->server->getPlugin('auth')->beforeMethod($this->server->httpRequest, $this->server->httpResponse);
+        $path = 'calendars/' . $this->resourceId . '/' . $this->resourceId . '/' . $eventUid . '.ics';
 
-            $this->assertTrue(
-                $aclPlugin->checkPrivileges($path, '{DAV:}write', 0, false),
-                'Resource administrator should be able to write the canonical resource calendar object through ACL'
-            );
-        } finally {
-            $previous === false
-                ? putenv('CALDAV_ORGANIZER_VALIDATION')
-                : putenv('CALDAV_ORGANIZER_VALIDATION=' . $previous);
-        }
+        $this->assertTrue(
+            $aclPlugin->checkPrivileges($path, '{DAV:}write', 0, false),
+            'Resource administrator should be able to write the canonical resource calendar object through ACL'
+        );
     }
 
     /**

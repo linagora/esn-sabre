@@ -259,9 +259,8 @@ class AMQPSchedulePlugin extends Plugin {
         $restrictToBooker = $this->shouldRestrictSchedulingToBooker($vCal);
 
         $isTeamCalendar = $this->isTeamCalendarPath($calendarPath);
-        $actorAddresses = $this->fetchSchedulingAddresses($calendarPath, $isTeamCalendar);
-        $organizerAddress = $this->extractSingleOrganizerAddress($vCal);
-        $schedulingAddresses = $isTeamCalendar && $organizerAddress ? [$organizerAddress] : $actorAddresses;
+        $actorAddresses = $this->fetchActorAddresses($calendarPath, $isTeamCalendar);
+        $schedulingAddresses = $this->resolveSchedulingAddresses($calendarPath, $isTeamCalendar, $vCal, $actorAddresses);
 
         $this->currentOldMessage = null;
         $this->currentCalendarId = basename($calendarPath);
@@ -310,7 +309,7 @@ class AMQPSchedulePlugin extends Plugin {
         if (!$calendarPath) return;
 
         $this->currentCalendarId = basename($calendarPath);
-        $addresses = $this->fetchSchedulingAddresses($calendarPath);
+        $addresses = $this->fetchActorAddresses($calendarPath);
         if (empty($addresses)) return;
 
         $nodeIcs = $node->get();

@@ -3,6 +3,7 @@ namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
 use ESN\CalDAV\VObjectPropertyRegistry;
+use ESN\DAV\Sharing\Plugin as SharingPlugin;
 use ESN\Utils\Env;
 use ESN\Utils\Utils;
 use Monolog\Logger;
@@ -540,9 +541,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $restrictToBooker = $this->shouldRestrictSchedulingToBooker($vCal);
 
         $isTeamCalendar = $this->isTeamCalendarPath($calendarPath);
-        $actorAddresses = $this->fetchSchedulingAddresses($calendarPath, $isTeamCalendar);
-        $organizerAddress = $this->extractSingleOrganizerAddress($vCal);
-        $schedulingAddresses = $isTeamCalendar && $organizerAddress ? [$organizerAddress] : $actorAddresses;
+        $actorAddresses = $this->fetchActorAddresses($calendarPath, $isTeamCalendar);
+        $schedulingAddresses = $this->resolveSchedulingAddresses($calendarPath, $isTeamCalendar, $vCal, $actorAddresses);
 
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
@@ -937,7 +937,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        $addresses = $this->fetchSchedulingAddresses($calendarPath);
+        $addresses = $this->fetchActorAddresses($calendarPath);
 
         if (empty($addresses)) {
             return;
@@ -1007,11 +1007,16 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     /**
-     * Team calendar scheduling must run as the connected member, not as the
-     * technical team-calendar owner, otherwise the iTIP broker cannot match
-     * ORGANIZER:mailto:<member> with the scheduling identity.
+     * The addresses of whoever the change is attributed to, which is the calendar owner.
+     *
+     * A team calendar is attributed to the connected member instead of to the technical
+     * team-calendar owner, otherwise the iTIP broker cannot match ORGANIZER:mailto:<member>
+     * with the scheduling identity.
+     *
+     * This is who acts, not necessarily who the resulting messages are sent under: see
+     * resolveSchedulingAddresses() for the latter.
      */
-    protected function fetchSchedulingAddresses($calendarPath, ?bool $isTeamCalendar = null): array {
+    protected function fetchActorAddresses($calendarPath, ?bool $isTeamCalendar = null): array {
         if ($isTeamCalendar === null) {
             $isTeamCalendar = $this->isTeamCalendarPath($calendarPath);
         }
@@ -1022,6 +1027,69 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         $authPlugin = $this->server->getPlugin('auth');
         return $authPlugin ? $this->getAddressesForPrincipalSafely($authPlugin->getCurrentPrincipal()) : [];
+    }
+
+    /**
+     * Picks the identity scheduling runs under.
+     *
+     * A team calendar schedules under the ORGANIZER carried by the object rather than under
+     * its technical owner, so that members can organise on their own behalf. That address is
+     * client supplied, hence it is only granted to a write-enabled member; otherwise we fall
+     * back to the connected user, who can still reply as an attendee but cannot send
+     * invitations in somebody else's name.
+     */
+    protected function resolveSchedulingAddresses(string $calendarPath, bool $isTeamCalendar, VCalendar $vCal, array $actorAddresses): array {
+        if (!$isTeamCalendar) {
+            return $actorAddresses;
+        }
+
+        $organizerAddress = $this->extractSingleOrganizerAddress($vCal);
+
+        return $organizerAddress && $this->mayScheduleAsOrganizer($organizerAddress, $calendarPath)
+            ? [$organizerAddress]
+            : $actorAddresses;
+    }
+
+    /**
+     * Whether $calendarPath may send scheduling messages in the name of $organizerAddress.
+     *
+     * The organizer address comes from client supplied iCalendar data, so it is only granted
+     * to a write-enabled sharee of that calendar. Members of a team calendar do organise on
+     * one another's behalf, which is why any write-enabled member qualifies, but nobody may
+     * invite in the name of somebody outside the calendar.
+     */
+    protected function mayScheduleAsOrganizer(string $organizerAddress, string $calendarPath): bool {
+        $organizerPrincipal = Utils::getPrincipalByUri($organizerAddress, $this->server);
+        if (!$organizerPrincipal) {
+            return false;
+        }
+
+        try {
+            $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            return false;
+        }
+
+        if (!method_exists($calendarNode, 'getInvites')) {
+            return false;
+        }
+
+        foreach ($calendarNode->getInvites() as $sharee) {
+            if ($this->normalizePrincipal($sharee->principal ?? null) === $this->normalizePrincipal($organizerPrincipal)
+                && $this->isWriteEnabledAccess((int) ($sharee->access ?? 0))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isWriteEnabledAccess(int $access): bool {
+        return in_array($access, [SharingPlugin::ACCESS_READWRITE, SharingPlugin::ACCESS_ADMINISTRATION], true);
+    }
+
+    private function normalizePrincipal(?string $principal): ?string {
+        return $principal === null ? null : trim($principal, '/');
     }
 
     protected function isTeamCalendarPath(string $calendarPath): bool {

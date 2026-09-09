@@ -14,6 +14,18 @@ use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Reader;
 
+/**
+ * Rejects calendar objects whose ORGANIZER may not organize in a team calendar.
+ *
+ * A team calendar is shared between its members, so an object stored there is not tied to a
+ * single owner the way a personal calendar object is. Members do organise on one another's
+ * behalf, but an ORGANIZER from outside the calendar would let a member put an event in the
+ * name of somebody who never agreed to it.
+ *
+ * Personal calendars are deliberately left alone: their scheduling identity is the calendar
+ * owner, read from the principal backend rather than from the submitted object, so an
+ * ORGANIZER the user is not entitled to reaches nobody anyway.
+ */
 class OrganizerValidationPlugin extends ServerPlugin {
 
     protected $server;
@@ -44,14 +56,11 @@ class OrganizerValidationPlugin extends ServerPlugin {
             return;
         }
 
-        // An attendee's copy of an invitation keeps the inviter as ORGANIZER, so
-        // updates (e.g. PARTSTAT changes) are allowed as long as the ORGANIZER is
-        // unchanged from the stored object: a foreign organizer can only be there
-        // because scheduling delivered it or a previously validated PUT wrote it.
-        $existingOrganizerUri = !$isNew && !$this->isTeamCalendarPath($calendarPath)
-            ? $this->getExistingOrganizerUri($request->getPath())
-            : null;
-        $this->validateCalendarOrganizer($vCal, $calendarPath, $existingOrganizerUri);
+        if (!$this->isTeamCalendarPath($calendarPath)) {
+            return;
+        }
+
+        $this->validateCalendarOrganizer($vCal, $calendarPath);
     }
 
     function beforeMove($sourcePath, $destinationPath) {
@@ -80,47 +89,11 @@ class OrganizerValidationPlugin extends ServerPlugin {
         }
     }
 
-    private function validateCalendarOrganizer(VCalendar $calendar, $calendarPath, ?string $existingOrganizerUri = null): void {
+    private function validateCalendarOrganizer(VCalendar $calendar, $calendarPath): void {
         $vevents = $calendar->select('VEVENT');
         if (empty($vevents) || !($organizerUri = $this->extractOrganizerUri($vevents))) return;
-        if ($existingOrganizerUri !== null && $organizerUri === $existingOrganizerUri) return;
 
         $this->validateOrganizerAuthorized($organizerUri, $calendarPath);
-    }
-
-    private function getExistingOrganizerUri(string $objectPath): ?string {
-        try {
-            $node = $this->server->tree->getNodeForPath($objectPath);
-        } catch (\Sabre\DAV\Exception $e) {
-            return null;
-        }
-
-        if (!$node instanceof \Sabre\CalDAV\ICalendarObject) {
-            return null;
-        }
-
-        try {
-            $data = $node->get();
-            if (is_resource($data)) {
-                $data = stream_get_contents($data);
-            }
-            $existingVCal = \Sabre\VObject\Reader::read($data);
-        } catch (\Exception $e) {
-            return null;
-        }
-
-        $organizerValues = [];
-        foreach ($existingVCal->select('VEVENT') as $vevent) {
-            if (isset($vevent->ORGANIZER)) {
-                $organizerValues[] = strtolower((string) $vevent->ORGANIZER);
-            }
-        }
-
-        if (count(array_unique($organizerValues)) !== 1) {
-            return null;
-        }
-
-        return reset($organizerValues);
     }
 
     private function extractOrganizerUri(array $vevents): ?string {
@@ -157,29 +130,11 @@ class OrganizerValidationPlugin extends ServerPlugin {
         }
 
         $organizerPrincipal = $aclPlugin->getPrincipalByUri($organizerUri);
-        if ($organizerPrincipal === null) {
-            throw new Forbidden('The ORGANIZER must be either the calendar owner or the authenticated user.');
-        }
 
-        if ($this->isTeamCalendarPath($calendarPath)) {
-            if ($this->isWriteEnabledCalendarSharee($organizerPrincipal, $calendarPath)) {
-                return;
-            }
-
+        if ($organizerPrincipal === null
+            || !$this->isWriteEnabledCalendarSharee($organizerPrincipal, $calendarPath)) {
             throw new Forbidden('The ORGANIZER must be a write-enabled team calendar member.');
         }
-
-        if ($organizerPrincipal === $this->getCalendarOwner($calendarPath)) {
-            return;
-        }
-
-        $authPlugin = $this->server->getPlugin('auth');
-        $currentPrincipal = $authPlugin ? $authPlugin->getCurrentPrincipal() : null;
-        if ($organizerPrincipal === $currentPrincipal) {
-            return;
-        }
-
-        throw new Forbidden('The ORGANIZER must be either the calendar owner or the authenticated user.');
     }
 
     private function isTeamCalendarPath($calendarPath): bool {
@@ -207,15 +162,6 @@ class OrganizerValidationPlugin extends ServerPlugin {
 
     private function isWriteEnabledAccess(int $access): bool {
         return in_array($access, [SharingPlugin::ACCESS_READWRITE, SharingPlugin::ACCESS_ADMINISTRATION], true);
-    }
-
-    private function getCalendarOwner($calendarPath) {
-        $calendarNode = $this->getCalendarNode($calendarPath);
-        if (!$calendarNode || !method_exists($calendarNode, 'getOwner')) {
-            return null;
-        }
-
-        return $calendarNode->getOwner();
     }
 
     private function getCalendarNode($calendarPath) {

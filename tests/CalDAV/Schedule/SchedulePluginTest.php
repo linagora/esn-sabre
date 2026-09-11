@@ -50,7 +50,6 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
             $lookup = new \ReflectionMethod(Plugin::class, 'loadCalendarObjectForDelivery');
             $result = $lookup->invoke($plugin, 'calendars/alice', $message, 'principals/users/alice');
             $this->assertSame($object, $result['objectNode']);
-            $this->assertSame('calendars/alice/calendar', $result['teamCalendarPath']);
         }
     }
 
@@ -464,53 +463,11 @@ ICS
         $this->assertSame(2, $this->invokeCountEventAttendees($calendar));
     }
 
-    function testShouldResolveTeamCalendarIdForReplyWhenTeamCalendarContainsEventUid() {
-        $this->initializePluginWithTeamCalendar(
-            'team-calendar-1',
-            'event-team',
-            $this->newCalendarObject('event-team', 'bob@example.org'),
-            ['{DAV:}write']
-        );
-
-        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
-        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'team-calendar-1'));
-
-        $this->assertSame('team-calendar-1', $this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
-    }
-
-    function testShouldNotResolveTeamCalendarIdForReplyWhenTeamCalendarDoesNotContainEventUid() {
-        $this->initializePluginWithTeamCalendar(
-            'other-team-calendar',
-            'another-event',
-            $this->newCalendarObject('another-event', 'bob@example.org'),
-            ['{DAV:}write']
-        );
-
-        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
-        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'other-team-calendar'));
-
-        $this->assertNull($this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
-    }
-
-    function testShouldResolveTeamCalendarIdForReplyWithoutWritePrivilege() {
-        $this->initializePluginWithTeamCalendar(
-            'team-calendar-1',
-            'event-team',
-            $this->newCalendarObject('event-team', 'bob@example.org'),
-            ['{DAV:}read']
-        );
-
-        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
-        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'team-calendar-1'));
-
-        $this->assertSame('team-calendar-1', $this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
-    }
-
     function testShouldFailITipReplyWhenRecipientCannotWriteTeamCalendar() {
         $teamEvent = $this->initializePluginForTeamCalendarDelivery(['{DAV:}read']);
         $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
         $message->sender = 'mailto:alice@example.org';
-        $message->message = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'team-calendar-1'));
+        $message->message = Reader::read($this->newCalendarObject('event-team', 'bob@example.org'));
 
         $this->plugin->scheduleLocalDelivery($message);
 
@@ -559,20 +516,6 @@ ICS
         );
 
         $this->assertSame('mailto:bob@example.org', $address);
-    }
-
-    function testShouldNotResolveTeamCalendarIdForReplyWhenOrganizerDoesNotMatch() {
-        $this->initializePluginWithTeamCalendar(
-            'team-calendar-1',
-            'event-team',
-            $this->newCalendarObject('event-team', 'charlie@example.org'),
-            ['{DAV:}write']
-        );
-
-        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
-        $calendar = Reader::read($this->newCalendarObject('event-team', 'bob@example.org', 'team-calendar-1'));
-
-        $this->assertNull($this->invokeResolveTeamCalendarIdForReplyMessage($message, $calendar));
     }
 
     function testShouldDeduplicateMasterAttendeesByNormalizedValue() {
@@ -1618,13 +1561,6 @@ ICS
         return $method->invoke($this->plugin, $request);
     }
 
-    private function invokeResolveTeamCalendarIdForReplyMessage(Message $message, $calendar): ?string {
-        $method = new \ReflectionMethod(Plugin::class, 'resolveTeamCalendarIdForReplyMessage');
-        $method->setAccessible(true);
-
-        return $method->invoke($this->plugin, $message, $calendar);
-    }
-
     private function invokeShouldValidateAttendeeSchedulingObjectChange(string $objectPath, bool $isTeamCalendar): bool {
         $method = new \ReflectionMethod(Plugin::class, 'shouldValidateAttendeeSchedulingObjectChange');
         $method->setAccessible(true);
@@ -1693,9 +1629,7 @@ ICS
         return $message;
     }
 
-    private function newCalendarObject(string $uid, string $organizerEmail, ?string $teamCalendarId = null): string {
-        $teamCalendarProperty = $teamCalendarId ? "X-OPENPAAS-TEAM-CALENDAR-ID:$teamCalendarId\n" : '';
-
+    private function newCalendarObject(string $uid, string $organizerEmail): string {
         return "BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
@@ -1703,7 +1637,7 @@ UID:$uid
 DTSTART:20351005T090000Z
 DTEND:20351005T100000Z
 SUMMARY:Team meeting
-{$teamCalendarProperty}ORGANIZER:mailto:$organizerEmail
+ORGANIZER:mailto:$organizerEmail
 ATTENDEE:mailto:alice@example.org
 END:VEVENT
 END:VCALENDAR

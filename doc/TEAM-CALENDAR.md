@@ -138,23 +138,11 @@ ORGANIZER is a write-enabled sharee (`isWriteEnabledCalendarSharee`, i.e. access
 `ACCESS_READWRITE` or `ACCESS_ADMINISTRATION`). Otherwise it throws
 `Forbidden('The ORGANIZER must be a write-enabled team calendar member.')`.
 
-### Routing iTIP replies — `X-OPENPAAS-TEAM-CALENDAR-ID`
+### Routing iTIP replies
 
-Because a team-calendar event is not owned by the replying attendee, a custom
-iCalendar property carries the routing information:
-
-```
-X-OPENPAAS-TEAM-CALENDAR-ID:{teamCalendarId}
-```
-
-- `setTeamCalendarIdProperty` stamps the id onto every `VEVENT` of a
-  team-calendar object.
-- `extractTeamCalendarIdProperty` reads it back.
-- `resolveTeamCalendarIdForReplyMessage` uses it, together with the iTIP
-  message `uid` and `recipient`, to locate the writable team-calendar object
-  (`findTeamCalendarObjectPath` / `loadWritableTeamCalendarObject`) so an
-  incoming reply is applied to the correct team calendar rather than the
-  attendee's own calendar.
+When the organizer copy is not in the personal calendar, scheduling searches
+the organizer's writable team calendars by UID. Organizer validation prevents
+the reply from being applied to another event with the same UID.
 
 ## Authentication and impersonation
 
@@ -173,7 +161,7 @@ The resulting tenant is `TenantType::TeamCalendars` (enum value `4`), mapped by
 - `lib/DAVACL/PrincipalBackend/Mongo.php` — `teamCalendarToPrincipal`, `getAuthTenantByTeamCalendarEmail`, domain-scoped queries
 - `lib/DAV/Sharing/Plugin.php` — access levels and technical-token sharing
 - `lib/CalDAV/OrganizerValidationPlugin.php` — write-enabled organizer enforcement
-- `lib/CalDAV/Schedule/Plugin.php`, `lib/CalDAV/Schedule/AMQPSchedulePlugin.php` — member-scoped scheduling and `X-OPENPAAS-TEAM-CALENDAR-ID` routing
+- `lib/CalDAV/Schedule/Plugin.php`, `lib/CalDAV/Schedule/AMQPSchedulePlugin.php` — member-scoped scheduling
 - `lib/DAV/Auth/Backend/Esn.php`, `lib/Utils/TenantType.php`, `lib/Utils/AuthTenant.php` — authentication and impersonation
 
 ## Tests

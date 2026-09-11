@@ -265,7 +265,6 @@ if (!empty($config['amqp']['host'])) {
     $server->addPlugin($subscriptionRealTimePlugin);
 
     $server->addPlugin(new ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin($calendarBackend));
-    $server->addPlugin(new ESN\CalDAV\TeamCalendarMetadataPlugin($calendarBackend));
     $server->addPlugin(new ESN\CalDAV\Schedule\AMQPSchedulePlugin($AMQPPublisher, $principalBackend));
 }
 

@@ -135,8 +135,7 @@ uses `TenantType::Resources`.
   `domainId` (`ObjectId`), `domainName` (string), optional `emailAddress`.
 
 A team calendar is a shared calendar owned by a dedicated principal rather than
-by a user, with membership-based sharing and iTIP scheduling routed through the
-`X-OPENPAAS-TEAM-CALENDAR-ID` property.
+by a user, with membership-based sharing and member-scoped iTIP scheduling.
 
 **Properties** (`teamCalendarToPrincipal`):
 

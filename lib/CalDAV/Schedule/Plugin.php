@@ -2,7 +2,6 @@
 namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
-use ESN\CalDAV\TeamCalendarMetadataPlugin;
 use ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin;
 use ESN\CalDAV\VObjectPropertyRegistry;
 use ESN\DAV\Sharing\Plugin as SharingPlugin;
@@ -36,7 +35,6 @@ use Sabre\VObject\Reader;
 #[\AllowDynamicProperties]
 class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     private const DEFAULT_REPLY_PROPAGATION_THRESHOLD = 200;
-    private const TEAM_CALENDAR_ID_PROPERTY = 'X-OPENPAAS-TEAM-CALENDAR-ID';
     private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES = ['VALARM', 'TRANSP', 'CLASS'];
     private const PRESERVABLE_RECIPIENT_LOCAL_PROPERTIES_WITH_MANAGED_ALARMS = ['TRANSP', 'CLASS'];
     private const FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES = ['DTSTART', 'DTEND', 'LOCATION', 'SUMMARY', 'ORGANIZER'];
@@ -141,8 +139,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        $this->normalizeTeamCalendarMetadataForDelivery($newObject, $loaded['teamCalendarPath'] ?? null);
-
         if (!$objectNode) {
             $this->deliverToNewObject($iTipMessage, $calendarPath, $newFileName, $newObject);
         } else {
@@ -197,12 +193,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
     }
 
-    private function normalizeTeamCalendarMetadataForDelivery(VCalendar $calendar, ?string $calendarPath): void {
-        if ($calendarPath === null) return;
-        $metadata = $this->server->getPlugin(TeamCalendarMetadataPlugin::PLUGIN_NAME);
-        if ($metadata) $metadata->normalize($calendar, $calendarPath);
-    }
-
     private function loadMovedTeamCalendarObjectForDelivery(string $homePath, string $uid, string $principalUri): ?array {
         $plugin = $this->server->getPlugin(TeamCalendarSchedulingRecipientPlugin::PLUGIN_NAME);
         if (!$plugin) return null;
@@ -219,8 +209,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         return [
             'objectNode' => $node,
             'calendarData' => $data,
-            'calendarObject' => Reader::read($data),
-            'teamCalendarPath' => \Sabre\Uri\split($path)[0]
+            'calendarObject' => Reader::read($data)
         ];
     }
 
@@ -250,32 +239,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
     private function emptyLoadedCalendarObject(): array {
         return ['objectNode' => null, 'calendarData' => null, 'calendarObject' => null];
-    }
-
-    private function loadTeamCalendarObject(string $teamCalendarId, string $uid, string $organizer): array {
-        $objectPath = $this->findTeamCalendarObjectPath($teamCalendarId, $uid);
-        return $objectPath ? $this->loadTeamCalendarObjectAtPath($objectPath, $organizer) : $this->emptyLoadedCalendarObject();
-    }
-
-    private function loadWritableTeamCalendarObject(string $teamCalendarId, string $uid, string $organizer): array {
-        $objectPath = $this->findTeamCalendarObjectPath($teamCalendarId, $uid);
-        if (!$objectPath || !$this->canWriteCalendarObject($objectPath)) {
-            return $this->emptyLoadedCalendarObject();
-        }
-
-        return $this->loadTeamCalendarObjectAtPath($objectPath, $organizer);
-    }
-
-    private function findTeamCalendarObjectPath(string $teamCalendarId, string $uid): ?string {
-        $homePath = 'calendars/' . $teamCalendarId;
-        if (!$this->server->tree->nodeExists($homePath)) {
-            return null;
-        }
-
-        $home = $this->server->tree->getNodeForPath($homePath);
-        $result = method_exists($home, 'getCalendarObjectByUID') ? $home->getCalendarObjectByUID($uid) : null;
-
-        return $result ? $homePath . '/' . $result : null;
     }
 
     private function canWriteCalendarObject(string $objectPath): bool {
@@ -836,16 +799,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             // iTIP payload. Also strip RRULE from override VEVENTs (RFC 5545 §3.8.5.3 forbids
             // RRULE in a component that has RECURRENCE-ID; a misbehaving client may send it).
             $this->sanitizeOutgoingRequestMessage($message, $newObject);
-            return;
-        }
-
-        if ($message->method !== 'REPLY') {
-            return;
-        }
-
-        $teamCalendarId = $this->resolveTeamCalendarIdForReplyMessage($message, $newObject);
-        if ($teamCalendarId) {
-            $this->setTeamCalendarIdProperty($message->message, $teamCalendarId);
         }
     }
 
@@ -1205,36 +1158,6 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         return reset($organizerAddresses);
-    }
-
-    protected function setTeamCalendarIdProperty(VCalendar $calendar, string $teamCalendarId): bool {
-        $modified = false;
-        foreach ($calendar->VEVENT as $vevent) {
-            if (!isset($vevent->{self::TEAM_CALENDAR_ID_PROPERTY}) || $vevent->{self::TEAM_CALENDAR_ID_PROPERTY}->getValue() !== $teamCalendarId) {
-                unset($vevent->{self::TEAM_CALENDAR_ID_PROPERTY});
-                $vevent->add(self::TEAM_CALENDAR_ID_PROPERTY, $teamCalendarId);
-                $modified = true;
-            }
-        }
-
-        return $modified;
-    }
-
-    private function extractTeamCalendarIdProperty(VCalendar $calendar): ?string {
-        foreach ($calendar->VEVENT as $vevent) {
-            if (isset($vevent->{self::TEAM_CALENDAR_ID_PROPERTY})) return $vevent->{self::TEAM_CALENDAR_ID_PROPERTY}->getValue();
-        }
-
-        return null;
-    }
-
-    private function resolveTeamCalendarIdForReplyMessage(ITip\Message $message, VCalendar $calendar): ?string {
-        $teamCalendarId = $this->extractTeamCalendarIdProperty($calendar);
-        if (!$teamCalendarId || !$message->uid || !$message->recipient) {
-            return null;
-        }
-
-        return $this->loadTeamCalendarObject($teamCalendarId, $message->uid, $message->recipient)['objectNode'] ? $teamCalendarId : null;
     }
 
     /**

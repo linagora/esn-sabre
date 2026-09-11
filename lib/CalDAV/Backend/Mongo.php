@@ -151,6 +151,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return $this->calendarObjectService->getCalendarObject($calendarId, $objectUri);
     }
 
+    function hasCalendarObjectWithUid(string $calendarId, string $uid): bool {
+        return $this->calendarObjectService->hasCalendarObjectWithUid($calendarId, $uid);
+    }
+
     function getMultipleCalendarObjects($calendarId, array $uris) {
         $this->_assertIsArray($calendarId);
         return $this->calendarObjectService->getMultipleCalendarObjects($calendarId, $uris);

@@ -141,6 +141,27 @@ class CalendarObjectService {
         return $this->calendarObjectDAO->findByUid([$calendarId], $uid, ['_id' => 1]) !== null;
     }
 
+    public function getSchedulingRecipient(string $calendarId, string $objectUri): ?string {
+        $object = $this->calendarObjectDAO->findByUri([$calendarId], $objectUri, ['metadata.schedulingRecipientPrincipalUri' => 1]);
+        return $object['metadata']['schedulingRecipientPrincipalUri'] ?? null;
+    }
+
+    public function setSchedulingRecipient(string $calendarId, string $objectUri, string $principalUri): void {
+        $result = $this->calendarObjectDAO->updateCalendarObject($calendarId, $objectUri, [
+            'metadata.schedulingRecipientPrincipalUri' => $principalUri
+        ]);
+        if ($result->getMatchedCount() !== 1) {
+            throw new \RuntimeException('Cannot save scheduling recipient: calendar object not found');
+        }
+    }
+
+    public function findBySchedulingRecipient(string $uid, string $principalUri): array {
+        return iterator_to_array($this->calendarObjectDAO->findWithQuery([
+            'uid' => $uid,
+            'metadata.schedulingRecipientPrincipalUri' => $principalUri
+        ], ['_id' => 0, 'calendarid' => 1, 'uri' => 1]), false);
+    }
+
     /**
      * Get multiple calendar objects by URIs
      *

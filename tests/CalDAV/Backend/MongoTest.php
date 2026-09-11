@@ -67,9 +67,10 @@ class MongoTest extends AbstractDatabaseTestBase {
 
         $this->assertSame([
             ['calendarid' => $destination[0], 'uri' => 'renamed.ics']
-        ], $backend->findCalendarObjectsBySchedulingRecipient('event-123', $alice));
-        $this->assertSame([], $backend->findCalendarObjectsBySchedulingRecipient('event-12', $alice));
-        $this->assertSame([], $backend->findCalendarObjectsBySchedulingRecipient('event-123', 'principals/users/unknown'));
+        ], $backend->findCalendarObjectsBySchedulingRecipient('event-123', $alice, [$destination[0]]));
+        $this->assertSame([], $backend->findCalendarObjectsBySchedulingRecipient('event-123', $alice, [$personal[0]]));
+        $this->assertSame([], $backend->findCalendarObjectsBySchedulingRecipient('event-12', $alice, [$destination[0]]));
+        $this->assertSame([], $backend->findCalendarObjectsBySchedulingRecipient('event-123', 'principals/users/unknown', [$destination[0]]));
     }
 
     function testSettingSchedulingRecipientOnMissingObjectShouldFail() {

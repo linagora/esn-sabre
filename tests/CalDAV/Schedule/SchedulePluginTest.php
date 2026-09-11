@@ -22,6 +22,83 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         $this->plugin->initialize($server);
     }
 
+    function testDeliveryLookupShouldFindMovedCopyInWritableTeamCalendar() {
+        foreach (['REQUEST', 'CANCEL'] as $method) {
+            $backend = $this->createMock(\ESN\CalDAV\Backend\Mongo::class);
+            $backend->expects($this->once())->method('findCalendarObjectsBySchedulingRecipient')
+                ->with('event-team', 'principals/users/alice', ['physical-id'])
+                ->willReturn([['calendarid' => 'physical-id', 'uri' => 'renamed.ics']]);
+            $object = $this->createStub(\Sabre\CalDAV\ICalendarObject::class);
+            $object->method('get')->willReturn($this->newCalendarObject('event-team', 'bob@example.org'));
+            $calendar = $this->createStub(\ESN\CalDAV\SharedCalendar::class);
+            $calendar->method('getName')->willReturn('calendar');
+            $calendar->method('getCalendarId')->willReturn('physical-id');
+            $calendar->method('getChild')->willReturn($object);
+            $calendar->method('getOwner')->willReturn('principals/team-calendars/team');
+            $calendar->method('getShareAccess')->willReturn($method === 'REQUEST' ? 3 : 5);
+            $home = $this->createMock(\ESN\CalDAV\CalendarHome::class);
+            $home->method('getName')->willReturn('alice');
+            $home->expects($this->once())->method('getCalendarObjectByUID')->willReturn(null);
+            $home->method('getChildren')->willReturn([$calendar]);
+            $home->method('getChild')->willReturn($calendar);
+            $server = new Server([new SimpleCollection('calendars', [$home])]);
+            $server->addPlugin(new \ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin($backend));
+            $plugin = new Plugin();
+            $server->addPlugin($plugin);
+            $message = $this->newReplyMessage('event-team', 'mailto:alias@example.org');
+            $message->method = $method;
+            $lookup = new \ReflectionMethod(Plugin::class, 'loadCalendarObjectForDelivery');
+            $result = $lookup->invoke($plugin, 'calendars/alice', $message, 'principals/users/alice');
+            $this->assertSame($object, $result['objectNode']);
+            $this->assertSame('calendars/alice/calendar', $result['teamCalendarPath']);
+        }
+    }
+
+    function testDeliveryLookupShouldKeepPersonalFallbackAndReplyRouting() {
+        foreach (['REQUEST', 'CANCEL', 'REPLY'] as $method) {
+            $backend = $this->createMock(\ESN\CalDAV\Backend\Mongo::class);
+            $backend->expects($this->never())
+                ->method('findCalendarObjectsBySchedulingRecipient')->willReturn([]);
+            $home = $this->createMock(\ESN\CalDAV\CalendarHome::class);
+            $home->method('getName')->willReturn('alice');
+            $home->expects($this->once())->method('getCalendarObjectByUID')->with('event-team')->willReturn(null);
+            $home->method('getChildren')->willReturn([]);
+            $server = new Server([new SimpleCollection('calendars', [$home])]);
+            $server->addPlugin(new \ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin($backend));
+            $plugin = new Plugin();
+            $server->addPlugin($plugin);
+            $message = $this->newReplyMessage('event-team', 'mailto:alice@example.org');
+            $message->method = $method;
+            $lookup = new \ReflectionMethod(Plugin::class, 'loadCalendarObjectForDelivery');
+            $this->assertSame([
+                'objectNode' => null,
+                'calendarData' => null,
+                'calendarObject' => null
+            ], $lookup->invoke($plugin, 'calendars/alice', $message, 'principals/users/alice'));
+        }
+    }
+
+    function testDeliveryLookupShouldPreferPersonalCopyWithoutMetadataQuery() {
+        foreach (['REQUEST', 'CANCEL'] as $method) {
+            $backend = $this->createMock(\ESN\CalDAV\Backend\Mongo::class);
+            $backend->expects($this->never())->method('findCalendarObjectsBySchedulingRecipient');
+            $object = new SimpleFile('personal.ics', $this->newCalendarObject('event-team', 'bob@example.org'));
+            $home = $this->createMock(\ESN\CalDAV\CalendarHome::class);
+            $home->method('getName')->willReturn('alice');
+            $home->expects($this->once())->method('getCalendarObjectByUID')->willReturn('personal.ics');
+            $home->expects($this->never())->method('getChildren');
+            $home->method('getChild')->willReturn($object);
+            $server = new Server([new SimpleCollection('calendars', [$home])]);
+            $server->addPlugin(new \ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin($backend));
+            $plugin = new Plugin();
+            $server->addPlugin($plugin);
+            $message = $this->newReplyMessage('event-team', 'mailto:alice@example.org');
+            $message->method = $method;
+            $lookup = new \ReflectionMethod(Plugin::class, 'loadCalendarObjectForDelivery');
+            $this->assertSame($object, $lookup->invoke($plugin, 'calendars/alice', $message, 'principals/users/alice')['objectNode']);
+        }
+    }
+
     function testDeliverShouldSetSequenceTo0WhenNotPresent() {
         $message = $this->newItipMessage('');
 

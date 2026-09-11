@@ -34,6 +34,34 @@ class TeamCalendarSchedulingRecipientPlugin extends ServerPlugin {
         return self::PLUGIN_NAME;
     }
 
+    public function findSchedulingRecipientObjectPath(string $homePath, string $uid, string $principalUri): ?string {
+        $calendarPaths = $this->writableTeamCalendarPaths($homePath);
+        if (!$calendarPaths) return null;
+        $objects = $this->calendarBackend->findCalendarObjectsBySchedulingRecipient($uid, $principalUri, array_keys($calendarPaths));
+        if (!$objects) return null;
+        if (count($objects) !== 1) {
+            throw new \Sabre\DAV\Exception('Multiple calendar objects match scheduling recipient');
+        }
+        $object = $objects[0];
+        return $calendarPaths[$object['calendarid']] . '/' . $object['uri'];
+    }
+
+    private function writableTeamCalendarPaths(string $homePath): array {
+        $calendarPaths = [];
+        foreach ($this->server->tree->getNodeForPath($homePath)->getChildren() as $calendar) {
+            if (!$this->isWritableTeamCalendar($calendar)) continue;
+            $calendarPaths[$calendar->getCalendarId()] = rtrim($homePath, '/') . '/' . $calendar->getName();
+        }
+        return $calendarPaths;
+    }
+
+    private function isWritableTeamCalendar($calendar): bool {
+        if (!$calendar instanceof SharedCalendar) return false;
+        if (!Utils::isTeamCalendarFromPrincipal($calendar->getOwner())) return false;
+        return in_array($calendar->getShareAccess(), [\ESN\DAV\Sharing\Plugin::ACCESS_READWRITE,
+            \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION], true);
+    }
+
     public function captureSchedulingRecipientBeforeMove($sourcePath, $destinationPath): void {
         unset($this->moveContexts[$destinationPath]);
         $source = $this->calendarObjectAt($sourcePath);
@@ -53,7 +81,8 @@ class TeamCalendarSchedulingRecipientPlugin extends ServerPlugin {
 
     private function calendarObjectAt(string $path): ?ICalendarObject {
         $object = $this->server->tree->getNodeForPath($path);
-        return $object instanceof ICalendarObject && !$object instanceof ISchedulingObject ? $object : null;
+        if (!$object instanceof ICalendarObject || $object instanceof ISchedulingObject) return null;
+        return $object;
     }
 
     private function sharedCalendarAt(string $path): ?SharedCalendar {

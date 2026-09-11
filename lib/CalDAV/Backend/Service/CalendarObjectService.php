@@ -155,10 +155,11 @@ class CalendarObjectService {
         }
     }
 
-    public function findBySchedulingRecipient(string $uid, string $principalUri): array {
+    public function findBySchedulingRecipient(string $uid, string $principalUri, array $calendarIds): array {
         return iterator_to_array($this->calendarObjectDAO->findWithQuery([
             'uid' => $uid,
-            'metadata.schedulingRecipientPrincipalUri' => $principalUri
+            'metadata.schedulingRecipientPrincipalUri' => $principalUri,
+            'calendarid' => ['$in' => $calendarIds]
         ], ['_id' => 0, 'calendarid' => 1, 'uri' => 1]), false);
     }
 

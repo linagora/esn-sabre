@@ -76,6 +76,25 @@ class TeamCalendarMetadataPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame('team-calendar-id', $observedMarker);
     }
 
+    function testMoveShouldNormalizeWithoutEmittingServerUpdateForSchedulingRecipient() {
+        $backend = $this->createMock(Backend\Mongo::class);
+        $backend->expects($this->once())->method('getCalendarObjectSchedulingRecipient')
+            ->with('physical-team-calendar-id', 'renamed-event.ics')->willReturn('principals/users/alice');
+        [$server, $destination, $source] = $this->newServer('principals/team-calendars/team-calendar-id', $backend);
+        $source->addChild(new TeamCalendarMetadataEventTestDouble('event.ics', $this->event()));
+        $event = new TeamCalendarMetadataEventTestDouble('renamed-event.ics', $this->event());
+        $destination->addChild($event);
+        $server->on('calendarObjectUpdatedByServer', function () { $this->fail('Attendee MOVE must not emit an organizer update'); });
+
+        $sourcePath = 'calendars/personal-home/personal/event.ics';
+        $destinationPath = 'calendars/team-home/team-calendar/renamed-event.ics';
+        $server->emit('beforeMove', [$sourcePath, $destinationPath]);
+        $server->emit('afterMove', [$sourcePath, $destinationPath]);
+
+        $this->assertSame(1, $event->putCount);
+        $this->assertSame('team-calendar-id', Reader::read($event->get())->VEVENT->{TeamCalendarMetadataPlugin::PROPERTY}->getValue());
+    }
+
     function testMoveShouldEmitCalendarObjectUpdatedByServer() {
         list($server, $destinationCalendar, $sourceCalendar) = $this->newServer('principals/team-calendars/team-calendar-id');
         $sourceCalendar->addChild(new TeamCalendarMetadataEventTestDouble('event.ics', $this->event()));
@@ -132,7 +151,11 @@ class TeamCalendarMetadataPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame('forged-id', $calendar->VEVENT->{TeamCalendarMetadataPlugin::PROPERTY}->getValue());
     }
 
-    private function newServer(string $owner): array {
+    private function newServer(string $owner, ?Backend\Mongo $backend = null): array {
+        if ($backend === null) {
+            $backend = $this->createStub(Backend\Mongo::class);
+            $backend->method('getCalendarObjectSchedulingRecipient')->willReturn(null);
+        }
         $calendar = new TeamCalendarMetadataCalendarTestDouble('team-calendar', $owner);
         $personalCalendar = new SimpleCollection('personal');
         $server = new Server([
@@ -141,7 +164,7 @@ class TeamCalendarMetadataPluginTest extends \PHPUnit\Framework\TestCase {
                 new SimpleCollection('personal-home', [$personalCalendar]),
             ]),
         ]);
-        $server->addPlugin(new TeamCalendarMetadataPlugin());
+        $server->addPlugin(new TeamCalendarMetadataPlugin($backend));
 
         return [$server, $calendar, $personalCalendar];
     }
@@ -179,6 +202,10 @@ class TeamCalendarMetadataCalendarTestDouble extends SimpleCollection {
 
     function getOwner() {
         return $this->owner;
+    }
+
+    function getCalendarId() {
+        return 'physical-team-calendar-id';
     }
 }
 

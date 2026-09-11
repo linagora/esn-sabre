@@ -17,9 +17,15 @@ use Sabre\VObject\Reader;
  * Maintains the server-owned Team Calendar routing metadata.
  */
 class TeamCalendarMetadataPlugin extends ServerPlugin {
+    const PLUGIN_NAME = 'caldav-team-calendar-metadata';
     const PROPERTY = 'X-OPENPAAS-TEAM-CALENDAR-ID';
 
     private $server, $movedObjectOldMessages = [];
+    private $calendarBackend;
+
+    function __construct(Backend\Mongo $calendarBackend) {
+        $this->calendarBackend = $calendarBackend;
+    }
 
     function initialize(Server $server) {
         $this->server = $server;
@@ -28,7 +34,7 @@ class TeamCalendarMetadataPlugin extends ServerPlugin {
         $server->on('afterMove', [$this, 'afterMove'], 50);
     }
 
-    function getPluginName() { return 'caldav-team-calendar-metadata'; }
+    function getPluginName() { return self::PLUGIN_NAME; }
 
     function calendarObjectChange(RequestInterface $_request, ResponseInterface $_response, VCalendar $calendar,
         $calendarPath, &$modified, $_isNew) {
@@ -75,6 +81,10 @@ class TeamCalendarMetadataPlugin extends ServerPlugin {
 
         list($calendarData, $modified) = $normalized;
         if (!$modified && $source['teamCalendarId'] === $this->teamCalendarId($calendarPath)) return;
+
+        $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+        [, $objectUri] = \Sabre\Uri\split($destinationPath);
+        if ($this->calendarBackend->getCalendarObjectSchedulingRecipient($calendarNode->getCalendarId(), $objectUri) !== null) return;
 
         $this->server->emit('calendarObjectUpdatedByServer',
             [$source['calendarData'], $calendarData, $calendarPath, [self::PROPERTY], true]);

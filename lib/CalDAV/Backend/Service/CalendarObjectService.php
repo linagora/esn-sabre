@@ -137,6 +137,10 @@ class CalendarObjectService {
         return array_shift($result);
     }
 
+    public function hasCalendarObjectWithUid(string $calendarId, string $uid): bool {
+        return $this->calendarObjectDAO->findByUid([$calendarId], $uid, ['_id' => 1]) !== null;
+    }
+
     /**
      * Get multiple calendar objects by URIs
      *

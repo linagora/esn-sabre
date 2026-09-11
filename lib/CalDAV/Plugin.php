@@ -3,6 +3,7 @@ namespace ESN\CalDAV;
 
 use ESN\CalDAV\Validation\CalendarObjectValidator;
 use ESN\DAV\Sharing\Plugin as SPlugin;
+use ESN\Utils\Utils;
 use Sabre\DAV\Exception\BadRequest;
 use Sabre\DAV\Exception\UnsupportedMediaType;
 use Sabre\DAV\INode;
@@ -31,6 +32,32 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         parent::initialize($server);
         $server->on('calendarObjectChange', [$this, 'validateCalendarObjectBeforeScheduling'], self::PRIORITY_BEFORE_SCHEDULING);
         $server->on('propFind', [$this, 'propFindSharedCalendar'], 151);
+        $server->on('beforeMove', [$this, 'validateBeforeMoveToTeamCalendar'], 40);
+    }
+
+    function validateBeforeMoveToTeamCalendar($sourcePath, $destinationPath) {
+        list($sourceCalendarPath,) = \Sabre\Uri\split($sourcePath);
+        list($destinationCalendarPath,) = \Sabre\Uri\split($destinationPath);
+        if (!$sourceCalendarPath || !$destinationCalendarPath) return;
+
+        $sourceCalendar = $this->server->tree->getNodeForPath($sourceCalendarPath);
+        $destinationCalendar = $this->server->tree->getNodeForPath($destinationCalendarPath);
+        if (!$sourceCalendar instanceof SharedCalendar || !$destinationCalendar instanceof SharedCalendar
+            || !Utils::isUserPrincipal($sourceCalendar->getOwner())
+            || !Utils::isTeamCalendarFromPrincipal($destinationCalendar->getOwner())) return;
+
+        $source = $this->server->tree->getNodeForPath($sourcePath);
+        if (!$source instanceof \Sabre\CalDAV\ICalendarObject || $source instanceof \Sabre\CalDAV\Schedule\ISchedulingObject) return;
+        $data = $source->get();
+        $calendar = \Sabre\VObject\Reader::read(is_resource($data) ? stream_get_contents($data) : $data);
+        try {
+            if (isset($calendar->VEVENT->UID) && $destinationCalendar->getBackend()->hasCalendarObjectWithUid(
+                $destinationCalendar->getCalendarId(), (string) $calendar->VEVENT->UID)) {
+                throw new \Sabre\DAV\Exception\Forbidden('The destination Team Calendar already contains an event with this UID.');
+            }
+        } finally {
+            $calendar->destroy();
+        }
     }
 
     protected function validateICalendar(&$data, $path, &$modified, RequestInterface $request, ResponseInterface $response, $isNew) {

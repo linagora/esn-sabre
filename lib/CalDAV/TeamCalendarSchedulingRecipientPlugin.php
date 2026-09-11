@@ -46,6 +46,16 @@ class TeamCalendarSchedulingRecipientPlugin extends ServerPlugin {
         return $calendarPaths[$object['calendarid']] . '/' . $object['uri'];
     }
 
+    public function findCalendarObjectPathsWithoutSchedulingRecipient(string $homePath, string $uid): array {
+        $calendarPaths = $this->writableTeamCalendarPaths($homePath);
+        if (!$calendarPaths) return [];
+        $paths = [];
+        foreach ($this->calendarBackend->findCalendarObjectsByUidWithoutSchedulingRecipient($uid, array_keys($calendarPaths)) as $object) {
+            $paths[] = $calendarPaths[$object['calendarid']] . '/' . $object['uri'];
+        }
+        return $paths;
+    }
+
     private function writableTeamCalendarPaths(string $homePath): array {
         $calendarPaths = [];
         foreach ($this->server->tree->getNodeForPath($homePath)->getChildren() as $calendar) {

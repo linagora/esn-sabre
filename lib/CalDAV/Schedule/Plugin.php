@@ -162,8 +162,28 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return $result;
         }
 
-        $teamCalendarId = $this->extractTeamCalendarIdProperty($iTipMessage->message);
-        return $teamCalendarId ? $this->loadWritableTeamCalendarObject($teamCalendarId, $iTipMessage->uid, $iTipMessage->recipient) : $this->emptyLoadedCalendarObject();
+        return $this->loadTeamCalendarObjectForReply($result, $homePath, $iTipMessage);
+    }
+
+    private function loadTeamCalendarObjectForReply(array $fallback, string $homePath, ITip\Message $iTipMessage): ?array {
+        $plugin = $this->server->getPlugin(TeamCalendarSchedulingRecipientPlugin::PLUGIN_NAME);
+        try {
+            foreach ($plugin ? $plugin->findCalendarObjectPathsWithoutSchedulingRecipient($homePath, $iTipMessage->uid) : [] as $path) {
+                $candidate = $this->loadTeamCalendarObjectAtPath($path, $iTipMessage->recipient);
+                if (!$candidate['objectNode']) continue;
+                if ($fallback['objectNode']) {
+                    $candidate['calendarObject']->destroy();
+                    $fallback['calendarObject']->destroy();
+                    throw new \Sabre\DAV\Exception('Multiple organizer copies match scheduling reply');
+                }
+                $fallback = $candidate;
+            }
+            return $fallback;
+        } catch (\Sabre\DAV\Exception $e) {
+            $this->logger->warning('Scheduling reply lookup failed', ['reason' => $e->getMessage()]);
+            $iTipMessage->scheduleStatus = '5.0;Scheduling reply lookup failed';
+            return null;
+        }
     }
 
     private function loadMovedTeamCalendarObjectOrFallback(array $fallback, string $homePath,
@@ -268,11 +288,15 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $oldICalendarData = $objectNode->get();
         $currentObject = Reader::read($oldICalendarData);
 
-        return $this->calendarObjectHasOrganizer($currentObject, $organizer) ? [
-            'objectNode' => $objectNode,
-            'calendarData' => $oldICalendarData,
-            'calendarObject' => $currentObject
-        ] : $this->emptyLoadedCalendarObject();
+        if ($this->calendarObjectHasOrganizer($currentObject, $organizer)) {
+            return [
+                'objectNode' => $objectNode,
+                'calendarData' => $oldICalendarData,
+                'calendarObject' => $currentObject
+            ];
+        }
+        $currentObject->destroy();
+        return $this->emptyLoadedCalendarObject();
     }
 
     private function calendarObjectHasOrganizer(VCalendar $calendar, string $organizer): bool {

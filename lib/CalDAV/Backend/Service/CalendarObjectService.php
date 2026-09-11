@@ -163,6 +163,14 @@ class CalendarObjectService {
         ], ['_id' => 0, 'calendarid' => 1, 'uri' => 1]), false);
     }
 
+    public function findByUidWithoutSchedulingRecipient(string $uid, array $calendarIds): array {
+        return iterator_to_array($this->calendarObjectDAO->findWithQuery([
+            'uid' => $uid,
+            'calendarid' => ['$in' => $calendarIds],
+            'metadata.schedulingRecipientPrincipalUri' => null
+        ], ['_id' => 0, 'calendarid' => 1, 'uri' => 1]), false);
+    }
+
     /**
      * Get multiple calendar objects by URIs
      *

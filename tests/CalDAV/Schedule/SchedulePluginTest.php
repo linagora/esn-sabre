@@ -79,9 +79,10 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testDeliveryLookupShouldPreferPersonalCopyWithoutMetadataQuery() {
-        foreach (['REQUEST', 'CANCEL'] as $method) {
+        foreach (['REQUEST', 'CANCEL', 'REPLY'] as $method) {
             $backend = $this->createMock(\ESN\CalDAV\Backend\Mongo::class);
             $backend->expects($this->never())->method('findCalendarObjectsBySchedulingRecipient');
+            $backend->expects($this->never())->method('findCalendarObjectsByUidWithoutSchedulingRecipient');
             $object = new SimpleFile('personal.ics', $this->newCalendarObject('event-team', 'bob@example.org'));
             $home = $this->createMock(\ESN\CalDAV\CalendarHome::class);
             $home->method('getName')->willReturn('alice');

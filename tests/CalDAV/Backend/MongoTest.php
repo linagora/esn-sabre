@@ -80,6 +80,20 @@ class MongoTest extends AbstractDatabaseTestBase {
         $backend->setCalendarObjectSchedulingRecipient($calendarId[0], 'missing.ics', 'principals/users/alice');
     }
 
+    function testReplyCandidatesShouldExcludeMovedAttendeeCopies() {
+        $backend = $this->getBackend();
+        $organizer = $backend->createCalendar('principals/team-calendars/first', 'first', []);
+        $attendee = $backend->createCalendar('principals/team-calendars/second', 'second', []);
+        $ics = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:reply-event\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $backend->createCalendarObject($organizer, 'original.ics', $ics);
+        $backend->createCalendarObject($attendee, 'moved.ics', $ics);
+        $backend->setCalendarObjectSchedulingRecipient($attendee[0], 'moved.ics', 'principals/users/alice');
+        $this->assertSame([['calendarid' => $organizer[0], 'uri' => 'original.ics']],
+            $backend->findCalendarObjectsByUidWithoutSchedulingRecipient('reply-event', [$organizer[0], $attendee[0]]));
+        $this->assertSame([], $backend->findCalendarObjectsByUidWithoutSchedulingRecipient('reply-event', [$attendee[0]]));
+        $this->assertSame([], $backend->findCalendarObjectsByUidWithoutSchedulingRecipient('other-event', [$organizer[0]]));
+    }
+
     function testConstruct() {
         $backend = $this->getBackend();
         $this->assertTrue($backend instanceof Mongo);

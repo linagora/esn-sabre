@@ -2,9 +2,32 @@
 
 namespace ESN\CalDAV;
 
+use ESN\DAV\Sharing\Plugin as SharingPlugin;
 use Sabre\DAV\Server;
 
 class TeamCalendarSchedulingRecipientPluginTest extends \PHPUnit\Framework\TestCase {
+    function testLookupShouldRestrictQueryToWritableTeamCalendars() {
+        $calendars = [];
+        foreach ([['personal', 'principals/users/bob', SharingPlugin::ACCESS_READWRITE],
+            ['read', 'principals/team-calendars/team', SharingPlugin::ACCESS_READ],
+            ['write', 'principals/team-calendars/team', SharingPlugin::ACCESS_READWRITE],
+            ['admin', 'principals/team-calendars/other', SharingPlugin::ACCESS_ADMINISTRATION]] as [$id, $owner, $access]) {
+            $calendar = $this->createStub(SharedCalendar::class);
+            $calendar->method('getName')->willReturn('mirror-' . $id);
+            $calendar->method('getCalendarId')->willReturn($id);
+            $calendar->method('getOwner')->willReturn($owner);
+            $calendar->method('getShareAccess')->willReturn($access);
+            $calendars[] = $calendar;
+        }
+        $backend = $this->createMock(Backend\Mongo::class);
+        $backend->expects($this->once())->method('findCalendarObjectsBySchedulingRecipient')
+            ->with('event', 'principals/users/alice', ['write', 'admin'])->willReturn([]);
+        $server = new Server([new \Sabre\DAV\SimpleCollection('alice', $calendars)]);
+        $plugin = new TeamCalendarSchedulingRecipientPlugin($backend);
+        $server->addPlugin($plugin);
+        $this->assertNull($plugin->findSchedulingRecipientObjectPath('alice', 'event', 'principals/users/alice'));
+    }
+
     function testMoveShouldSaveCalendarOwnerAsSchedulingRecipient() {
         [$server, $backend] = $this->newSchedulingRecipientMoveServer('mailto:bob@example.com');
         $saved = false;

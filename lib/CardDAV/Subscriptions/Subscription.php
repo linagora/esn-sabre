@@ -5,8 +5,10 @@ namespace ESN\CardDAV\Subscriptions;
 use ESN\CardDAV\Backend\SubscriptionSupport;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 use ESN\Utils\Utils;
+use Sabre\CardDAV\IAddressBook;
 use Sabre\DAV\Collection;
 use Sabre\DAV\PropPatch;
+use Sabre\DAV\Sync\ISyncCollection;
 use Sabre\DAV\Xml\Property\Href;
 use Sabre\DAVACL\ACLTrait;
 use Sabre\DAVACL\IACL;
@@ -15,9 +17,15 @@ use Sabre\DAVACL\IACL;
  * Subscription Node
  *
  * This node represents a subscription.
+ *
+ * Its children are the cards of the source address book, so it behaves like a
+ * regular address book: IAddressBook brings the CardDAV plugin behaviors
+ * (vCard/jCard validation on creation, addressbook resourcetype, addressbook
+ * reports) and ISyncCollection exposes the changes of the source address book,
+ * just like Sabre\CardDAV\AddressBook does.
  */
 #[\AllowDynamicProperties]
-class Subscription extends Collection implements ISubscription, IACL {
+class Subscription extends Collection implements ISubscription, IAddressBook, ISyncCollection, IACL {
 
     use ACLTrait;
 
@@ -367,6 +375,35 @@ class Subscription extends Collection implements ISubscription, IACL {
     }
 
     /**
+     * Returns the changes for this subscription.
+     *
+     * Changes are the ones of the source address book, since the children of
+     * this node are the cards of the source address book.
+     *
+     * @param string $syncToken
+     * @param int $syncLevel
+     * @param int $limit
+     * @return array|null
+     */
+    function getChanges($syncToken, $syncLevel, $limit = null) {
+        if (!$this->carddavBackend instanceof \Sabre\CardDAV\Backend\SyncSupport) {
+            return null;
+        }
+
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        if (!$sourceAddressBookInfo) {
+            return null;
+        }
+
+        return $this->carddavBackend->getChangesForAddressBook(
+            $sourceAddressBookInfo['id'],
+            $syncToken,
+            $syncLevel,
+            $limit
+        );
+    }
+
+    /**
      * Updates properties on this node.
      *
      * This method received a PropPatch object, which contains all the
@@ -440,6 +477,26 @@ class Subscription extends Collection implements ISubscription, IACL {
 
         return $this->subscriptionInfo['principaluri'];
 
+    }
+
+    /**
+     * Returns the principal owning the source address book.
+     *
+     * The subscription itself belongs to the subscriber, but the contacts it
+     * exposes belong to the owner of the source address book. Plugins listing
+     * address books (see ESN\CardDAV\MobileRequestPlugin) use this to tell
+     * whose contacts they are displaying.
+     *
+     * @return string|null
+     */
+    function getShareOwner() {
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+
+        if (!$sourceAddressBookInfo) {
+            return $this->getOwner();
+        }
+
+        return $sourceAddressBookInfo['principaluri'];
     }
 
     /**

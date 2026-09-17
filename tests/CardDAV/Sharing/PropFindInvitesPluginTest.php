@@ -80,6 +80,9 @@ class PropFindInvitesPluginTest extends \ESN\CardDAV\PluginTestBase {
 
         $this->assertEquals(200, $response->status);
         $invites = json_decode($response->getBodyAsString(), true)['{DAV:}invite'];
+
+        // A shared address book is a view of the source one, so its sharees are
+        // the ones of the source address book, the owner included
         $this->assertEquals([
             [
                 'principal' => 'principals/users/' . $this->userTestId1,
@@ -89,6 +92,14 @@ class PropFindInvitesPluginTest extends \ESN\CardDAV\PluginTestBase {
                 'comment' => null,
                 'inviteStatus' => SPlugin::INVITE_ACCEPTED
 
+            ],
+            [
+                'principal' => 'principals/users/' . $this->userTestId2,
+                'href' => 'principals/users/' . $this->userTestId2,
+                'properties' => array (),
+                'access' => SPlugin::ACCESS_SHAREDOWNER,
+                'comment' => null,
+                'inviteStatus' => SPlugin::INVITE_ACCEPTED
             ]
         ], $invites);
     }

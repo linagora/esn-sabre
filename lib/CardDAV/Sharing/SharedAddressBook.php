@@ -112,20 +112,26 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
      * @return array
      */
     protected function getSourceAddressBookInfo() {
-        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
-
         // Create a modified addressBookInfo with the source ID
         // This ensures Card's put() and delete() operations use the source address book
         $sourceInfo = $this->addressBookInfo;
-        $sourceInfo['id'] = $sourceAddressBookId;
+        $sourceInfo['id'] = $this->getSourceAddressBookId();
 
         return $sourceInfo;
     }
 
+    /**
+     * Returns the id of the address book this one is a shared instance of.
+     *
+     * @return string
+     */
+    protected function getSourceAddressBookId() {
+        return (string)$this->addressBookInfo['addressbookid'];
+    }
+
     function getChildCount() {
         // Get count from the source address book
-        $sourceAddressBookId = (string)$this->addressBookInfo['addressbookid'];
-        return $this->carddavBackend->getCardCount($sourceAddressBookId);
+        return $this->carddavBackend->getCardCount($this->getSourceAddressBookId());
     }
 
     /**
@@ -291,7 +297,11 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
      * @return void
      */
     function updateInvites(array $sharees) {
-        throw new DAV\Exception\MethodNotAllowed('You are not allowed to share a shared address book');
+        if ((int)$this->getShareAccess() !== SPlugin::ACCESS_ADMINISTRATION) {
+            throw new \Sabre\DAV\Exception\Forbidden('You need administration access to share this address book');
+        }
+
+        $this->carddavBackend->updateInvites($this->getSourceAddressBookId(), $sharees);
     }
 
     /**
@@ -308,22 +318,45 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
      *
      * * $properties
      *
+     * These are the sharees of the source address book, the owner included.
+     * This address book is a view of that one, so every sharee sees the same
+     * list.
+     *
      * @return \Sabre\DAV\Xml\Element\Sharee[]
      */
     function getInvites() {
-        $result[] = new \Sabre\DAV\Xml\Element\Sharee([
-            'href' => $this->addressBookInfo['share_href'],
-            'access' => (int)$this->addressBookInfo['share_access'],
-            'inviteStatus' => (int)$this->addressBookInfo['share_invitestatus'],
-            'properties' => !empty($this->addressBookInfo['share_displayname']) ? [ '{DAV:}displayname' => $this->addressBookInfo['share_displayname'] ] : [],
-            'principal' => $this->addressBookInfo['principaluri']
+        $invites = $this->carddavBackend->getInvites($this->getSourceAddressBookId());
+
+        $invites[] = new \Sabre\DAV\Xml\Element\Sharee([
+            'href' => \Sabre\HTTP\encodePath($this->getShareOwner()),
+            'access' => SPlugin::ACCESS_SHAREDOWNER,
+            'inviteStatus' => SPlugin::INVITE_ACCEPTED,
+            'properties' => [],
+            'principal' => $this->getShareOwner()
         ]);
 
-        return $result;
+        return $invites;
     }
 
+    /**
+     * Publishes, or unpublishes, the source address book.
+     *
+     * This is an administration operation and applies to
+     * the original address book, not to a copy of it.
+     *
+     * @param string|bool $value Public privilege, or false to unpublish
+     * @return void
+     */
     function setPublishStatus($value) {
-        throw new DAV\Exception\MethodNotAllowed('You are not allowed to publish a shared address book');
+        if ((int)$this->getShareAccess() !== SPlugin::ACCESS_ADMINISTRATION) {
+            throw new \Sabre\DAV\Exception\Forbidden('You need administration access to publish this address book');
+        }
+        
+        $this->carddavBackend->setPublishStatus([
+            'id' => $this->getSourceAddressBookId(),
+            'principaluri' => $this->getShareOwner(),
+            'uri' => $this->addressBookInfo['share_resource_uri']
+        ], $value);
     }
 
     /**

@@ -72,6 +72,7 @@ of `config.json`.
 | `AUTO_PROVISION` | `true` | Create missing users on successful authentication |
 | `PRINCIPAL_PRIVACY` | `true` | Restrict DAV principal discovery |
 | `CALDAV_BINARY_ATTACHMENT_MODE` | `filter` | Inline binary attachment policy: `allow`, `reject` or `filter` |
+| `ALLOW_CARDDAV_INLINE_ATTACHMENT` | `false` | Accept vCards carrying an inline base64 `PHOTO` |
 | `SABRE_ENFORCE_RFC_6638` | `true` | Reject attendee updates to organizer-controlled scheduling fields |
 | `SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING` | `true` | Recipient-aware scheduling for `ACTION:EMAIL` `VALARM` components |
 | `TW_CAL_REPLY_PROPAGATION_THRESHOLD` | `200` | Attendee count above which reply propagation is skipped |
@@ -134,6 +135,14 @@ Feature flag to control how inline binary attachments (`ATTACH;ENCODING=BASE64;V
    - `allow`  : store the object as-is, inline binary attachments included
 
    Inline binaries can significantly bloat calendar objects; the default `filter` keeps them out of storage while still accepting the request. Use `allow` to opt back into the historical behaviour, or `reject` to surface an explicit error to clients.
+
+Feature flag to control whether vCards (and jCards) may embed their photo inline on contact creation and update: `PHOTO;ENCODING=b` (vCard 3.0), `PHOTO;ENCODING=BASE64` (vCard 2.1), `PHOTO;VALUE=BINARY`, or a `data:` URI (`PHOTO:data:image/jpeg;base64,...`, vCard 4.0 / jCard). Photos referenced by an external URI (`PHOTO;VALUE=URI:https://...`) are always accepted. Only `PHOTO` is inspected.
+ - ALLOW_CARDDAV_INLINE_ATTACHMENT
+
+   - `false` : reject any vCard carrying an inline photo with `403 Forbidden` (default)
+   - `true`  : store the vCard as-is, inline photo included
+
+   Contacts already stored with an inline photo are left untouched, but updating them is rejected until the inline photo is removed or replaced by a URI.
 
 ## Scheduling
 

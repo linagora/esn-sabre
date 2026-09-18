@@ -205,6 +205,12 @@ $server->addPlugin($carddavPlugin);
 $carddavJsonPlugin = new ESN\CardDAV\Plugin();
 $server->addPlugin($carddavJsonPlugin);
 
+// Inline photo policy (PHOTO;ENCODING=b / PHOTO;VALUE=BINARY)
+// ALLOW_CARDDAV_INLINE_ATTACHMENT = true | false (default: false)
+$server->addPlugin(new ESN\CardDAV\InlinePhotoPlugin(
+    \ESN\Utils\Env::getBoolean('ALLOW_CARDDAV_INLINE_ATTACHMENT', false)
+));
+
 // vCard export plugin
 $vcfPlugin = new Sabre\CardDAV\VCFExportPlugin();
 $server->addPlugin($vcfPlugin);

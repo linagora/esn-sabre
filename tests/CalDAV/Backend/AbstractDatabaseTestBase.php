@@ -293,7 +293,7 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         );
     }
 
-    function testGetDuplicateCalendarObjectsByURIWhenEventEventHasDuplicates() {
+    function testGetDuplicateCalendarObjectsWhenEventHasCopies() {
         $backend = $this->getBackend();
         $calendarId1 = $backend->createCalendar('principals/user2/userID', 'calendar1', []);
         $calendarId2 = $backend->createCalendar('principals/user2/userID', 'calendar2', []);
@@ -302,12 +302,12 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         $backend->createCalendarObject($calendarId1, 'URI1.ics', $object);
         $backend->createCalendarObject($calendarId2, 'URI2.ics', $object);
         
-        $result = $backend->getDuplicateCalendarObjectsByURI('principals/user2/userID', 'URI1.ics');
-        $this->assertCount(2, $result);
+        $result = $backend->getDuplicateCalendarObjects('principals/user2/userID', 'calendar1', 'URI1.ics');
+        $this->assertEquals(['calendar2/URI2.ics'], $result);
     }
 
 
-    function testGetDuplicateCalendarObjectsByURIWhenEventEventHasNoDuplicates() {
+    function testGetDuplicateCalendarObjectsWhenEventDoesNotExist() {
         $backend = $this->getBackend();
         $calendarId1 = $backend->createCalendar('principals/user2/userID', 'calendar1', []);
         $calendarId2 = $backend->createCalendar('principals/user2/userID', 'calendar2', []);
@@ -316,7 +316,30 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         $backend->createCalendarObject($calendarId1, 'URI1.ics', $object);
         $backend->createCalendarObject($calendarId2, 'URI2.ics', $object);
 
-        $this->assertCount(0, $backend->getDuplicateCalendarObjectsByURI('principals/user2/userID', 'URI3.ics'));
+        $this->assertCount(0, $backend->getDuplicateCalendarObjects('principals/user2/userID', 'calendar1', 'URI3.ics'));
+    }
+
+    function testGetDuplicateCalendarObjectsWhenEventHasNoCopy() {
+        $backend = $this->getBackend();
+        $calendarId1 = $backend->createCalendar('principals/user2/userID', 'calendar1', []);
+        $calendarId2 = $backend->createCalendar('principals/user2/userID', 'calendar2', []);
+
+        $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:event1\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $other = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:event2\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $backend->createCalendarObject($calendarId1, 'URI1.ics', $object);
+        $backend->createCalendarObject($calendarId2, 'URI1.ics', $other);
+
+        $this->assertEquals([], $backend->getDuplicateCalendarObjects('principals/user2/userID', 'calendar1', 'URI1.ics'));
+    }
+
+    function testGetDuplicateCalendarObjectsWhenCalendarIsUnknown() {
+        $backend = $this->getBackend();
+        $calendarId1 = $backend->createCalendar('principals/user2/userID', 'calendar1', []);
+
+        $object = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:event1\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $backend->createCalendarObject($calendarId1, 'URI1.ics', $object);
+
+        $this->assertEquals([], $backend->getDuplicateCalendarObjects('principals/user2/userID', 'unknown', 'URI1.ics'));
     }
 
     function testUpdateCalendarObject() {

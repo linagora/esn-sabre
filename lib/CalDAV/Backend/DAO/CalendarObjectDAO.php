@@ -76,7 +76,7 @@ class CalendarObjectDAO extends BaseDAO {
             'lastoccurence' => 1
         ]);
 
-        // Index for getCalendarObjectByUID and getDuplicateCalendarObjectsByURI
+        // Index for getCalendarObjectByUID and getDuplicateCalendarObjects
         $this->createIndex(['uid' => 1]);
     }
 }

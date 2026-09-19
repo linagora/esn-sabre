@@ -118,8 +118,12 @@ class CalendarHome extends \Sabre\CalDAV\CalendarHome {
         ];
     }
 
-    function getDuplicateCalendarObjectsByURI($uri) {
-        return $this->caldavBackend->getDuplicateCalendarObjectsByURI($this->principalInfo['uri'], $uri);
+    /**
+     * Paths, relative to this home, of the other copies (same UID) of the object
+     * $calendarUri/$objectUri in the calendars owned by the principal.
+     */
+    function getDuplicateCalendarObjects($calendarUri, $objectUri) {
+        return $this->caldavBackend->getDuplicateCalendarObjects($this->principalInfo['uri'], $calendarUri, $objectUri);
     }
 
     function getCalDAVBackend() {

@@ -8,7 +8,6 @@ use \Sabre\Uri;
 use DateTimeZone;
 use \Sabre\HTTP\RequestInterface;
 use \Sabre\HTTP\ResponseInterface;
-use ESN\Utils\Utils;
 
 #[\AllowDynamicProperties]
 class ImportPlugin extends \ESN\JSON\BasePlugin  {
@@ -18,11 +17,17 @@ class ImportPlugin extends \ESN\JSON\BasePlugin  {
      */
     const NS_CALDAV = 'urn:ietf:params:xml:ns:caldav';
 
+    /**
+     * Query parameter keeping, on import, the copies of the event living in the other
+     * calendars of the user: see removeDuplicateObjects
+     */
+    const KEEP_DUPLICATES_PARAMETER = 'keepDuplicates';
+
     function initialize(Server $server) {
         parent::initialize($server);
 
         $server->on('schedule', [$this, 'schedule'], 99);
-        $server->on('beforeMethod:PUT', [$this, 'removeDuplicateObjects'], 98);
+        $server->on('afterMethod:PUT', [$this, 'removeDuplicateObjects'], 98);
     }
 
     /**
@@ -63,21 +68,42 @@ class ImportPlugin extends \ESN\JSON\BasePlugin  {
         return false;
     }
 
+    /**
+     * Removes, once an import succeeded, the other copies of the imported event.
+     *
+     * Why: the calendar frontend imports an .ics file by PUTting each of its events
+     * (`?import`) into the calendar the user picked. Importing again a file holding an
+     * event the user already has in another of their calendars must not leave them
+     * with two occurrences of it (OpenPaaS-Suite/esn-frontend-calendar#276): the import
+     * moves the event into the picked calendar.
+     *
+     * So, on a `?import` PUT that succeeded (the preconditions passed and the object was
+     * written - a failed request leaves the home untouched), the objects bearing the UID
+     * of the imported object in the other calendars owned by the user are deleted. The
+     * imported object itself is never deleted: re-importing an event into its own
+     * calendar is a plain update.
+     *
+     * The same UID in two calendars is nonetheless a legitimate state (Outlook's "Copy
+     * to calendar" keeps the UID, migrations carry such copies over): clients importing
+     * such copies opt out with the `keepDuplicates` query parameter
+     * (`PUT ...?import&keepDuplicates`).
+     */
     function removeDuplicateObjects(RequestInterface $request, ResponseInterface $response) {
         $queryParams = $request->getQueryParameters();
         if (!array_key_exists('import', $queryParams)) return;
+        if (array_key_exists(self::KEEP_DUPLICATES_PARAMETER, $queryParams)) return;
+        if (!in_array($response->getStatus(), [201, 204])) return;
 
-        $path = $request->getPath();
+        $pathParts = explode('/', trim($request->getPath(), '/'));
+        if (count($pathParts) !== 4 || $pathParts[0] !== 'calendars') return;
+        list($namespace, $homeId, $calendarUri, $objectUri) = $pathParts;
 
-        $homePath = Utils::getCalendarHomePathFromEventPath($path);
+        $homePath = $namespace . '/' . $homeId;
         $home = $this->server->tree->getNodeForPath($homePath);
+        if (!($home instanceof CalendarHome)) return;
 
-        $eventURI = Utils::getEventUriFromPath($path);
-
-        $eventPaths = $home->getDuplicateCalendarObjectsByURI($eventURI);
-
-        foreach($eventPaths as $eventpath) {
-            $fullPath = $homePath . '/' . $eventpath;
+        foreach($home->getDuplicateCalendarObjects($calendarUri, $objectUri) as $eventPath) {
+            $fullPath = $homePath . '/' . $eventPath;
             $this->server->tree->delete($fullPath);
             $this->server->emit('afterUnbind', [$fullPath]);
         }

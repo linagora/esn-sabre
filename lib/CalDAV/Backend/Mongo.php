@@ -205,8 +205,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return $this->calendarService->getCalendarObjectByUID($principalUri, $uid);
     }
 
-    function getDuplicateCalendarObjectsByURI($principalUri, $uri) {
-        return $this->calendarService->getDuplicateCalendarObjectsByURI($principalUri, $uri);
+    function getDuplicateCalendarObjects($principalUri, $calendarUri, $objectUri) {
+        return $this->calendarService->getDuplicateCalendarObjects($principalUri, $calendarUri, $objectUri);
     }
 
     function getChangesForCalendar($calendarId, $syncToken, $syncLevel, $limit = null) {

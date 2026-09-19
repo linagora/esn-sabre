@@ -265,28 +265,37 @@ class CalendarService {
     }
 
     /**
-     * Get duplicate calendar objects by URI
+     * Get the other copies, in the calendars owned by the principal, of a calendar object
+     *
+     * The copies are the objects bearing the UID of the object stored at
+     * $calendarUri/$objectUri, that object itself excluded. Nothing is returned when
+     * that object does not exist or does not live in a calendar owned by the principal.
      *
      * @param string $principalUri
-     * @param string $uri
-     * @return array Array of calendar object paths
+     * @param string $calendarUri URI of the calendar instance holding the object
+     * @param string $objectUri
+     * @return array Array of calendar object paths, relative to the calendar home
      */
-    public function getDuplicateCalendarObjectsByURI($principalUri, $uri) {
+    public function getDuplicateCalendarObjects($principalUri, $calendarUri, $objectUri) {
         $calendarUris = $this->getCalendarInstancesByPrincipalUri($principalUri);
-        if (empty($calendarUris)) return [];
+        $calendarId = array_search($calendarUri, $calendarUris, true);
+        if ($calendarId === false) return [];
 
-        // Find the uid of the event having the provided URI
+        // Find the uid of the object
         $projection = ['uid' => 1];
-        $objrow = $this->calendarObjectDAO->findByUri(array_keys($calendarUris), $uri, $projection);
-        if (!$objrow) return [];
+        $objrow = $this->calendarObjectDAO->findByUri([(string) $calendarId], $objectUri, $projection);
+        if (!$objrow || !isset($objrow['uid'])) return [];
 
-        // Find the events having the found uid
+        // Find the other objects having the found uid
         $projection = ['uri' => 1, 'calendarid' => 1];
-        $objrows = $this->calendarObjectDAO->findByUidMultiple(array_keys($calendarUris), $objrow['uid'], $projection);
+        $objrows = $this->calendarObjectDAO->findByUidMultiple(array_map('strval', array_keys($calendarUris)), $objrow['uid'], $projection);
 
         $result = [];
         foreach($objrows as $row) {
-            $result[] = $calendarUris[(string) $row['calendarid']] . '/' . $row['uri'];
+            $rowCalendarId = (string) $row['calendarid'];
+            if ($rowCalendarId === (string) $calendarId && $row['uri'] === $objectUri) continue;
+
+            $result[] = $calendarUris[$rowCalendarId] . '/' . $row['uri'];
         }
 
         return $result;

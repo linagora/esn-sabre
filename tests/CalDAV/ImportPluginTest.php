@@ -50,26 +50,151 @@ class ImportPluginTest extends \ESN\DAV\ServerMock {
         $this->assertTrue($this->server->emit('schedule', [$this->newItipMessage('')]));
     }
 
-    function testRemoveDuplicateObjects() {
-        // when the node is deleted an 'afterUnbind' event will be emitted, so we're gonna play with that.
-        $this->server->on('afterUnbind',    [$this, 'assertUnbindPath']);
+    const HOME = '/calendars/54b64eadf6d7d8e41d263e0f';
 
-        // create a request to import stuff using an already created node in the ServerMock class
+    function testImportWithCurrentIfMatchUpdatesTheEvent() {
+        $etag = $this->getEtag('calendar1', 'event1.ics');
+
+        $response = $this->importEvent('calendar1', 'event1.ics', $this->newEvent('event1', 'v2'), ['HTTP_IF_MATCH' => $etag]);
+
+        $this->assertEquals(204, $response->getStatus());
+        $this->assertStringContainsString('SUMMARY:v2', $this->getCalendarData('calendar1', 'event1.ics'));
+        $this->assertNotEquals($etag, $this->getEtag('calendar1', 'event1.ics'));
+    }
+
+    function testImportWithStaleIfMatchFailsAndKeepsTheEvent() {
+        $before = $this->getCalendarData('calendar1', 'event1.ics');
+
+        $response = $this->importEvent('calendar1', 'event1.ics', $this->newEvent('event1', 'v2'), ['HTTP_IF_MATCH' => '"stale"']);
+
+        $this->assertEquals(412, $response->getStatus());
+        $this->assertEquals($before, $this->getCalendarData('calendar1', 'event1.ics'));
+    }
+
+    function testImportWithIfNoneMatchStarOnExistingEventFailsAndKeepsTheEvent() {
+        $before = $this->getCalendarData('calendar1', 'event1.ics');
+
+        $response = $this->importEvent('calendar1', 'event1.ics', $this->newEvent('event1', 'v2'), ['HTTP_IF_NONE_MATCH' => '*']);
+
+        $this->assertEquals(412, $response->getStatus());
+        $this->assertEquals($before, $this->getCalendarData('calendar1', 'event1.ics'));
+    }
+
+    function testImportWithoutPreconditionOnExistingEventIsAnUpdate() {
+        $unbound = $this->recordUnbinds();
+
+        $response = $this->importEvent('calendar1', 'event1.ics', $this->newEvent('event1', 'v2'));
+
+        $this->assertEquals(204, $response->getStatus());
+        $this->assertStringContainsString('SUMMARY:v2', $this->getCalendarData('calendar1', 'event1.ics'));
+        $this->assertEquals([], $unbound->getArrayCopy());
+    }
+
+    function testImportOfANewEventIsACreation() {
+        $response = $this->importEvent('calendar1', 'new.ics', $this->newEvent('new', 'v1'));
+
+        $this->assertEquals(201, $response->getStatus());
+        $this->assertStringContainsString('SUMMARY:v1', $this->getCalendarData('calendar1', 'new.ics'));
+    }
+
+    function testImportRemovesTheCopiesOfTheEventFromTheOtherCalendarsOfTheHome() {
+        $unbound = $this->recordUnbinds();
+
+        $response = $this->importEvent('user1Calendar2', 'event1.ics', $this->newEvent('event1', 'moved'));
+
+        $this->assertEquals(201, $response->getStatus());
+        $this->assertStringContainsString('SUMMARY:moved', $this->getCalendarData('user1Calendar2', 'event1.ics'));
+        $this->assertNull($this->getCalendarObject('calendar1', 'event1.ics'));
+        $this->assertEquals([self::HOME . '/calendar1/event1.ics'], $unbound->getArrayCopy());
+    }
+
+    function testImportRemovesCopiesHavingTheSameUidUnderAnotherUri() {
+        $response = $this->importEvent('user1Calendar2', 'other.ics', $this->newEvent('event1', 'moved'));
+
+        $this->assertEquals(201, $response->getStatus());
+        $this->assertNotNull($this->getCalendarObject('user1Calendar2', 'other.ics'));
+        $this->assertNull($this->getCalendarObject('calendar1', 'event1.ics'));
+    }
+
+    function testImportDoesNotRemoveEventsHavingAnotherUid() {
+        $response = $this->importEvent('user1Calendar2', 'event1.ics', $this->newEvent('another-uid', 'v1'));
+
+        $this->assertEquals(201, $response->getStatus());
+        $this->assertNotNull($this->getCalendarObject('calendar1', 'event1.ics'));
+        $this->assertNotNull($this->getCalendarObject('user1Calendar2', 'event1.ics'));
+    }
+
+    function testImportWithKeepDuplicatesLetsTheSameUidLiveInTwoCalendars() {
+        $response = $this->importEvent('user1Calendar2', 'event1.ics', $this->newEvent('event1', 'copy'), [], '?import&keepDuplicates');
+
+        $this->assertEquals(201, $response->getStatus());
+        $this->assertStringContainsString('SUMMARY:Monday 0h', $this->getCalendarData('calendar1', 'event1.ics'));
+        $this->assertStringContainsString('SUMMARY:copy', $this->getCalendarData('user1Calendar2', 'event1.ics'));
+    }
+
+    function testFailedImportDoesNotRemoveDuplicates() {
+        $unbound = $this->recordUnbinds();
+
+        $response = $this->importEvent('user1Calendar2', 'event1.ics', $this->newEvent('event1', 'moved'), ['HTTP_IF_MATCH' => '"stale"']);
+
+        $this->assertEquals(412, $response->getStatus());
+        $this->assertNotNull($this->getCalendarObject('calendar1', 'event1.ics'));
+        $this->assertNull($this->getCalendarObject('user1Calendar2', 'event1.ics'));
+        $this->assertEquals([], $unbound->getArrayCopy());
+    }
+
+    function testPutWithoutImportDoesNotRemoveDuplicates() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PUT',
             'HTTP_CONTENT_TYPE' => 'text/calendar',
-            'HTTP_ACCEPT'       => 'text/calendar',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event1.ics?import',
+            'REQUEST_URI'       => self::HOME . '/user1Calendar2/event1.ics',
         ));
+        $request->setBody($this->newEvent('event1', 'copy'));
 
-        // make the request
         $response = $this->request($request);
+
+        $this->assertEquals(201, $response->getStatus());
+        $this->assertNotNull($this->getCalendarObject('calendar1', 'event1.ics'));
     }
 
-    // this shouldn't be anything else other than public visiblity or server->on method won't work
-    function assertUnbindPath($path) {
-        // this should be equal to the path of the node that was deleted
-        $this->assertEquals($path, '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event1.ics');
+    private function importEvent($calendarUri, $objectUri, $ics, array $headers = [], $query = '?import') {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array_merge([
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/calendar',
+            'REQUEST_URI'       => self::HOME . '/' . $calendarUri . '/' . $objectUri . $query,
+        ], $headers));
+        $request->setBody($ics);
+
+        return $this->request($request);
+    }
+
+    private function recordUnbinds() {
+        $unbound = new \ArrayObject();
+        $this->server->on('afterUnbind', function($path) use ($unbound) {
+            $unbound[] = '/' . ltrim($path, '/');
+        });
+
+        return $unbound;
+    }
+
+    private function getCalendarObject($calendarUri, $objectUri) {
+        $calendarId = $calendarUri === 'calendar1' ? $this->cal['id'] : $this->user1Cal2['id'];
+
+        return $this->caldavBackend->getCalendarObject($calendarId, $objectUri);
+    }
+
+    private function getCalendarData($calendarUri, $objectUri) {
+        return $this->getCalendarObject($calendarUri, $objectUri)['calendardata'];
+    }
+
+    private function getEtag($calendarUri, $objectUri) {
+        return $this->getCalendarObject($calendarUri, $objectUri)['etag'];
+    }
+
+    private function newEvent($uid, $summary) {
+        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//probe//EN\r\nBEGIN:VEVENT\r\nUID:$uid\r\n" .
+            "DTSTAMP:20260101T090000Z\r\nDTSTART:20261102T090000Z\r\nDTEND:20261102T100000Z\r\n" .
+            "SUMMARY:$summary\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
     }
 
     private function newItipMessage($sequence) {

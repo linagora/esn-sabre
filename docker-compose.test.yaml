@@ -3,7 +3,7 @@
 #
 services:
   mongodb:
-    image: docker.io/library/mongo:8.0.6
+    image: docker.io/library/mongo:8.3.11
     hostname: mongodb
     ulimits:
       nofile:

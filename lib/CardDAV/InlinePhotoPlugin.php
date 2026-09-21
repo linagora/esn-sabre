@@ -90,23 +90,9 @@ class InlinePhotoPlugin extends ServerPlugin {
             $data = stream_get_contents($data);
         }
 
-        if (!is_string($data) || $data === '') {
-            return;
-        }
+        $vcard = $this->parseVCard($data);
 
-        try {
-            // A leading '[' means we're dealing with a jCard document.
-            if (substr($data, 0, 1) === '[') {
-                $vcard = VObject\Reader::readJson($data);
-            } else {
-                $vcard = VObject\Reader::read($data);
-            }
-        } catch (VObject\ParseException $e) {
-            // Not our concern; let the regular validation reject malformed data.
-            return;
-        }
-
-        if (!$vcard instanceof VObject\Component\VCard) {
+        if (is_null($vcard)) {
             return;
         }
 
@@ -117,6 +103,32 @@ class InlinePhotoPlugin extends ServerPlugin {
             $data = $vcard->serialize();
             $modified = true;
         }
+    }
+
+    /**
+     * Parses the payload as a vCard or a jCard.
+     *
+     * Returns null for anything that is not a vCard, malformed data included:
+     * the regular validation pipeline deals with those.
+     *
+     * @param mixed $data
+     * @return VObject\Component\VCard|null
+     */
+    protected function parseVCard($data) {
+        if (!is_string($data) || $data === '') {
+            return null;
+        }
+
+        try {
+            // A leading '[' means we're dealing with a jCard document.
+            $document = substr($data, 0, 1) === '['
+                ? VObject\Reader::readJson($data)
+                : VObject\Reader::read($data);
+        } catch (VObject\ParseException $e) {
+            return null;
+        }
+
+        return $document instanceof VObject\Component\VCard ? $document : null;
     }
 
     /**

@@ -4,6 +4,7 @@ namespace ESN\CardDAV;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Sabre\VObject;
 
 /**
  * @medium
@@ -55,25 +56,6 @@ class InlinePhotoPluginTest extends TestCase {
         ];
     }
 
-    #[DataProvider('inlinePhotoProvider')]
-    function testRejectsInlinePhotoByDefault($data) {
-        $plugin = new InlinePhotoPlugin();
-
-        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
-
-        $this->invokeProcess($plugin, $data);
-    }
-
-    #[DataProvider('inlinePhotoProvider')]
-    function testAllowLeavesInlinePhotoUntouched($data) {
-        $plugin = new InlinePhotoPlugin(true);
-        $original = $data;
-
-        $this->invokeProcess($plugin, $data);
-
-        $this->assertEquals($original, $data);
-    }
-
     static function acceptedProvider() {
         return [
             'URI photo' => [self::vcard('PHOTO;VALUE=URI:https://example.com/avatar.jpg')],
@@ -88,9 +70,9 @@ class InlinePhotoPluginTest extends TestCase {
                     ['photo', new \stdClass(), 'uri', 'https://example.com/avatar.jpg'],
                 ]
             ])],
-            'data: URI outside PHOTO' => [self::vcard('NOTE:data:image/jpeg;base64,dGVzdA==')],
             'no photo' => [self::vcard('NOTE:no photo here')],
             'inline LOGO' => [self::vcard('LOGO;ENCODING=b;TYPE=PNG:dGVzdA==')],
+            'data: URI outside PHOTO' => [self::vcard('NOTE:data:image/jpeg;base64,dGVzdA==')],
             'calendar with binary ATTACH' => [
                 "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:abc\r\nDTSTART:20260613T063000Z\r\n" .
                 "ATTACH;ENCODING=BASE64;VALUE=BINARY:dGVzdA==\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
@@ -99,23 +81,112 @@ class InlinePhotoPluginTest extends TestCase {
         ];
     }
 
-    #[DataProvider('acceptedProvider')]
-    function testAcceptsDataWithoutInlinePhoto($data) {
-        $plugin = new InlinePhotoPlugin();
-        $original = $data;
+    function testConstructorRejectsUnknownMode() {
+        $this->expectException(\InvalidArgumentException::class);
 
-        $this->invokeProcess($plugin, $data);
-
-        $this->assertEquals($original, $data);
+        new InlinePhotoPlugin('nope');
     }
 
-    function testRejectsInlinePhotoFromStreamPayload() {
-        $plugin = new InlinePhotoPlugin();
-        $data = self::stream(self::vcard('PHOTO;ENCODING=b;TYPE=JPEG:dGVzdA=='));
+    #[DataProvider('inlinePhotoProvider')]
+    function testRejectThrowsOnInlinePhoto($data) {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_REJECT);
+        $modified = false;
 
         $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
 
-        $this->invokeProcess($plugin, $data);
+        $this->invokeProcess($plugin, $data, $modified);
+    }
+
+    #[DataProvider('inlinePhotoProvider')]
+    function testFilterIsTheDefaultMode($data) {
+        $plugin = new InlinePhotoPlugin();
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertTrue($modified);
+        $this->assertCount(0, VObject\Reader::read($data)->select('PHOTO'));
+    }
+
+    #[DataProvider('inlinePhotoProvider')]
+    function testFilterStripsInlinePhoto($data) {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_FILTER);
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertTrue($modified);
+
+        $vcard = VObject\Reader::read($data);
+        $this->assertCount(0, $vcard->select('PHOTO'));
+        $this->assertEquals('John Doe', (string) $vcard->FN);
+    }
+
+    #[DataProvider('inlinePhotoProvider')]
+    function testAllowLeavesInlinePhotoUntouched($data) {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_ALLOW);
+        $original = $data;
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertFalse($modified);
+        $this->assertEquals($original, $data);
+    }
+
+    #[DataProvider('acceptedProvider')]
+    function testRejectAcceptsDataWithoutInlinePhoto($data) {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_REJECT);
+        $original = $data;
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertFalse($modified);
+        $this->assertEquals($original, $data);
+    }
+
+    #[DataProvider('acceptedProvider')]
+    function testFilterLeavesDataWithoutInlinePhotoUntouched($data) {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_FILTER);
+        $original = $data;
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertFalse($modified);
+        $this->assertEquals($original, $data);
+    }
+
+    function testFilterKeepsUriPhotoAndStripsInlineOne() {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_FILTER);
+        $data = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:John Doe\r\n" .
+            "PHOTO;ENCODING=b;TYPE=JPEG:dGVzdA==\r\n" .
+            "PHOTO;VALUE=URI:https://example.com/avatar.jpg\r\n" .
+            "END:VCARD\r\n";
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertTrue($modified);
+
+        $vcard = VObject\Reader::read($data);
+        $photos = $vcard->select('PHOTO');
+
+        $this->assertCount(1, $photos);
+
+        $remaining = reset($photos);
+        $this->assertEquals('https://example.com/avatar.jpg', $remaining->getValue());
+    }
+
+    function testRejectThrowsOnInlinePhotoFromStreamPayload() {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_REJECT);
+        $data = self::stream(self::vcard('PHOTO;ENCODING=b;TYPE=JPEG:dGVzdA=='));
+        $modified = false;
+
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
+        $this->invokeProcess($plugin, $data, $modified);
     }
 
     /**
@@ -123,14 +194,27 @@ class InlinePhotoPluginTest extends TestCase {
      * be read again, so the plugin must hand the payload back as a string.
      */
     function testAcceptedStreamPayloadIsHandedBackAsString() {
-        $plugin = new InlinePhotoPlugin();
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_REJECT);
         $vcard = self::vcard('PHOTO;VALUE=URI:https://example.com/avatar.jpg');
         $data = self::stream($vcard);
+        $modified = false;
 
-        $this->invokeProcess($plugin, $data);
+        $this->invokeProcess($plugin, $data, $modified);
 
         $this->assertIsString($data);
         $this->assertEquals($vcard, $data);
+    }
+
+    function testAllowLeavesStreamPayloadUnread() {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_ALLOW);
+        $vcard = self::vcard('PHOTO;ENCODING=b;TYPE=JPEG:dGVzdA==');
+        $data = self::stream($vcard);
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertIsResource($data);
+        $this->assertEquals($vcard, stream_get_contents($data));
     }
 
     private static function stream($content) {
@@ -144,11 +228,11 @@ class InlinePhotoPluginTest extends TestCase {
     /**
      * Calls the protected process() handler by reference.
      */
-    private function invokeProcess(InlinePhotoPlugin $plugin, &$data) {
+    private function invokeProcess(InlinePhotoPlugin $plugin, &$data, &$modified) {
         $method = new \ReflectionMethod($plugin, 'process');
         $method->setAccessible(true);
 
-        $args = [&$data];
+        $args = [&$data, &$modified];
         $method->invokeArgs($plugin, $args);
     }
 }

@@ -9,20 +9,28 @@ use Sabre\VObject;
 /**
  * Inline Photo Plugin
  *
- * Rejects vCards carrying an inline PHOTO (PHOTO;ENCODING=b,
- * PHOTO;VALUE=BINARY or a data: URI) when they are created or updated,
- * unless inline attachments are explicitly allowed.
+ * Controls how inline photos (PHOTO;ENCODING=b, PHOTO;VALUE=BINARY or a
+ * data: URI) are handled when contacts are created or updated.
  *
- * Inline photos bloat stored cards; clients are expected to reference the
- * picture by URI instead (PHOTO;VALUE=URI:https://...), which is always
- * accepted.
+ * Inline photos can bloat stored cards significantly; photos referenced by
+ * an external URI (PHOTO;VALUE=URI:https://...) are always left untouched.
+ *
+ * Three modes are supported:
+ *   - allow  : the card is stored as-is, inline photo included.
+ *   - reject : a request carrying an inline photo is rejected (403).
+ *   - filter : inline photos are silently stripped from the card (URI photos
+ *              are preserved). This is the default.
  */
 class InlinePhotoPlugin extends ServerPlugin {
 
+    const MODE_ALLOW = 'allow';
+    const MODE_REJECT = 'reject';
+    const MODE_FILTER = 'filter';
+
     /**
-     * @var bool
+     * @var string
      */
-    protected $allowInline;
+    protected $mode;
 
     /**
      * @var Server
@@ -30,10 +38,18 @@ class InlinePhotoPlugin extends ServerPlugin {
     protected $server;
 
     /**
-     * @param bool $allowInline Store inline photos as-is. Defaults to false.
+     * @param string $mode One of allow|reject|filter. Defaults to filter.
      */
-    function __construct($allowInline = false) {
-        $this->allowInline = (bool) $allowInline;
+    function __construct($mode = self::MODE_FILTER) {
+        $mode = strtolower((string) $mode);
+
+        if (!in_array($mode, [self::MODE_ALLOW, self::MODE_REJECT, self::MODE_FILTER], true)) {
+            throw new \InvalidArgumentException(
+                'Invalid inline photo mode "' . $mode . '", expected one of: allow, reject, filter'
+            );
+        }
+
+        $this->mode = $mode;
     }
 
     function initialize(Server $server) {
@@ -49,23 +65,24 @@ class InlinePhotoPlugin extends ServerPlugin {
     }
 
     function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
-        $this->process($data);
+        $this->process($data, $modified);
     }
 
     function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {
-        $this->process($data);
+        $this->process($data, $modified);
     }
 
     /**
-     * Rejects the given payload when it is a vCard with an inline PHOTO.
+     * Applies the configured policy to the given vCard payload.
      *
      * Non-vCard payloads and malformed data are left untouched so the
      * regular validation pipeline can deal with them.
      *
      * @param string|resource $data
+     * @param bool            $modified
      */
-    protected function process(&$data) {
-        if ($this->allowInline) {
+    protected function process(&$data, &$modified) {
+        if ($this->mode === self::MODE_ALLOW) {
             return;
         }
 
@@ -93,12 +110,45 @@ class InlinePhotoPlugin extends ServerPlugin {
             return;
         }
 
+        $filtered = false;
+        $this->applyPolicy($vcard, $filtered);
+
+        if ($filtered) {
+            $data = $vcard->serialize();
+            $modified = true;
+        }
+    }
+
+    /**
+     * Applies the configured policy to every inline PHOTO property of the card.
+     *
+     * @param VObject\Component\VCard $vcard
+     * @param bool                    $filtered Set to true when the payload was mutated.
+     */
+    protected function applyPolicy(VObject\Component\VCard $vcard, &$filtered) {
+        $toRemove = [];
+
         foreach ($vcard->select('PHOTO') as $photo) {
             if ($this->isInline($photo)) {
-                throw new \Sabre\DAV\Exception\Forbidden(
-                    'Inline PHOTO (ENCODING=b, VALUE=BINARY or data: URI) is not allowed on this server, reference the picture by URI instead.'
-                );
+                $this->rejectIfConfigured();
+                $toRemove[] = $photo;
             }
+        }
+
+        foreach ($toRemove as $photo) {
+            $vcard->remove($photo);
+            $filtered = true;
+        }
+    }
+
+    /**
+     * Throws when the plugin is configured to reject inline photos.
+     */
+    private function rejectIfConfigured() {
+        if ($this->mode === self::MODE_REJECT) {
+            throw new \Sabre\DAV\Exception\Forbidden(
+                'Inline photos (PHOTO;ENCODING=b, PHOTO;VALUE=BINARY or data: URI) are not allowed on this server, reference the picture by URI instead.'
+            );
         }
     }
 

@@ -4,27 +4,17 @@ namespace ESN\CalDAV;
 
 use ESN\DAV\Sharing\Plugin as SharingPlugin;
 use ESN\Utils\Utils;
-use Sabre\CalDAV\ICalendarObject;
-use Sabre\CalDAV\Schedule\ISchedulingObject;
 use Sabre\DAV\Exception\Forbidden;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Component\VCalendar;
-use Sabre\VObject\Reader;
 
 /**
- * Rejects calendar objects whose ORGANIZER may not organize in a team calendar.
+ * Validates organizer authorization on team-calendar writes through calendarObjectChange.
  *
- * A team calendar is shared between its members, so an object stored there is not tied to a
- * single owner the way a personal calendar object is. Members do organise on one another's
- * behalf, but an ORGANIZER from outside the calendar would let a member put an event in the
- * name of somebody who never agreed to it.
- *
- * Personal calendars are deliberately left alone: their scheduling identity is the calendar
- * owner, read from the principal backend rather than from the submitted object, so an
- * ORGANIZER the user is not entitled to reaches nobody anyway.
+ * Authorization to send messages as the organizer is enforced by the scheduling plugin.
  */
 class OrganizerValidationPlugin extends ServerPlugin {
 
@@ -33,7 +23,6 @@ class OrganizerValidationPlugin extends ServerPlugin {
     function initialize(Server $server) {
         $this->server = $server;
         $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], Plugin::PRIORITY_BEFORE_SCHEDULING - 10);
-        $server->on('beforeMove', [$this, 'beforeMove'], 45);
     }
 
     function getPluginName() {
@@ -61,32 +50,6 @@ class OrganizerValidationPlugin extends ServerPlugin {
         }
 
         $this->validateCalendarOrganizer($vCal, $calendarPath);
-    }
-
-    function beforeMove($sourcePath, $destinationPath) {
-        list($calendarPath,) = Utils::splitEventPath('/' . ltrim($destinationPath, '/'));
-        if (!$calendarPath || !$this->isTeamCalendarPath($calendarPath)) return;
-
-        try {
-            $source = $this->server->tree->getNodeForPath($sourcePath);
-        } catch (\Sabre\DAV\Exception) {
-            return;
-        }
-        if (!$source instanceof ICalendarObject || $source instanceof ISchedulingObject) return;
-
-        $calendarData = $source->get();
-        if (is_resource($calendarData)) $calendarData = stream_get_contents($calendarData);
-        $calendar = Reader::read($calendarData);
-        if (!$calendar instanceof VCalendar) {
-            $calendar->destroy();
-            return;
-        }
-
-        try {
-            $this->validateCalendarOrganizer($calendar, $calendarPath);
-        } finally {
-            $calendar->destroy();
-        }
     }
 
     private function validateCalendarOrganizer(VCalendar $calendar, $calendarPath): void {

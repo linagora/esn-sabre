@@ -195,7 +195,7 @@ $binaryAttachmentPlugin = new ESN\CalDAV\BinaryAttachmentPlugin(
 );
 $server->addPlugin($binaryAttachmentPlugin);
 
-// ORGANIZER must be a write-enabled member of the team calendar it is stored in
+// Validate team-calendar ORGANIZER on PUT.
 $server->addPlugin(new ESN\CalDAV\OrganizerValidationPlugin());
 
 // CardDAV support

@@ -124,25 +124,23 @@ The logic lives in `ESN\CalDAV\Schedule\Plugin` (and its AMQP variant
 `isTeamCalendarPath` inspects the calendar node owner
 (`Utils::isTeamCalendarFromPrincipal`). When a change targets a team calendar:
 
-- `fetchSchedulingAddresses` returns the **current principal's** addresses
+- `fetchActorAddresses` returns the **current principal's** addresses
   (the connected member) rather than the calendar owner's.
-- If the event has a single ORGANIZER, that organizer address is used as the
-  scheduling address (`extractSingleOrganizerAddress`).
+- `resolveSchedulingAddresses` uses a single ORGANIZER's address only if that
+  organizer is a write-enabled member; otherwise it uses the actor's addresses.
 - `shouldValidateAttendeeSchedulingObjectChange` relaxes the RFC 6638
   attendee-change validation for members who can write the object.
 
-### Organizer must be a write-enabled member
+### Organizer validation
 
-`ESN\CalDAV\OrganizerValidationPlugin` enforces that on a team calendar the
-ORGANIZER is a write-enabled sharee (`isWriteEnabledCalendarSharee`, i.e. access
-`ACCESS_READWRITE` or `ACCESS_ADMINISTRATION`). Otherwise it throws
-`Forbidden('The ORGANIZER must be a write-enabled team calendar member.')`.
+`OrganizerValidationPlugin` requires a write-enabled organizer on ordinary PUT;
+iTIP delivery and imports are exempt.
 
 ### Routing iTIP replies
 
 When the organizer copy is not in the personal calendar, scheduling searches
-the organizer's writable team calendars by UID. Organizer validation prevents
-the reply from being applied to another event with the same UID.
+the organizer's writable team calendars by UID, excluding attendee copies.
+The event's ORGANIZER must match the reply recipient; ambiguous matches are rejected.
 
 ## Authentication and impersonation
 
@@ -160,7 +158,7 @@ The resulting tenant is `TenantType::TeamCalendars` (enum value `4`), mapped by
 - `lib/CalDAV/Backend/Esn.php` — default calendar provisioning
 - `lib/DAVACL/PrincipalBackend/Mongo.php` — `teamCalendarToPrincipal`, `getAuthTenantByTeamCalendarEmail`, domain-scoped queries
 - `lib/DAV/Sharing/Plugin.php` — access levels and technical-token sharing
-- `lib/CalDAV/OrganizerValidationPlugin.php` — write-enabled organizer enforcement
+- `lib/CalDAV/OrganizerValidationPlugin.php` — organizer authorization on calendarObjectChange
 - `lib/CalDAV/Schedule/Plugin.php`, `lib/CalDAV/Schedule/AMQPSchedulePlugin.php` — member-scoped scheduling
 - `lib/DAV/Auth/Backend/Esn.php`, `lib/Utils/TenantType.php`, `lib/Utils/AuthTenant.php` — authentication and impersonation
 

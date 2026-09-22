@@ -35,7 +35,8 @@ class CalendarObjectDAO extends BaseDAO {
     }
 
     public function deleteAllObjectsByCalendarId($calendarId) {
-        return $this->deleteMany(['calendarid' => new \MongoDB\BSON\ObjectId($calendarId)]);
+        // Calendar objects store the calendar id as a string, unlike the other collections
+        return $this->deleteMany(['calendarid' => (string) $calendarId]);
     }
 
     public function findWithQuery(array $query, array $projection = []) {

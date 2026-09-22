@@ -206,6 +206,18 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(array(),$calendars);
     }
 
+    function testDeleteCalendarDeletesItsObjects() {
+        $backend = $this->getBackend();
+        $returnedId = $backend->createCalendar('principals/user2/userID','somerandomid',array(
+            '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set' => new \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet(array('VEVENT')),
+        ));
+        $backend->createCalendarObject($returnedId, 'random-id', "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:random-id\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $backend->deleteCalendar($returnedId);
+
+        $this->assertEquals([], $backend->getCalendarObjects($returnedId));
+    }
+
     /**
      * @depends testCreateCalendarAndFetch
      */

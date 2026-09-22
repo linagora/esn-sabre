@@ -2,6 +2,8 @@
 
 namespace ESN\CalDAV;
 
+use PHPUnit\Framework\Attributes\DataProvider;
+
 require_once ESN_TEST_BASE . '/Sabre/CalDAV/Backend/Mock.php';
 require_once ESN_TEST_BASE . '/Sabre/CalDAV/Backend/MockSharing.php';
 
@@ -521,6 +523,120 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($sharedCalendarESN->getOwner(), 'principals/user/54b64eadf6d7d8e41d263e0f');
     }
 
+    public static function childListingCases(): array {
+        $teamMember = new \Sabre\DAV\Xml\Element\Sharee([
+            'href'      => 'mailto:bob@example.org',
+            'principal' => 'principals/users/bob',
+            'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+        ]);
+        $resourceDelegate = new \Sabre\DAV\Xml\Element\Sharee([
+            'href'      => 'mailto:admin@example.org',
+            'principal' => 'principals/users/admin',
+            'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+        ]);
+
+        return [
+            'user calendar' => [[
+                'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED,
+            ], [], null],
+            'administration share' => [[
+                'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0e',
+                'share-access' => \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
+            ], [], null],
+            'team calendar with members' => [[
+                'principaluri' => 'principals/team-calendars/64b64eadf6d7d8e41d263e0f',
+                'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED,
+            ], [$teamMember], null],
+            'resource calendar with write-enabled delegates' => [[
+                'principaluri' => 'principals/resources/64b64eadf6d7d8e41d263e0f',
+                'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED,
+            ], [$resourceDelegate], null],
+            'public calendar' => [[
+                'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED,
+            ], [], '{DAV:}read'],
+        ];
+    }
+
+    private function sharedCalendarWithObjects(array $props, array $sharees, $publicRight, int $objectCount) {
+        $props['id'] = 1;
+        $props['uri'] = 'calendar';
+        $objects = [];
+        for ($i = 0; $i < $objectCount; $i++) {
+            $objects['event' . $i . '.ics'] = ['calendardata' => "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"];
+        }
+
+        $backend = new CountingBackendMock([$props], [1 => $objects], []);
+        $backend->publicRight = $publicRight;
+        if (!empty($sharees)) {
+            $backend->updateInvites(1, $sharees);
+        }
+
+        return [new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props)), $backend];
+    }
+
+    private function assertChildrenCarry(array $expectedACL, array $expectedUris, array $children) {
+        $this->assertCount(count($expectedUris), $children);
+        foreach ($children as $i => $child) {
+            $this->assertInstanceOf(\Sabre\CalDAV\CalendarObject::class, $child);
+            $this->assertEquals($expectedUris[$i], $child->getName());
+            $this->assertEquals($expectedACL, $child->getACL());
+        }
+    }
+
+    #[DataProvider('childListingCases')]
+    function testGetChildrenSharesTheChildACL(array $props, array $sharees, $publicRight) {
+        list($sharedCalendar, $backend) = $this->sharedCalendarWithObjects($props, $sharees, $publicRight, 3);
+
+        $this->assertChildrenCarry(
+            $sharedCalendar->getChildACL(),
+            ['event0.ics', 'event1.ics', 'event2.ics'],
+            $sharedCalendar->getChildren()
+        );
+    }
+
+    #[DataProvider('childListingCases')]
+    function testGetMultipleChildrenSharesTheChildACL(array $props, array $sharees, $publicRight) {
+        list($sharedCalendar, $backend) = $this->sharedCalendarWithObjects($props, $sharees, $publicRight, 3);
+
+        $this->assertChildrenCarry(
+            $sharedCalendar->getChildACL(),
+            ['event0.ics', 'event2.ics'],
+            $sharedCalendar->getMultipleChildren(['event0.ics', 'event2.ics', 'missing.ics'])
+        );
+    }
+
+    #[DataProvider('childListingCases')]
+    function testListingChildrenReadsTheSharingStateOnce(array $props, array $sharees, $publicRight) {
+        list($sharedCalendar, $backend) = $this->sharedCalendarWithObjects($props, $sharees, $publicRight, 50);
+
+        $backend->resetCounters();
+        $sharedCalendar->getChildACL();
+        $perChildACL = [$backend->getInvitesCalls, $backend->getCalendarPublicRightCalls];
+
+        $backend->resetCounters();
+        $this->assertCount(50, $sharedCalendar->getChildren());
+        $this->assertEquals($perChildACL, [$backend->getInvitesCalls, $backend->getCalendarPublicRightCalls]);
+
+        $backend->resetCounters();
+        $this->assertCount(2, $sharedCalendar->getMultipleChildren(['event0.ics', 'event49.ics']));
+        $this->assertEquals($perChildACL, [$backend->getInvitesCalls, $backend->getCalendarPublicRightCalls]);
+    }
+
+    function testListingAnEmptyCalendarDoesNotComputeTheChildACL() {
+        list($sharedCalendar, $backend) = $this->sharedCalendarWithObjects([
+            'principaluri' => 'principals/team-calendars/64b64eadf6d7d8e41d263e0f',
+            'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED,
+        ], [], '{DAV:}read', 0);
+
+        $backend->resetCounters();
+        $this->assertSame([], $sharedCalendar->getChildren());
+        $this->assertSame([], $sharedCalendar->getMultipleChildren(['missing.ics']));
+        $this->assertEquals(0, $backend->getInvitesCalls);
+        $this->assertEquals(0, $backend->getCalendarPublicRightCalls);
+    }
+
 }
 
 class SimpleBackendMock extends \Sabre\CalDAV\Backend\MockSharing {
@@ -543,5 +659,33 @@ class SimpleBackendMock extends \Sabre\CalDAV\Backend\MockSharing {
 
         $match = array_keys(array_column($subscribers, 'source'), $source);
           return $match;
+    }
+}
+
+class CountingBackendMock extends SimpleBackendMock {
+    public $publicRight = null;
+    public $getInvitesCalls = 0;
+    public $getCalendarPublicRightCalls = 0;
+
+    function resetCounters() {
+        $this->getInvitesCalls = 0;
+        $this->getCalendarPublicRightCalls = 0;
+    }
+
+    function getInvites($calendarId) {
+        $this->getInvitesCalls++;
+
+        return parent::getInvites($calendarId);
+    }
+
+    // Like the Mongo backend, only return the objects that exist
+    function getMultipleCalendarObjects($calendarId, array $uris) {
+        return array_values(array_filter(parent::getMultipleCalendarObjects($calendarId, $uris)));
+    }
+
+    function getCalendarPublicRight() {
+        $this->getCalendarPublicRightCalls++;
+
+        return $this->publicRight;
     }
 }

@@ -99,34 +99,45 @@ class ItipParseBudgetTest extends \ESN\DAV\ServerMock {
     }
 
     private function requestFor($uid, $summary, $sequence = 1) {
-        return $this->itipRequest($uid, 'REQUEST', $sequence, implode("\r\n", [
-            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Linagora//Twake//EN', 'METHOD:REQUEST',
-            'BEGIN:VEVENT', 'UID:' . $uid, 'DTSTAMP:20120313T142416Z',
-            'DTSTART:20260227T090000Z', 'DTEND:20260227T100000Z',
-            'SUMMARY:' . $summary, 'SEQUENCE:' . $sequence,
-            'ORGANIZER;CN=John:mailto:' . self::ORGANIZER,
-            'ATTENDEE;PARTSTAT=NEEDS-ACTION;CN=Me:mailto:' . self::ME,
-            'END:VEVENT', 'END:VCALENDAR', ''
-        ]));
-    }
-
-    private function organizedByMe($uid) {
-        return implode("\r\n", [
-            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Linagora//Twake//EN',
-            'BEGIN:VEVENT', 'UID:' . $uid, 'DTSTAMP:20120313T142416Z',
-            'DTSTART:20260227T090000Z', 'DTEND:20260227T100000Z',
-            'SUMMARY:Mine', 'SEQUENCE:1',
-            'ORGANIZER;CN=Me:mailto:' . self::ME,
-            'ATTENDEE;PARTSTAT=NEEDS-ACTION;CN=John:mailto:' . self::ORGANIZER,
-            'END:VEVENT', 'END:VCALENDAR', ''
-        ]);
+        return $this->itipRequest($uid, 'REQUEST', $sequence, $this->calendar(
+            $this->event($uid, $summary, $sequence, self::ORGANIZER, self::ME, 'NEEDS-ACTION'),
+            'REQUEST'
+        ));
     }
 
     private function replyFor($uid) {
-        return $this->itipRequest($uid, 'REPLY', 1, str_replace(
-            ['PRODID:-//Linagora//Twake//EN', 'PARTSTAT=NEEDS-ACTION'],
-            ['PRODID:-//Linagora//Twake//EN' . "\r\n" . 'METHOD:REPLY', 'PARTSTAT=ACCEPTED'],
-            $this->organizedByMe($uid)
+        // The attendee accepts an event this user organises.
+        return $this->itipRequest($uid, 'REPLY', 1, $this->calendar(
+            $this->event($uid, 'Mine', 1, self::ME, self::ORGANIZER, 'ACCEPTED'),
+            'REPLY'
+        ));
+    }
+
+    private function organizedByMe($uid) {
+        return $this->calendar($this->event($uid, 'Mine', 1, self::ME, self::ORGANIZER, 'NEEDS-ACTION'));
+    }
+
+    private function event($uid, $summary, $sequence, $organizer, $attendee, $partstat) {
+        return [
+            'UID:' . $uid,
+            'DTSTAMP:20120313T142416Z',
+            'DTSTART:20260227T090000Z',
+            'DTEND:20260227T100000Z',
+            'SUMMARY:' . $summary,
+            'SEQUENCE:' . $sequence,
+            'ORGANIZER;CN=Organizer:mailto:' . $organizer,
+            'ATTENDEE;PARTSTAT=' . $partstat . ';CN=Attendee:mailto:' . $attendee,
+        ];
+    }
+
+    private function calendar(array $event, $method = null) {
+        $head = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Linagora//Twake//EN'];
+        if ($method) {
+            $head[] = 'METHOD:' . $method;
+        }
+
+        return implode("\r\n", array_merge(
+            $head, ['BEGIN:VEVENT'], $event, ['END:VEVENT', 'END:VCALENDAR', '']
         ));
     }
 

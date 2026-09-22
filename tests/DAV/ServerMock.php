@@ -375,52 +375,8 @@ END:VCALENDAR'
 
         $this->server = new \Sabre\DAV\Server($this->tree);
         $this->server->sapi = new \Sabre\HTTP\SapiMock();
-        $this->server->debugExceptions = true;
 
-        // Mirrors esn.php: the plugins and the backend share one parse cache.
-        $this->vObjectCache = $this->caldavBackend->getVObjectCache();
-        $this->server->addPlugin(new \ESN\DAV\VObjectCachePlugin($this->vObjectCache));
-
-        $principalBackend = $this->principalBackend;
-        $calendarRoot = $this->calendarRoot;
-        $this->server->on('auth:success', function($authTenant) use ($principalBackend) {
-            $principalBackend->setAuthTenant($authTenant);
-        });
-        $this->server->on('auth:success', function($authTenant) use ($calendarRoot) {
-            $calendarRoot->setAuthTenant($authTenant);
-        });
-
-        $davACLPlugin = new \ESN\DAVACL\Plugin();
-        $this->server->addPlugin($davACLPlugin);
-
-        $caldavPlugin = new \ESN\CalDAV\Plugin();
-        $this->server->addPlugin($caldavPlugin);
-
-        $carddavPlugin = new \Sabre\CardDAV\Plugin();
-        $this->server->addPlugin($carddavPlugin);
-
-        $this->carddavPlugin = new \ESN\CardDAV\Plugin();
-        $this->server->addPlugin($this->carddavPlugin);
-
-        $this->carddavSubscriptionsPlugin = new \ESN\CardDAV\Subscriptions\Plugin();
-        $this->server->addPlugin($this->carddavSubscriptionsPlugin);
-
-        $this->server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
-        $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
-
-        $this->authBackend = new \ESN\DAV\Auth\Backend\Mock('', null, $this->principalBackend, $this->server, true);
-        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', SERVER_MOCK_DOMAIN_ID));
-        $authPlugin = new \ESN\DAV\Auth\PluginMock($this->authBackend);
-        $this->server->addPlugin($authPlugin);
-
-        $aclPlugin = new \Sabre\DAVACL\Plugin();
-        $aclPlugin->principalCollectionSet = [
-            PRINCIPALS_USERS,
-            PRINCIPALS_RESOURCES,
-            PRINCIPALS_DOMAINS
-        ];
-        $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
-        $this->server->addPlugin($aclPlugin);
+        $this->registerPlugins();
 
         $this->oldCal = $this->oldCaldavCalendar;
         $this->oldCal['id'] = $this->caldavBackend->createCalendar($this->oldCal['principaluri'], $this->oldCal['uri'], $this->oldCal);
@@ -472,6 +428,61 @@ END:VCALENDAR'
         }
     }
 
+
+    /**
+     * Registers the plugin set the tests run against, mirroring esn.php.
+     *
+     * Kept out of setUp(), which is long enough already: every test in the
+     * suite inherits it, so it grows every time the server gains a plugin.
+     */
+    protected function registerPlugins() {
+            $this->server->debugExceptions = true;
+
+            // Mirrors esn.php: the plugins and the backend share one parse cache.
+            $this->vObjectCache = $this->caldavBackend->getVObjectCache();
+            $this->server->addPlugin(new \ESN\DAV\VObjectCachePlugin($this->vObjectCache));
+
+            $principalBackend = $this->principalBackend;
+            $calendarRoot = $this->calendarRoot;
+            $this->server->on('auth:success', function($authTenant) use ($principalBackend) {
+                $principalBackend->setAuthTenant($authTenant);
+            });
+            $this->server->on('auth:success', function($authTenant) use ($calendarRoot) {
+                $calendarRoot->setAuthTenant($authTenant);
+            });
+
+            $davACLPlugin = new \ESN\DAVACL\Plugin();
+            $this->server->addPlugin($davACLPlugin);
+
+            $caldavPlugin = new \ESN\CalDAV\Plugin();
+            $this->server->addPlugin($caldavPlugin);
+
+            $carddavPlugin = new \Sabre\CardDAV\Plugin();
+            $this->server->addPlugin($carddavPlugin);
+
+            $this->carddavPlugin = new \ESN\CardDAV\Plugin();
+            $this->server->addPlugin($this->carddavPlugin);
+
+            $this->carddavSubscriptionsPlugin = new \ESN\CardDAV\Subscriptions\Plugin();
+            $this->server->addPlugin($this->carddavSubscriptionsPlugin);
+
+            $this->server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
+            $this->server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
+
+            $this->authBackend = new \ESN\DAV\Auth\Backend\Mock('', null, $this->principalBackend, $this->server, true);
+            $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', SERVER_MOCK_DOMAIN_ID));
+            $authPlugin = new \ESN\DAV\Auth\PluginMock($this->authBackend);
+            $this->server->addPlugin($authPlugin);
+
+            $aclPlugin = new \Sabre\DAVACL\Plugin();
+            $aclPlugin->principalCollectionSet = [
+                PRINCIPALS_USERS,
+                PRINCIPALS_RESOURCES,
+                PRINCIPALS_DOMAINS
+            ];
+            $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
+            $this->server->addPlugin($aclPlugin);
+    }
     protected function delegateCalendar() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',

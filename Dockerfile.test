@@ -103,4 +103,4 @@ RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject' && 
 
 EXPOSE 80
 
-CMD ["sh", "./scripts/start.sh"]
+CMD ["bash", "./scripts/start.sh"]

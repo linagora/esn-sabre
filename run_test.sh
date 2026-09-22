@@ -1,26 +1,28 @@
 #!/bin/bash
 set -euo pipefail
 
-# Usage: ./run_test.sh [--filter=TestClassName] [--skip-java] [--skip-php] [--skip-build]
+# Usage: ./run_test.sh [--filter=TestClassName] [--skip-java] [--skip-php] [--skip-nginx] [--skip-build]
 # Examples:
 #   ./run_test.sh                                          # Run everything
 #   ./run_test.sh --skip-build                            # Skip docker build, run all tests
-#   ./run_test.sh --skip-java                             # Run PHP tests only
-#   ./run_test.sh --skip-php                              # Run Java integration tests only
+#   ./run_test.sh --skip-java --skip-nginx                # Run PHP tests only
+#   ./run_test.sh --skip-php --skip-nginx                 # Run Java integration tests only
+#   ./run_test.sh --skip-php --skip-java                  # Run nginx rate limit tests only
 #   ./run_test.sh --filter=IMipPluginTest                 # Run PHP tests with filter
 #   ./run_test.sh --filter=IMipPluginTest --skip-build    # Run PHP tests with filter, skip build
-#   ./run_test.sh --skip-java --skip-php                  # Build Docker images only
+#   ./run_test.sh --skip-java --skip-php --skip-nginx     # Build Docker images only
 
 FILTER=""
 SKIP_JAVA=false
 SKIP_PHP=false
+SKIP_NGINX=false
 SKIP_BUILD=false
 MANUAL_MODE=false
 CLEANUP_IMAGES=false
 
 # Images built by this script. They are named (not tagged per-run), so an image
 # left behind by a previous run is silently reused by --skip-build invocations.
-BUILT_IMAGES=(esn_sabre_test esn-sabre-ldap-test)
+BUILT_IMAGES=(esn_sabre_test esn-sabre-ldap-test esn_sabre_nginx_test)
 
 for arg in "$@"; do
   case $arg in
@@ -34,6 +36,10 @@ for arg in "$@"; do
       ;;
     --skip-php)
       SKIP_PHP=true
+      shift
+      ;;
+    --skip-nginx)
+      SKIP_NGINX=true
       shift
       ;;
     --skip-build)
@@ -50,7 +56,7 @@ for arg in "$@"; do
       ;;
     *)
       echo "Unknown option: $arg"
-      echo "Usage: $0 [--filter=TestClassName] [--skip-java] [--skip-php] [--skip-build] [--cleanup-images]"
+      echo "Usage: $0 [--filter=TestClassName] [--skip-java] [--skip-php] [--skip-nginx] [--skip-build] [--cleanup-images]"
       exit 1
       ;;
   esac
@@ -90,6 +96,8 @@ if [ "$SKIP_BUILD" = false ]; then
 
   docker build --pull -t esn-sabre-ldap-test -f Dockerfile.ldap . || exit 1
   docker build --pull -t esn_sabre_test -f Dockerfile.test . || exit 1
+  # The production image: the nginx rate limit test runs against it.
+  docker build --pull -t esn_sabre_nginx_test -f Dockerfile . || exit 1
 else
   for image in "${BUILT_IMAGES[@]}"; do
     if [ -z "$(docker images -q "$image" 2>/dev/null)" ]; then
@@ -108,6 +116,13 @@ if [ "$SKIP_PHP" = false ]; then
     echo "Running all PHP tests"
     docker compose -f docker-compose.test.yaml run --rm esn_test bash -c "sleep 5 && make lint && make test" || exit 1
   fi
+fi
+
+# Nginx rate limit tests, against the production image
+if [ "$SKIP_NGINX" = false ]; then
+  bash tests/nginx/rate_limit_test.sh esn_sabre_nginx_test || exit 1
+else
+  echo "Skipping nginx rate limit tests"
 fi
 
 # Java integration tests

@@ -27,7 +27,9 @@ server {
   }
 
   location / {
-    limit_req zone=davserver burst=${NGINX_RATE_BURST} nodelay;
+    # limit_req directives, or nothing when NGINX_RATE_LIMIT=off: rendered by
+    # scripts/start.sh from the environment at container boot.
+    include /etc/nginx/snippets/rate_limit_location.conf;
 
     add_header 'Access-Control-Allow-Origin' "$http_origin" always;
     add_header 'Access-Control-Allow-Methods' 'OPTIONS, GET, HEAD, DELETE, PROPFIND, PUT, PROPPATCH, COPY, MOVE, REPORT, ITIP, ACL, PATCH, POST' always;

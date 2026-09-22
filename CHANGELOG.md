@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
 ### Bug Fixes
 
+ - Deleting a calendar now deletes its events. They were left behind in `calendarobjects` because the deletion filtered on an `ObjectId` while the calendar id is stored as a string there. Existing orphans can be listed with `db.calendarobjects.aggregate([{ $lookup: { from: "calendars", let: { id: "$calendarid" }, pipeline: [{ $match: { $expr: { $eq: [{ $toString: "$_id" }, "$$id"] } } }], as: "c" } }, { $match: { c: [] } }, { $count: "orphans" }])`.
  - ISSUE-404 Fix duplicated `DAV`/`X-Sabre-Version` headers in DAV responses — the nginx capability headers are now only emitted for the OPTIONS short-circuit, letting Sabre emit them once (with consistent casing) for proxied responses (#404)
 
 ## [2.1.0] - 2026-05-07

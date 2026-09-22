@@ -268,6 +268,16 @@ a list of subscription urls a user is using.
 
 Currently limited to the JSON API support.
 
+### ESN\CardDAV\InlinePhotoPlugin
+
+Controls how inline contact photos are handled on contact creation and update, for vCards and jCards alike. A `PHOTO` is inline when it carries `ENCODING=b` (vCard 3.0), `ENCODING=BASE64` (vCard 2.1) or `VALUE=BINARY`, or when its value is a `data:` URI (`PHOTO:data:image/jpeg;base64,...`, vCard 4.0 / jCard). Photos referenced by an external URI (`PHOTO;VALUE=URI:https://...`) are always preserved, and only `PHOTO` is inspected.
+
+Three modes, selected via the `CARDDAV_INLINE_ATTACHMENT_MODE` environment variable (see [CONFIGURE.md](./CONFIGURE.md)):
+
+- `filter` (default): inline photos are stripped from the stored card.
+- `reject`: requests carrying an inline photo are rejected with `403 Forbidden`.
+- `allow`: the card is stored as-is, inline photo included.
+
 ### ESN\CardDAV\MobileRequestPlugin
 
 DEPRECATED

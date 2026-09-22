@@ -15,4 +15,8 @@ envsubst '${NGINX_RATE_BURST}' \
 /root/set_nginx_htpasswd.sh
 
 sh /var/www/scripts/generate_config.sh > /var/www/config.json
+
+# Indexes are created here once, not on every request. A failure must not keep sabre from starting.
+php /var/www/scripts/create-indexes.php /var/www/config.json || echo "WARNING: MongoDB index creation failed, see doc/storage/MONGO.md to create them manually" >&2
+
 /usr/bin/supervisord

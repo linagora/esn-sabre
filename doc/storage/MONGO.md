@@ -17,7 +17,11 @@ Links a calendar to a principal (owner or sharee). Each share creates a separate
 Key fields: `calendarid`, `principaluri`, `uri`, `access`, `share_href`, `share_invitestatus`, `public_right`.
 
 **Class:** `CalDAV\Backend\DAO\CalendarInstanceDAO`  
-**Indexes:** `{ principaluri, uri }` (unique)
+**Indexes:**
+- `{ principaluri, uri }` (unique)
+- `{ principaluri, hidden }`
+- `{ principaluri, calendarid }`
+- `{ calendarid, share_href }` — sharees and public right of a calendar, also serves `{ calendarid }` alone
 
 ---
 
@@ -28,8 +32,7 @@ Key fields: `calendarid`, `uri`, `uid`, `calendardata`, `componenttype`, `firsto
 
 **Class:** `CalDAV\Backend\DAO\CalendarObjectDAO`  
 **Indexes:**
-- `{ calendarid }`
-- `{ calendarid, uri }`
+- `{ calendarid, uri }` — also serves `{ calendarid }` alone
 - `{ calendarid, componenttype, firstoccurence, lastoccurence }` — time-range queries
 - `{ uid }`
 
@@ -81,7 +84,7 @@ Key fields: `principaluri`, `uri`, `synctoken`.
 Sharee-side view of a shared address book.
 
 **Class:** `CardDAV\Backend\Mongo`  
-**Indexes:** none beyond `_id`
+**Indexes:** `{ addressbookid, share_href }` (also serves `{ addressbookid }` alone), `{ principaluri }`
 
 ---
 
@@ -91,7 +94,7 @@ Individual vCard objects.
 Key fields: `addressbookid`, `uri`, `carddata`.
 
 **Class:** `CardDAV\Backend\Mongo`  
-**Indexes:** `{ addressbookid }`, `{ addressbookid, uri }`
+**Indexes:** `{ addressbookid, uri }` — also serves `{ addressbookid }` alone
 
 ---
 
@@ -111,7 +114,7 @@ External address book subscriptions attached to a principal.
 Key fields: `principaluri`, `source`.
 
 **Class:** `CardDAV\Backend\Mongo`  
-**Indexes:** none declared
+**Indexes:** `{ principaluri }`, `{ source }`
 
 ---
 
@@ -126,5 +129,38 @@ These collections are owned by the ESN application and only read by Sabre.
 
 ## Index creation
 
-CalDAV indexes are created at startup by `CalDAV\Backend\Mongo::ensureIndex()`, guarded by the `SHOULD_CREATE_INDEX` env var (defaults to enabled).  
-CardDAV indexes follow the same guard in `CardDAV\Backend\Mongo::ensureIndex()`.
+Indexes are created once when the container starts: `scripts/start.sh` runs `scripts/create-indexes.php`, which calls
+`CalDAV\Backend\Mongo::ensureIndexes()` and `CardDAV\Backend\Mongo::ensureIndexes()`. Creating an index that already
+exists is a no-op, so this is safe on every restart. Index creation never runs on HTTP requests. Before this change it
+ran on every request unless `SHOULD_CREATE_INDEX=false` was set; that setting no longer exists.
+
+If index creation fails at startup, sabre still starts and logs a warning. You can rerun
+`php scripts/create-indexes.php [config.json]` or use the `mongosh` script below, which also drops the indexes that
+became redundant.
+
+### One-shot script for existing deployments
+
+Run against the sabre database (`mongosh "<sabre connection string>" create-indexes.js`). Index builds do not block
+reads or writes on MongoDB 4.2+, but run it outside peak hours on large collections.
+
+```js
+// Indexes added (idempotent)
+db.calendarinstances.createIndex({ calendarid: 1, share_href: 1 });
+db.sharedaddressbooks.createIndex({ addressbookid: 1, share_href: 1 });
+db.sharedaddressbooks.createIndex({ principaluri: 1 });
+db.addressbooksubscriptions.createIndex({ principaluri: 1 });
+db.addressbooksubscriptions.createIndex({ source: 1 });
+
+// Indexes made redundant by a compound index with the same prefix: they only slow writes down
+for (const [coll, key] of [["calendarobjects", { calendarid: 1 }], ["cards", { addressbookid: 1 }]]) {
+  if (db[coll].getIndexes().some(i => JSON.stringify(i.key) === JSON.stringify(key))) {
+    db[coll].dropIndex(key);
+  }
+}
+```
+
+To check that a query uses an index, look for `IXSCAN` (not `COLLSCAN`) and `totalDocsExamined` close to `nReturned`:
+
+```js
+db.calendarinstances.find({ calendarid: ObjectId("...") }).explain("executionStats")
+```

@@ -357,7 +357,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         $dataMessage = [
             'eventPath' => '/' . $eventPath,
-            'event'     => VObject\Reader::read($upToDateEventIcs),
+            // Mutable copy: buildData() injects PRODID/DTSTAMP before publishing.
+            // Going through the cache means the object the scheduling delivery
+            // just wrote is reused instead of these bytes being parsed again.
+            'event'     => VObjectCachePlugin::cacheFor($this->server)->readMutable($upToDateEventIcs),
             'rawEvent'  => $upToDateEventIcs,
         ];
 

@@ -130,6 +130,16 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
         $this->ensureOrganizerValarmUidsForRequest($iTipMessage);
 
+        // The broker rewrites $currentObject in place and hands it back as the
+        // new object, so the previous revision only survives as a copy taken
+        // now. Copying is markedly cheaper than parsing $oldICalendarData all
+        // over again, which is what the delivery below used to do -- twice, on
+        // a REPLY. Only the methods that actually compare against the previous
+        // revision pay for it.
+        $previousRevision = $currentObject && in_array($iTipMessage->method, ['REPLY', 'REQUEST'], true)
+            ? clone $currentObject
+            : null;
+
         $broker = new ITip\Broker();
         $newObject = $broker->processMessage($iTipMessage, $currentObject);
 
@@ -143,7 +153,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         if (!$objectNode) {
             $this->deliverToNewObject($iTipMessage, $calendarPath, $newFileName, $newObject);
         } else {
-            $this->deliverToExistingObject($iTipMessage, $objectNode, $oldICalendarData, $newObject);
+            $this->deliverToExistingObject($iTipMessage, $objectNode, $previousRevision ?? $oldICalendarData, $newObject);
         }
         $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
     }
@@ -386,22 +396,43 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
         $calendar = $this->server->tree->getNodeForPath($calendarPath);
-        $calendar->createFile($newFileName, $newObject->serialize());
+        $calendar->createFile($newFileName, $this->serializeForDelivery($newObject));
     }
 
-    private function deliverToExistingObject(ITip\Message $iTipMessage, $objectNode, $oldICalendarData, VCalendar $newObject): void {
-        if ($iTipMessage->method === 'REPLY' && !$this->shouldSkipReplyPropagation($oldICalendarData)) {
+    /**
+     * @param VCalendar|string|null $previousRevision the revision this delivery
+     *        replaces, as an object when the caller already holds one
+     */
+    private function deliverToExistingObject(ITip\Message $iTipMessage, $objectNode, $previousRevision, VCalendar $newObject): void {
+        if ($iTipMessage->method === 'REPLY' && !$this->shouldSkipReplyPropagation($previousRevision)) {
             $this->processICalendarChange(
-                $oldICalendarData,
+                $previousRevision,
                 $newObject,
                 [$iTipMessage->recipient],
                 [$iTipMessage->sender]
             );
         }
         if ($iTipMessage->method === 'REQUEST') {
-            $this->preserveRecipientLocalProperties($oldICalendarData, $newObject);
+            $this->preserveRecipientLocalProperties($previousRevision, $newObject);
         }
-        $objectNode->put($newObject->serialize());
+        $objectNode->put($this->serializeForDelivery($newObject));
+    }
+
+    /**
+     * Serializes an object being delivered and hands it to the request cache.
+     *
+     * These writes go straight to the node, outside the server's event
+     * pipeline, so ESN\CalDAV\Plugin::validateICalendar never runs on them and
+     * nothing would otherwise stop the backend -- and the real-time publisher --
+     * from parsing these very bytes again.
+     *
+     * Ownership of $object moves to the cache: callers must be done with it.
+     */
+    private function serializeForDelivery(VCalendar $object): string {
+        $data = $object->serialize();
+        VObjectCachePlugin::cacheFor($this->server)->put($data, $object);
+
+        return $data;
     }
 
     /**
@@ -423,8 +454,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         return false;
     }
 
-    private function preserveRecipientLocalProperties(?string $oldICalendarData, VCalendar $newObject): void {
-        $oldObject = CalendarObjectHelper::readCalendarObject($oldICalendarData);
+    /**
+     * @param VCalendar|string|null $previousRevision
+     */
+    private function preserveRecipientLocalProperties($previousRevision, VCalendar $newObject): void {
+        $oldObject = CalendarObjectHelper::readCalendarObject($previousRevision);
         if (!$oldObject) {
             return;
         }
@@ -453,7 +487,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             }
         }
 
-        $oldObject->destroy();
+        // Only what we parsed ourselves: a caller that handed us its own object
+        // still owns it.
+        if ($oldObject !== $previousRevision) {
+            $oldObject->destroy();
+        }
     }
 
     // Email VALARM recipient scheduling

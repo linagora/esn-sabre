@@ -1,6 +1,7 @@
 <?php
 namespace ESN\CalDAV\Schedule;
 
+use ESN\DAV\VObjectCachePlugin;
 use ESN\Utils\Utils;
 use Sabre\CalDAV\ICalendarObject;
 use Sabre\CalDAV\Schedule\ISchedulingObject;
@@ -48,6 +49,13 @@ class AMQPSchedulePlugin extends Plugin {
         $server->on('afterWriteContent', [$this, 'afterWrite']);
         $server->on('afterUnbind',       [$this, 'afterUnbindFlush']);
         $server->on('calendarObjectUpdatedByServer', [$this, 'scheduleServerUpdate']);
+    }
+
+    /**
+     * The parse cache for the request being handled.
+     */
+    private function vObjectCache() {
+        return VObjectCachePlugin::cacheFor($this->server);
     }
 
     function afterWrite() {
@@ -268,7 +276,9 @@ class AMQPSchedulePlugin extends Plugin {
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
             $this->currentOldMessage = $node->get();
-            $oldObj = Reader::read($this->currentOldMessage);
+            // Shared instance, as in the parent's calendarObjectChange: the
+            // checks below and the iTIP broker only read the previous revision.
+            $oldObj = $this->vObjectCache()->read($this->currentOldMessage);
         }
 
         $isAttendeeCalendarWrite = $this->isAttendeeCalendarWrite($oldObj ?? $vCal, $isTeamCalendar, $actorAddresses);
@@ -322,12 +332,12 @@ class AMQPSchedulePlugin extends Plugin {
         // Fix: fetch the organizer's full calendar (which has the master VEVENT + the override
         // with this attendee) and pass it to the Broker so it can generate a proper REPLY.
         $nodeIcs = $this->resolveFullCalendarForBroker($nodeIcs) ?: $nodeIcs;
-        $sourceCalendar = CalendarObjectHelper::readCalendarObject($nodeIcs);
+        $sourceCalendar = CalendarObjectHelper::readCalendarObject($nodeIcs, $this->vObjectCache());
 
         // Cancelling a booking the chair organizer never accepted still has to reach the
         // booker, who is waiting on an answer; the attendees never saw the booking.
-        // $sourceCalendar (not $node->get()) is what the Broker parses once
-        // resolveFullCalendarForBroker() has had its say, so both see the same recipients.
+        // $sourceCalendar is also what goes to the Broker below, so both see the
+        // same recipients once resolveFullCalendarForBroker() has had its say.
         $ignore = $this->shouldRestrictSchedulingToBooker($sourceCalendar)
             ? PublicAgendaScheduleUtils::recipientsExceptBooker([$sourceCalendar])
             : [];
@@ -337,7 +347,9 @@ class AMQPSchedulePlugin extends Plugin {
             $broker->significantChangeProperties,
             ['SUMMARY', 'LOCATION', 'DESCRIPTION']
         );
-        $messages = $broker->parseEvent(null, $addresses, $nodeIcs);
+        // Hand the broker the object rather than the ICS: given a string it parses
+        // it itself, which is the same payload a third time.
+        $messages = $broker->parseEvent(null, $addresses, $sourceCalendar);
 
         foreach ($messages as $message) {
             if (in_array($message->recipient, $ignore)) {
@@ -361,7 +373,9 @@ class AMQPSchedulePlugin extends Plugin {
      * permission error, not found) — callers must fall back to the original ICS.
      */
     private function resolveFullCalendarForBroker(string $ics): ?string {
-        $vCal = Reader::read($ics);
+        // Shared instance: read only, and never destroy()ed here -- the caller
+        // goes on to use this very object as $sourceCalendar.
+        $vCal = $this->vObjectCache()->read($ics);
 
         $hasMaster = false;
         foreach ($vCal->VEVENT as $vevent) {
@@ -372,7 +386,6 @@ class AMQPSchedulePlugin extends Plugin {
         }
 
         if ($hasMaster) {
-            $vCal->destroy();
             return null; // Nothing to fix — caller uses original ICS as-is.
         }
 
@@ -380,7 +393,6 @@ class AMQPSchedulePlugin extends Plugin {
         $exceptionVevent = $vCal->VEVENT;
         $organizerRaw    = isset($exceptionVevent->ORGANIZER) ? (string)$exceptionVevent->ORGANIZER : null;
         $uid             = isset($exceptionVevent->UID)       ? (string)$exceptionVevent->UID       : null;
-        $vCal->destroy();
 
         if (!$organizerRaw || !$uid) {
             return null;

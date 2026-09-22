@@ -32,7 +32,10 @@ class VObjectParseBudgetTest extends \ESN\DAV\ServerMock {
         // The plugins that used to re-read the node, or re-parse the payload,
         // for themselves.
         $this->server->addPlugin(new ParticipationPlugin());
-        $this->server->addPlugin(new Schedule\Plugin($this->principalBackend));
+        // The AMQP subclass, not the parent: it overrides calendarObjectChange
+        // and beforeUnbind with copies of its own, so it is the one that has to
+        // be measured if the budget is to mean anything in production.
+        $this->server->addPlugin(new Schedule\AMQPSchedulePlugin(new NullAmqpPublisher(), $this->principalBackend));
         $this->server->addPlugin(new \ESN\JSON\Plugin('json'));
         $this->server->addPlugin(new BinaryAttachmentPlugin(BinaryAttachmentPlugin::MODE_FILTER));
     }
@@ -91,6 +94,28 @@ class VObjectParseBudgetTest extends \ESN\DAV\ServerMock {
         $this->assertStringContainsString('https://example.com/agenda.pdf', $stored['calendardata']);
 
         $this->assertHandedOverObjectMatchesStoredData('event1.ics');
+    }
+
+    /**
+     * A delete schedules CANCEL messages from the object being removed. Every
+     * step of that -- deciding whether the broker needs the organizer's copy,
+     * looking for public-agenda metadata, and the broker itself -- works from
+     * the same payload, so it should be read once.
+     */
+    function testDeleteShouldParseTheCancelledObjectOnlyOnce() {
+        $this->request($this->putRequest($this->eventWithAttendees()));
+        $this->vObjectCache->resetStats();
+
+        $response = $this->request($this->deleteRequest());
+        $this->assertSame(204, $response->status);
+
+        $stats = $this->vObjectCache->getStats();
+
+        $this->assertSame(1, $stats['parses'], 'the cancelled object should be parsed once');
+        // Two readers share it: the check for whether the broker needs the
+        // organizer's copy, and the public-agenda metadata lookup. The broker's
+        // own parse is invisible here, which is why it is handed the object.
+        $this->assertGreaterThanOrEqual(2, $stats['hits'], 'and reused by the scheduling path');
     }
 
     function testShouldStoreWhatTheClientSent() {
@@ -156,6 +181,13 @@ class VObjectParseBudgetTest extends \ESN\DAV\ServerMock {
         ]);
     }
 
+    private function deleteRequest() {
+        return \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD' => 'DELETE',
+            'REQUEST_URI'    => self::EVENT_PATH
+        ]);
+    }
+
     private function putRequest($body, $contentType = 'text/calendar') {
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'REQUEST_METHOD' => 'PUT',
@@ -170,6 +202,15 @@ class VObjectParseBudgetTest extends \ESN\DAV\ServerMock {
     private function updatedEvent($summary = 'Rewritten') {
         return $this->calendar([
             'SUMMARY:' . $summary
+        ]);
+    }
+
+    private function eventWithAttendees() {
+        return $this->calendar([
+            'SUMMARY:With attendees',
+            'ORGANIZER;CN=U1:mailto:54b64eadf6d7d8e41d263e0f@example.org',
+            'ATTENDEE;PARTSTAT=NEEDS-ACTION;CN=A1:mailto:a1@example.org',
+            'ATTENDEE;PARTSTAT=NEEDS-ACTION;CN=A2:mailto:a2@example.org'
         ]);
     }
 
@@ -200,4 +241,12 @@ class VObjectParseBudgetTest extends \ESN\DAV\ServerMock {
             ''
         ]));
     }
+}
+
+/**
+ * The scheduling plugin only needs somewhere to hand its messages; what it
+ * publishes is not what this test is about.
+ */
+class NullAmqpPublisher {
+    function publish($topic, $message) {}
 }

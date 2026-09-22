@@ -43,23 +43,55 @@ class Plugin extends \ESN\JSON\BasePlugin {
             return true;
         }
 
+        $aclPlugin = $this->server->getPlugin('acl');
+        if (!$aclPlugin) {
+            return true;
+        }
+
         $paths = isset($report->hrefs) ? $report->hrefs : [$path];
-        foreach ($paths as $reportPath) {
-            $this->assertCanReadExistingPath($reportPath, self::REPORT_READ_PRIVILEGES[$reportName]);
+        foreach ($this->findExistingPaths($paths) as $existingPath) {
+            // Some REPORT handlers synthesize responses directly, bypassing propFind ACL checks.
+            $aclPlugin->checkPrivileges($existingPath, self::REPORT_READ_PRIVILEGES[$reportName], \Sabre\DAVACL\Plugin::R_PARENT);
         }
 
         return true;
     }
 
-    private function assertCanReadExistingPath($path, $privilege) {
-        if (!$this->server->tree->nodeExists($path)) {
-            return;
+    /**
+     * Returns the paths that exist. The children of a collection supporting multi-get are looked up in a single
+     * query rather than one per path: a multiget REPORT can carry hundreds of hrefs of the same calendar.
+     */
+    private function findExistingPaths(array $paths) {
+        $pathsByParent = [];
+        foreach ($paths as $path) {
+            // Trimmed, as the tree caches the nodes it fetches under trimmed paths
+            $path = trim($path, '/');
+            list($parent) = \Sabre\Uri\split($path);
+            $pathsByParent[$parent][] = $path;
         }
 
-        $aclPlugin = $this->server->getPlugin('acl');
-        if ($aclPlugin) {
-            // Some REPORT handlers synthesize responses directly, bypassing propFind ACL checks.
-            $aclPlugin->checkPrivileges($path, $privilege, \Sabre\DAVACL\Plugin::R_PARENT);
+        $existingPaths = [];
+        foreach ($pathsByParent as $parent => $children) {
+            if (count($children) > 1 && $this->isMultiGetCollection($parent)) {
+                $existingPaths = array_merge($existingPaths, array_keys($this->server->tree->getMultipleNodes($children)));
+                continue;
+            }
+
+            foreach ($children as $child) {
+                if ($this->server->tree->nodeExists($child)) {
+                    $existingPaths[] = $child;
+                }
+            }
+        }
+
+        return $existingPaths;
+    }
+
+    private function isMultiGetCollection($path) {
+        try {
+            return $this->server->tree->getNodeForPath($path) instanceof DAV\IMultiGet;
+        } catch (DAV\Exception\NotFound $e) {
+            return false;
         }
     }
 

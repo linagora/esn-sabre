@@ -17,6 +17,19 @@ Pre-requisite:
 docker compose -f docker-compose.test.yaml run --rm esn_test
 ```
 
+### Nginx rate limit tests
+
+`tests/nginx/rate_limit_test.sh` runs the production image (`Dockerfile`), configured only with
+`docker run -e`, and checks the rate limiting described in [CONFIGURE.md](CONFIGURE.md#nginx-rate-limiting).
+It needs docker and no other service. `run_test.sh` builds the image as `esn_sabre_nginx_test` and runs
+it, unless `--skip-nginx` is passed:
+
+```bash
+./run_test.sh --skip-php --skip-java
+# or, against any image:
+bash tests/nginx/rate_limit_test.sh linagora/esn-sabre
+```
+
 ### Using Makefile
 
 ```bash

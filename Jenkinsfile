@@ -14,17 +14,22 @@ pipeline {
     stages {
       stage('Build Test Images') {
           steps {
-              sh 'bash run_test.sh --skip-java --skip-php'
+              sh 'bash run_test.sh --skip-java --skip-php --skip-nginx'
           }
       }
       stage('Compile and Test') {
           steps {
-              sh 'bash run_test.sh --skip-java --skip-build'
+              sh 'bash run_test.sh --skip-java --skip-nginx --skip-build'
+          }
+       }
+       stage('Nginx Rate Limit Test') {
+          steps {
+              sh 'bash run_test.sh --skip-java --skip-php --skip-build'
           }
        }
        stage('Run Integration Test') {
           steps {
-              sh 'bash run_test.sh --skip-php --skip-build'
+              sh 'bash run_test.sh --skip-php --skip-nginx --skip-build'
           }
       }
       stage('Deliver Docker images for PR') {

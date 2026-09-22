@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
  - ISSUE-437 Expose video conference links through the standard RFC 7986 `CONFERENCE` property — events carrying `X-OPENPAAS-VIDEOCONFERENCE` are decorated upon `PUT` (and upon iTIP delivery) so that external clients (Apple Calendar, iOS, Outlook, ...) display a join button. `X-OPENPAAS-VIDEOCONFERENCE` is kept for Twake clients, and is conversely derived from the `CONFERENCE` property of events created by external clients (#437)
  - Every runtime setting can now be configured from `config.json` instead of the process environment. The `environment` section of `config.json` takes precedence, the process environment is still honoured as a fallback, and the built-in default applies last, so existing deployments keep working untouched. `scripts/generate_config.sh` materializes the whole section, `config.json.default` lists every key with its default value, and [doc/CONFIGURE.md](doc/CONFIGURE.md) documents all of them.
+ - Nginx rate limiting: `NGINX_TRUSTED_PROXIES` keys the limit on the real client IP taken from `X-Forwarded-For` (sent by the listed proxies only), `NGINX_TRUSTED_CLIENTS_CIDR` exempts trusted clients such as the Twake Calendar side service, `NGINX_RATE_LIMIT=off` disables rate limiting, and `NGINX_RATE_LIMIT_STATUS` sets the rejection status. Invalid values stop the container at startup. See [doc/CONFIGURE.md](doc/CONFIGURE.md#nginx-rate-limiting)
  - ISSUE-425 Auto-provision users upon a DAV request — when an LDAP or impersonated user authenticates successfully but has no entry in the `users` collection yet, the entry is created on the fly (following the twake-calendar-side-service document format) instead of returning a `401`. Gated by the `AUTO_PROVISION` env var (default `true`). Needed upon migrations (#425)
 
 ### Performance
@@ -21,6 +22,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
  - Add the missing MongoDB indexes: `calendarinstances { calendarid, share_href }` (the sharees and public right lookups of a calendar were collection scans), `sharedaddressbooks { addressbookid, share_href }` and `{ principaluri }`, `addressbooksubscriptions { principaluri }` and `{ source }`. Drop the redundant `calendarobjects { calendarid }` and `cards { addressbookid }`, covered by the `{ calendarid, uri }` and `{ addressbookid, uri }` indexes.
 
    Upgrade: the new indexes are created at startup. To drop the redundant ones, or if index creation fails at startup, run the `mongosh` script from [doc/storage/MONGO.md](doc/storage/MONGO.md#index-creation).
+
+### Changes
+
+ - **Behaviour change**: requests rejected by the Nginx rate limit are now answered `429 Too Many Requests` with `Retry-After: 1` and the CORS headers, instead of `503 Service Unavailable`. Clients and monitoring that treat 503 as a rate-limit signal must be updated, or set `NGINX_RATE_LIMIT_STATUS=503` to keep the previous status
 
 ### Bug Fixes
 

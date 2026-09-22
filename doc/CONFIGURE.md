@@ -166,16 +166,67 @@ When enabled, Sabre sends each attendee only the email alarms that explicitly li
 
 ## Nginx rate limiting
 
-The embedded Nginx is configured with `ngx_http_limit_req_module` to protect the CalDAV server from request flooding. Three ENV variables control the behaviour:
+The embedded Nginx is configured with `ngx_http_limit_req_module` to protect the CalDAV server from
+request flooding. Every setting is an environment variable read by `scripts/start.sh` when the
+container starts: no image rebuild, no `config.json` entry, no file to mount. To change a value,
+restart the container with the new environment. An invalid value stops the container at startup with
+an error that names it.
 
- - `NGINX_RATE_LIMIT` — sustained request rate per IP (default: `50r/s`)
- - `NGINX_RATE_ZONE_SIZE` — size of the shared-memory tracking zone (default: `10m`, enough for ~160 000 IPs)
- - `NGINX_RATE_BURST` — number of requests above the rate that are served immediately before returning 503 (default: `100`)
+| Variable                     | Default  | Meaning                                                                                  |
+|------------------------------|----------|------------------------------------------------------------------------------------------|
+| `NGINX_RATE_LIMIT`           | `50r/s`  | Sustained rate per client IP (`<n>r/s` or `<n>r/m`). `off`, `false`, `0` or `disabled` (any case) disables rate limiting. |
+| `NGINX_RATE_BURST`           | `100`    | Requests above the rate served immediately before rejecting.                            |
+| `NGINX_RATE_ZONE_SIZE`       | `10m`    | Shared-memory size of the tracking zone (`10m` is enough for ~160 000 IPs).              |
+| `NGINX_RATE_LIMIT_STATUS`    | `429`    | HTTP status of rejected requests (400 to 599).                                           |
+| `NGINX_TRUSTED_CLIENTS_CIDR` | (unset)  | CIDR(s) of trusted clients, never rate limited (e.g. `10.42.0.0/16`).                    |
+| `NGINX_TRUSTED_PROXIES`      | (unset)  | CIDR(s) of proxies allowed to set `X-Forwarded-For`.                                     |
 
-Example — lower limits for a small deployment:
+Rejected requests get `429 Too Many Requests` with a `Retry-After: 1` header and the usual CORS
+headers, so browsers let the frontend see the 429. Rejections are logged at the `warn` level. The
+container logs its effective configuration at startup, for example:
+
+```
+start.sh: nginx rate limiting enabled: limit=50r/s burst=100 status=429 zone_size=10m trusted_proxies=[10.0.0.0/8] trusted_clients=[10.42.0.0/16]
+```
+
+**The limit is per client IP.** Behind a reverse proxy or an ingress, every request comes from the
+proxy's address, so all users share a single bucket unless `NGINX_TRUSTED_PROXIES` is set.
+
+ - `NGINX_TRUSTED_PROXIES` takes one or more CIDRs, separated by commas or spaces. When set, the client
+   IP is read from `X-Forwarded-For` (`real_ip_header X-Forwarded-For; real_ip_recursive on;`), for
+   requests coming from these CIDRs only. The header is ignored from any other peer, so it cannot be
+   spoofed to escape the limit. Trusted hops are skipped: the client IP is the rightmost address of
+   the header that is not a trusted proxy. The rate limit, the access logs and anything else that uses
+   the client address then see the real client IP. Unset, the TCP peer address is used and no header
+   is trusted.
+ - `NGINX_TRUSTED_CLIENTS_CIDR` takes one or more CIDRs, separated by commas or spaces
+   (`10.42.0.0/16,192.168.10.0/24`). A single IP is accepted too: `10.42.3.7` is treated as `/32`, an
+   IPv6 address as `/128`. Requests from these clients are never rate limited. `0.0.0.0/0` and `::/0`
+   are rejected: use `NGINX_RATE_LIMIT=off` to disable rate limiting. When `NGINX_TRUSTED_PROXIES` is
+   set, the exemption applies to the real client IP taken from `X-Forwarded-For`, not to the proxy IP.
+   The exemption is based on the address only, never on credentials: Nginx cannot validate an
+   `Authorization` header, so anyone could forge one to bypass the limit.
+ - `NGINX_RATE_LIMIT=off` removes the `limit_req_zone` and `limit_req` directives from the
+   configuration, for deployments that already rate limit at their ingress.
+
+Recommended setup for Twake Calendar: exempt the network of the side service, which legitimately
+sends bursts (imports, reindexing, alarm scheduling, domain member sync, ITIP), and trust the ingress
+so that end users each get their own bucket.
+
+```yaml
+sabre_dav:
+  image: linagora/esn-sabre
+  environment:
+    - NGINX_TRUSTED_CLIENTS_CIDR=10.42.0.0/16   # side service network: never rate limited
+    - NGINX_TRUSTED_PROXIES=10.0.0.0/8          # ingress: X-Forwarded-For is trusted
+    - NGINX_RATE_LIMIT=50r/s
+```
+
+The same variables work in a Kubernetes `env:` block or in the Helm chart values. With `docker run`:
 
 ```bash
 docker run -d -p 8001:80 \
+  -e NGINX_TRUSTED_CLIENTS_CIDR=10.42.0.0/16 \
   -e NGINX_RATE_LIMIT=10r/s \
   -e NGINX_RATE_BURST=30 \
   linagora/esn-sabre

@@ -123,4 +123,108 @@ class AddressBookTest extends \PHPUnit\Framework\TestCase {
 
         $this->assertCount(2, $result);
     }
+
+    private function sharedPublicBookWithCards(int $cardCount) {
+        $backend = new CountingCardDAVBackend($this->sabredb);
+        $backend->publicRight = '{DAV:}read';
+        $backend->sharees = [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'principal' => 'principals/users/user2',
+                'access' => SPlugin::ACCESS_READWRITE,
+                'inviteStatus' => SPlugin::INVITE_ACCEPTED,
+            ])
+        ];
+        for ($i = 0; $i < $cardCount; $i++) {
+            $backend->createCard($this->bookId, 'card' . $i . '.vcf', $this->cardData);
+        }
+
+        return [new AddressBook($backend, $this->bookInfo), $backend];
+    }
+
+    private function assertCardsCarry(array $expectedACL, array $expectedUris, array $children) {
+        $this->assertEqualsCanonicalizing($expectedUris, array_map(function ($child) { return $child->getName(); }, $children));
+        foreach ($children as $child) {
+            $this->assertInstanceOf(\Sabre\CardDAV\Card::class, $child);
+            $this->assertEquals($expectedACL, $child->getACL());
+        }
+    }
+
+    function testGetChildrenSharesTheChildACL() {
+        list($book, $backend) = $this->sharedPublicBookWithCards(3);
+
+        $childACL = $book->getChildACL();
+        $this->assertContains(['privilege' => '{DAV:}read', 'principal' => '{DAV:}authenticated'], $childACL);
+        $this->assertContains(['privilege' => '{DAV:}write-content', 'principal' => 'principals/users/user2', 'protected' => true], $childACL);
+        $this->assertCardsCarry($childACL, ['card0.vcf', 'card1.vcf', 'card2.vcf'], $book->getChildren());
+    }
+
+    function testGetMultipleChildrenSharesTheChildACL() {
+        list($book, $backend) = $this->sharedPublicBookWithCards(3);
+
+        $this->assertCardsCarry(
+            $book->getChildACL(),
+            ['card0.vcf', 'card2.vcf'],
+            $book->getMultipleChildren(['card0.vcf', 'card2.vcf', 'missing.vcf'])
+        );
+    }
+
+    function testListingCardsReadsTheSharingStateOnce() {
+        list($book, $backend) = $this->sharedPublicBookWithCards(20);
+
+        $backend->resetCounters();
+        $book->getChildACL();
+        $perChildACL = [$backend->getInvitesCalls, $backend->getAddressBookPublicRightCalls];
+
+        $backend->resetCounters();
+        $this->assertCount(20, $book->getChildren());
+        $this->assertEquals($perChildACL, [$backend->getInvitesCalls, $backend->getAddressBookPublicRightCalls]);
+
+        $backend->resetCounters();
+        $this->assertCount(2, $book->getMultipleChildren(['card0.vcf', 'card19.vcf']));
+        $this->assertEquals($perChildACL, [$backend->getInvitesCalls, $backend->getAddressBookPublicRightCalls]);
+    }
+
+    function testChildExistsDoesNotComputeTheChildACL() {
+        list($book, $backend) = $this->sharedPublicBookWithCards(1);
+
+        $backend->resetCounters();
+        $this->assertTrue($book->childExists('card0.vcf'));
+        $this->assertFalse($book->childExists('missing.vcf'));
+        $this->assertEquals(0, $backend->getInvitesCalls);
+        $this->assertEquals(0, $backend->getAddressBookPublicRightCalls);
+    }
+
+    function testListingAnEmptyAddressBookDoesNotComputeTheChildACL() {
+        list($book, $backend) = $this->sharedPublicBookWithCards(0);
+
+        $backend->resetCounters();
+        $this->assertSame([], $book->getChildren());
+        $this->assertSame([], $book->getMultipleChildren(['missing.vcf']));
+        $this->assertEquals(0, $backend->getInvitesCalls);
+        $this->assertEquals(0, $backend->getAddressBookPublicRightCalls);
+    }
+}
+
+class CountingCardDAVBackend extends \ESN\CardDAV\Backend\Mongo {
+    public $publicRight = null;
+    public $sharees = [];
+    public $getInvitesCalls = 0;
+    public $getAddressBookPublicRightCalls = 0;
+
+    function resetCounters() {
+        $this->getInvitesCalls = 0;
+        $this->getAddressBookPublicRightCalls = 0;
+    }
+
+    function getInvites($addressBookId) {
+        $this->getInvitesCalls++;
+
+        return $this->sharees;
+    }
+
+    function getAddressBookPublicRight($addressBookId) {
+        $this->getAddressBookPublicRightCalls++;
+
+        return $this->publicRight;
+    }
 }

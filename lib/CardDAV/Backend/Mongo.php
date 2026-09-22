@@ -330,6 +330,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
             'uri' => [ '$in' => $uris ]
         ];
+        $cards = [];
         foreach ($collection->find($query, [ 'projection' => $projection ]) as $card) {
             $card = $card->getArrayCopy();
 

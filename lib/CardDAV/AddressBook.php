@@ -19,6 +19,13 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return new \Sabre\CardDAV\Card($this->carddavBackend, $this->addressBookInfo, (array) $obj);
     }
 
+    /**
+     * The default implementation builds the child through getChild(), which computes the child ACL for nothing.
+     */
+    function childExists($name) {
+        return (bool) $this->carddavBackend->getCard($this->addressBookInfo['id'], $name);
+    }
+
     function getACL() {
         if($properties = $this->getProperties(['{DAV:}acl'])) {
             if (!in_array('dav:write', (array) $properties['{DAV:}acl'])) {
@@ -81,11 +88,27 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return $response;
     }
 
+    /**
+     * The child ACL reads the public right and the sharees from the database, so it is computed once for the
+     * whole listing rather than once per card.
+     */
     function getChildren($offset = 0, $limit = 0, $sort = null, $filters = null) {
-        $objs = $this->carddavBackend->getCards($this->addressBookInfo['id'], $offset, $limit, $sort, $filters);
+        return $this->asCards($this->carddavBackend->getCards($this->addressBookInfo['id'], $offset, $limit, $sort, $filters));
+    }
+
+    function getMultipleChildren(array $paths) {
+        return $this->asCards($this->carddavBackend->getMultipleCards($this->addressBookInfo['id'], $paths));
+    }
+
+    private function asCards($objs) {
+        if (empty($objs)) {
+            return [];
+        }
+
+        $childACL = $this->getChildACL();
         $children = [];
         foreach($objs as $obj) {
-            $obj['acl'] = $this->getChildACL();
+            $obj['acl'] = $childACL;
             $children[] = new \Sabre\CardDAV\Card($this->carddavBackend,$this->addressBookInfo,$obj);
         }
         return $children;

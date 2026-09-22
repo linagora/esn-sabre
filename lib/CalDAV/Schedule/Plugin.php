@@ -130,15 +130,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
         $this->ensureOrganizerValarmUidsForRequest($iTipMessage);
 
-        // The broker rewrites $currentObject in place and hands it back as the
-        // new object, so the previous revision only survives as a copy taken
-        // now. Copying is markedly cheaper than parsing $oldICalendarData all
-        // over again, which is what the delivery below used to do -- twice, on
-        // a REPLY. Only the methods that actually compare against the previous
-        // revision pay for it.
-        $previousRevision = $currentObject && in_array($iTipMessage->method, ['REPLY', 'REQUEST'], true)
-            ? clone $currentObject
-            : null;
+        $previousRevision = $this->snapshotPreviousRevision($iTipMessage, $currentObject);
 
         $broker = new ITip\Broker();
         $newObject = $broker->processMessage($iTipMessage, $currentObject);
@@ -156,6 +148,24 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $this->deliverToExistingObject($iTipMessage, $objectNode, $previousRevision ?? $oldICalendarData, $newObject);
         }
         $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
+    }
+
+    /**
+     * Copies the revision this delivery is about to replace.
+     *
+     * The broker rewrites the current object in place and hands it back as the
+     * new one, so the previous revision only survives as a copy taken before
+     * that. Copying is markedly cheaper than parsing the stored data all over
+     * again, which is what the delivery used to do -- twice, on a REPLY. The
+     * methods that never compare against the previous revision get nothing, and
+     * pay nothing.
+     */
+    private function snapshotPreviousRevision(ITip\Message $iTipMessage, ?VCalendar $currentObject): ?VCalendar {
+        if (!$currentObject || !in_array($iTipMessage->method, ['REPLY', 'REQUEST'], true)) {
+            return null;
+        }
+
+        return clone $currentObject;
     }
 
     private function loadCalendarObjectForDelivery(string $homePath, ITip\Message $iTipMessage, ?string $principalUri = null): ?array {

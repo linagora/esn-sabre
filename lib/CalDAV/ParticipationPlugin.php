@@ -1,6 +1,7 @@
 <?php
 namespace ESN\CalDAV;
 
+use \ESN\DAV\VObjectCachePlugin;
 use \ESN\Utils\Utils;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
@@ -43,7 +44,8 @@ class ParticipationPlugin extends ServerPlugin {
             return;
         }
 
-        $oldCal = \Sabre\VObject\Reader::read($node->get());
+        // Shared instance: we only compare participation status against it.
+        $oldCal = VObjectCachePlugin::cacheFor($this->server)->read($node->get());
 
         $this->processICalendarParticipation(
             $node,

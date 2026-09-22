@@ -16,6 +16,7 @@ use ESN\CalDAV\Backend\Service\SubscriptionService;
 use ESN\CalDAV\Backend\Service\SchedulingService;
 use ESN\CalDAV\Backend\Service\CalendarService;
 use ESN\CalDAV\Backend\Service\CalendarObjectService;
+use ESN\Utils\VObjectCache;
 
 #[\AllowDynamicProperties]
 class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
@@ -40,6 +41,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     protected $schedulingService;
     protected $calendarService;
     protected $calendarObjectService;
+    protected $vObjectCache;
 
     public $propertyMap = [
         '{DAV:}displayname' => 'displayname',
@@ -77,7 +79,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         // Initialize Services
         $this->calendarSharingService = new CalendarSharingService($this->calendarInstanceDAO, $this->eventEmitter);
-        $this->calendarDataNormalizer = new CalendarDataNormalizer();
+        // Shared with the plugins through \ESN\DAV\VObjectCachePlugin: by the time a
+        // write reaches the backend the payload has already been parsed upstream.
+        $this->vObjectCache = new VObjectCache();
+        $this->calendarDataNormalizer = new CalendarDataNormalizer($this->vObjectCache);
         $this->subscriptionService = new SubscriptionService($this->calendarSubscriptionDAO, $this->eventEmitter, $this->subscriptionPropertyMap);
         $this->schedulingService = new SchedulingService($this->schedulingObjectDAO);
         $this->calendarService = new CalendarService(
@@ -97,6 +102,18 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
     function getEventEmitter() {
         return $this->eventEmitter;
+    }
+
+    /**
+     * The parse cache this backend denormalizes with.
+     *
+     * Register it on the server through \ESN\DAV\VObjectCachePlugin so plugins
+     * and backend share a single parse per payload.
+     *
+     * @return VObjectCache
+     */
+    function getVObjectCache() {
+        return $this->vObjectCache;
     }
 
     function getCalendarsForUser($principalUri) {

@@ -112,6 +112,12 @@ $server = new Sabre\DAV\Server($tree);
 // logger plugin
 $server->addPlugin($loggerPlugin);
 
+// Parse cache, shared with the CalDAV backend: a write is handled by a handful of
+// plugins that each need the old or the new calendar object, and parsing VObject
+// data is the most expensive part of the request. Registered early so every other
+// plugin can reach it through ESN\DAV\VObjectCachePlugin::cacheFor().
+$server->addPlugin(new ESN\DAV\VObjectCachePlugin($calendarBackend->getVObjectCache()));
+
 // Auth backend
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm'], $principalBackend, $server, SABRE_ENV === SABRE_ENV_DEV);
 $server->on('auth:success',

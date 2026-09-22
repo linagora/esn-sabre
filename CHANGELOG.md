@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 ### Performance
 
  - Listing a calendar (PROPFIND `Depth: 1`, `sync-collection`, `calendar-multiget`) no longer reads the calendar sharing state from MongoDB once per event: the child ACL is computed once per listing. On a 3000 event calendar, a PROPFIND `Depth: 1` goes from 21014 MongoDB commands (~5 s) down to 21 (~50 ms).
+ - Same for address books: listing the cards of an address book no longer reads its public right and sharees once per card, and checking that a card exists no longer computes its ACL. On a 3000 card address book, a PROPFIND `Depth: 1` goes from 6018 MongoDB commands down to 20, an `addressbook-multiget` of 500 cards from 2508 down to 510.
 
 ### Bug Fixes
 

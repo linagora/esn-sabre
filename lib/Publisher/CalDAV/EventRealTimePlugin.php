@@ -7,6 +7,7 @@ use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject;
 use Sabre\Uri;
+use \ESN\DAV\VObjectCachePlugin;
 use \ESN\Utils\Utils as Utils;
 #[\AllowDynamicProperties]
 class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
@@ -165,23 +166,12 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         $nodeParent = $this->server->tree->getNodeForPath('/'.$parentUri);
 
-        $oldVcal = \Sabre\VObject\Reader::read($node->get());
+        // Shared instance: the previous revision is only read from here on (UID
+        // comparison and serialization for the outgoing message).
+        $oldVcal = VObjectCachePlugin::cacheFor($this->server)->read($node->get());
         $this->addSharedUsers('UPDATED', $nodeParent, $path, $data, $oldVcal);
 
         return true;
-    }
-
-    function getFirstChar($data) {
-        if (is_resource($data)) {
-            $char = fgetc($data);
-            rewind($data);
-            return $char === false ? null : $char;
-        }
-
-        if (is_string($data) && $data !== '') {
-            return $data[0];
-        }
-        return null;
     }
 
     function addSharedUsers($action, $calendar, $calendarPathObject, $data, $old_event = null) {
@@ -236,11 +226,11 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             return null;
         }
 
-        if ($this->getFirstChar($data) === '[') {
-            $event = \Sabre\VObject\Reader::readJson($data);
-        } else {
-            $event = \Sabre\VObject\Reader::read($data);
-        }
+        // Mutable copy: the payload gets its METHOD stripped and, later on,
+        // PRODID/DTSTAMP injected before publication. Going through the cache
+        // still means this payload is parsed once for the whole request -- the
+        // backend denormalizes the very same bytes a moment later.
+        $event = VObjectCachePlugin::cacheFor($this->server)->readMutable($data);
 
         $dataAsString = $data;
         if (is_resource($data)) {

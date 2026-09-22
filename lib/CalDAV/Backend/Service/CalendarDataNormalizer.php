@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV\Backend\Service;
 
+use ESN\Utils\VObjectCache;
 use \Sabre\VObject;
 
 /**
@@ -17,6 +18,18 @@ use \Sabre\VObject;
 class CalendarDataNormalizer {
     const MAX_DATE = '2038-01-01';
 
+    /** @var VObjectCache */
+    private $vObjectCache;
+
+    /**
+     * @param VObjectCache|null $vObjectCache Shared with the plugins handling the
+     *                                        request, so denormalizing the payload
+     *                                        a plugin just parsed costs nothing.
+     */
+    public function __construct(?VObjectCache $vObjectCache = null) {
+        $this->vObjectCache = $vObjectCache ?: new VObjectCache();
+    }
+
     /**
      * Extract denormalized metadata from calendar data
      *
@@ -25,7 +38,9 @@ class CalendarDataNormalizer {
      * @throws \Sabre\DAV\Exception\BadRequest If no valid component found
      */
     public function getDenormalizedData($calendarData) {
-        $vObject = VObject\Reader::read($calendarData);
+        // Read only: every helper below inspects the tree without touching it,
+        // so the shared document can be used as is.
+        $vObject = $this->vObjectCache->read($calendarData);
 
         $component = $this->findMainComponent($vObject);
         $this->validateComponent($component);

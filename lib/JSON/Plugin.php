@@ -3,6 +3,7 @@
 namespace ESN\JSON;
 
 use ESN\CalDAV\VObjectPropertyRegistry;
+use ESN\DAV\VObjectCachePlugin;
 use ESN\JSON\CalDAV\CalendarHandler;
 use ESN\JSON\CalDAV\CalendarObjectHandler;
 use ESN\JSON\CalDAV\SubscriptionHandler;
@@ -224,7 +225,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function checkModificationsRights(\Sabre\DAV\IFile $node) {
         if ($node instanceof \Sabre\CalDAV\ICalendarObject) {
-            $vcalendar = VObject\Reader::read($node->get());
+            // Shared instance: the privacy check only reads the VEVENT.
+            $vcalendar = VObjectCachePlugin::cacheFor($this->server)->read($node->get());
             if (Utils::isHiddenPrivateEvent($vcalendar->VEVENT, $node, $this->currentUser)) {
                 throw new DAV\Exception\Forbidden('You can not modify private events you do not own');
             }

@@ -4,6 +4,7 @@ namespace ESN\CalDAV\Schedule;
 use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
 use ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin;
 use ESN\CalDAV\VObjectPropertyRegistry;
+use ESN\DAV\VObjectCachePlugin;
 use ESN\DAV\Sharing\Plugin as SharingPlugin;
 use ESN\Utils\Env;
 use ESN\Utils\Utils;
@@ -597,7 +598,9 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         if (!$isNew) {
             $node = $this->server->tree->getNodeForPath($request->getPath());
-            $oldObj = Reader::read($node->get());
+            // Shared instance: the change detection below and the iTIP broker
+            // only read the previous revision, they never rewrite it.
+            $oldObj = VObjectCachePlugin::cacheFor($this->server)->read($node->get());
         } else {
             $oldObj = null;
         }
@@ -984,7 +987,9 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        $oldObject = Reader::read($node->get());
+        // Shared instance: \ESN\Publisher\CalDAV\EventRealTimePlugin reads the very
+        // same payload while handling this DELETE.
+        $oldObject = VObjectCachePlugin::cacheFor($this->server)->read($node->get());
 
         // Cancelling a booking the chair organizer never accepted still has to reach the
         // booker, who is waiting on an answer; the attendees never saw the booking.

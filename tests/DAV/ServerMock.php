@@ -377,6 +377,10 @@ END:VCALENDAR'
         $this->server->sapi = new \Sabre\HTTP\SapiMock();
         $this->server->debugExceptions = true;
 
+        // Mirrors esn.php: the plugins and the backend share one parse cache.
+        $this->vObjectCache = $this->caldavBackend->getVObjectCache();
+        $this->server->addPlugin(new \ESN\DAV\VObjectCachePlugin($this->vObjectCache));
+
         $principalBackend = $this->principalBackend;
         $calendarRoot = $this->calendarRoot;
         $this->server->on('auth:success', function($authTenant) use ($principalBackend) {

@@ -177,5 +177,7 @@ class CalendarInstanceDAO extends BaseDAO {
         );
         $this->createIndex(['principaluri' => 1, 'hidden' => 1]);
         $this->createIndex(['principaluri' => 1, 'calendarid' => 1]);
+        // Sharees and public right of a calendar: queries filter on 'calendarid', alone or with 'share_href'
+        $this->createIndex(['calendarid' => 1, 'share_href' => 1]);
     }
 }

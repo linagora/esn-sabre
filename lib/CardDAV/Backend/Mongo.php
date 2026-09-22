@@ -47,7 +47,6 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $this->db = $db;
         $this->eventEmitter = new EventEmitter();
         $this->CharAPI = new \ESN\Utils\CharAPI();
-        $this->ensureIndex();
     }
 
     function getEventEmitter() {
@@ -70,7 +69,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $query = [ 'principaluri' => $principalUri ];
         $addressBooks = [];
 
-        foreach ($collection->find($query, [ 'projection' => $projection ]) as $row) {
+        // Served by the { principaluri, uri } index
+        foreach ($collection->find($query, [ 'projection' => $projection, 'sort' => [ 'uri' => 1 ] ]) as $row) {
             $addressBooks[] = [
                 'id'  => (string)$row['_id'],
                 'uri' => $row['uri'],
@@ -1044,24 +1044,32 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         ];
     }
 
-    private function ensureIndex() {
-        // Skip index creation if disabled through configuration
-        // Rational: calling createIndex on every request doesn't make sense in production
-        if (\ESN\Utils\Env::getBoolean('SHOULD_CREATE_INDEX', true)) {
-            // create a unique compound index on 'principaluri' and 'uri' for address book collection
-            $addressBookCollection = $this->db->selectCollection($this->addressBooksTableName);
-            $addressBookCollection->createIndex(
-                array('principaluri' => 1, 'uri' => 1),
-                array('unique' => true)
-            );
+    /**
+     * Creates the MongoDB indexes. Run once at container startup by scripts/create-indexes.php, never per request.
+     */
+    function ensureIndexes() {
+        // create a unique compound index on 'principaluri' and 'uri' for address book collection
+        $addressBookCollection = $this->db->selectCollection($this->addressBooksTableName);
+        $addressBookCollection->createIndex(
+            array('principaluri' => 1, 'uri' => 1),
+            array('unique' => true)
+        );
 
-            // Fasten retrieval of changes in addressbooks
-            $addressBookChangeCollection = $this->db->selectCollection($this->addressBookChangesTableName);
-            $addressBookChangeCollection->createIndex(array('addressbookid' => 1, 'synctoken' => 1));
+        // Fasten retrieval of changes in addressbooks
+        $addressBookChangeCollection = $this->db->selectCollection($this->addressBookChangesTableName);
+        $addressBookChangeCollection->createIndex(array('addressbookid' => 1, 'synctoken' => 1));
 
-            $cardsCollection = $this->db->selectCollection($this->cardsTableName);
-            $cardsCollection->createIndex(array('addressbookid' => 1));
-            $cardsCollection->createIndex(array('addressbookid' => 1, 'uri' => 1));
-        }
+        // Also serves the queries on 'addressbookid' alone
+        $cardsCollection = $this->db->selectCollection($this->cardsTableName);
+        $cardsCollection->createIndex(array('addressbookid' => 1, 'uri' => 1));
+
+        // Sharees of an address book (getInvites, updateInvites), and address books shared with a user
+        $sharedAddressBookCollection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $sharedAddressBookCollection->createIndex(array('addressbookid' => 1, 'share_href' => 1));
+        $sharedAddressBookCollection->createIndex(array('principaluri' => 1));
+
+        $subscriptionCollection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
+        $subscriptionCollection->createIndex(array('principaluri' => 1));
+        $subscriptionCollection->createIndex(array('source' => 1));
     }
 }

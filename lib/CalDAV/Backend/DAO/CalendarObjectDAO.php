@@ -62,10 +62,8 @@ class CalendarObjectDAO extends BaseDAO {
     }
 
     public function ensureIndexes() {
-        // Index for all calendar object queries
-        $this->createIndex(['calendarid' => 1]);
-
-        // Compound index for getMultipleCalendarObjects and getCalendarObject
+        // Compound index for getMultipleCalendarObjects and getCalendarObject, also serves the queries on
+        // 'calendarid' alone
         $this->createIndex(['calendarid' => 1, 'uri' => 1]);
 
         // Compound index for calendarQuery with time-range filters

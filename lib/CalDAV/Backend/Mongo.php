@@ -93,8 +93,6 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             $this->calendarObjectDAO,
             $this->calendarDataNormalizer
         );
-
-        $this->ensureIndex();
     }
 
     function getEventEmitter() {
@@ -388,17 +386,16 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $this->calendarDAO->incrementSyncToken($calendarId);
     }
 
-    private function ensureIndex() {
-        // Skip index creation if disabled through configuration
-        // Rational: calling createIndex on every request doesn't make sense in production
-        if (\ESN\Utils\Env::getBoolean('SHOULD_CREATE_INDEX', true)) {
-            $this->calendarDAO->ensureIndexes();
-            $this->calendarInstanceDAO->ensureIndexes();
-            $this->calendarObjectDAO->ensureIndexes();
-            $this->calendarChangeDAO->ensureIndexes();
-            $this->calendarSubscriptionDAO->ensureIndexes();
-            $this->schedulingObjectDAO->ensureIndexes();
-        }
+    /**
+     * Creates the MongoDB indexes. Run once at container startup by scripts/create-indexes.php, never per request.
+     */
+    public function ensureIndexes() {
+        $this->calendarDAO->ensureIndexes();
+        $this->calendarInstanceDAO->ensureIndexes();
+        $this->calendarObjectDAO->ensureIndexes();
+        $this->calendarChangeDAO->ensureIndexes();
+        $this->calendarSubscriptionDAO->ensureIndexes();
+        $this->schedulingObjectDAO->ensureIndexes();
     }
 
 }

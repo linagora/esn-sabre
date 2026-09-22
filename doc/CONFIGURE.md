@@ -76,7 +76,6 @@ of `config.json`.
 | `SABRE_ENFORCE_RFC_6638` | `true` | Reject attendee updates to organizer-controlled scheduling fields |
 | `SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING` | `true` | Recipient-aware scheduling for `ACTION:EMAIL` `VALARM` components |
 | `TW_CAL_REPLY_PROPAGATION_THRESHOLD` | `200` | Attendee count above which reply propagation is skipped |
-| `SHOULD_CREATE_INDEX` | `true` | Provision MongoDB indexes on every request |
 | `LOG_TRACE` | `false` | Add exception stack traces to the logs |
 
 Both spellings are equivalent — as an ENV variable:
@@ -125,7 +124,7 @@ Feature flag to restrict DAV principal discovery.
 
    This prevents DAV clients from enumerating other users or resources and leaking internal principal ids.
 
-Sabre being written in PHP, it supports per-request MongoDB indexes provisioning (defaults to `true`), which can be disabled by setting the SHOULD_CREATE_INDEX environment variable to `false`. This is recommended in production once indexes are provisioned.
+MongoDB indexes are created once when the container starts (`scripts/create-indexes.php`), not on every request. See [doc/storage/MONGO.md](storage/MONGO.md#index-creation).
 
 Feature flag to control how inline binary attachments (`ATTACH;ENCODING=BASE64;VALUE=BINARY`) are handled on calendar object creation and update. URI attachments (`ATTACH:https://...`) are always preserved.
  - CALDAV_BINARY_ATTACHMENT_MODE

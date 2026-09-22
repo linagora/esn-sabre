@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV\Schedule;
 
+use ESN\Utils\VObjectCache;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\ITip;
 use Sabre\VObject\Reader;
@@ -18,14 +19,18 @@ class CalendarObjectHelper {
     /**
      * Parses raw iCalendar data into a VCalendar, returning null when the
      * input cannot be parsed or is not a VCALENDAR.
+     *
+     * Pass the request's cache to reuse a document already parsed while
+     * handling it. What comes back is then shared with the other holders of the
+     * same payload, so it must not be mutated or destroy()ed.
      */
-    public static function readCalendarObject($calendarObject): ?VCalendar {
+    public static function readCalendarObject($calendarObject, ?VObjectCache $cache = null): ?VCalendar {
         if ($calendarObject instanceof VCalendar) {
             return $calendarObject;
         }
 
         try {
-            $parsedObject = \Sabre\VObject\Reader::read($calendarObject);
+            $parsedObject = $cache ? $cache->read($calendarObject) : Reader::read($calendarObject);
         } catch (\Throwable) {
             return null;
         }

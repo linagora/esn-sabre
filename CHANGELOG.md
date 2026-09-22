@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
  - Every runtime setting can now be configured from `config.json` instead of the process environment. The `environment` section of `config.json` takes precedence, the process environment is still honoured as a fallback, and the built-in default applies last, so existing deployments keep working untouched. `scripts/generate_config.sh` materializes the whole section, `config.json.default` lists every key with its default value, and [doc/CONFIGURE.md](doc/CONFIGURE.md) documents all of them.
  - ISSUE-425 Auto-provision users upon a DAV request — when an LDAP or impersonated user authenticates successfully but has no entry in the `users` collection yet, the entry is created on the fly (following the twake-calendar-side-service document format) instead of returning a `401`. Gated by the `AUTO_PROVISION` env var (default `true`). Needed upon migrations (#425)
 
+### Performance
+
+ - Listing a calendar (PROPFIND `Depth: 1`, `sync-collection`, `calendar-multiget`) no longer reads the calendar sharing state from MongoDB once per event: the child ACL is computed once per listing. On a 3000 event calendar, a PROPFIND `Depth: 1` goes from 21014 MongoDB commands (~5 s) down to 21 (~50 ms).
+
 ### Bug Fixes
 
  - ISSUE-404 Fix duplicated `DAV`/`X-Sabre-Version` headers in DAV responses — the nginx capability headers are now only emitted for the OPTIONS short-circuit, letting Sabre emit them once (with consistent casing) for proxied responses (#404)

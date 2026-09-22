@@ -145,6 +145,33 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     }
 
     /**
+     * Sabre computes the child ACL once per calendar object. Here that computation reads the calendar sharing
+     * state from the database, so it is computed once for the whole listing.
+     */
+    function getChildren() {
+        return $this->asCalendarObjects($this->caldavBackend->getCalendarObjects($this->calendarInfo['id']));
+    }
+
+    function getMultipleChildren(array $paths) {
+        return $this->asCalendarObjects($this->caldavBackend->getMultipleCalendarObjects($this->calendarInfo['id'], $paths));
+    }
+
+    private function asCalendarObjects(array $objs) {
+        if (empty($objs)) {
+            return [];
+        }
+
+        $childACL = $this->getChildACL();
+        $children = [];
+        foreach ($objs as $obj) {
+            $obj['acl'] = $childACL;
+            $children[] = new \Sabre\CalDAV\CalendarObject($this->caldavBackend, $this->calendarInfo, $obj);
+        }
+
+        return $children;
+    }
+
+    /**
      * This method returns the ACL's for calendar objects in this calendar.
      * The result of this method automatically gets passed to the
      * calendar-object nodes in the calendar.

@@ -3,6 +3,7 @@ namespace ESN\CalDAV;
 
 use ESN\CalDAV\Validation\CalendarObjectValidator;
 use ESN\DAV\Sharing\Plugin as SPlugin;
+use ESN\DAV\VObjectCachePlugin;
 use ESN\Utils\Utils;
 use Sabre\DAV\Exception\BadRequest;
 use Sabre\DAV\Exception\UnsupportedMediaType;
@@ -20,7 +21,21 @@ use Sabre\VObject\Component\VCalendar;
 class Plugin extends \Sabre\CalDAV\Plugin {
     const PRIORITY_BEFORE_SCHEDULING = 80;
 
+    /**
+     * Last in line on calendarObjectChange, after scheduling and everything
+     * else that may still rewrite the object.
+     */
+    const PRIORITY_CAPTURE_WRITTEN_OBJECT = 1000;
+
     private $calendarObjectValidator;
+
+    /**
+     * The object as the last calendarObjectChange listener left it, kept only
+     * for the length of one validateICalendar() call.
+     *
+     * @var VCalendar|null
+     */
+    private $writtenObject;
 
     function __construct(?CalendarObjectValidator $calendarObjectValidator = null) {
         $this->calendarObjectValidator = $calendarObjectValidator ?: new CalendarObjectValidator();
@@ -31,6 +46,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         parent::initialize($server);
         $server->on('calendarObjectChange', [$this, 'validateCalendarObjectBeforeScheduling'], self::PRIORITY_BEFORE_SCHEDULING);
+        $server->on('calendarObjectChange', [$this, 'captureWrittenObject'], self::PRIORITY_CAPTURE_WRITTEN_OBJECT);
         $server->on('propFind', [$this, 'propFindSharedCalendar'], 151);
         $server->on('beforeMove', [$this, 'validateBeforeMoveToTeamCalendar'], 40);
     }
@@ -60,15 +76,40 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
     }
 
+    /**
+     * Takes a copy of the object as the last listener left it.
+     *
+     * Sabre destroys the parsed object at the end of validateICalendar(), so a
+     * copy is the only way to keep it; see validateICalendar() below for what
+     * it is kept for. Cloning is markedly cheaper than parsing the payload
+     * again, which is what every reader downstream would otherwise do.
+     */
+    function captureWrittenObject(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
+        $this->writtenObject = clone $vCal;
+    }
+
     protected function validateICalendar(&$data, $path, &$modified, RequestInterface $request, ResponseInterface $response, $isNew) {
+        $this->writtenObject = null;
+
         try {
             parent::validateICalendar($data, $path, $modified, $request, $response, $isNew);
+
+            // The copy above is what $data now describes: either Sabre serialized
+            // the object into $data, or nothing changed it and $data is still the
+            // body it was parsed from. Hand it over so the plugins publishing this
+            // write, and the backend denormalizing it, work from the copy instead
+            // of parsing those same bytes all over again.
+            if ($this->writtenObject) {
+                VObjectCachePlugin::cacheFor($this->server)->put($data, $this->writtenObject);
+            }
         } catch (UnsupportedMediaType $e) {
             if (str_starts_with($e->getMessage(), 'Validation error in iCalendar:')) {
                 throw new BadRequest($e->getMessage());
             }
 
             throw $e;
+        } finally {
+            $this->writtenObject = null;
         }
     }
 

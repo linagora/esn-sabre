@@ -3,6 +3,8 @@
 namespace ESN\CalDAV;
 
 use PHPUnit\Framework\TestCase;
+use Sabre\HTTP\Request;
+use Sabre\HTTP\Response;
 use Sabre\VObject;
 
 /**
@@ -34,16 +36,12 @@ ICS;
     }
 
     function testFilterStripsBinaryAttachmentButKeepsUri() {
-        $plugin = new BinaryAttachmentPlugin(BinaryAttachmentPlugin::MODE_FILTER);
+        $vcal = VObject\Reader::read($this->calendarWithBinaryAttach());
 
-        $data = $this->calendarWithBinaryAttach();
-        $modified = false;
-
-        $this->invokeProcess($plugin, $data, $modified);
+        $modified = $this->emitCalendarObjectChange(BinaryAttachmentPlugin::MODE_FILTER, $vcal);
 
         $this->assertTrue($modified);
 
-        $vcal = VObject\Reader::read($data);
         $attachments = $vcal->VEVENT->select('ATTACH');
 
         $this->assertCount(1, $attachments);
@@ -53,32 +51,24 @@ ICS;
     }
 
     function testRejectThrowsOnBinaryAttachment() {
-        $plugin = new BinaryAttachmentPlugin(BinaryAttachmentPlugin::MODE_REJECT);
-
-        $data = $this->calendarWithBinaryAttach();
-        $modified = false;
+        $vcal = VObject\Reader::read($this->calendarWithBinaryAttach());
 
         $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
 
-        $this->invokeProcess($plugin, $data, $modified);
+        $this->emitCalendarObjectChange(BinaryAttachmentPlugin::MODE_REJECT, $vcal);
     }
 
     function testAllowLeavesDataUntouched() {
-        $plugin = new BinaryAttachmentPlugin(BinaryAttachmentPlugin::MODE_ALLOW);
+        $vcal = VObject\Reader::read($this->calendarWithBinaryAttach());
+        $original = $vcal->serialize();
 
-        $data = $this->calendarWithBinaryAttach();
-        $original = $data;
-        $modified = false;
-
-        $this->invokeProcess($plugin, $data, $modified);
+        $modified = $this->emitCalendarObjectChange(BinaryAttachmentPlugin::MODE_ALLOW, $vcal);
 
         $this->assertFalse($modified);
-        $this->assertEquals($original, $data);
+        $this->assertEquals($original, $vcal->serialize());
     }
 
     function testFilterIgnoresCalendarWithoutBinaryAttachment() {
-        $plugin = new BinaryAttachmentPlugin(BinaryAttachmentPlugin::MODE_FILTER);
-
         $data = <<<ICS
 BEGIN:VCALENDAR
 VERSION:2.0
@@ -90,18 +80,20 @@ ATTACH;FMTTYPE=application/pdf:https://example.com/files/agenda.pdf
 END:VEVENT
 END:VCALENDAR
 ICS;
-        $original = $data;
-        $modified = false;
+        $vcal = VObject\Reader::read($data);
+        $original = $vcal->serialize();
 
-        $this->invokeProcess($plugin, $data, $modified);
+        $modified = $this->emitCalendarObjectChange(BinaryAttachmentPlugin::MODE_FILTER, $vcal);
 
         $this->assertFalse($modified);
-        $this->assertEquals($original, $data);
+        $this->assertEquals($original, $vcal->serialize());
     }
 
+    /**
+     * Sabre converts a jCal body to a VCalendar before anyone is notified, so
+     * the plugin only ever sees the converted object.
+     */
     function testFilterAcceptsJCalInput() {
-        $plugin = new BinaryAttachmentPlugin(BinaryAttachmentPlugin::MODE_FILTER);
-
         $jcal = json_encode([
             'vcalendar',
             [['version', new \stdClass(), 'text', '2.0']],
@@ -117,38 +109,32 @@ ICS;
             ]]
         ]);
 
-        $data = $jcal;
-        $modified = false;
+        $vcal = VObject\Reader::readJson($jcal);
 
-        $this->invokeProcess($plugin, $data, $modified);
+        $modified = $this->emitCalendarObjectChange(BinaryAttachmentPlugin::MODE_FILTER, $vcal);
 
         $this->assertTrue($modified);
-
-        $vcal = VObject\Reader::read($data);
         $this->assertCount(0, $vcal->VEVENT->select('ATTACH'));
     }
 
-    function testNonCalendarDataIsLeftUntouched() {
-        $plugin = new BinaryAttachmentPlugin(BinaryAttachmentPlugin::MODE_FILTER);
-
-        $data = "not a calendar";
-        $original = $data;
-        $modified = false;
-
-        $this->invokeProcess($plugin, $data, $modified);
-
-        $this->assertFalse($modified);
-        $this->assertEquals($original, $data);
-    }
-
     /**
-     * Calls the protected process() handler by reference.
+     * Drives the plugin the way Sabre does: through calendarObjectChange, with
+     * the object it has already parsed.
      */
-    private function invokeProcess(BinaryAttachmentPlugin $plugin, &$data, &$modified) {
-        $method = new \ReflectionMethod($plugin, 'process');
-        $method->setAccessible(true);
+    private function emitCalendarObjectChange($mode, $vcal): bool {
+        $server = new \Sabre\DAV\Server([]);
+        $server->addPlugin(new BinaryAttachmentPlugin($mode));
 
-        $args = [&$data, &$modified];
-        $method->invokeArgs($plugin, $args);
+        $modified = false;
+        $server->emit('calendarObjectChange', [
+            new Request('PUT', '/calendars/user/cal/event.ics'),
+            new Response(),
+            $vcal,
+            'calendars/user/cal',
+            &$modified,
+            false
+        ]);
+
+        return $modified;
     }
 }

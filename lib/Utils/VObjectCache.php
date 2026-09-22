@@ -29,12 +29,13 @@ class VObjectCache {
     /**
      * Number of parsed documents kept around.
      *
-     * A write juggles at most the old object plus a couple of successive
-     * revisions of the new one, so four is comfortable. Keeping it small is
-     * what stops a REPORT over a large calendar from pinning every event it
-     * touches in memory.
+     * A write juggles the old object, the new one, and one payload per iTIP
+     * message scheduling delivers along the way, so eight leaves room without
+     * evicting anything that is still wanted. Keeping it small is what stops a
+     * REPORT over a large calendar from pinning every event it touches in
+     * memory.
      */
-    const DEFAULT_CAPACITY = 4;
+    const DEFAULT_CAPACITY = 8;
 
     /** @var array<string, Document> content key => parsed document, oldest first */
     private $entries = [];
@@ -102,6 +103,31 @@ class VObjectCache {
     }
 
     /**
+     * Stores a document that was parsed elsewhere, under the payload it
+     * corresponds to.
+     *
+     * This is how a document already built while handling the request is handed
+     * over so the next reader of the same bytes does not parse them again.
+     * Ownership moves to the cache: the caller must not mutate the document
+     * afterwards, exactly as with what read() returns.
+     *
+     * An existing entry wins, since it is the one other callers may already be
+     * holding.
+     *
+     * @param string|resource $data
+     */
+    function put($data, Document $document) {
+        $key = self::keyFor(self::asString($data));
+
+        if (isset($this->entries[$key])) {
+            return;
+        }
+
+        $this->entries[$key] = $document;
+        $this->evictOverflow();
+    }
+
+    /**
      * Drops every entry. Call this at request boundaries; within a request the
      * capacity bound is enough.
      */
@@ -132,8 +158,7 @@ class VObjectCache {
     /**
      * jCal and vCard-JSON payloads start with a '[', everything else is parsed
      * as its text flavour. Centralising the sniff here is the point: it used to
-     * be copy-pasted in Utils::formatIcal, BinaryAttachmentPlugin and
-     * EventRealTimePlugin.
+     * be copy-pasted across the plugins handling a write.
      */
     private static function parse($data) {
         if (substr($data, 0, 1) === '[') {

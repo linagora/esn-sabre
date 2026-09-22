@@ -1,6 +1,10 @@
 <?php
 
 namespace ESN\CalDAV;
+
+use Sabre\HTTP\Request;
+use Sabre\HTTP\Response;
+
 require_once ESN_TEST_BASE. '/DAV/ServerMock.php';
 
 /**
@@ -103,13 +107,10 @@ ICS;
         $calendarData['id'] = $this->caldavBackend->createCalendar($calendarData['principaluri'], $calendarData['uri'], $calendarData);
         $etag = $this->caldavBackend->createCalendarObject($calendarData['id'], $objectData['uri'], $oldCal);
   
-        $modified = false;
         $path = "calendars/54b64eadf6d7d8e41d263e0f/participationCal/objecturi.ics";
-
-        $node = $this->server->tree->getNodeForPath("calendars/54b64eadf6d7d8e41d263e0f/participationCal/objecturi.ics");
-        $this->assertTrue($this->server->emit('beforeWriteContent', [$path, $node, &$data, &$modified]));
-        
         $eventNode = \Sabre\VObject\Reader::read($data);
+
+        $this->assertTrue($this->emitCalendarObjectChange($path, $eventNode));
 
         [$masterEvent, $pastOverride, $futureOverride] = $eventNode->select('VEVENT');
 
@@ -175,19 +176,36 @@ ICS;
         $calendarData['id'] = $this->caldavBackend->createCalendar($calendarData['principaluri'], $calendarData['uri'], $calendarData);
         $this->caldavBackend->createCalendarObject($calendarData['id'], $objectData['uri'], $oldCal);
 
-        $modified = false;
         $path = "calendars/54b64eadf6d7d8e41d263e0f/participationRecurringCal/recurring-objecturi.ics";
-        $node = $this->server->tree->getNodeForPath($path);
-
-        $this->assertTrue($this->server->emit('beforeWriteContent', [$path, $node, &$data, &$modified]));
-
         $eventNode = \Sabre\VObject\Reader::read($data);
+
+        $this->assertTrue($this->emitCalendarObjectChange($path, $eventNode));
+
         [$masterEvent, $overrideEvent] = $this->extractMasterAndOverrideEvents($eventNode);
 
         $this->assertNotNull($masterEvent);
         $this->assertNotNull($overrideEvent);
         $this->assertEquals('ACCEPTED', $masterEvent->ATTENDEE['PARTSTAT']->getValue());
         $this->assertFalse(isset($overrideEvent->ATTENDEE));
+    }
+
+    /**
+     * Drives the plugin the way Sabre does: through calendarObjectChange, with
+     * the object it has already parsed and which it mutates in place.
+     */
+    private function emitCalendarObjectChange($path, \Sabre\VObject\Component\VCalendar $vCal): bool {
+        $this->server->httpRequest = new Request('PUT', '/' . $path);
+
+        $modified = false;
+
+        return $this->server->emit('calendarObjectChange', [
+            $this->server->httpRequest,
+            new Response(),
+            $vCal,
+            dirname($path),
+            &$modified,
+            false
+        ]);
     }
 
     private function extractMasterAndOverrideEvents(\Sabre\VObject\Component\VCalendar $calendar): array {

@@ -108,6 +108,25 @@ class VObjectCacheTest extends TestCase {
         $this->assertSame($first, $cache->read($this->ics('First')));
     }
 
+    function testPutShouldSpareTheNextReaderTheParse() {
+        $cache = new VObjectCache();
+
+        $document = \Sabre\VObject\Reader::read($this->ics());
+        $cache->put($this->ics(), $document);
+
+        $this->assertSame($document, $cache->read($this->ics()));
+        $this->assertSame(['parses' => 0, 'hits' => 1], $cache->getStats());
+    }
+
+    function testPutShouldNotDisplaceADocumentCallersMayAlreadyHold() {
+        $cache = new VObjectCache();
+
+        $held = $cache->read($this->ics());
+        $cache->put($this->ics(), \Sabre\VObject\Reader::read($this->ics()));
+
+        $this->assertSame($held, $cache->read($this->ics()));
+    }
+
     function testResetShouldDropEverything() {
         $cache = new VObjectCache();
 

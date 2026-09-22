@@ -2,13 +2,12 @@
 namespace ESN\CalDAV;
 
 use \ESN\DAV\VObjectCachePlugin;
-use \ESN\Utils\Utils;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use \Sabre\CalDAV\ICalendarObject;
-use \Sabre\CalDAV\ICalendar;
-use \Sabre\Uri;
 use \Sabre\HTTP\RequestInterface;
+use \Sabre\HTTP\ResponseInterface;
+use \Sabre\VObject\Component\VCalendar;
 
 #[\AllowDynamicProperties]
 class ParticipationPlugin extends ServerPlugin {
@@ -22,84 +21,87 @@ class ParticipationPlugin extends ServerPlugin {
 
     function initialize(Server $server) {
         $this->server = $server;
-        $server->on('beforeWriteContent', [$this, 'beforeWriteContent'], 1);
+
+        // calendarObjectChange gives us the object Sabre has already parsed and
+        // lets it do the one re-serialization at the end, instead of parsing and
+        // serializing the payload again here on every write.
+        //
+        // Runs just before scheduling, so a propagated participation status is
+        // part of what gets scheduled.
+        $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], Plugin::PRIORITY_BEFORE_SCHEDULING - 5);
     }
 
-    function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {
-        if (!$this->scheduleReply($this->server->httpRequest)) {
+    /**
+     * Propagates a change of participation status on the series to the
+     * overrides that still follow it.
+     *
+     * @param VCalendar $vCal     the parsed object, mutated in place
+     * @param bool      $modified set when an override was updated
+     */
+    function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
+        // Nothing to propagate on a creation: there is no previous answer to
+        // compare the new one against.
+        if ($isNew || !$this->scheduleReply($this->server->httpRequest)) {
             return;
         }
+
+        $node = $this->server->tree->getNodeForPath($request->getPath());
 
         if (!$node instanceof ICalendarObject) {
-            return;
-        }
-
-        // We're only interested in ICalendarObject nodes that are inside of a
-        // real calendar. This is to avoid triggering validation and scheduling
-        // for non-calendars (such as an inbox).
-        list($parent) = Uri\split($path);
-        $parentNode = $this->server->tree->getNodeForPath($parent);
-
-        if (!$parentNode instanceof ICalendar) {
             return;
         }
 
         // Shared instance: we only compare participation status against it.
         $oldCal = VObjectCachePlugin::cacheFor($this->server)->read($node->get());
 
-        $this->processICalendarParticipation(
-            $node,
-            $data,
-            $oldCal,
-            $modified
-        );
+        $this->processICalendarParticipation($vCal, $oldCal, $modified);
     }
 
-    protected function processICalendarParticipation($node, &$data, $oldCal, &$modified) {
-        list($data, $modified) = Utils::formatIcal($data, $modified);
-
+    protected function processICalendarParticipation(VCalendar $vCal, VCalendar $oldCal, &$modified) {
         $addresses = $this->getAddressesForPrincipal(
             $this->server->getPlugin('auth')->getCurrentPrincipal()
         );
 
         if (empty($addresses)) {
-            $data = $data->serialize();
             return;
         }
 
-        $newInstances = $this->getAllInstancePartstatForAttendee($data, $addresses[0]);
+        $newInstances = $this->getAllInstancePartstatForAttendee($vCal, $addresses[0]);
         $oldInstances = $this->getAllInstancePartstatForAttendee($oldCal, $addresses[0]);
 
-        if (isset($newInstances['master']) && isset($oldInstances['master'])) {
-            if ($newInstances['master']['partstat'] && $oldInstances['master']['partstat'] && $newInstances['master']['partstat'] !== $oldInstances['master']['partstat']) {
-                $now = new \DateTimeImmutable();
+        if (!isset($newInstances['master']) || !isset($oldInstances['master'])) {
+            return;
+        }
 
-                foreach ($data->VEVENT as $vevent) {
-                    if (!isset($vevent->{'RECURRENCE-ID'})) {
-                        continue;
-                    }
+        $partstat = $newInstances['master']['partstat'];
 
-                    // Past overrides keep their explicit response when the series response changes.
-                    if ($this->isPastRecurrence($vevent->{'RECURRENCE-ID'}, $now)) {
-                        continue;
-                    }
+        if (!$partstat || !$oldInstances['master']['partstat'] || $partstat === $oldInstances['master']['partstat']) {
+            return;
+        }
 
-                    if (!isset($vevent->ATTENDEE)) {
-                        continue;
-                    }
+        $now = new \DateTimeImmutable();
 
-                    foreach ($vevent->ATTENDEE as $attendee) {
-                        if (strtolower($attendee->getValue()) == $addresses[0]) {
-                            isset($attendee['PARTSTAT']) ? $attendee['PARTSTAT']->setValue($newInstances['master']['partstat']) : $attendee['PARTSTAT'] = $newInstances['master']['partstat'];
-                        }
-                    }
+        foreach ($vCal->VEVENT as $vevent) {
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                continue;
+            }
+
+            // Past overrides keep their explicit response when the series response changes.
+            if ($this->isPastRecurrence($vevent->{'RECURRENCE-ID'}, $now)) {
+                continue;
+            }
+
+            if (!isset($vevent->ATTENDEE)) {
+                continue;
+            }
+
+            foreach ($vevent->ATTENDEE as $attendee) {
+                if (strtolower($attendee->getValue()) == $addresses[0]) {
+                    isset($attendee['PARTSTAT']) ? $attendee['PARTSTAT']->setValue($partstat) : $attendee['PARTSTAT'] = $partstat;
+                    $modified = true;
                 }
             }
         }
-
-        $data = $data->serialize();
-
-        return;
     }
 
     private function isPastRecurrence($recurrenceId, $now) {
@@ -144,7 +146,7 @@ class ParticipationPlugin extends ServerPlugin {
         }
 
         $addresses = $properties[$CUAS]->getHrefs();
-    
+
         return $addresses;
     }
 

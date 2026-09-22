@@ -4,7 +4,10 @@ namespace ESN\CalDAV;
 
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
+use Sabre\HTTP\RequestInterface;
+use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject;
+use Sabre\VObject\Component\VCalendar;
 
 /**
  * Binary Attachment Plugin
@@ -55,67 +58,36 @@ class BinaryAttachmentPlugin extends ServerPlugin {
     function initialize(Server $server) {
         $this->server = $server;
 
-        // Run early so the policy is applied before scheduling/participation
-        // logic re-serializes the object.
-        $server->on('beforeCreateFile', [$this, 'beforeCreateFile'], 1);
-        $server->on('beforeWriteContent', [$this, 'beforeWriteContent'], 1);
+        // calendarObjectChange hands us the object Sabre already parsed, and
+        // re-serializes it once for everybody if we report a change. Running on
+        // the raw payload instead would mean parsing and serializing the event a
+        // second time on every single write.
+        //
+        // Runs before scheduling so an attachment never reaches an attendee, and
+        // before participation handling for the same reason.
+        $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], Plugin::PRIORITY_BEFORE_SCHEDULING - 30);
     }
 
     function getPluginName() {
         return 'caldav-binary-attachment';
     }
 
-    function beforeCreateFile($path, &$data, \Sabre\DAV\ICollection $parent, &$modified) {
-        $this->process($data, $modified);
-    }
-
-    function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {
-        $this->process($data, $modified);
-    }
-
     /**
-     * Applies the configured policy to the given calendar payload.
+     * Applies the configured policy to the calendar object being written.
      *
-     * Non-calendar payloads and malformed data are left untouched so the
-     * regular validation pipeline can deal with them.
-     *
-     * @param string|resource $data
-     * @param bool            $modified
+     * @param VCalendar $vCal     the parsed object, mutated in place
+     * @param bool      $modified set when an attachment was stripped, which is
+     *                            what tells Sabre to re-serialize the object
      */
-    protected function process(&$data, &$modified) {
+    function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
         if ($this->mode === self::MODE_ALLOW) {
             return;
         }
 
-        if (is_resource($data)) {
-            $data = stream_get_contents($data);
-        }
-
-        if (!is_string($data) || $data === '') {
-            return;
-        }
-
-        try {
-            // A leading '[' means we're dealing with a jCal document.
-            if (substr($data, 0, 1) === '[') {
-                $vcalendar = VObject\Reader::readJson($data);
-            } else {
-                $vcalendar = VObject\Reader::read($data);
-            }
-        } catch (VObject\ParseException $e) {
-            // Not our concern; let the regular validation reject malformed data.
-            return;
-        }
-
-        if (!$vcalendar instanceof VObject\Component\VCalendar) {
-            return;
-        }
-
         $filtered = false;
-        $this->applyPolicy($vcalendar, $filtered);
+        $this->applyPolicy($vCal, $filtered);
 
         if ($filtered) {
-            $data = $vcalendar->serialize();
             $modified = true;
         }
     }

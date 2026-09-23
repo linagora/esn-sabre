@@ -3,6 +3,7 @@
 namespace ESN\DAVACL;
 
 require_once ESN_TEST_BASE. '/DAV/ServerMock.php';
+require_once ESN_TEST_BASE. '/DAV/MongoFindCounter.php';
 
 class PluginTest extends \ESN\DAV\ServerMock {
     function testPROPFINDPrincipal() {
@@ -50,19 +51,15 @@ class PluginTest extends \ESN\DAV\ServerMock {
         }
         $hrefs[] = '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/missing.ics';
 
-        $counter = new CalendarObjectQueryCounter();
-        \MongoDB\Driver\Monitoring\addSubscriber($counter);
-        try {
+        $queries = \ESN\DAV\MongoFindCounter::count('calendarobjects', function () use ($hrefs, &$response) {
             $response = $this->multiget('/calendars/54b64eadf6d7d8e41d263e0f/calendar1/', $hrefs);
-        } finally {
-            \MongoDB\Driver\Monitoring\removeSubscriber($counter);
-        }
+        });
 
         $this->assertEquals(207, $response->status);
         // Sabre leaves the missing href out of the response
         $this->assertEquals(20, substr_count($response->getBodyAsString(), '<d:response>'));
         // One lookup for the ACL check, one for the report itself, whatever the number of hrefs
-        $this->assertLessThanOrEqual(2, $counter->queries);
+        $this->assertLessThanOrEqual(2, $queries);
     }
 
     function testMultigetOfUnreadableCalendarIsForbidden() {
@@ -88,18 +85,4 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $this->assertEquals(403, $response->status);
     }
-}
-
-class CalendarObjectQueryCounter implements \MongoDB\Driver\Monitoring\CommandSubscriber {
-    public $queries = 0;
-
-    function commandStarted(\MongoDB\Driver\Monitoring\CommandStartedEvent $event): void {
-        if ($event->getCommandName() === 'find' && $event->getCommand()->find === 'calendarobjects') {
-            $this->queries++;
-        }
-    }
-
-    function commandSucceeded(\MongoDB\Driver\Monitoring\CommandSucceededEvent $event): void {}
-
-    function commandFailed(\MongoDB\Driver\Monitoring\CommandFailedEvent $event): void {}
 }

@@ -3,6 +3,7 @@
 namespace ESN\CalDAV\Backend;
 
 require_once 'AbstractDatabaseTestBase.php';
+require_once ESN_TEST_BASE . '/DAV/MongoFindCounter.php';
 
 /**
  * @medium
@@ -17,6 +18,26 @@ class MongoTest extends AbstractDatabaseTestBase {
         $db = $mc->{ESN_MONGO_SABREDB};
         $db->drop();
         return new Mongo($db);
+    }
+
+    function testGetMultipleCalendarObjectsQueriesByBatches() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        // Just over one batch
+        $count = \ESN\CalDAV\Backend\Service\CalendarObjectService::MULTIGET_BATCH_SIZE + 10;
+        $uris = [];
+        for ($i = 0; $i < $count; $i++) {
+            $uris[] = 'event' . $i . '.ics';
+            $backend->createCalendarObject($calendarId, 'event' . $i . '.ics', "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:event-" . $i . "\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        }
+        $uris[] = 'missing.ics';
+
+        $queries = \ESN\DAV\MongoFindCounter::count('calendarobjects', function () use ($backend, $calendarId, $uris, &$objects) {
+            $objects = $backend->getMultipleCalendarObjects($calendarId, $uris);
+        });
+
+        $this->assertEquals(2, $queries);
+        $this->assertEqualsCanonicalizing(array_slice($uris, 0, $count), array_column($objects, 'uri'));
     }
 
     function testSchedulingRecipientShouldRemainInternalAndSurviveContentUpdate() {

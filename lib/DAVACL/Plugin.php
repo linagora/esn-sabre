@@ -62,6 +62,15 @@ class Plugin extends \ESN\JSON\BasePlugin {
      * query rather than one per path: a multiget REPORT can carry hundreds of hrefs of the same calendar.
      */
     private function findExistingPaths(array $paths) {
+        $existingPaths = [];
+        foreach ($this->groupByParent($paths) as $parent => $children) {
+            $existingPaths = array_merge($existingPaths, $this->findExistingChildren($parent, $children));
+        }
+
+        return $existingPaths;
+    }
+
+    private function groupByParent(array $paths) {
         $pathsByParent = [];
         foreach ($paths as $path) {
             // Trimmed, as the tree caches the nodes it fetches under trimmed paths
@@ -70,21 +79,15 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $pathsByParent[$parent][] = $path;
         }
 
-        $existingPaths = [];
-        foreach ($pathsByParent as $parent => $children) {
-            if (count($children) > 1 && $this->isMultiGetCollection($parent)) {
-                $existingPaths = array_merge($existingPaths, array_keys($this->server->tree->getMultipleNodes($children)));
-                continue;
-            }
+        return $pathsByParent;
+    }
 
-            foreach ($children as $child) {
-                if ($this->server->tree->nodeExists($child)) {
-                    $existingPaths[] = $child;
-                }
-            }
+    private function findExistingChildren($parent, array $children) {
+        if (count($children) > 1 && $this->isMultiGetCollection($parent)) {
+            return array_keys($this->server->tree->getMultipleNodes($children));
         }
 
-        return $existingPaths;
+        return array_values(array_filter($children, [$this->server->tree, 'nodeExists']));
     }
 
     private function isMultiGetCollection($path) {

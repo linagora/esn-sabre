@@ -5,6 +5,7 @@ namespace ESN\CardDAV\Backend;
 use \Sabre\DAV\Sharing\Plugin as SPlugin;
 
 require_once 'AbstractDatabaseTestBase.php';
+require_once ESN_TEST_BASE . '/DAV/MongoFindCounter.php';
 
 /**
  * @medium
@@ -73,6 +74,25 @@ class MongoTest extends AbstractDatabaseTestBase {
         $this->db = $mcsabre->{ESN_MONGO_SABREDB};
         $this->db->drop();
         return new Mongo($this->db);
+    }
+
+    function testGetMultipleCardsQueriesByBatches() {
+        $backend = $this->getBackend();
+        // Just over one batch
+        $count = Mongo::MULTIGET_BATCH_SIZE + 10;
+        $uris = [];
+        for ($i = 0; $i < $count; $i++) {
+            $uris[] = 'card' . $i . '.vcf';
+            $backend->createCard($this->bookId, 'card' . $i . '.vcf', "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Card " . $i . "\r\nEND:VCARD\r\n");
+        }
+        $uris[] = 'missing.vcf';
+
+        $queries = \ESN\DAV\MongoFindCounter::count('cards', function () use ($backend, $uris, &$cards) {
+            $cards = $backend->getMultipleCards($this->bookId, $uris);
+        });
+
+        $this->assertEquals(2, $queries);
+        $this->assertEqualsCanonicalizing(array_slice($uris, 0, $count), array_column($cards, 'uri'));
     }
 
     function testConstruct() {

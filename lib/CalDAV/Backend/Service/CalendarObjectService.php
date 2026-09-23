@@ -29,6 +29,10 @@ class CalendarObjectService {
         'calendardata' => 1
     ];
 
+    // Maximum number of URIs per query of a multi-get, so that a request carrying thousands of hrefs does not turn
+    // into a single query that could hit the database timeout
+    const MULTIGET_BATCH_SIZE = 512;
+
     private $calendarObjectDAO;
     private $calendarDataNormalizer;
 
@@ -182,8 +186,10 @@ class CalendarObjectService {
         $calendarId = $calendarId[0];
 
         $result = [];
-        foreach ($this->calendarObjectDAO->findByCalendarIdAndUris($calendarId, $uris, self::FULL_PROJECTION) as $row) {
-            $result[] = $this->asDomainObject($row, true);
+        foreach (array_chunk($uris, self::MULTIGET_BATCH_SIZE) as $batch) {
+            foreach ($this->calendarObjectDAO->findByCalendarIdAndUris($calendarId, $batch, self::FULL_PROJECTION) as $row) {
+                $result[] = $this->asDomainObject($row, true);
+            }
         }
 
         return $result;

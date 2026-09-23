@@ -37,6 +37,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         '{DAV:}write'
     ];
 
+    // Maximum number of URIs per query of a multi-get, so that a request carrying thousands of hrefs does not turn
+    // into a single query that could hit the database timeout
+    const MULTIGET_BATCH_SIZE = 512;
+
     const MINIMAL_ADDRESSBOOK_FIELDS = [
         '_id' => 1,
         'principaluri' => 1,
@@ -326,17 +330,19 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'carddata' => 1,
             'etag' => 1,
             'size' => 1];
-        $query = [
-            'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
-            'uri' => [ '$in' => $uris ]
-        ];
         $cards = [];
-        foreach ($collection->find($query, [ 'projection' => $projection ]) as $card) {
-            $card = $card->getArrayCopy();
+        foreach (array_chunk($uris, self::MULTIGET_BATCH_SIZE) as $batch) {
+            $query = [
+                'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
+                'uri' => [ '$in' => $batch ]
+            ];
+            foreach ($collection->find($query, [ 'projection' => $projection ]) as $card) {
+                $card = $card->getArrayCopy();
 
-            $card['id'] = (string)$card['_id'];
-            unset($card['_id']);
-            $cards[] = $card;
+                $card['id'] = (string)$card['_id'];
+                unset($card['_id']);
+                $cards[] = $card;
+            }
         }
         return $cards;
     }

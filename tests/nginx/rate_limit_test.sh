@@ -139,7 +139,19 @@ cid=$(start "${SLOW[@]}" -e NGINX_TRUSTED_CLIENTS_CIDR=10.42.0.0/16) || failed "
 expect_count "client outside 10.42.0.0/16 is limited" "$(count 429 <<<"$(inside_seq "$cid" 20)")" -eq 14
 docker rm -f "$cid" >/dev/null
 
-echo "4. NGINX_TRUSTED_PROXIES: X-Forwarded-For is honoured from trusted proxies only"
+echo "4. X-Forwarded-For is trusted by default; NGINX_TRUSTED_PROXIES can restrict it"
+cid=$(start "${SLOW[@]}") || failed "container did not start"
+codes=""
+for ip in 198.51.100.1 198.51.100.2 198.51.100.3; do
+  codes+=$(outside_seq "$cid" 6 -H "X-Forwarded-For: $ip")$'\n'
+done
+expect_count "default: forwarded IPs from any peer get separate buckets" "$(count 429 <<<"$codes")" -eq 0
+docker exec "$cid" nginx -T 2>/dev/null | grep -q 'set_real_ip_from 0.0.0.0/0;' \
+  && pass "IPv4 peers trusted by default" || failed "IPv4 peers not trusted by default"
+docker exec "$cid" nginx -T 2>/dev/null | grep -q 'set_real_ip_from ::/0;' \
+  && pass "IPv6 peers trusted by default" || failed "IPv6 peers not trusted by default"
+docker rm -f "$cid" >/dev/null
+
 cid=$(start "${SLOW[@]}" -e NGINX_TRUSTED_PROXIES=127.0.0.1) || failed "container did not start"
 codes=""
 for ip in 198.51.100.1 198.51.100.2 198.51.100.3; do
@@ -163,12 +175,12 @@ expect_count "exemption applies to the forwarded client IP" \
 expect_count "the proxy IP itself is not exempted" "$(count 429 <<<"$(inside_seq "$cid" 20)")" -eq 14
 docker rm -f "$cid" >/dev/null
 
-cid=$(start "${SLOW[@]}") || failed "container did not start"
+cid=$(start "${SLOW[@]}" -e NGINX_TRUSTED_PROXIES=) || failed "container did not start"
 codes=""
 for ip in 198.51.100.1 198.51.100.2 198.51.100.3; do
   codes+=$(inside_seq "$cid" 6 -H "X-Forwarded-For: $ip")$'\n'
 done
-expect_count "no trusted proxy: X-Forwarded-For is ignored, 429 answers" "$(count 429 <<<"$codes")" -eq 12
+expect_count "explicitly empty trusted proxies: X-Forwarded-For is ignored, 429 answers" "$(count 429 <<<"$codes")" -eq 12
 docker rm -f "$cid" >/dev/null
 
 echo "5. NGINX_RATE_LIMIT_STATUS is configurable"

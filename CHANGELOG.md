@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
 ### Bug Fixes
 
+ - Sharees (read, read-write, administration) can read the owner's calendar again (`calendarserver:delegatedsource`, e.g. `REPORT /calendars/{ownerId}/{calendarId}.json`): since #411 enforces `{DAV:}read` on JSON REPORTs, they got `403`. The owner's calendar and its events now grant `{DAV:}read`, and only read, to these sharees. PRIVATE / CONFIDENTIAL events stay anonymized for them. Free-busy sharees, declined and revoked shares and other users still get `403`
  - Deleting a calendar now deletes its events. They were left behind in `calendarobjects` because the deletion filtered on an `ObjectId` while the calendar id is stored as a string there. Existing orphans can be listed with `db.calendarobjects.aggregate([{ $lookup: { from: "calendars", let: { id: "$calendarid" }, pipeline: [{ $match: { $expr: { $eq: [{ $toString: "$_id" }, "$$id"] } } }], as: "c" } }, { $match: { c: [] } }, { $count: "orphans" }])`.
  - ISSUE-404 Fix duplicated `DAV`/`X-Sabre-Version` headers in DAV responses — the nginx capability headers are now only emitted for the OPTIONS short-circuit, letting Sabre emit them once (with consistent casing) for proxied responses (#404)
 

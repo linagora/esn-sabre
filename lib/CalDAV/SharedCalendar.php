@@ -14,8 +14,27 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         '{' . Plugin::NS_CALDAV . '}read-free-busy'
     ];
 
+    /**
+     * Sharees of this calendar, read once per node: the ACL of the calendar and of its objects,
+     * and getOwner(), all need them.
+     */
+    private $invites = null;
+
     function __construct(\Sabre\CalDAV\SharedCalendar $sharedCalendar) {
         parent::__construct($sharedCalendar->caldavBackend, $sharedCalendar->calendarInfo);
+    }
+
+    function getInvites() {
+        if ($this->invites === null) {
+            $this->invites = parent::getInvites();
+        }
+
+        return $this->invites;
+    }
+
+    function updateInvites(array $sharees) {
+        $this->invites = null;
+        parent::updateInvites($sharees);
     }
 
     /**
@@ -31,9 +50,26 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
      * @return array
      */
     function getACL() {
+        return $this->buildACL(true);
+    }
+
+    /**
+     * The ACL reported to clients in the JSON API. The read ACEs of the sharees on the owner's instance of a
+     * user calendar are left out: clients list the sharees from the invites, and compute the rights of the
+     * current user and the public right from this ACL.
+     *
+     * @return array
+     */
+    function getReportedACL() {
+        return $this->buildACL(Utils::isTeamCalendarFromPrincipal($this->getOwner()));
+    }
+
+    private function buildACL(bool $withShareeReadAces) {
         $acl = parent::getACL();
 
-        $acl = $this->appendTeamCalendarMemberReadAces($acl);
+        if ($withShareeReadAces) {
+            $acl = $this->appendShareeReadAces($acl);
+        }
         $acl = $this->appendSourceCalendarDelegateWriteAces($acl);
 
         switch ($this->getShareAccess()) {
@@ -113,7 +149,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
         if (isset($public_right) && strlen($public_right) > 0) {
             $index = array_search('{DAV:}authenticated', array_column($acl, 'principal'));
-            if ($index) {
+            if ($index !== false) {
                 $acl[$index]['privilege'] = $public_right;
 
                 if ($public_right === '{DAV:}write') {
@@ -181,7 +217,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     function getChildACL() {
         $childACL = parent::getChildACL();
 
-        $childACL = $this->appendTeamCalendarMemberReadAces($childACL);
+        $childACL = $this->appendShareeReadAces($childACL);
         $childACL = $this->appendSourceCalendarDelegateWriteAces($childACL);
 
         if ($this->getShareAccess() == SPlugin::ACCESS_ADMINISTRATION) {
@@ -266,6 +302,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
     function updateInviteStatus($status) {
 
+        $this->invites = null;
         $this->caldavBackend->saveCalendarInviteStatus($this->calendarInfo['id'], $status);
 
     }
@@ -294,26 +331,6 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         return $this->caldavBackend;
     }
 
-    private function appendTeamCalendarMemberReadAces(array $acl) {
-        if (!Utils::isTeamCalendarFromPrincipal($this->getOwner()) || $this->getShareAccess() !== SPlugin::ACCESS_NOTSHARED) {
-            return $acl;
-        }
-
-        foreach ($this->getInvites() as $sharee) {
-            if (!in_array((int) $sharee->access, [SPlugin::ACCESS_READ, SPlugin::ACCESS_READWRITE, SPlugin::ACCESS_ADMINISTRATION], true) || !$sharee->principal) {
-                continue;
-            }
-
-            $acl[] = [
-                'privilege' => '{DAV:}read',
-                'principal' => $sharee->principal,
-                'protected' => true,
-            ];
-        }
-
-        return $acl;
-    }
-
     private function appendSourceCalendarDelegateWriteAces(array $acl) {
         if (!$this->shouldAppendSourceCalendarDelegateWriteAces()) {
             return $acl;
@@ -324,19 +341,50 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
                 continue;
             }
 
-            $acl[] = [
-                'privilege' => '{DAV:}read',
-                'principal' => $sharee->principal,
-                'protected' => true,
-            ];
-            $acl[] = [
-                'privilege' => '{DAV:}write',
-                'principal' => $sharee->principal,
-                'protected' => true,
-            ];
+            $acl = $this->appendAce($acl, '{DAV:}read', $sharee->principal);
+            $acl = $this->appendAce($acl, '{DAV:}write', $sharee->principal);
         }
 
         return $acl;
+    }
+
+    /**
+     * Sharees read the owner's instance: the JSON listing advertises it to them as
+     * calendarserver:delegatedsource, and team calendars are only reachable there. Read only: sharees of
+     * a user calendar write through their own instance.
+     */
+    private function appendShareeReadAces(array $acl) {
+        if ($this->isSharedInstance()) {
+            return $acl;
+        }
+
+        foreach ($this->getInvites() as $sharee) {
+            if ($this->isReadEnabledShare($sharee)) {
+                $acl = $this->appendAce($acl, '{DAV:}read', $sharee->principal);
+            }
+        }
+
+        return $acl;
+    }
+
+    private function appendAce(array $acl, $privilege, $principal) {
+        $ace = [
+            'privilege' => $privilege,
+            'principal' => $principal,
+            'protected' => true,
+        ];
+
+        if (!in_array($ace, $acl, true)) {
+            $acl[] = $ace;
+        }
+
+        return $acl;
+    }
+
+    private function isReadEnabledShare($sharee): bool {
+        return in_array((int) $sharee->access, [SPlugin::ACCESS_READ, SPlugin::ACCESS_READWRITE, SPlugin::ACCESS_ADMINISTRATION], true)
+            && (int) $sharee->inviteStatus !== SPlugin::INVITE_DECLINED
+            && !empty($sharee->principal);
     }
 
     private function shouldAppendSourceCalendarDelegateWriteAces(): bool {

@@ -492,7 +492,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 $result['invite'] = $node->getInvites();
             }
             if (in_array('acl', $jsonData['prop'])) {
-                $result['acl'] = $node->getACL();
+                $result['acl'] = $node instanceof \ESN\CalDAV\SharedCalendar ? $node->getReportedACL() : $node->getACL();
             }
 
             $this->send(200, $result);

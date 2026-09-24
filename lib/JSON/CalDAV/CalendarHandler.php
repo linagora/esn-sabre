@@ -345,9 +345,18 @@ class CalendarHandler {
             $json['invite'] = $node->getInvites();
         }
 
-        if (method_exists($node, 'getACL') && $node->getACL()) {
-            $json['acl'] = $node->getACL();
+        $acl = $this->reportedAcl($node);
+        if ($acl) {
+            $json['acl'] = $acl;
         }
+    }
+
+    private function reportedAcl($node) {
+        if ($node instanceof \ESN\CalDAV\SharedCalendar) {
+            return $node->getReportedACL();
+        }
+
+        return method_exists($node, 'getACL') ? $node->getACL() : null;
     }
 
     public function subscriptionToJson($nodePath, $subscription, $withRights = null) {
@@ -550,7 +559,7 @@ class CalendarHandler {
 
         $node->savePublicRight($publicRight);
 
-        return [200, $node->getACL()];
+        return [200, $node->getReportedACL()];
     }
 
     /**

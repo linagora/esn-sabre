@@ -478,6 +478,129 @@ END:VCALENDAR
         $this->assertEquals($vevents[2]->CLASS, 'PRIVATE');
     }
 
+    // User 0e shares her (non public) calendar2: the JSON listing advertises it to the sharees as
+    // calendarserver:delegatedsource, and the frontend reads the events there.
+    private function shareCalendarUser2With($principal, $access) {
+        $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'shared.ics', 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:shared-event
+SUMMARY:Sprint planning
+DTSTART:20150227T090000Z
+DTEND:20150227T100000Z
+END:VEVENT
+END:VCALENDAR
+');
+        $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'private.ics', 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:private-event
+SUMMARY:Secret meeting
+LOCATION:Secret room
+DTSTART:20150227T110000Z
+DTEND:20150227T120000Z
+CLASS:PRIVATE
+END:VEVENT
+END:VCALENDAR
+');
+        $this->caldavBackend->updateInvites($this->calUser2['id'], [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'         => 'mailto:sharee@example.org',
+                'principal'    => $principal,
+                'access'       => $access,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+            ]),
+        ]);
+    }
+
+    private function jsonReportCalendarUser2As($principal) {
+        $this->authBackend->setPrincipal($principal);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/calendar2.json',
+        ));
+        $request->setBody(json_encode($this->timeRangeDataRecur));
+
+        return $this->request($request);
+    }
+
+    private function eventsOf($response) {
+        $events = [];
+        foreach (json_decode($response->getBodyAsString())->_embedded->{'dav:item'} as $item) {
+            $vcalendar = \Sabre\VObject\Reader::readJson($item->data);
+            foreach ($vcalendar->select('VEVENT') as $vevent) {
+                $events[(string) $vevent->UID] = $vevent;
+            }
+        }
+
+        return $events;
+    }
+
+    public static function shareeReadAccessCases(): array {
+        return [
+            'read' => [\Sabre\DAV\Sharing\Plugin::ACCESS_READ],
+            'read-write' => [\Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE],
+            'administration' => [\ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('shareeReadAccessCases')]
+    function testShareeCanJsonReportTheOwnerCalendarByTimeRange($access) {
+        $this->shareCalendarUser2With('principals/users/54b64eadf6d7d8e41d263e0f', $access);
+
+        $response = $this->jsonReportCalendarUser2As('principals/users/54b64eadf6d7d8e41d263e0f');
+
+        $this->assertEquals(200, $response->status);
+        $events = $this->eventsOf($response);
+        $this->assertEquals('Sprint planning', (string) $events['shared-event']->SUMMARY);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('shareeReadAccessCases')]
+    function testPrivateEventIsAnonymizedWhenAShareeJsonReportsTheOwnerCalendar($access) {
+        $this->shareCalendarUser2With('principals/users/54b64eadf6d7d8e41d263e0f', $access);
+
+        $response = $this->jsonReportCalendarUser2As('principals/users/54b64eadf6d7d8e41d263e0f');
+
+        $this->assertEquals(200, $response->status);
+        $events = $this->eventsOf($response);
+        $this->assertEquals('Busy', (string) $events['private-event']->SUMMARY);
+        $this->assertStringNotContainsString('Secret', $response->getBodyAsString());
+    }
+
+    function testUserWithoutShareCannotJsonReportTheOwnerCalendar() {
+        $this->shareCalendarUser2With('principals/users/54b64eadf6d7d8e41d263e0f', \Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+
+        $response = $this->jsonReportCalendarUser2As('principals/users/54b64eadf6d7d8e41d263e0c');
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testFreeBusyShareeCannotJsonReportTheOwnerCalendar() {
+        $this->shareCalendarUser2With('principals/users/54b64eadf6d7d8e41d263e0f', \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY);
+
+        $response = $this->jsonReportCalendarUser2As('principals/users/54b64eadf6d7d8e41d263e0f');
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testFormerShareeCannotJsonReportTheOwnerCalendar() {
+        $this->shareCalendarUser2With('principals/users/54b64eadf6d7d8e41d263e0f', \Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+        $this->caldavBackend->updateInvites($this->calUser2['id'], [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'      => 'mailto:sharee@example.org',
+                'principal' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS,
+            ]),
+        ]);
+
+        $response = $this->jsonReportCalendarUser2As('principals/users/54b64eadf6d7d8e41d263e0f');
+
+        $this->assertEquals(403, $response->status);
+    }
+
     function testGetSubscriptionObjects() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

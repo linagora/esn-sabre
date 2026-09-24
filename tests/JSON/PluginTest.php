@@ -402,6 +402,55 @@ END:VCALENDAR
         $this->assertStringEndsWith('Z', (string)$vevent->DTEND, 'DTEND should end with Z (UTC format)');
     }
 
+    function testTimeRangeQueryShouldFindEventWithCustomTimezoneAtItsUtcTime() {
+        // A TZID that is not an Olson identifier can only be resolved through
+        // its VTIMEZONE: the denormalized range must honour it.
+        $ics = implode("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Linagora//Twake Calendar//EN',
+            'BEGIN:VTIMEZONE',
+            'TZID:Custom Eastern',
+            'X-LIC-LOCATION:America/New_York',
+            'BEGIN:STANDARD',
+            'DTSTART:19700101T000000',
+            'TZOFFSETFROM:-0400',
+            'TZOFFSETTO:-0400',
+            'END:STANDARD',
+            'END:VTIMEZONE',
+            'BEGIN:VEVENT',
+            'UID:custom-timezone-event',
+            'DTSTAMP:20260301T000000Z',
+            'DTSTART;TZID=Custom Eastern:20260322T090000',
+            'DTEND;TZID=Custom Eastern:20260322T100000',
+            'SUMMARY:Custom timezone event',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $put = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/calendar',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/custom-timezone-event.ics',
+        ));
+        $put->setBody($ics);
+        $this->assertEquals(201, $this->request($put)->getStatus());
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+        $request->setBody(json_encode([
+            'match' => [ 'start' => '20260322T130000Z', 'end' => '20260322T150000Z' ]
+        ]));
+        $response = $this->request($request);
+
+        $this->assertStringContainsString('custom-timezone-event', $response->getBodyAsString());
+    }
+
     function testTimeRangeQueryMissingMatch() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

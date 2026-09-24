@@ -144,4 +144,38 @@ class VObjectCacheTest extends TestCase {
 
         $cache->read('this is not a calendar');
     }
+
+    private function customTimezoneIcs() {
+        return implode("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VTIMEZONE',
+            'TZID:Custom Eastern',
+            'X-LIC-LOCATION:America/New_York',
+            'BEGIN:STANDARD',
+            'DTSTART:19700101T000000',
+            'TZOFFSETFROM:-0400',
+            'TZOFFSETTO:-0400',
+            'END:STANDARD',
+            'END:VTIMEZONE',
+            'BEGIN:VEVENT',
+            'UID:parse-cache',
+            'DTSTAMP:20260101T000000Z',
+            'DTSTART;TZID=Custom Eastern:20260322T090000',
+            'DTEND;TZID=Custom Eastern:20260322T100000',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+    }
+
+    function testReadMutableShouldNotResolveTimezonesThroughTheSharedDocument() {
+        $cache = new VObjectCache();
+
+        $copy = $cache->readMutable($this->customTimezoneIcs());
+        $cache->read($this->customTimezoneIcs())->remove('VTIMEZONE');
+
+        $this->assertEquals('America/New_York',
+            $copy->VEVENT->DTSTART->getDateTime()->getTimezone()->getName());
+    }
 }

@@ -68,7 +68,7 @@ class CalendarSharingService {
 
         $currentInvites = $this->getInvites([$calendarId, $instanceId]);
         $existingInstance = $this->calendarInstanceDAO->findInstanceById($instanceId, ['_id' => 0]);
-        $sourceCalendarPath = $this->getSourceCalendarPath($calendarId, $existingInstance);
+        $sourceCalendarPath = $this->getSourceCalendarPath($calendarId);
 
         $calendarInstances = [];
 
@@ -87,11 +87,9 @@ class CalendarSharingService {
         return $calendarInstances;
     }
 
-    // Prefer instance from request; fallback to source instance to build the source calendar path.
-    private function getSourceCalendarPath($calendarId, $instance) {
-        if (empty($instance)) {
-            $instance = $this->calendarInstanceDAO->findSourceInstanceByCalendarId($calendarId, ['principaluri' => 1, 'uri' => 1]);
-        }
+    // Always resolve the owner instance: a delegated admin may update sharees through their own copy.
+    private function getSourceCalendarPath($calendarId) {
+        $instance = $this->calendarInstanceDAO->findSourceInstanceByCalendarId($calendarId, ['principaluri' => 1, 'uri' => 1]);
 
         if (empty($instance['principaluri']) || empty($instance['uri'])) {
             return null;

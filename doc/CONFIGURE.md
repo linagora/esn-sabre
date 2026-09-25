@@ -179,7 +179,7 @@ an error that names it.
 | `NGINX_RATE_ZONE_SIZE`       | `10m`    | Shared-memory size of the tracking zone (`10m` is enough for ~160 000 IPs).              |
 | `NGINX_RATE_LIMIT_STATUS`    | `429`    | HTTP status of rejected requests (400 to 599).                                           |
 | `NGINX_TRUSTED_CLIENTS_CIDR` | (unset)  | CIDR(s) of trusted clients, never rate limited (e.g. `10.42.0.0/16`).                    |
-| `NGINX_TRUSTED_PROXIES`      | (unset)  | CIDR(s) of proxies allowed to set `X-Forwarded-For`.                                     |
+| `NGINX_TRUSTED_PROXIES`      | `0.0.0.0/0,::/0` | CIDR(s) of peers allowed to set `X-Forwarded-For`. Set to an empty string to ignore the header. |
 
 Rejected requests get `429 Too Many Requests` with a `Retry-After: 1` header and the usual CORS
 headers, so browsers let the frontend see the 429. Rejections are logged at the `warn` level. The
@@ -189,21 +189,19 @@ container logs its effective configuration at startup, for example:
 start.sh: nginx rate limiting enabled: limit=50r/s burst=100 status=429 zone_size=10m trusted_proxies=[10.0.0.0/8] trusted_clients=[10.42.0.0/16]
 ```
 
-**The limit is per client IP.** Behind a reverse proxy or an ingress, every request comes from the
-proxy's address, so all users share a single bucket unless `NGINX_TRUSTED_PROXIES` is set.
+**The limit is per client IP.** By default `X-Forwarded-For` from any peer replaces the TCP peer IP;
+without the header, the TCP peer IP is used. The ingress must sanitize the header.
 
- - `NGINX_TRUSTED_PROXIES` takes one or more CIDRs, separated by commas or spaces. When set, the client
-   IP is read from `X-Forwarded-For` (`real_ip_header X-Forwarded-For; real_ip_recursive on;`), for
-   requests coming from these CIDRs only. The header is ignored from any other peer, so it cannot be
-   spoofed to escape the limit. Trusted hops are skipped: the client IP is the rightmost address of
-   the header that is not a trusted proxy. The rate limit, the access logs and anything else that uses
-   the client address then see the real client IP. Unset, the TCP peer address is used and no header
-   is trusted.
+ - `NGINX_TRUSTED_PROXIES` takes one or more CIDRs, separated by commas or spaces. It defaults to
+   all IPv4 and IPv6 peers. Set explicit CIDRs to restrict who may supply `X-Forwarded-For`, or an
+   empty string to ignore it. With `real_ip_header X-Forwarded-For; real_ip_recursive on;`, trusted
+   hops are skipped; when all peers are trusted, the first address in the header is used. The rate
+   limit, access logs and anything else that uses the client address then see the selected IP.
  - `NGINX_TRUSTED_CLIENTS_CIDR` takes one or more CIDRs, separated by commas or spaces
    (`10.42.0.0/16,192.168.10.0/24`). A single IP is accepted too: `10.42.3.7` is treated as `/32`, an
    IPv6 address as `/128`. Requests from these clients are never rate limited. `0.0.0.0/0` and `::/0`
-   are rejected: use `NGINX_RATE_LIMIT=off` to disable rate limiting. When `NGINX_TRUSTED_PROXIES` is
-   set, the exemption applies to the real client IP taken from `X-Forwarded-For`, not to the proxy IP.
+   are rejected: use `NGINX_RATE_LIMIT=off` to disable rate limiting. With a trusted
+   `X-Forwarded-For` header, the exemption applies to the forwarded client IP, not to the proxy IP.
    The exemption is based on the address only, never on credentials: Nginx cannot validate an
    `Authorization` header, so anyone could forge one to bypass the limit.
  - `NGINX_RATE_LIMIT=off` removes the `limit_req_zone` and `limit_req` directives from the
@@ -217,8 +215,7 @@ so that end users each get their own bucket.
 sabre_dav:
   image: linagora/esn-sabre
   environment:
-    - NGINX_TRUSTED_CLIENTS_CIDR=10.42.0.0/16   # side service network: never rate limited
-    - NGINX_TRUSTED_PROXIES=10.0.0.0/8          # ingress: X-Forwarded-For is trusted
+    - NGINX_TRUSTED_CLIENTS_CIDR=10.42.0.0/16   # side service internal requests without X-Forwarded-For: never rate limited
     - NGINX_RATE_LIMIT=50r/s
 ```
 

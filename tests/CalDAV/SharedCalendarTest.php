@@ -253,6 +253,189 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
     }
 
 
+    public static function shareeReadAccessCases(): array {
+        $cases = [];
+        // The owner's instance is NOTSHARED as read from Mongo, SHAREDOWNER in Sabre
+        foreach (['not shared' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED, 'share owner' => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER] as $ownerName => $ownerAccess) {
+            $cases[$ownerName . ', read'] = [\Sabre\DAV\Sharing\Plugin::ACCESS_READ, $ownerAccess];
+            $cases[$ownerName . ', read-write'] = [\Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE, $ownerAccess];
+            $cases[$ownerName . ', administration'] = [\ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION, $ownerAccess];
+        }
+
+        return $cases;
+    }
+
+    #[DataProvider('shareeReadAccessCases')]
+    function testOwnerCalendarGrantsReadToSharees($access, $ownerAccess) {
+        $sharedCalendar = $this->ownerCalendarSharedWith([$this->sharee('principals/users/bob', $access)], null, $ownerAccess);
+
+        $readAce = ['privilege' => '{DAV:}read', 'principal' => 'principals/users/bob', 'protected' => true];
+        $this->assertContains($readAce, $sharedCalendar->getACL());
+        $this->assertContains($readAce, $sharedCalendar->getChildACL());
+    }
+
+    #[DataProvider('shareeReadAccessCases')]
+    function testOwnerCalendarNeverGrantsMoreThanReadToSharees($access, $ownerAccess) {
+        $sharedCalendar = $this->ownerCalendarSharedWith([$this->sharee('principals/users/bob', $access)], null, $ownerAccess);
+
+        $this->assertEquals(['{DAV:}read'], $this->privilegesOf('principals/users/bob', $sharedCalendar->getACL()));
+        $this->assertEquals(['{DAV:}read'], $this->privilegesOf('principals/users/bob', $sharedCalendar->getChildACL()));
+    }
+
+    public static function shareeWithoutReadCases(): array {
+        return [
+            'free-busy' => [\ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY, \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED, 'principals/users/bob'],
+            'declined' => [\Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE, \Sabre\DAV\Sharing\Plugin::INVITE_DECLINED, 'principals/users/bob'],
+            'no access' => [\Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS, \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED, 'principals/users/bob'],
+            'external sharee' => [\Sabre\DAV\Sharing\Plugin::ACCESS_READ, \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED, null],
+        ];
+    }
+
+    #[DataProvider('shareeWithoutReadCases')]
+    function testOwnerCalendarDoesNotGrantReadToShareesWithoutReadAccess($access, $inviteStatus, $principal) {
+        $sharedCalendar = $this->ownerCalendarSharedWith([$this->sharee($principal, $access, $inviteStatus)]);
+
+        $this->assertEquals($this->ownerCalendarSharedWith([])->getACL(), $sharedCalendar->getACL());
+        $this->assertEquals($this->ownerCalendarSharedWith([])->getChildACL(), $sharedCalendar->getChildACL());
+    }
+
+    function testOwnerCalendarNoLongerGrantsReadOnceTheShareIsRevoked() {
+        $props = [
+            'id'           => 1,
+            'principaluri' => 'principals/users/alice',
+        ];
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar(new SimpleBackendMock([$props], [], []), $props));
+        $sharedCalendar->updateInvites([$this->sharee('principals/users/bob', \Sabre\DAV\Sharing\Plugin::ACCESS_READ)]);
+        $this->assertContains('{DAV:}read', $this->privilegesOf('principals/users/bob', $sharedCalendar->getChildACL()));
+
+        $sharedCalendar->updateInvites([$this->sharee('principals/users/bob', \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS)]);
+
+        $this->assertEquals([], $this->privilegesOf('principals/users/bob', $sharedCalendar->getACL()));
+        $this->assertEquals([], $this->privilegesOf('principals/users/bob', $sharedCalendar->getChildACL()));
+    }
+
+    function testShareeInstanceDoesNotGrantReadToTheOtherSharees() {
+        $props = [
+            'id'           => 1,
+            'principaluri' => 'principals/users/bob',
+            'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+        ];
+        $backend = new FixedInvitesBackendMock([$props], [], []);
+        $backend->invites = [$this->sharee('principals/users/charlie', \Sabre\DAV\Sharing\Plugin::ACCESS_READ)];
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $this->assertEquals([], $this->privilegesOf('principals/users/charlie', $sharedCalendar->getACL()));
+        $this->assertEquals([], $this->privilegesOf('principals/users/charlie', $sharedCalendar->getChildACL()));
+    }
+
+    function testReportedACLOfAUserCalendarDoesNotListTheSharees() {
+        $sharedCalendar = $this->ownerCalendarSharedWith(
+            [$this->sharee('principals/users/bob', \Sabre\DAV\Sharing\Plugin::ACCESS_READ)],
+            '{DAV:}read'
+        );
+
+        $this->assertEquals($this->ownerCalendarSharedWith([], '{DAV:}read')->getACL(), $sharedCalendar->getReportedACL());
+    }
+
+    function testReportedACLOfATeamCalendarListsTheMembers() {
+        $props = [
+            'id'           => 1,
+            'principaluri' => 'principals/team-calendars/64b64eadf6d7d8e41d263e0f',
+        ];
+        $backend = new FixedInvitesBackendMock([$props], [], []);
+        $backend->invites = [$this->sharee('principals/users/bob', \Sabre\DAV\Sharing\Plugin::ACCESS_READ)];
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $this->assertEquals($sharedCalendar->getACL(), $sharedCalendar->getReportedACL());
+        $this->assertEquals(['{DAV:}read'], $this->privilegesOf('principals/users/bob', $sharedCalendar->getReportedACL()));
+    }
+
+    function testOwnerCalendarKeepsThePublicRightWhenShared() {
+        $sharedCalendar = $this->ownerCalendarSharedWith(
+            [$this->sharee('principals/users/bob', \Sabre\DAV\Sharing\Plugin::ACCESS_READ)],
+            '{DAV:}read'
+        );
+
+        $this->assertEquals(['{DAV:}read'], $this->privilegesOf('{DAV:}authenticated', $sharedCalendar->getACL()));
+        $this->assertEquals(['{DAV:}read'], $this->privilegesOf('{DAV:}authenticated', $sharedCalendar->getChildACL()));
+    }
+
+    function testPublicRightAppliesWhenTheAuthenticatedAceComesFirst() {
+        // A free-busy instance has no other ACE: the {DAV:}authenticated one is at index 0
+        $props = [
+            'id'           => 1,
+            'principaluri' => 'principals/users/bob',
+            'share-access' => \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY,
+        ];
+        $backend = new FixedInvitesBackendMock([$props], [], []);
+        $backend->publicRight = '{DAV:}read';
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $this->assertEquals(['{DAV:}read'], $this->privilegesOf('{DAV:}authenticated', $sharedCalendar->getACL()));
+    }
+
+    function testAclOfASharedOwnerCalendarReadsTheInvitesOnce() {
+        $props = [
+            'id'           => 1,
+            'uri'          => 'calendar',
+            'principaluri' => 'principals/users/alice',
+        ];
+        $objects = [];
+        for ($i = 0; $i < 20; $i++) {
+            $objects['event' . $i . '.ics'] = ['calendardata' => "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"];
+        }
+        $backend = new FixedInvitesBackendMock([$props], [1 => $objects], []);
+        $backend->invites = [$this->sharee('principals/users/bob', \Sabre\DAV\Sharing\Plugin::ACCESS_READ)];
+        $sharedCalendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $sharedCalendar->getACL();
+        $sharedCalendar->getChildACL();
+        $sharedCalendar->getOwner();
+        $this->assertCount(20, $sharedCalendar->getChildren());
+
+        $this->assertEquals(1, $backend->getInvitesCalls);
+    }
+
+    private function ownerCalendarSharedWith(array $sharees, $publicRight = null, $ownerAccess = \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED) {
+        $props = [
+            'id'           => 1,
+            'principaluri' => 'principals/users/alice',
+            'share-access' => $ownerAccess,
+        ];
+        $backend = new FixedInvitesBackendMock([$props], [], []);
+        $backend->publicRight = $publicRight;
+        $backend->invites = array_merge([
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'         => 'mailto:alice@example.org',
+                'principal'    => 'principals/users/alice',
+                'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+            ]),
+        ], $sharees);
+
+        return new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+    }
+
+    private function sharee($principal, $access, $inviteStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED) {
+        return new \Sabre\DAV\Xml\Element\Sharee([
+            'href'         => 'mailto:bob@example.org',
+            'principal'    => $principal,
+            'access'       => $access,
+            'inviteStatus' => $inviteStatus,
+        ]);
+    }
+
+    private function privilegesOf($principal, array $acl) {
+        $privileges = [];
+        foreach ($acl as $ace) {
+            if ($ace['principal'] === $principal) {
+                $privileges[] = $ace['privilege'];
+            }
+        }
+
+        return $privileges;
+    }
+
     function testGetChildACLAdministrationShareAccess() {
         $props = [
             'id'                                        => 1,
@@ -609,16 +792,18 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
 
     #[DataProvider('childListingCases')]
     function testListingChildrenReadsTheSharingStateOnce(array $props, array $sharees, $publicRight) {
+        // Each measure uses a fresh node: the invites are then read once per node
         list($sharedCalendar, $backend) = $this->sharedCalendarWithObjects($props, $sharees, $publicRight, 50);
-
         $backend->resetCounters();
         $sharedCalendar->getChildACL();
         $perChildACL = [$backend->getInvitesCalls, $backend->getCalendarPublicRightCalls];
 
+        list($sharedCalendar, $backend) = $this->sharedCalendarWithObjects($props, $sharees, $publicRight, 50);
         $backend->resetCounters();
         $this->assertCount(50, $sharedCalendar->getChildren());
         $this->assertEquals($perChildACL, [$backend->getInvitesCalls, $backend->getCalendarPublicRightCalls]);
 
+        list($sharedCalendar, $backend) = $this->sharedCalendarWithObjects($props, $sharees, $publicRight, 50);
         $backend->resetCounters();
         $this->assertCount(2, $sharedCalendar->getMultipleChildren(['event0.ics', 'event49.ics']));
         $this->assertEquals($perChildACL, [$backend->getInvitesCalls, $backend->getCalendarPublicRightCalls]);
@@ -687,5 +872,15 @@ class CountingBackendMock extends SimpleBackendMock {
         $this->getCalendarPublicRightCalls++;
 
         return $this->publicRight;
+    }
+}
+
+class FixedInvitesBackendMock extends CountingBackendMock {
+    public $invites = [];
+
+    function getInvites($calendarId) {
+        $this->getInvitesCalls++;
+
+        return $this->invites;
     }
 }

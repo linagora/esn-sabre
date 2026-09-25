@@ -146,9 +146,10 @@ for ip in 198.51.100.1 198.51.100.2 198.51.100.3; do
   codes+=$(outside_seq "$cid" 6 -H "X-Forwarded-For: $ip")$'\n'
 done
 expect_count "default: forwarded IPs from any peer get separate buckets" "$(count 429 <<<"$codes")" -eq 0
-docker exec "$cid" nginx -T 2>/dev/null | grep -q 'set_real_ip_from 0.0.0.0/0;' \
+nginx_config=$(docker exec "$cid" nginx -T 2>/dev/null)
+grep -Fq 'set_real_ip_from 0.0.0.0/0;' <<<"$nginx_config" \
   && pass "IPv4 peers trusted by default" || failed "IPv4 peers not trusted by default"
-docker exec "$cid" nginx -T 2>/dev/null | grep -q 'set_real_ip_from ::/0;' \
+grep -Fq 'set_real_ip_from ::/0;' <<<"$nginx_config" \
   && pass "IPv6 peers trusted by default" || failed "IPv6 peers not trusted by default"
 docker rm -f "$cid" >/dev/null
 

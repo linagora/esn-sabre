@@ -4,15 +4,17 @@ namespace ESN\CalDAV\Subscriptions;
 
 use Sabre\CalDAV\Backend\SubscriptionSupport;
 use Sabre\CalDAV\ICalendarObjectContainer;
+use Sabre\DAV\Sync\ISyncCollection;
 
 /**
  * Subscription Node
  *
  * This node extends Sabre's Subscription to also expose calendar objects from the source calendar.
- * This allows REPORT queries on subscriptions to return events from the source calendar.
+ * This allows REPORT queries on subscriptions to return events from the source calendar,
+ * and ISyncCollection exposes the changes of the source calendar to sync-collection.
  */
 #[\AllowDynamicProperties]
-class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements ICalendarObjectContainer, \Sabre\CalDAV\ICalendar {
+class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements ICalendarObjectContainer, \Sabre\CalDAV\ICalendar, ISyncCollection {
 
     /**
      * Cached source calendar info
@@ -128,7 +130,9 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
      * @return string
      */
     private function resolveSourcePrincipal($principalId) {
-        $principalBackend = $this->caldavBackend->getPrincipalBackend();
+        $principalBackend = method_exists($this->caldavBackend, 'getPrincipalBackend')
+            ? $this->caldavBackend->getPrincipalBackend()
+            : null;
         if ($principalBackend) {
             foreach (['principals/resources/', 'principals/team-calendars/'] as $principalPrefix) {
                 if ($principalBackend->getPrincipalByPath($principalPrefix . $principalId)) {
@@ -153,6 +157,55 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
         }
 
         return $this->caldavBackend->calendarQuery($sourceCalendarInfo['id'], $filters);
+    }
+
+    /**
+     * Returns the sync token of the source calendar.
+     *
+     * @return string|null
+     */
+    function getSyncToken() {
+        if (!$this->caldavBackend instanceof \Sabre\CalDAV\Backend\SyncSupport) {
+            return null;
+        }
+
+        $sourceCalendarInfo = $this->getSourceCalendarInfo();
+        if (!$sourceCalendarInfo) {
+            return null;
+        }
+
+        return $sourceCalendarInfo['{DAV:}sync-token']
+            ?? $sourceCalendarInfo['{http://sabredav.org/ns}sync-token']
+            ?? null;
+    }
+
+    /**
+     * Returns the changes for this subscription.
+     *
+     * Changes are the ones of the source calendar, since the children of this
+     * node are the calendar objects of the source calendar.
+     *
+     * @param string $syncToken
+     * @param int $syncLevel
+     * @param int $limit
+     * @return array|null
+     */
+    function getChanges($syncToken, $syncLevel, $limit = null) {
+        if (!$this->caldavBackend instanceof \Sabre\CalDAV\Backend\SyncSupport) {
+            return null;
+        }
+
+        $sourceCalendarInfo = $this->getSourceCalendarInfo();
+        if (!$sourceCalendarInfo) {
+            return null;
+        }
+
+        return $this->caldavBackend->getChangesForCalendar(
+            $sourceCalendarInfo['id'],
+            $syncToken,
+            $syncLevel,
+            $limit
+        );
     }
 
     /**

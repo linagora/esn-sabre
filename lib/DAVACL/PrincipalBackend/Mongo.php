@@ -12,6 +12,14 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     protected $collectionMap;
     protected ?AuthTenant $authTenant = null;
 
+    /**
+     * Group principals (with their members) already built during this request, by URI.
+     *
+     * Listing the users of a domain attaches the domain, with all its members, to each of
+     * them: sharing one copy keeps this linear instead of quadratic in the number of users.
+     */
+    private array $groupPrincipals = [];
+
     function setAuthTenant(AuthTenant $authTenant) {
         $this->authTenant = $authTenant;
     }
@@ -533,7 +541,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $groupPrincipals = [];
 
         foreach ($this->getGroupMembership($principalUri) as $groupPrincipal) {
-            $groupPrincipals[] = [
+            $groupPrincipals[] = $this->groupPrincipals[$groupPrincipal] ??= [
                 'uri' => $groupPrincipal,
                 'administrators' => $this->getAdministratorsForGroup($groupPrincipal),
                 'members' => $this->getGroupMemberSet($groupPrincipal)

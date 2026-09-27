@@ -4,6 +4,8 @@ namespace ESN\DAVACL\PrincipalBackend;
 
 use \ESN\Utils\AuthTenant as AuthTenant;
 
+require_once ESN_TEST_BASE. '/DAV/MongoFindCounter.php';
+
 #[\AllowDynamicProperties]
 class MongoTest extends \PHPUnit\Framework\TestCase {
     protected static $esndb;
@@ -325,6 +327,21 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         // Extra check to make sure no mongo ids are used
         $this->assertSame($expected['id'], $principals[0]['id']);
         $this->assertSame($expected['id'], $principal['id']);
+    }
+
+    function testUserPrincipalsByPrefixShouldListTheDomainMembersOnce() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $queries = \ESN\DAV\MongoFindCounter::count('users', function () use ($backend, &$principals) {
+            $principals = $backend->getPrincipalsByPrefix('principals/users');
+        });
+
+        $this->assertCount(8, $principals);
+        foreach ($principals as $principal) {
+            $this->assertEqualsCanonicalizing(self::$domainMembers, $principal['groupPrincipals'][0]['members']);
+        }
+        // The users, the domains of each user, then the members of their domain once: not once per user
+        $this->assertEquals(count($principals) + 2, $queries);
     }
 
     function testDomainPrincipalsByPrefix() {

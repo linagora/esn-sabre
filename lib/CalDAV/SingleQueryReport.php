@@ -94,10 +94,9 @@ class SingleQueryReport {
         $this->needsJson = $report->contentType === 'application/calendar+json';
         $this->currentUser = $this->getCurrentUserPrincipal();
 
-        $calendarOwner = $node->getOwner();
-        // Same rule as PrivateEventPlugin: a delegate (not the calendar owner)
-        // only sees a sanitized version of PRIVATE / CONFIDENTIAL events.
-        $this->sanitizeForDelegate = $this->currentUser !== null && $calendarOwner !== null && $calendarOwner !== $this->currentUser;
+        // Same rule as PrivateEventPlugin: users the calendar hides private events from
+        // only see a sanitized version of PRIVATE / CONFIDENTIAL events.
+        $this->sanitizeForDelegate = $this->currentUser !== null && \ESN\Utils\Utils::hidesPrivateEventsFrom($node, $this->currentUser);
     }
 
     /**

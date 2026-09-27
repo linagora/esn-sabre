@@ -109,13 +109,7 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
         $principalId = $parts[1];
         $calendarUri = $parts[2];
 
-        $principalPrefix = 'principals/users/';
-        $principalBackend = $this->caldavBackend->getPrincipalBackend();
-        if ($principalBackend && $principalBackend->getPrincipalByPath('principals/resources/' . $principalId)) {
-            $principalPrefix = 'principals/resources/';
-        }
-
-        $calendars = $this->caldavBackend->getCalendarsForUser($principalPrefix . $principalId);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->resolveSourcePrincipal($principalId));
         foreach ($calendars as $calendar) {
             if ($calendar['uri'] === $calendarUri) {
                 $this->sourceCalendarInfo = $calendar;
@@ -125,6 +119,25 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
 
         $this->sourceCalendarInfo = false;
         return null;
+    }
+
+    /**
+     * Returns the principal owning the source calendar home: a resource, a team calendar, or else a user.
+     *
+     * @param string $principalId
+     * @return string
+     */
+    private function resolveSourcePrincipal($principalId) {
+        $principalBackend = $this->caldavBackend->getPrincipalBackend();
+        if ($principalBackend) {
+            foreach (['principals/resources/', 'principals/team-calendars/'] as $principalPrefix) {
+                if ($principalBackend->getPrincipalByPath($principalPrefix . $principalId)) {
+                    return $principalPrefix . $principalId;
+                }
+            }
+        }
+
+        return 'principals/users/' . $principalId;
     }
 
     /**
@@ -209,15 +222,15 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
      * @return string|null The principal URI of the source calendar owner
      */
     function getSourceOwner() {
-        $source = $this->subscriptionInfo['source'] ?? null;
-        if ($source && preg_match('#calendars/([^/]+)#', $source, $matches)) {
-            return 'principals/users/' . $matches[1];
-        }
-
-        // Fallback to database lookup
+        // The source calendar is usually already loaded to reach its objects
         $sourceCalendarInfo = $this->getSourceCalendarInfo();
         if ($sourceCalendarInfo && isset($sourceCalendarInfo['principaluri'])) {
             return $sourceCalendarInfo['principaluri'];
+        }
+
+        $source = $this->subscriptionInfo['source'] ?? null;
+        if ($source && preg_match('#calendars/([^/]+)#', $source, $matches)) {
+            return 'principals/users/' . $matches[1];
         }
 
         return $this->getOwner();

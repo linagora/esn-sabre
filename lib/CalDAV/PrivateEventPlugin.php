@@ -12,10 +12,11 @@ use ESN\Utils\Utils;
 /**
  * Private Event Plugin
  *
- * Sanitizes PRIVATE/CONFIDENTIAL events for delegated users.
+ * Sanitizes PRIVATE/CONFIDENTIAL events for users not allowed to see their details:
+ * delegates of a user calendar, public readers and subscribers.
  * Uses the denormalized 'classification' field to avoid unnecessary parsing.
  * Only parses ICS data when classification is PRIVATE or CONFIDENTIAL
- * AND the current user is not the calendar owner.
+ * AND the calendar hides private events from the current user (see Utils::hidesPrivateEventsFrom).
  *
  * Legacy data without classification field is treated as non-private (no performance impact).
  */
@@ -39,7 +40,7 @@ class PrivateEventPlugin extends ServerPlugin {
 
     /**
      * Intercepts HTTP GET requests on private/confidential calendar objects.
-     * Sanitizes the response body for delegated users who are not the calendar owner.
+     * Sanitizes the response body for users the calendar hides private events from.
      *
      * @param \Sabre\HTTP\RequestInterface $request
      * @param \Sabre\HTTP\ResponseInterface $response
@@ -54,21 +55,9 @@ class PrivateEventPlugin extends ServerPlugin {
             return;
         }
 
-        if (!($node instanceof \Sabre\CalDAV\ICalendarObject)) {
-            return;
-        }
-
-        if (!$this->needsSanitization($node)) {
-            return;
-        }
-
         $currentUser = $this->getCurrentUser();
-        if (!$currentUser) {
-            return;
-        }
-
-        $calendarOwner = $this->getCalendarOwner($path);
-        if (!$calendarOwner || $calendarOwner === $currentUser) {
+        $calendar = $this->findCalendarHidingPrivateEvents($node, $path, $currentUser);
+        if (!$calendar) {
             return;
         }
 
@@ -79,7 +68,7 @@ class PrivateEventPlugin extends ServerPlugin {
         }
 
         // Sanitize the data
-        $sanitizedData = $this->sanitizeCalendarData($calendarData, $calendarOwner, $currentUser);
+        $sanitizedData = $this->sanitizeCalendarData($calendarData, $calendar, $currentUser);
 
         // Set response headers (similar to CorePlugin::httpGet)
         $response->setHeader('Content-Type', 'text/calendar; charset=utf-8');
@@ -98,22 +87,9 @@ class PrivateEventPlugin extends ServerPlugin {
     }
 
     function propFind(PropFind $propFind, INode $node) {
-        if (!($node instanceof \Sabre\CalDAV\ICalendarObject)) {
-            return;
-        }
-
-        if (!$this->needsSanitization($node)) {
-            return;
-        }
-
         $currentUser = $this->getCurrentUser();
-        if (!$currentUser) {
-            return;
-        }
-
-        $path = $propFind->getPath();
-        $calendarOwner = $this->getCalendarOwner($path);
-        if (!$calendarOwner || $calendarOwner === $currentUser) {
+        $calendar = $this->findCalendarHidingPrivateEvents($node, $propFind->getPath(), $currentUser);
+        if (!$calendar) {
             return;
         }
 
@@ -123,10 +99,32 @@ class PrivateEventPlugin extends ServerPlugin {
             return;
         }
 
-        $sanitizedData = $this->sanitizeCalendarData($calendarData, $calendarOwner, $currentUser);
+        $sanitizedData = $this->sanitizeCalendarData($calendarData, $calendar, $currentUser);
         if ($sanitizedData !== $calendarData) {
             $propFind->set($calendarDataProp, $sanitizedData);
         }
+    }
+
+    /**
+     * Returns the calendar containing this private/confidential object when it hides
+     * private events from the current user, null when the object can be served as is.
+     *
+     * @param INode $node
+     * @param string $objectPath
+     * @param string|null $currentUser
+     * @return INode|null
+     */
+    protected function findCalendarHidingPrivateEvents(INode $node, $objectPath, $currentUser) {
+        if (!$currentUser || !$this->needsSanitization($node)) {
+            return null;
+        }
+
+        $calendar = $this->getCalendar($objectPath);
+        if (!$calendar || !method_exists($calendar, 'getOwner') || !Utils::hidesPrivateEventsFrom($calendar, $currentUser)) {
+            return null;
+        }
+
+        return $calendar;
     }
 
     protected function needsSanitization(INode $node) {
@@ -144,8 +142,7 @@ class PrivateEventPlugin extends ServerPlugin {
             return false;
         }
 
-        $class = strtoupper($objectData['classification']);
-        return $class === 'PRIVATE' || $class === 'CONFIDENTIAL';
+        return Utils::isPrivateClassification($objectData['classification']);
     }
 
     protected function getCurrentUser() {
@@ -154,31 +151,26 @@ class PrivateEventPlugin extends ServerPlugin {
     }
 
     /**
-     * Get the real owner of the calendar containing the object.
-     * For shared calendars, this returns the original owner, not the sharee.
+     * Get the calendar containing the object, as reached by the request: the calendar itself,
+     * a shared instance of it, or a subscription to it.
      *
      * @param string $objectPath Path to the calendar object (e.g., calendars/bob/alice-calendar/event.ics)
-     * @return string|null The owner principal URI
+     * @return INode|null
      */
-    protected function getCalendarOwner($objectPath) {
+    protected function getCalendar($objectPath) {
         // Get the parent calendar path by removing the last segment (the object URI)
         $pathParts = explode('/', $objectPath);
         array_pop($pathParts);
         $calendarPath = implode('/', $pathParts);
 
         try {
-            $calendarNode = $this->server->tree->getNodeForPath($calendarPath);
-            if ($calendarNode && method_exists($calendarNode, 'getOwner')) {
-                return $calendarNode->getOwner();
-            }
+            return $this->server->tree->getNodeForPath($calendarPath);
         } catch (\Sabre\DAV\Exception\NotFound $e) {
-            // Calendar not found
+            return null;
         }
-
-        return null;
     }
 
-    protected function sanitizeCalendarData($calendarData, $calendarOwner, $currentUser) {
+    protected function sanitizeCalendarData($calendarData, $calendar, $currentUser) {
         try {
             $vCalendar = VObject\Reader::read($calendarData);
         } catch (\Exception $e) {
@@ -190,13 +182,7 @@ class PrivateEventPlugin extends ServerPlugin {
             return $calendarData;
         }
 
-        $mockNode = new class($calendarOwner) {
-            private $owner;
-            public function __construct($owner) { $this->owner = $owner; }
-            public function getOwner() { return $this->owner; }
-        };
-
-        $sanitizedCalendar = Utils::hidePrivateEventInfoForUser($vCalendar, $mockNode, $currentUser);
+        $sanitizedCalendar = Utils::hidePrivateEventInfoForUser($vCalendar, $calendar, $currentUser);
         $result = $sanitizedCalendar->serialize();
 
         $vCalendar->destroy();

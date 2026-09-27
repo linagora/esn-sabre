@@ -439,6 +439,53 @@ ICS;
         $this->assertFalse(Utils::isHiddenPrivateEvent($vevent, $node, $userPrincipal));
     }
 
+    function testIsHiddenPrivateEventForTeamMemberReadingTheTeamCalendar() {
+        $node = $this->teamCalendarWithSharees(['principals/users/member']);
+
+        $this->assertFalse(Utils::isHiddenPrivateEvent($this->privateEvent(), $node, 'principals/users/member'));
+    }
+
+    function testIsHiddenPrivateEventForNonMemberReadingTheTeamCalendar() {
+        $node = $this->teamCalendarWithSharees(['principals/users/member']);
+
+        $this->assertTrue(Utils::isHiddenPrivateEvent($this->privateEvent(), $node, 'principals/users/other'));
+    }
+
+    function testIsHiddenPrivateEventForSubscriberOfTheTeamCalendar() {
+        $node = new class() {
+            public function getOwner() { return 'principals/users/subscriber'; }
+            public function getSourceOwner() { return 'principals/team-calendars/team'; }
+        };
+
+        $this->assertTrue(Utils::isHiddenPrivateEvent($this->privateEvent(), $node, 'principals/users/subscriber'));
+    }
+
+    private function privateEvent() {
+        return \Sabre\VObject\Reader::read(join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:team-private-event-test',
+            'DTSTART:20260110T100000Z',
+            'DTEND:20260110T110000Z',
+            'SUMMARY:Private Meeting',
+            'CLASS:PRIVATE',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]))->VEVENT;
+    }
+
+    private function teamCalendarWithSharees(array $sharees) {
+        return new class($sharees) {
+            private $sharees;
+            public function __construct($sharees) { $this->sharees = $sharees; }
+            public function getOwner() { return 'principals/team-calendars/team'; }
+            public function isSharedInstance() { return false; }
+            public function isReadEnabledSharee($principal) { return in_array($principal, $this->sharees, true); }
+        };
+    }
+
     /**
      * Test that hidePrivateEventInfoForUser masks PRIVATE event details
      */

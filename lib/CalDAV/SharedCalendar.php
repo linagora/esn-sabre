@@ -331,6 +331,26 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         return $this->caldavBackend;
     }
 
+    /**
+     * Whether this principal reads this instance as one of its sharees.
+     *
+     * @param string $principal
+     * @return bool
+     */
+    function isReadEnabledSharee($principal) {
+        if ($this->isSharedInstance()) {
+            return false;
+        }
+
+        foreach ($this->getInvites() as $sharee) {
+            if ($sharee->principal === $principal && $this->isReadEnabledShare($sharee)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function appendSourceCalendarDelegateWriteAces(array $acl) {
         if (!$this->shouldAppendSourceCalendarDelegateWriteAces()) {
             return $acl;

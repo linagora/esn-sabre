@@ -269,35 +269,55 @@ class Utils {
     }
 
     static function isHiddenPrivateEvent($vevent, $node, $userPrincipal) {
-        $class = strtoupper((string) $vevent->CLASS);
-        if (!in_array($class, ['PRIVATE', 'CONFIDENTIAL'], true)) {
-            return false;
-        }
+        return self::isPrivateClassification((string) $vevent->CLASS)
+            && self::hidesPrivateEventsFrom($node, $userPrincipal);
+    }
 
+    static function isPrivateClassification($classification) {
+        return in_array(strtoupper((string) $classification), ['PRIVATE', 'CONFIDENTIAL'], true);
+    }
+
+    /**
+     * Whether the PRIVATE / CONFIDENTIAL events of this calendar are reduced when read by this user.
+     *
+     * @param mixed $node The calendar (or calendar object) the events are read through
+     * @param string|null $userPrincipal
+     * @return bool
+     */
+    static function hidesPrivateEventsFrom($node, $userPrincipal) {
         // For subscriptions, check against the source calendar owner
         if (method_exists($node, 'getSourceOwner')) {
             return $node->getSourceOwner() !== $userPrincipal;
         }
 
-        if (self::isTeamCalendarSharedInstance($node, $userPrincipal)) {
+        if (self::isTeamCalendarReadByMember($node, $userPrincipal)) {
             return false;
         }
 
         return $node->getOwner() !== $userPrincipal;
     }
 
-    private static function isTeamCalendarSharedInstance($node, $userPrincipal) {
+    /**
+     * Team calendar members read it either through their shared instance, or through the team calendar
+     * itself, where they are sharees.
+     */
+    private static function isTeamCalendarReadByMember($node, $userPrincipal) {
         if ($userPrincipal === null) {
             return false;
         }
-        if (!method_exists($node, 'getOwner')) {
-            return false;
-        }
-        if (!method_exists($node, 'isSharedInstance')) {
+        if (!method_exists($node, 'getOwner') || !self::isTeamCalendarFromPrincipal($node->getOwner())) {
             return false;
         }
 
-        return self::isTeamCalendarFromPrincipal($node->getOwner()) && $node->isSharedInstance();
+        return self::isSharedInstance($node) || self::isReadEnabledSharee($node, $userPrincipal);
+    }
+
+    private static function isSharedInstance($node) {
+        return method_exists($node, 'isSharedInstance') && $node->isSharedInstance();
+    }
+
+    private static function isReadEnabledSharee($node, $userPrincipal) {
+        return method_exists($node, 'isReadEnabledSharee') && $node->isReadEnabledSharee($userPrincipal);
     }
 
     /**

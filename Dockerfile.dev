@@ -8,7 +8,7 @@
 #
 # This image enables PHP Xdebug for debugging with port 9003
 
-ARG BASE_IMAGE="linagora/esn-sabre:sabre-4_7_0-09-12-2025"
+ARG BASE_IMAGE="linagora/esn-sabre:2.4.6.4"
 FROM ${BASE_IMAGE}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,3 +23,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && ln -s /etc/php/8.4/mods-available/xdebug.ini /etc/php/8.4/fpm/conf.d/20-xdebug.ini \
  && ln -s /etc/php/8.4/mods-available/xdebug.ini /etc/php/8.4/cli/conf.d/20-xdebug.ini \
  && rm -rf /var/lib/apt/lists/*
+
+# Local source mounts a newer start.sh, so keep its nginx template in sync.
+COPY docker/config/default.conf.template /etc/nginx/sites-available/default.template

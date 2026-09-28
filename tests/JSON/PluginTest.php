@@ -716,6 +716,78 @@ END:VCALENDAR
         $this->assertEquals($response->status, 403);
     }
 
+    function test403ModifyOwnerPrivateCalendarObjectsViaDelegatedCalendar() {
+        $delegatedEventUri = $this->givenOwnerPrivateEventInDelegatedCalendar();
+
+        $response = $this->requestAsDelegate('PUT', $delegatedEventUri, 'text/calendar', $this->privateRecurEvent);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function test403ModifyOwnerPrivateCalendarObjectsViaDelegatedCalendarWithJson() {
+        $delegatedEventUri = $this->givenOwnerPrivateEventInDelegatedCalendar();
+        $jsonEvent = json_encode(\Sabre\VObject\Reader::read($this->privateRecurEvent)->jsonSerialize());
+
+        $response = $this->requestAsDelegate('PUT', $delegatedEventUri, 'application/calendar+json', $jsonEvent);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function test403DeleteOwnerPrivateCalendarObjectsViaDelegatedCalendar() {
+        $delegatedEventUri = $this->givenOwnerPrivateEventInDelegatedCalendar();
+
+        $response = $this->requestAsDelegate('DELETE', $delegatedEventUri);
+
+        $this->assertEquals(403, $response->status);
+    }
+
+    function testOwnerCanModifyPrivateCalendarObjectsOfDelegatedCalendar() {
+        $this->givenOwnerPrivateEventInDelegatedCalendar();
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/calendar',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/' . $this->delegatedCal['uri'] . '/privateRecurEvent.ics',
+        ));
+        $request->setBody($this->privateRecurEvent);
+
+        $response = $this->request($request);
+
+        $this->assertEquals(204, $response->status);
+    }
+
+    private function givenOwnerPrivateEventInDelegatedCalendar() {
+        $this->caldavBackend->createCalendarObject($this->delegatedCal['id'], 'privateRecurEvent.ics', $this->privateRecurEvent);
+        $this->caldavBackend->updateInvites($this->delegatedCal['id'], [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'       => 'mailto:johndoe@example.org',
+                'principal'  => 'principals/users/54b64eadf6d7d8e41d263e0e',
+                'access'     => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+                'properties' => []
+            ])
+        ]);
+
+        $delegateInstances = array_filter(
+            $this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0e'),
+            fn($calendar) => $calendar['id'][0] == $this->delegatedCal['id'][0]
+        );
+
+        return '/calendars/54b64eadf6d7d8e41d263e0e/' . reset($delegateInstances)['uri'] . '/privateRecurEvent.ics';
+    }
+
+    private function requestAsDelegate($method, $uri, $contentType = null, $body = null) {
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0e');
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array_filter(array(
+            'REQUEST_METHOD'    => $method,
+            'HTTP_CONTENT_TYPE' => $contentType,
+            'REQUEST_URI'       => $uri,
+        )));
+        if ($body !== null) {
+            $request->setBody($body);
+        }
+
+        return $this->request($request);
+    }
+
     function testTimeRangeQuery404() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',

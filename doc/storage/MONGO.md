@@ -94,7 +94,8 @@ Individual vCard objects.
 Key fields: `addressbookid`, `uri`, `carddata`.
 
 **Class:** `CardDAV\Backend\Mongo`  
-**Indexes:** `{ addressbookid, uri }` — also serves `{ addressbookid }` alone
+**Indexes:** `{ addressbookid, uri }` — also serves `{ addressbookid }` alone;
+`{ addressbookid, fn, _id }` — supports paginated `sort=fn` listings with a stable tie-breaker
 
 ---
 
@@ -146,6 +147,7 @@ reads or writes on MongoDB 4.2+, but run it outside peak hours on large collecti
 ```js
 // Indexes added (idempotent)
 db.calendarinstances.createIndex({ calendarid: 1, share_href: 1 });
+db.cards.createIndex({ addressbookid: 1, fn: 1, _id: 1 });
 db.sharedaddressbooks.createIndex({ addressbookid: 1, share_href: 1 });
 db.sharedaddressbooks.createIndex({ principaluri: 1 });
 db.addressbooksubscriptions.createIndex({ principaluri: 1 });
@@ -163,4 +165,5 @@ To check that a query uses an index, look for `IXSCAN` (not `COLLSCAN`) and `tot
 
 ```js
 db.calendarinstances.find({ calendarid: ObjectId("...") }).explain("executionStats")
+db.cards.find({ addressbookid: ObjectId("...") }).sort({ fn: 1, _id: 1 }).limit(50).explain("executionStats")
 ```

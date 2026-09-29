@@ -1069,6 +1069,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         // Also serves the queries on 'addressbookid' alone
         $cardsCollection = $this->db->selectCollection($this->cardsTableName);
         $cardsCollection->createIndex(array('addressbookid' => 1, 'uri' => 1));
+        // Supports paginated contact listings sorted by the stored first letter and unique _id.
+        $cardsCollection->createIndex(array('addressbookid' => 1, 'fn' => 1, '_id' => 1));
 
         // Sharees of an address book (getInvites, updateInvites), and address books shared with a user
         $sharedAddressBookCollection = $this->db->selectCollection($this->sharedAddressBooksTableName);

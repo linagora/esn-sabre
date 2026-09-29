@@ -280,7 +280,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'skip' => (int) $offset
         ];
         if ($limit > 0) $options['limit'] = (int) $limit;
-        if ($sort != null) $options['sort'] = ([ $sort => 1]);
+        // Equal sort values need a unique tie-breaker for stable skip/limit pages.
+        if ($sort != null) $options['sort'] = [ $sort => 1, '_id' => 1 ];
 
         $cardscursor = $collection->find($query, $options);
 

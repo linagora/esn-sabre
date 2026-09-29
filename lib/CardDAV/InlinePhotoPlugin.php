@@ -2,6 +2,7 @@
 
 namespace ESN\CardDAV;
 
+use ESN\Utils\TrustedUrlBase;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
 use Sabre\VObject;
@@ -26,11 +27,13 @@ class InlinePhotoPlugin extends ServerPlugin {
     const MODE_ALLOW = 'allow';
     const MODE_REJECT = 'reject';
     const MODE_FILTER = 'filter';
+    private static string $PHOTO_PROPERTY = 'PHOTO';
 
     /**
      * @var string
      */
     protected $mode;
+    private ?TrustedUrlBase $trustedUrlBase;
 
     /**
      * @var Server
@@ -40,7 +43,7 @@ class InlinePhotoPlugin extends ServerPlugin {
     /**
      * @param string $mode One of allow|reject|filter. Defaults to filter.
      */
-    function __construct($mode = self::MODE_FILTER) {
+    function __construct($mode = self::MODE_FILTER, ?string $trustedUrlBase = null) {
         $mode = strtolower((string) $mode);
 
         if (!in_array($mode, [self::MODE_ALLOW, self::MODE_REJECT, self::MODE_FILTER], true)) {
@@ -50,6 +53,8 @@ class InlinePhotoPlugin extends ServerPlugin {
         }
 
         $this->mode = $mode;
+        $this->trustedUrlBase = $trustedUrlBase !== null && $trustedUrlBase !== ''
+            ? new TrustedUrlBase($trustedUrlBase) : null;
     }
 
     function initialize(Server $server) {
@@ -82,7 +87,7 @@ class InlinePhotoPlugin extends ServerPlugin {
      * @param bool            $modified
      */
     protected function process(&$data, &$modified) {
-        if ($this->mode === self::MODE_ALLOW) {
+        if ($this->mode === self::MODE_ALLOW && $this->trustedUrlBase === null) {
             return;
         }
 
@@ -140,9 +145,13 @@ class InlinePhotoPlugin extends ServerPlugin {
     protected function applyPolicy(VObject\Component\VCard $vcard, &$filtered) {
         $toRemove = [];
 
-        foreach ($vcard->select('PHOTO') as $photo) {
+        foreach ($vcard->select(self::$PHOTO_PROPERTY) as $photo) {
             if ($this->isInline($photo)) {
-                $this->rejectIfConfigured();
+                if ($this->mode !== self::MODE_ALLOW) {
+                    $this->rejectIfConfigured();
+                    $toRemove[] = $photo;
+                }
+            } elseif ($this->trustedUrlBase !== null && !$this->trustedUrlBase->accepts((string) $photo)) {
                 $toRemove[] = $photo;
             }
         }

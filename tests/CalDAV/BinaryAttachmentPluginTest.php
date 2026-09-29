@@ -89,6 +89,22 @@ ICS;
         $this->assertEquals($original, $vcal->serialize());
     }
 
+    function testTrustedBaseFiltersOnlyUntrustedUriAttachments() {
+        $vcal = VObject\Reader::read(str_replace(
+            'https://example.com/files/agenda.pdf',
+            "https://tung-drive.linagora.com/files/agenda.pdf\nATTACH:https://evil.test/file.pdf",
+            $this->calendarWithBinaryAttach()
+        ));
+
+        $modified = $this->emitCalendarObjectChange(BinaryAttachmentPlugin::MODE_FILTER, $vcal,
+            'https://{fdqn}-drive.linagora.com');
+
+        $this->assertTrue($modified);
+        $attachments = $vcal->VEVENT->select('ATTACH');
+        $this->assertCount(1, $attachments);
+        $this->assertSame('https://tung-drive.linagora.com/files/agenda.pdf', (string) reset($attachments));
+    }
+
     /**
      * Sabre converts a jCal body to a VCalendar before anyone is notified, so
      * the plugin only ever sees the converted object.
@@ -121,9 +137,9 @@ ICS;
      * Drives the plugin the way Sabre does: through calendarObjectChange, with
      * the object it has already parsed.
      */
-    private function emitCalendarObjectChange($mode, $vcal): bool {
+    private function emitCalendarObjectChange($mode, $vcal, ?string $trustedBase = null): bool {
         $server = new \Sabre\DAV\Server([]);
-        $server->addPlugin(new BinaryAttachmentPlugin($mode));
+        $server->addPlugin(new BinaryAttachmentPlugin($mode, $trustedBase));
 
         $modified = false;
         $server->emit('calendarObjectChange', [

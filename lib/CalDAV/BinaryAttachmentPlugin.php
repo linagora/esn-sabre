@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+use ESN\Utils\TrustedUrlBase;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
 use Sabre\HTTP\RequestInterface;
@@ -29,11 +30,13 @@ class BinaryAttachmentPlugin extends ServerPlugin {
     const MODE_ALLOW = 'allow';
     const MODE_REJECT = 'reject';
     const MODE_FILTER = 'filter';
+    private static string $ATTACH_PROPERTY = 'ATTACH';
 
     /**
      * @var string
      */
     protected $mode;
+    private ?TrustedUrlBase $trustedUrlBase;
 
     /**
      * @var Server
@@ -43,7 +46,7 @@ class BinaryAttachmentPlugin extends ServerPlugin {
     /**
      * @param string $mode One of allow|reject|filter. Defaults to filter.
      */
-    function __construct($mode = self::MODE_FILTER) {
+    function __construct($mode = self::MODE_FILTER, ?string $trustedUrlBase = null) {
         $mode = strtolower((string) $mode);
 
         if (!in_array($mode, [self::MODE_ALLOW, self::MODE_REJECT, self::MODE_FILTER], true)) {
@@ -53,6 +56,8 @@ class BinaryAttachmentPlugin extends ServerPlugin {
         }
 
         $this->mode = $mode;
+        $this->trustedUrlBase = $trustedUrlBase !== null && $trustedUrlBase !== ''
+            ? new TrustedUrlBase($trustedUrlBase) : null;
     }
 
     function initialize(Server $server) {
@@ -80,7 +85,7 @@ class BinaryAttachmentPlugin extends ServerPlugin {
      *                            what tells Sabre to re-serialize the object
      */
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
-        if ($this->mode === self::MODE_ALLOW) {
+        if ($this->mode === self::MODE_ALLOW && $this->trustedUrlBase === null) {
             return;
         }
 
@@ -106,7 +111,12 @@ class BinaryAttachmentPlugin extends ServerPlugin {
             if ($child instanceof VObject\Component) {
                 $this->applyPolicy($child, $filtered);
             } elseif ($this->isBinaryAttachment($child)) {
-                $this->rejectIfConfigured();
+                if ($this->mode !== self::MODE_ALLOW) {
+                    $this->rejectIfConfigured();
+                    $toRemove[] = $child;
+                }
+            } elseif ($this->trustedUrlBase !== null && $child instanceof VObject\Property &&
+                strtoupper($child->name) === self::$ATTACH_PROPERTY && !$this->trustedUrlBase->accepts((string) $child)) {
                 $toRemove[] = $child;
             }
         }
@@ -137,7 +147,7 @@ class BinaryAttachmentPlugin extends ServerPlugin {
      * @return bool
      */
     protected function isBinaryAttachment($child) {
-        if (!($child instanceof VObject\Property) || strtoupper($child->name) !== 'ATTACH') {
+        if (!($child instanceof VObject\Property) || strtoupper($child->name) !== self::$ATTACH_PROPERTY) {
             return false;
         }
 

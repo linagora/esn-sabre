@@ -188,7 +188,9 @@ $caldavPlugin = new ESN\CalDAV\Plugin();
 $server->addPlugin($caldavPlugin);
 
 // RFC 7986 CONFERENCE property derived from X-OPENPAAS-VIDEOCONFERENCE
-$server->addPlugin(new ESN\CalDAV\VideoConferencePlugin());
+$server->addPlugin(new ESN\CalDAV\VideoConferencePlugin(
+    \ESN\Utils\Env::getString('TRUSTED_VIDEO_URL_BASE')
+));
 
 // Private event sanitization for delegated calendars
 $privateEventPlugin = new ESN\CalDAV\PrivateEventPlugin();
@@ -197,7 +199,8 @@ $server->addPlugin($privateEventPlugin);
 // Inline binary attachment policy (ATTACH;VALUE=BINARY)
 // CALDAV_BINARY_ATTACHMENT_MODE = allow | reject | filter (default: filter)
 $binaryAttachmentPlugin = new ESN\CalDAV\BinaryAttachmentPlugin(
-    \ESN\Utils\Env::getString('CALDAV_BINARY_ATTACHMENT_MODE', ESN\CalDAV\BinaryAttachmentPlugin::MODE_FILTER)
+    \ESN\Utils\Env::getString('CALDAV_BINARY_ATTACHMENT_MODE', ESN\CalDAV\BinaryAttachmentPlugin::MODE_FILTER),
+    \ESN\Utils\Env::getString('TRUSTED_ATTACH_URL_BASE')
 );
 $server->addPlugin($binaryAttachmentPlugin);
 
@@ -214,7 +217,8 @@ $server->addPlugin($carddavJsonPlugin);
 // Inline photo policy (PHOTO;ENCODING=b, PHOTO;VALUE=BINARY, data: URI)
 // CARDDAV_INLINE_ATTACHMENT_MODE = allow | reject | filter (default: filter)
 $server->addPlugin(new ESN\CardDAV\InlinePhotoPlugin(
-    \ESN\Utils\Env::getString('CARDDAV_INLINE_ATTACHMENT_MODE', ESN\CardDAV\InlinePhotoPlugin::MODE_FILTER)
+    \ESN\Utils\Env::getString('CARDDAV_INLINE_ATTACHMENT_MODE', ESN\CardDAV\InlinePhotoPlugin::MODE_FILTER),
+    \ESN\Utils\Env::getString('TRUSTED_ATTACH_URL_BASE')
 ));
 
 // vCard export plugin

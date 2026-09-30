@@ -117,6 +117,29 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         return $acl;
     }
 
+    /**
+     * Lists the contacts of the address books of this home in one query, sorted by full name.
+     *
+     * Returns [addressBooks, cards]: the address books keyed by id (see Backend\Mongo::getAggregatedAddressBooks)
+     * and the cards referencing them through 'addressbookid'.
+     */
+    function getAggregatedContacts($withDelegations, $withSubscriptions, $withDomainMembers, $limit = 0, $after = null) {
+        $extraAddressBooks = [];
+        if ($withDomainMembers) {
+            foreach ($this->principal['groupPrincipals'] ?? [] as $groupPrincipal) {
+                if (strpos($groupPrincipal['uri'], 'principals/domains/') === 0) {
+                    $extraAddressBooks[] = [ 'principaluri' => $groupPrincipal['uri'], 'uri' => Backend\Esn::DOMAIN_MEMBERS_URI ];
+                }
+            }
+        }
+
+        $addressBooks = $this->carddavBackend->getAggregatedAddressBooks(
+            $this->principalUri, $withDelegations, $withSubscriptions, $extraAddressBooks);
+        $cards = $this->carddavBackend->getCardsOfAddressBooks(array_keys($addressBooks), $limit, $after);
+
+        return [$addressBooks, $cards];
+    }
+
     protected function updateChildrenWithSubscriptionAddressBooks($children) {
         foreach ($this->carddavBackend->getSubscriptionsForUser($this->principalUri) as $subscription) {
             $children[] = new \ESN\CardDAV\Subscriptions\Subscription($this->carddavBackend, $subscription);

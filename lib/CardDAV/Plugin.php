@@ -619,165 +619,67 @@ class Plugin extends \ESN\JSON\BasePlugin {
     /**
      * Lists the contacts of all the address books of a home (own ones, delegated and subscribed ones, and
      * optionally the domain members and domain address books), sorted by full name and paginated with an opaque
-     * 'after' cursor.
+     * 'after' cursor returned as 'next'. Selecting the address books and reading the contacts is up to the home.
      */
     private function getAggregatedContacts($nodePath, AddressBookHome $node, array $queryParams) {
         if ($node->getOwner() !== $this->currentUser && $this->authTenant?->tenantType !== TenantType::Technical) {
             throw new Forbidden('Only the owner of an address book home can list its contacts');
         }
 
-        list($limit, $after) = $this->aggregatedContactsPage($queryParams);
+        $after = Utils::getArrayValue($queryParams, 'after');
+        if ($after !== null && !is_string($after)) {
+            throw new BadRequest('Invalid after cursor');
+        }
 
-        list($addressBooks, $cards) = $node->getAggregatedContacts(
-            Utils::getArrayValue($queryParams, 'delegate', 'true') !== 'false',
-            Utils::getArrayValue($queryParams, 'share', 'true') !== 'false',
-            $this->aggregatedDomainAddressBooks($node, $queryParams),
-            // One more card than asked tells whether there is a next page
-            $limit + 1,
-            $after
+        $page = $node->getContactsPage(
+            ContactSources::fromQueryParameters($queryParams),
+            $this->aggregatedContactsLimit($queryParams),
+            $after,
+            fn($path) => $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)
         );
 
-        $hasNext = count($cards) > $limit;
-        $cards = array_slice($cards, 0, $limit);
+        $baseUri = $this->server->getBaseUri();
+        $items = [];
+        foreach ($page['items'] as $item) {
+            $items[] = [
+                '_links' => [
+                    'self' => [ 'href' => $baseUri . $item['path'] ]
+                ],
+                'etag' => $item['etag'],
+                'data' => VObject\Reader::read($item['carddata'])->jsonSerialize()
+            ];
+        }
 
         $result = [
             '_links' => [
-                'self' => [ 'href' => $this->server->getBaseUri() . $nodePath . '.json' ]
+                'self' => [ 'href' => $baseUri . $nodePath . '.json' ]
             ],
-            '_embedded' => [ 'dav:item' => $this->aggregatedContactItems($nodePath, $addressBooks, $cards) ]
+            '_embedded' => [ 'dav:item' => $items ]
         ];
 
         // The client passes it back as 'after' to get the next page
-        if ($hasNext) {
-            $last = end($cards);
-            $result['next'] = $this->encodeContactCursor($last['fn_sort'], $last['id']);
+        if ($page['next'] !== null) {
+            $result['next'] = $page['next'];
         }
 
         return [200, $result];
     }
 
     /**
-     * Address books of the domain of the home owner listed with its contacts, as principaluri + uri pairs: the
-     * domain members one when domainMember=true, the domain address book when domainContacts=true.
+     * Validates the sort and page size of an aggregated contact listing, which is always paginated.
      */
-    private function aggregatedDomainAddressBooks(AddressBookHome $node, array $queryParams) {
-        $domainPrincipalUri = $node->getDomainPrincipalUri();
-        if ($domainPrincipalUri === null) {
-            return [];
-        }
-
-        $addressBooks = [];
-        if (Utils::getArrayValue($queryParams, 'domainMember', 'false') === 'true') {
-            $addressBooks[] = [ 'principaluri' => $domainPrincipalUri, 'uri' => Backend\Esn::DOMAIN_MEMBERS_URI ];
-        }
-
-        if (Utils::getArrayValue($queryParams, 'domainContacts', 'false') === 'true') {
-            $domainAddressBook = $this->readableDomainAddressBook($domainPrincipalUri);
-            if ($domainAddressBook !== null) {
-                $addressBooks[] = $domainAddressBook;
-            }
-        }
-
-        return $addressBooks;
-    }
-
-    /**
-     * Domain address book (dab) of a domain when the current user can read it, null otherwise: a missing or
-     * disabled one, or one whose members right was revoked, is left out.
-     */
-    private function readableDomainAddressBook($domainPrincipalUri) {
-        $path = 'addressbooks/' . explode('/', $domainPrincipalUri)[2] . '/' . Backend\Esn::DOMAIN_ADDRESS_BOOK_URI;
-        try {
-            $addressBook = $this->server->tree->getNodeForPath($path);
-        } catch (DAV\Exception\NotFound $e) {
-            return null;
-        }
-
-        if (!($addressBook instanceof Group\GroupAddressBook) || $addressBook->isDisabled()
-            || !$this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
-            return null;
-        }
-
-        return [ 'principaluri' => $domainPrincipalUri, 'uri' => Backend\Esn::DOMAIN_ADDRESS_BOOK_URI ];
-    }
-
-    /**
-     * Validates the sort and pagination parameters of an aggregated contact listing.
-     *
-     * @return array [limit, after cursor or null]
-     */
-    private function aggregatedContactsPage(array $queryParams) {
+    private function aggregatedContactsLimit(array $queryParams): int {
         $sort = Utils::getArrayValue($queryParams, 'sort', 'fn');
         if ($sort !== 'fn') {
             throw new BadRequest('Unsupported sort: ' . $sort);
         }
 
-        // Always paginated: listing every contact at once is not supported
         $limit = Utils::getArrayValue($queryParams, 'limit', (string)self::DEFAULT_AGGREGATED_CONTACTS_LIMIT);
         if (!is_string($limit) || !ctype_digit($limit) || (int)$limit < 1 || (int)$limit > self::MAX_AGGREGATED_CONTACTS_LIMIT) {
             throw new BadRequest('limit must be an integer between 1 and ' . self::MAX_AGGREGATED_CONTACTS_LIMIT);
         }
 
-        $after = isset($queryParams['after']) ? $this->decodeContactCursor($queryParams['after']) : null;
-
-        return [(int)$limit, $after];
-    }
-
-    private function aggregatedContactItems($homePath, array $addressBooks, array $cards) {
-        $baseUri = $this->server->getBaseUri();
-        $items = [];
-        foreach ($cards as $card) {
-            $addressBookPath = $this->aggregatedAddressBookPath($homePath, $addressBooks[$card['addressbookid']]);
-            $items[] = [
-                '_links' => [
-                    'self' => [ 'href' => $baseUri . $addressBookPath . '/' . $card['uri'] ]
-                ],
-                'etag' => $card['etag'],
-                'data' => VObject\Reader::read($card['carddata'])->jsonSerialize()
-            ];
-        }
-
-        return $items;
-    }
-
-    /**
-     * Path through which the user reaches an aggregated address book: its node in the user's home, except for
-     * address books of groups (domains) which are reached directly, like in getAddressBookDetail.
-     */
-    private function aggregatedAddressBookPath($homePath, array $addressBook) {
-        if ($addressBook['homeUri'] !== null && Utils::isUserPrincipal($addressBook['principaluri'])) {
-            return $homePath . '/' . $addressBook['homeUri'];
-        }
-
-        $ownerPrincipalExploded = explode('/', $addressBook['principaluri']);
-        return explode('/', $homePath)[0] . '/' . $ownerPrincipalExploded[2] . '/' . $addressBook['uri'];
-    }
-
-    /**
-     * The cursor is base64url({"fn_sort": ..., "_id": ...}): the sort keys of the last card of the page.
-     */
-    private function encodeContactCursor($fnSort, $id) {
-        $json = json_encode([ 'fn_sort' => $fnSort, '_id' => $id ]);
-
-        return rtrim(strtr(base64_encode($json), '+/', '-_'), '=');
-    }
-
-    private function decodeContactCursor($cursor) {
-        $json = false;
-        if (is_string($cursor)) {
-            $base64 = strtr($cursor, '-_', '+/');
-            $json = base64_decode(str_pad($base64, strlen($base64) + (4 - strlen($base64) % 4) % 4, '='), true);
-        }
-        $data = $json === false ? null : json_decode($json, true);
-
-        if (!is_array($data)
-            || !is_string($data['fn_sort'] ?? null)
-            || !is_string($data['_id'] ?? null)
-            || !preg_match('/^[0-9a-f]{24}$/', $data['_id'])) {
-            throw new BadRequest('Invalid after cursor');
-        }
-
-        return [ 'fn_sort' => $data['fn_sort'], 'id' => $data['_id'] ];
+        return (int)$limit;
     }
 
     private function qualifySourcePath($sourcePath) {

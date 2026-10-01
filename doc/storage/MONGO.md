@@ -91,11 +91,14 @@ Sharee-side view of a shared address book.
 ### `cards`
 Individual vCard objects.
 
-Key fields: `addressbookid`, `uri`, `carddata`.
+Key fields: `addressbookid`, `uri`, `carddata`, `fn` (first letter of the full name), `fn_sort` (full name without
+accents, upper-cased).
 
 **Class:** `CardDAV\Backend\Mongo`  
 **Indexes:** `{ addressbookid, uri }` — also serves `{ addressbookid }` alone;
-`{ addressbookid, fn, _id }` — supports paginated `sort=fn` listings with a stable tie-breaker
+`{ addressbookid, fn, _id }` — supports paginated `sort=fn` listings with a stable tie-breaker;
+`{ addressbookid, fn_sort, _id }` — supports contact listings aggregated over the address books of a user
+(`GET /addressbooks/{userId}.json?contacts=true`), merging one index scan per address book
 
 ---
 
@@ -148,6 +151,7 @@ reads or writes on MongoDB 4.2+, but run it outside peak hours on large collecti
 // Indexes added (idempotent)
 db.calendarinstances.createIndex({ calendarid: 1, share_href: 1 });
 db.cards.createIndex({ addressbookid: 1, fn: 1, _id: 1 });
+db.cards.createIndex({ addressbookid: 1, fn_sort: 1, _id: 1 });
 db.sharedaddressbooks.createIndex({ addressbookid: 1, share_href: 1 });
 db.sharedaddressbooks.createIndex({ principaluri: 1 });
 db.addressbooksubscriptions.createIndex({ principaluri: 1 });

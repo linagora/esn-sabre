@@ -39,6 +39,14 @@ class VideoConferencePlugin extends ServerPlugin {
     }
 
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
+        if ($this->filterCalendar($vCal)) {
+            $modified = true;
+        }
+    }
+
+    // Shared by CalDAV writes and iTIP delivery before either path stores the event.
+    function filterCalendar(VCalendar $vCal): bool {
+        $modified = false;
         if ($this->trustedUrlBase !== null) {
             foreach ($vCal->select('VEVENT') as $event) {
                 foreach ($event->select(self::$VIDEOCONFERENCE_PROPERTY) as $link) {
@@ -62,5 +70,6 @@ class VideoConferencePlugin extends ServerPlugin {
         if (VideoConferenceDecorator::decorate($vCal)) {
             $modified = true;
         }
+        return $modified;
     }
 }

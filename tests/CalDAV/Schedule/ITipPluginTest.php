@@ -2,6 +2,8 @@
 
 namespace ESN\CalDAV\Schedule;
 
+use ESN\CalDAV\BinaryAttachmentPlugin;
+use ESN\CalDAV\VideoConferencePlugin;
 use Sabre\DAV\ServerPlugin;
 use Sabre\VObject\Document;
 use Sabre\VObject\ITip\Message;
@@ -153,6 +155,30 @@ END:VCALENDAR'
 
         $this->assertEquals(204, $response->getStatus());
     }
+
+    function testITipRequestFiltersUntrustedLinksBeforeLocalDelivery()
+    {
+        $this->server->addPlugin(new BinaryAttachmentPlugin(
+            BinaryAttachmentPlugin::MODE_FILTER, 'https://{fdqn}-drive.linagora.com'));
+        $this->server->addPlugin(new VideoConferencePlugin('https://meet.linagora.com'));
+        $this->iTipRequestData['method'] = 'REQUEST';
+        $this->iTipRequestData['ical'] = str_replace('END:VEVENT',
+            "X-OPENPAAS-VIDEOCONFERENCE:https://meet.linagora.com/room\n" .
+            "X-OPENPAAS-VIDEOCONFERENCE:https://meet.linagora.com.evil.test/room\n" .
+            "CONFERENCE;VALUE=URI;FEATURE=VIDEO:https://meet.linagora.com.evil.test/other\n" .
+            "ATTACH:https://tung-drive.linagora.com/file.pdf\n" .
+            "ATTACH:https://tung-drive.linagora.com.evil.test/file.pdf\nEND:VEVENT",
+            $this->iTipRequestData['ical']);
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(204, $this->server->httpResponse->getStatus());
+        $delivered = $this->calDavPlugin->deliveredMessage->message->serialize();
+        $this->assertStringContainsString('https://meet.linagora.com/room', $delivered);
+        $this->assertStringContainsString('https://tung-drive.linagora.com/file.pdf', $delivered);
+        $this->assertStringNotContainsString('meet.linagora.com.evil.test', $delivered);
+        $this->assertStringNotContainsString('tung-drive.linagora.com.evil.test', $delivered);
+    }
     
     function testITipShouldEmitITipIfMethodeNotCounter()
     {
@@ -300,6 +326,8 @@ END:VCALENDAR';
 #[\AllowDynamicProperties]
 class CalDavPluginMock extends ServerPlugin
 {
+    public $deliveredMessage;
+
     function getPluginName()
     {
         return 'caldav-schedule';
@@ -312,7 +340,7 @@ class CalDavPluginMock extends ServerPlugin
 
     function scheduleLocalDelivery($message)
     {
-        return;
+        $this->deliveredMessage = $message;
     }
 
 }

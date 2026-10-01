@@ -17,7 +17,7 @@ use Sabre\VObject\Component\VCalendar;
  * are handled when calendar objects are created or updated.
  *
  * Inline binaries can bloat calendar objects significantly; URI attachments
- * (ATTACH:https://...) are always left untouched.
+ * (ATTACH:https://...) are preserved unless a trusted URL base is configured.
  *
  * Three modes are supported:
  *   - allow  : the data is stored as-is, binary attachments included.
@@ -85,16 +85,20 @@ class BinaryAttachmentPlugin extends ServerPlugin {
      *                            what tells Sabre to re-serialize the object
      */
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
+        if ($this->filterCalendar($vCal)) {
+            $modified = true;
+        }
+    }
+
+    // iTIP delivery bypasses calendarObjectChange, so it must apply the same policy explicitly.
+    function filterCalendar(VCalendar $vCal): bool {
         if ($this->mode === self::MODE_ALLOW && $this->trustedUrlBase === null) {
-            return;
+            return false;
         }
 
         $filtered = false;
         $this->applyPolicy($vCal, $filtered);
-
-        if ($filtered) {
-            $modified = true;
-        }
+        return $filtered;
     }
 
     /**

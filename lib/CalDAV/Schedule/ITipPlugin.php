@@ -72,9 +72,6 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         $message->method = $issetdef('method', 'REQUEST');
         $message->sequence = (int) $issetdef('sequence', 0);
         $message->message = VObject\Reader::read($payload->ical);
-        // Events coming from an external system carry the video conference link in the
-        // OpenPaaS property only: expose it to the recipient's clients as well.
-        VideoConferenceDecorator::decorate($message->message);
         $message->sender = $this->resolveSenderFromItipMessage($message, $issetdef('replyTo', $payload->sender));
         $message->recipient = 'mailto:' . $payload->recipient;
 
@@ -93,6 +90,20 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         // ORGANIZER/ATTENDEE: that address can legitimately be an alias, a group/list address
         // or any address the mail layer resolved to this user. The routing decision (the URL)
         // is authoritative, so we honor it and deliver onto the targeted calendar.
+
+        // Local iTIP delivery writes straight to the recipient's calendar and inbox,
+        // bypassing calendarObjectChange where PUT filters these links.
+        $attachmentPlugin = $this->server->getPlugin('caldav-binary-attachment');
+        if ($attachmentPlugin) {
+            $attachmentPlugin->filterCalendar($message->message);
+        }
+        $videoPlugin = $this->server->getPlugin('caldav-videoconference');
+        if ($videoPlugin) {
+            $videoPlugin->filterCalendar($message->message);
+        } else {
+            // Keep video decoration for servers without the optional plugin.
+            VideoConferenceDecorator::decorate($message->message);
+        }
 
         if($message->method !== 'COUNTER'){
             $this->server->getPlugin('caldav-schedule')->scheduleLocalDelivery($message);

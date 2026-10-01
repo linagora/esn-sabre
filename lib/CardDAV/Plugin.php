@@ -618,7 +618,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
     /**
      * Lists the contacts of all the address books of a home (own ones, delegated and subscribed ones, and
-     * optionally the domain members one), sorted by full name and paginated with an opaque 'after' cursor.
+     * optionally the domain members and domain address books), sorted by full name and paginated with an opaque
+     * 'after' cursor.
      */
     private function getAggregatedContacts($nodePath, AddressBookHome $node, array $queryParams) {
         if ($node->getOwner() !== $this->currentUser && $this->authTenant?->tenantType !== TenantType::Technical) {
@@ -630,7 +631,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         list($addressBooks, $cards) = $node->getAggregatedContacts(
             Utils::getArrayValue($queryParams, 'delegate', 'true') !== 'false',
             Utils::getArrayValue($queryParams, 'share', 'true') !== 'false',
-            Utils::getArrayValue($queryParams, 'domainMember', 'false') === 'true',
+            $this->aggregatedDomainAddressBooks($node, $queryParams),
             // One more card than asked tells whether there is a next page
             $limit + 1,
             $after
@@ -653,6 +654,51 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return [200, $result];
+    }
+
+    /**
+     * Address books of the domain of the home owner listed with its contacts, as principaluri + uri pairs: the
+     * domain members one when domainMember=true, the domain address book when domainContacts=true.
+     */
+    private function aggregatedDomainAddressBooks(AddressBookHome $node, array $queryParams) {
+        $domainPrincipalUri = $node->getDomainPrincipalUri();
+        if ($domainPrincipalUri === null) {
+            return [];
+        }
+
+        $addressBooks = [];
+        if (Utils::getArrayValue($queryParams, 'domainMember', 'false') === 'true') {
+            $addressBooks[] = [ 'principaluri' => $domainPrincipalUri, 'uri' => Backend\Esn::DOMAIN_MEMBERS_URI ];
+        }
+
+        if (Utils::getArrayValue($queryParams, 'domainContacts', 'false') === 'true') {
+            $domainAddressBook = $this->readableDomainAddressBook($domainPrincipalUri);
+            if ($domainAddressBook !== null) {
+                $addressBooks[] = $domainAddressBook;
+            }
+        }
+
+        return $addressBooks;
+    }
+
+    /**
+     * Domain address book (dab) of a domain when the current user can read it, null otherwise: a missing or
+     * disabled one, or one whose members right was revoked, is left out.
+     */
+    private function readableDomainAddressBook($domainPrincipalUri) {
+        $path = 'addressbooks/' . explode('/', $domainPrincipalUri)[2] . '/' . Backend\Esn::DOMAIN_ADDRESS_BOOK_URI;
+        try {
+            $addressBook = $this->server->tree->getNodeForPath($path);
+        } catch (DAV\Exception\NotFound $e) {
+            return null;
+        }
+
+        if (!($addressBook instanceof Group\GroupAddressBook) || $addressBook->isDisabled()
+            || !$this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+            return null;
+        }
+
+        return [ 'principaluri' => $domainPrincipalUri, 'uri' => Backend\Esn::DOMAIN_ADDRESS_BOOK_URI ];
     }
 
     /**

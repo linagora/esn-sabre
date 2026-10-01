@@ -121,23 +121,28 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
      * Lists the contacts of the address books of this home in one query, sorted by full name.
      *
      * Returns [addressBooks, cards]: the address books keyed by id (see Backend\Mongo::getAggregatedAddressBooks)
-     * and the cards referencing them through 'addressbookid'.
+     * and the cards referencing them through 'addressbookid'. $extraAddressBooks (principaluri + uri pairs) are
+     * listed too, the caller being responsible for checking that the user can read them.
      */
-    function getAggregatedContacts($withDelegations, $withSubscriptions, $withDomainMembers, $limit = 0, $after = null) {
-        $extraAddressBooks = [];
-        if ($withDomainMembers) {
-            foreach ($this->principal['groupPrincipals'] ?? [] as $groupPrincipal) {
-                if (strpos($groupPrincipal['uri'], 'principals/domains/') === 0) {
-                    $extraAddressBooks[] = [ 'principaluri' => $groupPrincipal['uri'], 'uri' => Backend\Esn::DOMAIN_MEMBERS_URI ];
-                }
-            }
-        }
-
+    function getAggregatedContacts($withDelegations, $withSubscriptions, array $extraAddressBooks = [], $limit = 0, $after = null) {
         $addressBooks = $this->carddavBackend->getAggregatedAddressBooks(
             $this->principalUri, $withDelegations, $withSubscriptions, $extraAddressBooks);
         $cards = $this->carddavBackend->getCardsOfAddressBooks(array_keys($addressBooks), $limit, $after);
 
         return [$addressBooks, $cards];
+    }
+
+    /**
+     * Principal uri of the domain the owner of this home belongs to, null when there is none.
+     */
+    function getDomainPrincipalUri() {
+        foreach ($this->principal['groupPrincipals'] ?? [] as $groupPrincipal) {
+            if (strpos($groupPrincipal['uri'], 'principals/domains/') === 0) {
+                return $groupPrincipal['uri'];
+            }
+        }
+
+        return null;
     }
 
     protected function updateChildrenWithSubscriptionAddressBooks($children) {

@@ -179,6 +179,20 @@ class InlinePhotoPluginTest extends TestCase {
         $this->assertEquals('https://example.com/avatar.jpg', $remaining->getValue());
     }
 
+    function testTrustedBaseFiltersUntrustedUriPhoto() {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_FILTER, 'https://{fdqn}-drive.linagora.com');
+        $data = self::vcard("PHOTO;VALUE=URI:https://manh-drive.linagora.com/avatar.jpg\r\n" .
+            'PHOTO;VALUE=URI:https://evil.test/avatar.jpg');
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertTrue($modified);
+        $photos = VObject\Reader::read($data)->select('PHOTO');
+        $this->assertCount(1, $photos);
+        $this->assertSame('https://manh-drive.linagora.com/avatar.jpg', (string) reset($photos));
+    }
+
     function testRejectThrowsOnInlinePhotoFromStreamPayload() {
         $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_REJECT);
         $data = self::stream(self::vcard('PHOTO;ENCODING=b;TYPE=JPEG:dGVzdA=='));

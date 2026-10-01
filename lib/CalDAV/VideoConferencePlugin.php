@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+use ESN\Utils\TrustedUrlBase;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
 use Sabre\HTTP\RequestInterface;
@@ -16,6 +17,14 @@ use Sabre\VObject\Component\VCalendar;
  * @see VideoConferenceDecorator
  */
 class VideoConferencePlugin extends ServerPlugin {
+    private static string $VIDEOCONFERENCE_PROPERTY = 'X-OPENPAAS-VIDEOCONFERENCE';
+    private static string $CONFERENCE_PROPERTY = 'CONFERENCE';
+    private ?TrustedUrlBase $trustedUrlBase;
+
+    function __construct(?string $trustedUrlBase = null) {
+        $this->trustedUrlBase = $trustedUrlBase !== null && $trustedUrlBase !== ''
+            ? new TrustedUrlBase($trustedUrlBase) : null;
+    }
 
     function initialize(Server $server) {
         VObjectPropertyRegistry::register();
@@ -30,8 +39,37 @@ class VideoConferencePlugin extends ServerPlugin {
     }
 
     function calendarObjectChange(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
+        if ($this->filterCalendar($vCal)) {
+            $modified = true;
+        }
+    }
+
+    // Shared by CalDAV writes and iTIP delivery before either path stores the event.
+    function filterCalendar(VCalendar $vCal): bool {
+        $modified = false;
+        if ($this->trustedUrlBase !== null) {
+            foreach ($vCal->select('VEVENT') as $event) {
+                foreach ($event->select(self::$VIDEOCONFERENCE_PROPERTY) as $link) {
+                    if (trim((string) $link) !== '' && !$this->trustedUrlBase->accepts((string) $link)) {
+                        $event->remove($link);
+                        $modified = true;
+                    }
+                }
+
+                // CONFERENCE can recreate the OpenPaaS link, so filter video links in both forms.
+                foreach ($event->select(self::$CONFERENCE_PROPERTY) as $conference) {
+                    $features = array_map('trim', explode(',', strtoupper((string) ($conference['FEATURE'] ?? ''))));
+                    if (in_array('VIDEO', $features, true) && !$this->trustedUrlBase->accepts((string) $conference)) {
+                        $event->remove($conference);
+                        $modified = true;
+                    }
+                }
+            }
+        }
+
         if (VideoConferenceDecorator::decorate($vCal)) {
             $modified = true;
         }
+        return $modified;
     }
 }

@@ -71,6 +71,8 @@ of `config.json`.
 | `SABRE_IMPERSONATION_ENABLED` | `false` | Master switch for admin impersonation |
 | `AUTO_PROVISION` | `true` | Create missing users on successful authentication |
 | `PRINCIPAL_PRIVACY` | `true` | Restrict DAV principal discovery |
+| `TRUSTED_VIDEO_URL_BASE` | unset | Keep only video conference URLs at this base; unset leaves links untouched |
+| `TRUSTED_ATTACH_URL_BASE` | unset | Keep only calendar ATTACH and contact PHOTO URLs at this base; unset leaves links untouched |
 | `CALDAV_BINARY_ATTACHMENT_MODE` | `filter` | Inline binary attachment policy: `allow`, `reject` or `filter` |
 | `CARDDAV_INLINE_ATTACHMENT_MODE` | `filter` | Inline contact photo policy: `allow`, `reject` or `filter` |
 | `SABRE_ENFORCE_RFC_6638` | `true` | Reject attendee updates to organizer-controlled scheduling fields |

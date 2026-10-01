@@ -296,116 +296,64 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     /**
-     * Resolves the address books whose contacts are listed together for a user, keyed by source address book id.
+     * Address books matching principaluri + uri pairs, read in one query whatever their number. Pairs matching no
+     * address book are left out.
      *
-     * Own address books come first, then accepted delegations, subscriptions and finally $extraAddressBooks
-     * (principaluri + uri pairs). When a source is reachable several ways, the first one wins. 'homeUri' is the
-     * uri of the node exposing the source in the user's address book home, null for extra address books.
+     * @return array [ [ 'id', 'principaluri', 'uri' ], ... ]
      */
-    function getAggregatedAddressBooks($principalUri, $withDelegations = true, $withSubscriptions = true, array $extraAddressBooks = []) {
-        // Subscriptions and extra address books are only known by principaluri + uri, while cards reference
-        // their address book _id: they are gathered and resolved to ids with a single query.
-        $toResolve = $withSubscriptions ? $this->getSubscribedAddressBookSources($principalUri) : [];
-        foreach ($extraAddressBooks as $addressBook) {
-            $toResolve[] = [ 'principaluri' => $addressBook['principaluri'], 'uri' => $addressBook['uri'], 'homeUri' => null ];
-        }
-
-        // Array union keeps the left entry: an address book reached several ways keeps the first way
-        return $this->getOwnAddressBookSources($principalUri)
-            + ($withDelegations ? $this->getDelegatedAddressBookSources($principalUri) : [])
-            + $this->resolveAddressBookSources($toResolve);
-    }
-
-    private function getOwnAddressBookSources($principalUri) {
-        $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $addressBooks = [];
-
-        // Served by the { principaluri, uri } index
-        foreach ($collection->find([ 'principaluri' => $principalUri ], [ 'projection' => self::MINIMAL_ADDRESSBOOK_FIELDS ]) as $row) {
-            $addressBooks[(string)$row['_id']] = [
-                'principaluri' => $row['principaluri'],
-                'uri' => $row['uri'],
-                'homeUri' => $row['uri']
-            ];
-        }
-
-        return $addressBooks;
-    }
-
-    /**
-     * Accepted delegations only: pending or declined ones do not give access to the contacts.
-     */
-    private function getDelegatedAddressBookSources($principalUri) {
-        $delegations = [];
-        $query = [ 'principaluri' => $principalUri, 'share_invitestatus' => SPlugin::INVITE_ACCEPTED ];
-        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
-        foreach ($collection->find($query, [ 'projection' => [ 'addressbookid' => 1, 'uri' => 1 ] ]) as $row) {
-            $delegations[(string)$row['addressbookid']] = $row['uri'];
-        }
-
-        if (!$delegations) {
+    function getAddressBooksByPrincipalAndUri(array $addressBooks) {
+        if (!$addressBooks) {
             return [];
         }
 
-        // The owner of the source tells how its contacts are reached (see ESN\CardDAV\Plugin)
-        $addressBooks = [];
-        $ids = array_map(fn($id) => new \MongoDB\BSON\ObjectId($id), array_keys($delegations));
+        $or = array_map(fn($addressBook) => [ 'principaluri' => $addressBook['principaluri'], 'uri' => $addressBook['uri'] ], $addressBooks);
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $found = [];
+        // Served by the { principaluri, uri } index
+        foreach ($collection->find([ '$or' => array_values($or) ], [ 'projection' => self::MINIMAL_ADDRESSBOOK_FIELDS ]) as $row) {
+            $found[] = [ 'id' => (string)$row['_id'], 'principaluri' => $row['principaluri'], 'uri' => $row['uri'] ];
+        }
+
+        return $found;
+    }
+
+    /**
+     * Address books shared with a principal along with their source address book, read in two queries whatever
+     * their number, unlike getSharedAddressBooksForUser. Shares whose source no longer exists are left out.
+     *
+     * @return array [ [ 'uri', 'share_invitestatus', 'addressbookid', 'source_principaluri', 'source_uri' ], ... ]
+     */
+    function getSharedAddressBookSourcesForUser($principalUri) {
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $projection = [ 'uri' => 1, 'addressbookid' => 1, 'share_invitestatus' => 1 ];
+        $shares = $collection->find([ 'principaluri' => $principalUri ], [ 'projection' => $projection ])->toArray();
+        if (!$shares) {
+            return [];
+        }
+
+        $sources = [];
+        $ids = array_map(fn($share) => $share['addressbookid'], $shares);
         $collection = $this->db->selectCollection($this->addressBooksTableName);
         foreach ($collection->find([ '_id' => [ '$in' => $ids ] ], [ 'projection' => self::MINIMAL_ADDRESSBOOK_FIELDS ]) as $row) {
-            $addressBooks[(string)$row['_id']] = [
-                'principaluri' => $row['principaluri'],
-                'uri' => $row['uri'],
-                'homeUri' => $delegations[(string)$row['_id']]
+            $sources[(string)$row['_id']] = $row;
+        }
+
+        $result = [];
+        foreach ($shares as $share) {
+            $source = $sources[(string)$share['addressbookid']] ?? null;
+            if ($source === null) {
+                continue;
+            }
+            $result[] = [
+                'uri' => $share['uri'],
+                'share_invitestatus' => $this->getValue($share, 'share_invitestatus', SPlugin::INVITE_INVALID),
+                'addressbookid' => (string)$share['addressbookid'],
+                'source_principaluri' => $source['principaluri'],
+                'source_uri' => $source['uri']
             ];
         }
 
-        return $addressBooks;
-    }
-
-    /**
-     * Sources of the subscriptions of a principal, not resolved to address book ids.
-     */
-    private function getSubscribedAddressBookSources($principalUri) {
-        $sources = [];
-        $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
-        foreach ($collection->find([ 'principaluri' => $principalUri ], [ 'projection' => [ 'source' => 1, 'uri' => 1 ] ]) as $row) {
-            // Same resolution as ESN\CardDAV\Subscriptions\Subscription::getSourceAddressBookInfo
-            $parts = explode('/', trim($row['source'], '/'));
-            if (count($parts) < 3 || $parts[0] !== 'addressbooks') {
-                continue;
-            }
-            $sources[] = [ 'principaluri' => 'principals/users/' . $parts[1], 'uri' => $parts[2], 'homeUri' => $row['uri'] ];
-        }
-
-        return $sources;
-    }
-
-    /**
-     * Resolves principaluri + uri pairs to address book ids in one query, keyed by id. When several pairs resolve
-     * to the same address book the first one wins. Pairs of address books that no longer exist are skipped.
-     */
-    private function resolveAddressBookSources(array $sources) {
-        if (!$sources) {
-            return [];
-        }
-
-        $or = array_map(fn($source) => [ 'principaluri' => $source['principaluri'], 'uri' => $source['uri'] ], $sources);
-        $ids = [];
-        $collection = $this->db->selectCollection($this->addressBooksTableName);
-        // Served by the { principaluri, uri } index
-        foreach ($collection->find([ '$or' => $or ], [ 'projection' => self::MINIMAL_ADDRESSBOOK_FIELDS ]) as $row) {
-            $ids[$row['principaluri'] . '/' . $row['uri']] = (string)$row['_id'];
-        }
-
-        $addressBooks = [];
-        foreach ($sources as $source) {
-            $id = $ids[$source['principaluri'] . '/' . $source['uri']] ?? null;
-            if ($id !== null) {
-                $addressBooks[$id] ??= $source;
-            }
-        }
-
-        return $addressBooks;
+        return $result;
     }
 
     /**

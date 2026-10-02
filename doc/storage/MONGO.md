@@ -98,7 +98,7 @@ accents, upper-cased).
 **Indexes:** `{ addressbookid, uri }` — also serves `{ addressbookid }` alone;
 `{ addressbookid, fn, _id }` — supports paginated `sort=fn` listings with a stable tie-breaker;
 `{ addressbookid, fn_sort, _id }` — supports contact listings aggregated over the address books of a user
-(`GET /addressbooks/{userId}.json?contacts=true`), merging one index scan per address book
+(`GET /contacts/{userId}.json`), merging one index scan per address book
 
 ---
 

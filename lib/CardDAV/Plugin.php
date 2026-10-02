@@ -23,6 +23,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $server->on('beforeUnbind', [$this, 'beforeUnbind']);
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
         $server->on('beforeCreateFile', [$this, 'beforeCreateFile']);
+        // Serve the virtual JSON route before plugins that resolve GET paths in the DAV tree.
+        $server->on('method:GET', [$this, 'httpGetAllContacts'], 79);
         $server->on('method:GET', [$this, 'httpGet'], 80);
         $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
         $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
@@ -152,18 +154,27 @@ class Plugin extends \ESN\JSON\BasePlugin {
         if ($node instanceof \ESN\CardDAV\AddressBookRoot) {
             list($code, $body) = $this->listAddressBookHomes($node);
         } else if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
-            $queryParams = $request->getQueryParameters();
-
-            if ($node instanceof AddressBookHome && Utils::getArrayValue($queryParams, 'contacts') === 'true') {
-                list($code, $body) = $this->getAggregatedContacts($path, $node, $queryParams);
-            } else {
-                $options = $this->addressBookListOptions($queryParams);
-
-                list($code, $body) = $this->getAddressBooks($path, $node, $options);
-            }
+            $options = $this->addressBookListOptions($request->getQueryParameters());
+            list($code, $body) = $this->getAddressBooks($path, $node, $options);
         } else if ($node instanceof \Sabre\CardDAV\AddressBook || $node instanceof Subscriptions\Subscription) {
             list($code, $body) = $this->getContacts($request, $response, $path, $node);
         }
+
+        return $this->send($code, $body);
+    }
+
+    function httpGetAllContacts($request, $response) {
+        if (!$this->acceptJson() || !preg_match('#^contacts/([^/]+)$#', $request->getPath(), $matches)) {
+            return true;
+        }
+
+        $homePath = 'addressbooks/' . $matches[1];
+        $node = $this->server->tree->getNodeForPath($homePath);
+        if (!$node instanceof AddressBookHome || $node instanceof GroupAddressBookHome) {
+            throw new DAV\Exception\NotFound('Contact list not found');
+        }
+
+        list($code, $body) = $this->getAggregatedContacts($request->getPath(), $node, $request->getQueryParameters());
 
         return $this->send($code, $body);
     }
@@ -622,6 +633,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
      * 'after' cursor returned as 'next'. Selecting the address books and reading the contacts is up to the home.
      */
     private function getAggregatedContacts($nodePath, AddressBookHome $node, array $queryParams) {
+        // The virtual /contacts path has no DAV node; check the real address book home.
+        $this->server->getPlugin('acl')->checkPrivileges('addressbooks/' . $node->getName(), '{DAV:}read');
         if ($node->getOwner() !== $this->currentUser && $this->authTenant?->tenantType !== TenantType::Technical) {
             throw new Forbidden('Only the owner of an address book home can list its contacts');
         }

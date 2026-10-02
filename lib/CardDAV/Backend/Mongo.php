@@ -41,6 +41,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     // into a single query that could hit the database timeout
     const MULTIGET_BATCH_SIZE = 512;
 
+    // Order of contacts sorted by full name: English, ignoring accents and case (strength 1). The cards index on
+    // fn_sort is built with it and only serves queries using the very same collation.
+    const CONTACT_SORT_COLLATION = [ 'locale' => 'en', 'strength' => 1 ];
+
     const MINIMAL_ADDRESSBOOK_FIELDS = [
         '_id' => 1,
         'principaluri' => 1,
@@ -377,8 +381,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         $options = [
             'projection' => [ '_id' => 1, 'addressbookid' => 1, 'uri' => 1, 'carddata' => 1, 'etag' => 1, 'fn_sort' => 1 ],
-            // Served by the { addressbookid, fn_sort, _id } index, merging one scan per address book
-            'sort' => [ 'fn_sort' => 1, '_id' => 1 ]
+            // Served by the { addressbookid, fn_sort, _id } index, merging one scan per address book. The cursor
+            // conditions above compare with the same collation, so a page resumes where the previous one stopped.
+            'sort' => [ 'fn_sort' => 1, '_id' => 1 ],
+            'collation' => self::CONTACT_SORT_COLLATION
         ];
         if ($limit > 0) $options['limit'] = (int) $limit;
 
@@ -1156,11 +1162,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     /**
-     * Full name normalized for sorting: accents stripped and upper-cased, so that a plain byte comparison
-     * orders contacts by name. Cursors carry this value, so any change here requires re-computing stored values.
+     * Full name as sorted: kept as is, accents and case being ignored by CONTACT_SORT_COLLATION rather than
+     * stripped here, so that another language only needs another collation, not new stored values.
      */
     function getSortableFn($fn) {
-        return strtoupper($this->CharAPI->getAsciiUpperCase(trim((string)$fn)));
+        return trim((string)$fn);
     }
 
     /**
@@ -1184,8 +1190,12 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         // Supports paginated contact listings sorted by the stored first letter and unique _id.
         $cardsCollection->createIndex(array('addressbookid' => 1, 'fn' => 1, '_id' => 1));
         // Supports contact listings aggregated over several address books, sorted by full name and paginated
-        // with a cursor: each address book is scanned in order and the scans are merged.
-        $cardsCollection->createIndex(array('addressbookid' => 1, 'fn_sort' => 1, '_id' => 1));
+        // with a cursor: each address book is scanned in order and the scans are merged. Named after its collation,
+        // as MongoDB refuses an index of the same name with other options.
+        $cardsCollection->createIndex(
+            array('addressbookid' => 1, 'fn_sort' => 1, '_id' => 1),
+            array('name' => 'addressbookid_1_fn_sort_1__id_1_en_strength1', 'collation' => self::CONTACT_SORT_COLLATION)
+        );
 
         // Sharees of an address book (getInvites, updateInvites), and address books shared with a user
         $sharedAddressBookCollection = $this->db->selectCollection($this->sharedAddressBooksTableName);

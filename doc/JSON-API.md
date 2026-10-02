@@ -305,6 +305,22 @@ List all address books in the addressbookHome.
 }
 ```
 
+## GET /contacts/{userId}.json
+
+List contacts across the user's own, delegated and subscribed address books. The optional
+`domainMember=true` and `domainContacts=true` parameters include domain address books.
+
+**Query Parameters:** `sort=fn` (the only supported sort), `limit` (1–1000, default 50),
+`after` (the `next` cursor from the previous page), `delegate`, `share`, `domainMember`,
+and `domainContacts`.
+
+**Status Codes:** 200 on success, 400 for invalid pagination, 403 when a non-technical
+user requests another user's contacts, 404 for an unknown user.
+
+The response embeds `dav:item` contacts. Each item's self link points to its original
+address book; the listing's self link points to `/contacts/{userId}.json`. A non-final
+page also has a `next` cursor to pass as `after`.
+
 ## POST /addressbooks/{addressbookHomeId}.json
 
 Create an address book in the specified addressbook home.

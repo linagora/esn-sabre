@@ -3,6 +3,7 @@ namespace ESN\CardDAV;
 
 use Sabre\DAV;
 use \Sabre\VObject;
+use \Sabre\DAV\Exception\BadRequest;
 use \Sabre\DAV\Exception\Forbidden;
 use \ESN\Utils\Utils as Utils;
 use \ESN\Utils\TenantType;
@@ -10,6 +11,10 @@ use \ESN\Utils\AuthTenant;
 
 #[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
+    // Page sizes of the contact listing aggregated over the address books of a home
+    const DEFAULT_AGGREGATED_CONTACTS_LIMIT = 50;
+    const MAX_AGGREGATED_CONTACTS_LIMIT = 1000;
+
     protected ?AuthTenant $authTenant = null;
 
     function initialize(\Sabre\DAV\Server $server) {
@@ -18,6 +23,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $server->on('beforeUnbind', [$this, 'beforeUnbind']);
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
         $server->on('beforeCreateFile', [$this, 'beforeCreateFile']);
+        // Serve the virtual JSON route before plugins that resolve GET paths in the DAV tree.
+        $server->on('method:GET', [$this, 'httpGetAllContacts'], 79);
         $server->on('method:GET', [$this, 'httpGet'], 80);
         $server->on('method:PROPFIND', [$this, 'httpPropfind'], 80);
         $server->on('method:PROPPATCH', [$this, 'httpProppatch'], 80);
@@ -148,11 +155,26 @@ class Plugin extends \ESN\JSON\BasePlugin {
             list($code, $body) = $this->listAddressBookHomes($node);
         } else if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
             $options = $this->addressBookListOptions($request->getQueryParameters());
-
             list($code, $body) = $this->getAddressBooks($path, $node, $options);
         } else if ($node instanceof \Sabre\CardDAV\AddressBook || $node instanceof Subscriptions\Subscription) {
             list($code, $body) = $this->getContacts($request, $response, $path, $node);
         }
+
+        return $this->send($code, $body);
+    }
+
+    function httpGetAllContacts($request, $response) {
+        if (!$this->acceptJson() || !preg_match('#^contacts/([^/]+)$#', $request->getPath(), $matches)) {
+            return true;
+        }
+
+        $homePath = 'addressbooks/' . $matches[1];
+        $node = $this->server->tree->getNodeForPath($homePath);
+        if (!$node instanceof AddressBookHome || $node instanceof GroupAddressBookHome) {
+            throw new DAV\Exception\NotFound('Contact list not found');
+        }
+
+        list($code, $body) = $this->getAggregatedContacts($request->getPath(), $node, $request->getQueryParameters());
 
         return $this->send($code, $body);
     }
@@ -603,6 +625,74 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return [200, $result];
+    }
+
+    /**
+     * Lists the contacts of all the address books of a home (own ones, delegated and subscribed ones, and
+     * optionally the domain members and domain address books), sorted by full name and paginated with an opaque
+     * 'after' cursor returned as 'next'. Selecting the address books and reading the contacts is up to the home.
+     */
+    private function getAggregatedContacts($nodePath, AddressBookHome $node, array $queryParams) {
+        // The virtual /contacts path has no DAV node; check the real address book home.
+        $this->server->getPlugin('acl')->checkPrivileges('addressbooks/' . $node->getName(), '{DAV:}read');
+        if ($node->getOwner() !== $this->currentUser && $this->authTenant?->tenantType !== TenantType::Technical) {
+            throw new Forbidden('Only the owner of an address book home can list its contacts');
+        }
+
+        $after = Utils::getArrayValue($queryParams, 'after');
+        if ($after !== null && !is_string($after)) {
+            throw new BadRequest('Invalid after cursor');
+        }
+
+        $page = $node->getContactsPage(
+            ContactSources::fromQueryParameters($queryParams),
+            $this->aggregatedContactsLimit($queryParams),
+            $after,
+            fn($path) => $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)
+        );
+
+        $baseUri = $this->server->getBaseUri();
+        $items = [];
+        foreach ($page['items'] as $item) {
+            $items[] = [
+                '_links' => [
+                    'self' => [ 'href' => $baseUri . $item['path'] ]
+                ],
+                'etag' => $item['etag'],
+                'data' => VObject\Reader::read($item['carddata'])->jsonSerialize()
+            ];
+        }
+
+        $result = [
+            '_links' => [
+                'self' => [ 'href' => $baseUri . $nodePath . '.json' ]
+            ],
+            '_embedded' => [ 'dav:item' => $items ]
+        ];
+
+        // The client passes it back as 'after' to get the next page
+        if ($page['next'] !== null) {
+            $result['next'] = $page['next'];
+        }
+
+        return [200, $result];
+    }
+
+    /**
+     * Validates the sort and page size of an aggregated contact listing, which is always paginated.
+     */
+    private function aggregatedContactsLimit(array $queryParams): int {
+        $sort = Utils::getArrayValue($queryParams, 'sort', 'fn');
+        if ($sort !== 'fn') {
+            throw new BadRequest('Unsupported sort: ' . $sort);
+        }
+
+        $limit = Utils::getArrayValue($queryParams, 'limit', (string)self::DEFAULT_AGGREGATED_CONTACTS_LIMIT);
+        if (!is_string($limit) || !ctype_digit($limit) || (int)$limit < 1 || (int)$limit > self::MAX_AGGREGATED_CONTACTS_LIMIT) {
+            throw new BadRequest('limit must be an integer between 1 and ' . self::MAX_AGGREGATED_CONTACTS_LIMIT);
+        }
+
+        return (int)$limit;
     }
 
     private function qualifySourcePath($sourcePath) {

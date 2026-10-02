@@ -91,11 +91,17 @@ Sharee-side view of a shared address book.
 ### `cards`
 Individual vCard objects.
 
-Key fields: `addressbookid`, `uri`, `carddata`.
+Key fields: `addressbookid`, `uri`, `carddata`, `fn` (first letter of the full name), `fn_sort` (full name as is,
+trimmed: accents and case are ignored by the collation of its index rather than stripped).
 
 **Class:** `CardDAV\Backend\Mongo`  
 **Indexes:** `{ addressbookid, uri }` — also serves `{ addressbookid }` alone;
-`{ addressbookid, fn, _id }` — supports paginated `sort=fn` listings with a stable tie-breaker
+`{ addressbookid, fn, _id }` — supports paginated `sort=fn` listings with a stable tie-breaker;
+`{ addressbookid, fn_sort, _id }` named `addressbookid_1_fn_sort_1__id_1_en_strength1`, with the collation
+`{ locale: "en", strength: 1 }` (`CardDAV\Backend\Mongo::CONTACT_SORT_COLLATION`) — supports contact listings
+aggregated over the address books of a user (`GET /contacts/{userId}.json`), merging one index scan per address book.
+It only serves queries passing the very same collation: changing the language of the sort means changing the
+collation and recreating this index under another name, stored values staying as they are.
 
 ---
 
@@ -148,6 +154,8 @@ reads or writes on MongoDB 4.2+, but run it outside peak hours on large collecti
 // Indexes added (idempotent)
 db.calendarinstances.createIndex({ calendarid: 1, share_href: 1 });
 db.cards.createIndex({ addressbookid: 1, fn: 1, _id: 1 });
+db.cards.createIndex({ addressbookid: 1, fn_sort: 1, _id: 1 },
+  { name: "addressbookid_1_fn_sort_1__id_1_en_strength1", collation: { locale: "en", strength: 1 } });
 db.sharedaddressbooks.createIndex({ addressbookid: 1, share_href: 1 });
 db.sharedaddressbooks.createIndex({ principaluri: 1 });
 db.addressbooksubscriptions.createIndex({ principaluri: 1 });

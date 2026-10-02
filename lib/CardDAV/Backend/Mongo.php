@@ -41,6 +41,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     // into a single query that could hit the database timeout
     const MULTIGET_BATCH_SIZE = 512;
 
+    // Order of contacts sorted by full name: English, ignoring accents and case (strength 1). The cards index on
+    // fn_sort is built with it and only serves queries using the very same collation.
+    const CONTACT_SORT_COLLATION = [ 'locale' => 'en', 'strength' => 1 ];
+
     const MINIMAL_ADDRESSBOOK_FIELDS = [
         '_id' => 1,
         'principaluri' => 1,
@@ -295,6 +299,109 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         return $cards;
     }
 
+    /**
+     * Address books matching principaluri + uri pairs, read in one query whatever their number. Pairs matching no
+     * address book are left out.
+     *
+     * @return array [ [ 'id', 'principaluri', 'uri' ], ... ]
+     */
+    function getAddressBooksByPrincipalAndUri(array $addressBooks) {
+        if (!$addressBooks) {
+            return [];
+        }
+
+        $or = array_map(fn($addressBook) => [ 'principaluri' => $addressBook['principaluri'], 'uri' => $addressBook['uri'] ], $addressBooks);
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $found = [];
+        // Served by the { principaluri, uri } index
+        foreach ($collection->find([ '$or' => array_values($or) ], [ 'projection' => self::MINIMAL_ADDRESSBOOK_FIELDS ]) as $row) {
+            $found[] = [ 'id' => (string)$row['_id'], 'principaluri' => $row['principaluri'], 'uri' => $row['uri'] ];
+        }
+
+        return $found;
+    }
+
+    /**
+     * Address books shared with a principal along with their source address book, read in two queries whatever
+     * their number, unlike getSharedAddressBooksForUser. Shares whose source no longer exists are left out.
+     *
+     * @return array [ [ 'uri', 'share_invitestatus', 'addressbookid', 'source_principaluri', 'source_uri' ], ... ]
+     */
+    function getSharedAddressBookSourcesForUser($principalUri) {
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $projection = [ 'uri' => 1, 'addressbookid' => 1, 'share_invitestatus' => 1 ];
+        $shares = $collection->find([ 'principaluri' => $principalUri ], [ 'projection' => $projection ])->toArray();
+        if (!$shares) {
+            return [];
+        }
+
+        $sources = [];
+        $ids = array_map(fn($share) => $share['addressbookid'], $shares);
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        foreach ($collection->find([ '_id' => [ '$in' => $ids ] ], [ 'projection' => self::MINIMAL_ADDRESSBOOK_FIELDS ]) as $row) {
+            $sources[(string)$row['_id']] = $row;
+        }
+
+        $result = [];
+        foreach ($shares as $share) {
+            $source = $sources[(string)$share['addressbookid']] ?? null;
+            if ($source === null) {
+                continue;
+            }
+            $result[] = [
+                'uri' => $share['uri'],
+                'share_invitestatus' => $this->getValue($share, 'share_invitestatus', SPlugin::INVITE_INVALID),
+                'addressbookid' => (string)$share['addressbookid'],
+                'source_principaluri' => $source['principaluri'],
+                'source_uri' => $source['uri']
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Lists the cards of several address books in one query, sorted by full name then _id.
+     *
+     * $after is the ['fn_sort' => ..., 'id' => ...] of the last card of the previous page: only the cards sorted
+     * after it are returned, so that a page is read from the index without skipping the previous ones.
+     */
+    function getCardsOfAddressBooks(array $addressBookIds, $limit = 0, $after = null) {
+        if (!$addressBookIds) {
+            return [];
+        }
+
+        $query = [
+            'addressbookid' => [ '$in' => array_map(fn($id) => new \MongoDB\BSON\ObjectId($id), array_values($addressBookIds)) ]
+        ];
+        if ($after) {
+            $query['fn_sort'] = [ '$gte' => $after['fn_sort'] ];
+            $query['$nor'] = [[ 'fn_sort' => $after['fn_sort'], '_id' => [ '$lte' => new \MongoDB\BSON\ObjectId($after['id']) ] ]];
+        }
+
+        $options = [
+            'projection' => [ '_id' => 1, 'addressbookid' => 1, 'uri' => 1, 'carddata' => 1, 'etag' => 1, 'fn_sort' => 1 ],
+            // Served by the { addressbookid, fn_sort, _id } index, merging one scan per address book. The cursor
+            // conditions above compare with the same collation, so a page resumes where the previous one stopped.
+            'sort' => [ 'fn_sort' => 1, '_id' => 1 ],
+            'collation' => self::CONTACT_SORT_COLLATION
+        ];
+        if ($limit > 0) $options['limit'] = (int) $limit;
+
+        $cards = [];
+        foreach ($this->db->selectCollection($this->cardsTableName)->find($query, $options) as $card) {
+            $cards[] = [
+                'id' => (string)$card['_id'],
+                'addressbookid' => (string)$card['addressbookid'],
+                'uri' => $card['uri'],
+                'carddata' => $card['carddata'],
+                'etag' => $card['etag'],
+                'fn_sort' => $card['fn_sort'] ?? ''
+            ];
+        }
+        return $cards;
+    }
+
     function getCardCount($addressBookId) {
         $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
         $collection = $this->db->selectCollection($this->cardsTableName);
@@ -359,7 +466,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
             'size' => $extraData['size'],
             'etag' => $extraData['etag'],
-            'fn' => $extraData['fn']
+            'fn' => $extraData['fn'],
+            'fn_sort' => $extraData['fn_sort']
         ];
 
         $collection->insertOne($obj);
@@ -378,7 +486,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'lastmodified' => time(),
             'size' => $extraData['size'],
             'etag' => $extraData['etag'],
-            'fn' => $extraData['fn']
+            'fn' => $extraData['fn'],
+            'fn_sort' => $extraData['fn_sort']
         ];
         $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId), 'uri' => $cardUri ];
 
@@ -1046,9 +1155,18 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $storedFn = ctype_alpha($convertedFn[0]) ? strtolower($convertedFn[0]) : '#';
         return [
             'fn'   => $storedFn,
+            'fn_sort' => $this->getSortableFn($fn),
             'size' => strlen($cardData),
             'etag' => '"' . md5($cardData) . '"'
         ];
+    }
+
+    /**
+     * Full name as sorted: kept as is, accents and case being ignored by CONTACT_SORT_COLLATION rather than
+     * stripped here, so that another language only needs another collation, not new stored values.
+     */
+    function getSortableFn($fn) {
+        return trim((string)$fn);
     }
 
     /**
@@ -1071,6 +1189,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $cardsCollection->createIndex(array('addressbookid' => 1, 'uri' => 1));
         // Supports paginated contact listings sorted by the stored first letter and unique _id.
         $cardsCollection->createIndex(array('addressbookid' => 1, 'fn' => 1, '_id' => 1));
+        // Supports contact listings aggregated over several address books, sorted by full name and paginated
+        // with a cursor: each address book is scanned in order and the scans are merged. Named after its collation,
+        // as MongoDB refuses an index of the same name with other options.
+        $cardsCollection->createIndex(
+            array('addressbookid' => 1, 'fn_sort' => 1, '_id' => 1),
+            array('name' => 'addressbookid_1_fn_sort_1__id_1_en_strength1', 'collation' => self::CONTACT_SORT_COLLATION)
+        );
 
         // Sharees of an address book (getInvites, updateInvites), and address books shared with a user
         $sharedAddressBookCollection = $this->db->selectCollection($this->sharedAddressBooksTableName);

@@ -19,7 +19,7 @@ services:
       - esn-sabre-test-net
 
   amqp_host:
-    image: docker.io/library/rabbitmq:3
+    image: docker.io/library/rabbitmq:4.1.1-management
     hostname: amqp_host
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]

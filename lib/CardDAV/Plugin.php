@@ -8,6 +8,7 @@ use \Sabre\DAV\Exception\Forbidden;
 use \ESN\Utils\Utils as Utils;
 use \ESN\Utils\TenantType;
 use \ESN\Utils\AuthTenant;
+use ESN\DAV\SortOrder;
 
 #[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
@@ -644,11 +645,20 @@ class Plugin extends \ESN\JSON\BasePlugin {
             throw new BadRequest('Invalid after cursor');
         }
 
+        $order = Utils::getArrayValue($queryParams, SortOrder::PARAMETER, SortOrder::ASC);
+        if (is_string($order)) {
+            $order = strtolower($order);
+        }
+        if (!in_array($order, [SortOrder::ASC, SortOrder::DESC], true)) {
+            throw new BadRequest('order must be asc or desc');
+        }
+
         $page = $node->getContactsPage(
             ContactSources::fromQueryParameters($queryParams),
             $this->aggregatedContactsLimit($queryParams),
             $after,
-            fn($path) => $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)
+            fn($path) => $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false),
+            $order
         );
 
         $baseUri = $this->server->getBaseUri();

@@ -3,19 +3,20 @@
 namespace ESN\CardDAV;
 
 use \Sabre\DAV\Exception\BadRequest;
+use ESN\DAV\SortOrder;
 
 /**
  * Position in a contact listing sorted by full name, handed to clients as an opaque string:
- * base64url({"fn_sort": ..., "_id": ...}), the sort keys of the last card of a page.
+ * base64url({"fn_sort": ..., "_id": ..., "order": ...}), the sort keys and order of the last card of a page.
  */
 final class ContactCursor
 {
     /**
      * @param array $card a card returned by Backend\Mongo::getCardsOfAddressBooks
      */
-    public static function encode(array $card): string
+    public static function encode(array $card, string $order = SortOrder::ASC): string
     {
-        $json = json_encode([ 'fn_sort' => $card['fn_sort'], '_id' => $card['id'] ]);
+        $json = json_encode([ 'fn_sort' => $card['fn_sort'], '_id' => $card['id'], SortOrder::PARAMETER => $order ]);
 
         return rtrim(strtr(base64_encode($json), '+/', '-_'), '=');
     }
@@ -25,7 +26,7 @@ final class ContactCursor
      *                    null for the first page
      * @throws BadRequest when the cursor was not built by encode
      */
-    public static function decode(?string $cursor): ?array
+    public static function decode(?string $cursor, string $order = SortOrder::ASC): ?array
     {
         if ($cursor === null) {
             return null;
@@ -37,6 +38,12 @@ final class ContactCursor
 
         if (!is_string($fnSort) || !self::isObjectId($id)) {
             throw new BadRequest('Invalid after cursor');
+        }
+
+        // Cursors issued before order was supported always referred to ascending listings.
+        $cursorOrder = array_key_exists(SortOrder::PARAMETER, $data) ? $data[SortOrder::PARAMETER] : SortOrder::ASC;
+        if (!in_array($cursorOrder, [SortOrder::ASC, SortOrder::DESC], true) || $cursorOrder !== $order) {
+            throw new BadRequest('Invalid after cursor order');
         }
 
         return [ 'fn_sort' => $fnSort, 'id' => $id ];

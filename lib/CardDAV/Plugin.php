@@ -675,7 +675,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
                     'self' => [ 'href' => $baseUri . $item['path'] ]
                 ],
                 'etag' => $item['etag'],
-                'data' => VObject\Reader::read($item['carddata'])->jsonSerialize()
+                'data' => $this->serializeContactWithSortedEmails($item['carddata'])
             ];
         }
 
@@ -692,6 +692,22 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return [200, $result];
+    }
+
+    private function serializeContactWithSortedEmails(string $cardData): array {
+        $vcard = VObject\Reader::read($cardData);
+        $emails = [];
+
+        // The table displays the first email: use Sabre's PREF rules, as for the stored email sort key.
+        while ($email = $vcard->preferred('EMAIL')) {
+            $emails[] = $email;
+            $vcard->remove($email);
+        }
+        foreach ($emails as $email) {
+            $vcard->add($email);
+        }
+
+        return $vcard->jsonSerialize();
     }
 
     /**

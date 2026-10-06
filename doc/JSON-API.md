@@ -369,11 +369,22 @@ List all contacts in the address book.
 - limit: The number of contacts to be returned
 - sort: The column to sort by, e.g. "fn"
 - modifiedBefore: Timestamp in seconds, to list contacts modified before a specificed time
+- after: The `next` cursor of the previous page, see below
+- order: `asc` (default) or `desc`, only applied to cursor pagination, see below
 
 **Response:**
 
 A dav:addressbook resource, with items expanded. The resource may also contain
 a next link, if the offset/limit query parameters are used.
+
+**Cursor pagination:** with `after`, or with `sort=fn` and neither `offset`, `search` nor `modifiedBefore`, contacts
+are sorted by full name (ignoring case and accents) and paginated like `GET /contacts/{userId}.json`: `limit` is
+1–1000 (default 50), `sort` can only be `fn`, `order=asc|desc` (default `asc`) must stay the same on subsequent
+pages, and a non-final page has a `next` cursor to pass as `after` instead of a next link. `after` cannot be used
+with `offset`, `search` or `modifiedBefore`: such requests, and invalid cursors, sort, order or limit, get a 400.
+
+`order` only applies to cursor pagination: it is ignored, and not validated, when the request is not cursor
+paginated, e.g. with `offset` or without `sort=fn`: `sort` then sorts in ascending order.
 
 
 ## REPORT /addressbooks/{addressbookHomeId}/{addressbookId}.json

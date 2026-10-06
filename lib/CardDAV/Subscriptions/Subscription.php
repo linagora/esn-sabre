@@ -3,7 +3,10 @@
 namespace ESN\CardDAV\Subscriptions;
 
 use ESN\CardDAV\Backend\SubscriptionSupport;
+use ESN\CardDAV\ContactsPage;
+use ESN\CardDAV\IContactsPageAddressBook;
 use ESN\DAV\Sharing\Plugin as SPlugin;
+use ESN\DAV\SortOrder;
 use ESN\Utils\Utils;
 use Sabre\CardDAV\IAddressBook;
 use Sabre\DAV\Collection;
@@ -25,7 +28,7 @@ use Sabre\DAVACL\IACL;
  * just like Sabre\CardDAV\AddressBook does.
  */
 #[\AllowDynamicProperties]
-class Subscription extends Collection implements ISubscription, IAddressBook, ISyncCollection, IACL {
+class Subscription extends Collection implements ISubscription, IAddressBook, ISyncCollection, IACL, IContactsPageAddressBook {
 
     use ACLTrait;
 
@@ -343,6 +346,18 @@ class Subscription extends Collection implements ISubscription, IAddressBook, IS
         }
 
         return $this->carddavBackend->getCardCount($sourceAddressBookInfo['id']);
+    }
+
+    /**
+     * Returns a page of the contacts of the source address book, none when it no longer exists.
+     */
+    function getContactsPage(string $path, int $limit, ?array $after, string $order = SortOrder::ASC): array {
+        $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
+        if (!$sourceAddressBookInfo) {
+            return [ 'items' => [], 'next' => null ];
+        }
+
+        return ContactsPage::read($this->carddavBackend, [ (string)$sourceAddressBookInfo['id'] => $path ], $limit, $after, $order);
     }
 
     /**

@@ -5,9 +5,10 @@ namespace ESN\CardDAV;
 use Sabre\DAV;
 use ESN\Utils\Utils as Utils;
 use ESN\DAV\Sharing\Plugin as SPlugin;
+use ESN\DAV\SortOrder;
 
 #[\AllowDynamicProperties]
-class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection, Sharing\ISharedAddressBook {
+class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortableCollection, Sharing\ISharedAddressBook, IContactsPageAddressBook {
     function getChildACL() {
         return $this->getACL();
     }
@@ -116,6 +117,10 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
 
     function getChildCount() {
         return $this->carddavBackend->getCardCount($this->addressBookInfo['id']);
+    }
+
+    function getContactsPage(string $path, int $limit, ?array $after, string $order = SortOrder::ASC): array {
+        return ContactsPage::read($this->carddavBackend, [ (string)$this->addressBookInfo['id'] => $path ], $limit, $after, $order);
     }
 
     public function getSupportedPublicRights() {

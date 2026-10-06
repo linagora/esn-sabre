@@ -4,6 +4,7 @@ namespace ESN\CardDAV\Backend;
 
 use Sabre\Event\EventEmitter;
 use ESN\DAV\Sharing\Plugin as SPlugin;
+use ESN\DAV\SortOrder;
 
 #[\AllowDynamicProperties]
 class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
@@ -366,7 +367,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
      * $after is the ['fn_sort' => ..., 'id' => ...] of the last card of the previous page: only the cards sorted
      * after it are returned, so that a page is read from the index without skipping the previous ones.
      */
-    function getCardsOfAddressBooks(array $addressBookIds, $limit = 0, $after = null) {
+    function getCardsOfAddressBooks(array $addressBookIds, $limit = 0, $after = null, string $order = SortOrder::ASC) {
         if (!$addressBookIds) {
             return [];
         }
@@ -374,16 +375,18 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $query = [
             'addressbookid' => [ '$in' => array_map(fn($id) => new \MongoDB\BSON\ObjectId($id), array_values($addressBookIds)) ]
         ];
+        $descending = $order === SortOrder::DESC;
         if ($after) {
-            $query['fn_sort'] = [ '$gte' => $after['fn_sort'] ];
-            $query['$nor'] = [[ 'fn_sort' => $after['fn_sort'], '_id' => [ '$lte' => new \MongoDB\BSON\ObjectId($after['id']) ] ]];
+            // Reverse both cursor comparisons along with the sort, including equal-name ties.
+            $query['fn_sort'] = [ ($descending ? '$lte' : '$gte') => $after['fn_sort'] ];
+            $query['$nor'] = [[ 'fn_sort' => $after['fn_sort'], '_id' => [ ($descending ? '$gte' : '$lte') => new \MongoDB\BSON\ObjectId($after['id']) ] ]];
         }
 
         $options = [
             'projection' => [ '_id' => 1, 'addressbookid' => 1, 'uri' => 1, 'carddata' => 1, 'etag' => 1, 'fn_sort' => 1 ],
             // Served by the { addressbookid, fn_sort, _id } index, merging one scan per address book. The cursor
             // conditions above compare with the same collation, so a page resumes where the previous one stopped.
-            'sort' => [ 'fn_sort' => 1, '_id' => 1 ],
+            'sort' => [ 'fn_sort' => $descending ? -1 : 1, '_id' => $descending ? -1 : 1 ],
             'collation' => self::CONTACT_SORT_COLLATION
         ];
         if ($limit > 0) $options['limit'] = (int) $limit;

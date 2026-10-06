@@ -2,6 +2,7 @@
 
 namespace ESN\CardDAV;
 
+use ESN\DAV\SortOrder;
 use Sabre\DAV\MkCol;
 use ESN\Utils\Utils;
 
@@ -126,14 +127,14 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
      * @param string|null $after opaque cursor of the previous page, see ContactCursor
      * @return array [ 'items' => [ [ 'path', 'etag', 'carddata' ], ... ], 'next' => cursor or null ]
      */
-    function getContactsPage(ContactSources $sources, int $limit, ?string $after, callable $canRead): array {
+    function getContactsPage(ContactSources $sources, int $limit, ?string $after, callable $canRead, string $order = SortOrder::ASC): array {
         $paths = $this->aggregatedAddressBookPaths($sources, $canRead);
 
         // One more card than asked tells whether there is a next page
         $cards = $this->carddavBackend->getCardsOfAddressBooks(
-            array_keys($paths), $limit + 1, ContactCursor::decode($after));
+            array_keys($paths), $limit + 1, ContactCursor::decode($after, $order), $order);
 
-        $next = count($cards) > $limit ? ContactCursor::encode($cards[$limit - 1]) : null;
+        $next = count($cards) > $limit ? ContactCursor::encode($cards[$limit - 1], $order) : null;
 
         $items = [];
         foreach (array_slice($cards, 0, $limit) as $card) {

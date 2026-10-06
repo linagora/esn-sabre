@@ -94,6 +94,8 @@ Individual vCard objects.
 Key fields: `addressbookid`, `uri`, `carddata`, `fn` (first letter of the full name), `fn_sort` (full name as is,
 trimmed: accents and case are ignored by the collation of its index rather than stripped).
 
+Email sort field: `email_sort` (trimmed preferred email or `""`).
+
 **Class:** `CardDAV\Backend\Mongo`  
 **Indexes:** `{ addressbookid, uri }` — also serves `{ addressbookid }` alone;
 `{ addressbookid, fn, _id }` — supports paginated `sort=fn` listings with a stable tie-breaker;
@@ -102,6 +104,9 @@ trimmed: accents and case are ignored by the collation of its index rather than 
 aggregated over the address books of a user (`GET /contacts/{userId}.json`), merging one index scan per address book.
 It only serves queries passing the very same collation: changing the language of the sort means changing the
 collation and recreating this index under another name, stored values staying as they are.
+
+`{ addressbookid, email_sort, _id }` uses the same collation for `sort=email` in both directions.
+Empty emails sort before non-empty emails in ascending order, and after them in descending order.
 
 ---
 
@@ -156,6 +161,8 @@ db.calendarinstances.createIndex({ calendarid: 1, share_href: 1 });
 db.cards.createIndex({ addressbookid: 1, fn: 1, _id: 1 });
 db.cards.createIndex({ addressbookid: 1, fn_sort: 1, _id: 1 },
   { name: "addressbookid_1_fn_sort_1__id_1_en_strength1", collation: { locale: "en", strength: 1 } });
+db.cards.createIndex({ addressbookid: 1, email_sort: 1, _id: 1 },
+  { name: "addressbookid_1_email_sort_1__id_1_en_strength1", collation: { locale: "en", strength: 1 } });
 db.sharedaddressbooks.createIndex({ addressbookid: 1, share_href: 1 });
 db.sharedaddressbooks.createIndex({ principaluri: 1 });
 db.addressbooksubscriptions.createIndex({ principaluri: 1 });

@@ -630,7 +630,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
     /**
      * Lists the contacts of all the address books of a home (own ones, delegated and subscribed ones, and
-     * optionally the domain members and domain address books), sorted by full name and paginated with an opaque
+     * optionally the domain members and domain address books), sorted by full name or email and paginated with an opaque
      * 'after' cursor returned as 'next'. Selecting the address books and reading the contacts is up to the home.
      */
     private function getAggregatedContacts($nodePath, AddressBookHome $node, array $queryParams) {
@@ -643,6 +643,11 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $after = Utils::getArrayValue($queryParams, 'after');
         if ($after !== null && !is_string($after)) {
             throw new BadRequest('Invalid after cursor');
+        }
+
+        $sort = Utils::getArrayValue($queryParams, ContactSort::PARAMETER, ContactSort::FN);
+        if (!is_string($sort) || !isset(ContactSort::FIELDS[$sort])) {
+            throw new BadRequest('sort must be fn or email');
         }
 
         $order = Utils::getArrayValue($queryParams, SortOrder::PARAMETER, SortOrder::ASC);
@@ -658,7 +663,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $this->aggregatedContactsLimit($queryParams),
             $after,
             fn($path) => $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false),
-            $order
+            $order,
+            $sort
         );
 
         $baseUri = $this->server->getBaseUri();
@@ -689,14 +695,9 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     /**
-     * Validates the sort and page size of an aggregated contact listing, which is always paginated.
+     * Validates the page size of an aggregated contact listing, which is always paginated.
      */
     private function aggregatedContactsLimit(array $queryParams): int {
-        $sort = Utils::getArrayValue($queryParams, 'sort', 'fn');
-        if ($sort !== 'fn') {
-            throw new BadRequest('Unsupported sort: ' . $sort);
-        }
-
         $limit = Utils::getArrayValue($queryParams, 'limit', (string)self::DEFAULT_AGGREGATED_CONTACTS_LIMIT);
         if (!is_string($limit) || !ctype_digit($limit) || (int)$limit < 1 || (int)$limit > self::MAX_AGGREGATED_CONTACTS_LIMIT) {
             throw new BadRequest('limit must be an integer between 1 and ' . self::MAX_AGGREGATED_CONTACTS_LIMIT);

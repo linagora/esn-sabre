@@ -29,6 +29,7 @@ $db = $client->{$dbName};
 
 $schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 56;
 (new \ESN\CalDAV\Backend\Mongo($db, $schedulingObjectTTLInDays))->ensureIndexes();
-(new \ESN\CardDAV\Backend\Mongo($db))->ensureIndexes();
+$carddavBackend = new \ESN\CardDAV\Backend\Mongo($db);
+$carddavBackend->ensureIndexes();
 
 echo "MongoDB indexes created on database " . $dbName . "\n";

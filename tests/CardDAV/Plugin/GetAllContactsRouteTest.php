@@ -321,4 +321,51 @@ class GetAllContactsRouteTest extends \ESN\CardDAV\PluginTestBase {
             'no preference keeps first' => ['4.0', "EMAIL:zoe@example.org\r\nEMAIL:alpha@example.org\r\n", 'zoe@example.org']
         ];
     }
+
+    #[DataProvider('emailResponseOrder')]
+    function testListingOrdersEmailPropertiesByPreference(string $version, string $emailLines, array $expectedOrder) {
+        $cardData = "BEGIN:VCARD\r\nVERSION:" . $version . "\r\nUID:card1\r\nFN:Email Order\r\n" . $emailLines . "TEL;TYPE=WORK:123456\r\nEND:VCARD\r\n";
+        $this->carddavBackend->updateCard($this->user1Book1Id, 'card1', $cardData);
+        $storedCard = $this->carddavBackend->getCard($this->user1Book1Id, 'card1');
+        $original = json_decode(json_encode(\Sabre\VObject\Reader::read($cardData)), true);
+        $originalEmails = array_values(array_filter($original[1], fn($property) => $property[0] === 'email'));
+        $propertiesByEmail = array_column($originalEmails, null, 3);
+        $expectedEmails = array_map(fn($value) => $propertiesByEmail[$value], $expectedOrder);
+        $originalOtherProperties = array_values(array_filter($original[1], fn($property) => $property[0] !== 'email'));
+
+        foreach (['', '?sort=email&order=asc', '?sort=email&order=desc'] as $query) {
+            $response = $this->makeRequest('GET', '/contacts/' . $this->userTestId1 . '.json' . $query);
+            $this->assertEquals(200, $response->status);
+            $items = json_decode($response->getBodyAsString(), true)['_embedded']['dav:item'];
+            $matchingItems = array_values(array_filter($items, fn($item) => basename($item['_links']['self']['href']) === 'card1'));
+            $this->assertCount(1, $matchingItems);
+            $item = $matchingItems[0];
+            $properties = $item['data'][1];
+
+            // Compare complete properties so TYPE, PREF and other parameters survive the reordering.
+            $emails = array_values(array_filter($properties, fn($property) => $property[0] === 'email'));
+            $otherProperties = array_values(array_filter($properties, fn($property) => $property[0] !== 'email'));
+            $this->assertSame($expectedEmails, $emails);
+            $this->assertSame($originalOtherProperties, $otherProperties);
+            $this->assertSame($storedCard['etag'], $item['etag']);
+        }
+
+        $this->assertEquals($storedCard, $this->carddavBackend->getCard($this->user1Book1Id, 'card1'));
+    }
+
+    static function emailResponseOrder() {
+        return [
+            'vCard 3 preferred emails first' => ['3.0',
+                "EMAIL;TYPE=WORK:zoe@example.org\r\nEMAIL;TYPE=INTERNET,PREF:alpha@example.org\r\nEMAIL;TYPE=HOME,PREF:bravo@example.org\r\nEMAIL;TYPE=HOME:gamma@example.org\r\n",
+                ['alpha@example.org', 'bravo@example.org', 'zoe@example.org', 'gamma@example.org']],
+            'vCard 4 increasing PREF with stable ties' => ['4.0',
+                "EMAIL:zoe@example.org\r\nEMAIL;PREF=50:delta@example.org\r\nEMAIL;PREF=2:alpha@example.org\r\nEMAIL;PREF=2:bravo@example.org\r\nEMAIL;PREF=100:charlie@example.org\r\n",
+                ['alpha@example.org', 'bravo@example.org', 'delta@example.org', 'charlie@example.org', 'zoe@example.org']],
+            'no PREF preserves original order' => ['4.0',
+                "EMAIL;TYPE=HOME:zoe@example.org\r\nEMAIL;TYPE=WORK:alpha@example.org\r\n",
+                ['zoe@example.org', 'alpha@example.org']],
+            'single email' => ['4.0', "EMAIL;PREF=1:zoe@example.org\r\n", ['zoe@example.org']],
+            'no email' => ['4.0', '', []]
+        ];
+    }
 }

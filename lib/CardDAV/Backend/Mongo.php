@@ -5,6 +5,7 @@ namespace ESN\CardDAV\Backend;
 use Sabre\Event\EventEmitter;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 use ESN\DAV\SortOrder;
+use ESN\CardDAV\ContactSort;
 
 #[\AllowDynamicProperties]
 class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
@@ -362,12 +363,12 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     /**
-     * Lists the cards of several address books in one query, sorted by full name then _id.
+     * Lists the cards of several address books in one query, sorted by full name or email then _id.
      *
-     * $after is the ['fn_sort' => ..., 'id' => ...] of the last card of the previous page: only the cards sorted
+     * $after holds the sort value and id of the last card of the previous page: only the cards sorted
      * after it are returned, so that a page is read from the index without skipping the previous ones.
      */
-    function getCardsOfAddressBooks(array $addressBookIds, $limit = 0, $after = null, string $order = SortOrder::ASC) {
+    function getCardsOfAddressBooks(array $addressBookIds, $limit = 0, $after = null, string $order = SortOrder::ASC, string $sort = ContactSort::FN) {
         if (!$addressBookIds) {
             return [];
         }
@@ -375,18 +376,20 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $query = [
             'addressbookid' => [ '$in' => array_map(fn($id) => new \MongoDB\BSON\ObjectId($id), array_values($addressBookIds)) ]
         ];
+        $field = ContactSort::FIELDS[$sort];
         $descending = $order === SortOrder::DESC;
+        $sortKeys = [ $field => $descending ? -1 : 1, '_id' => $descending ? -1 : 1 ];
         if ($after) {
-            // Reverse both cursor comparisons along with the sort, including equal-name ties.
-            $query['fn_sort'] = [ ($descending ? '$lte' : '$gte') => $after['fn_sort'] ];
-            $query['$nor'] = [[ 'fn_sort' => $after['fn_sort'], '_id' => [ ($descending ? '$gte' : '$lte') => new \MongoDB\BSON\ObjectId($after['id']) ] ]];
+            // Reverse both cursor comparisons along with the sort, including equal-value ties.
+            $query[$field] = [ ($descending ? '$lte' : '$gte') => $after[$field] ];
+            $query['$nor'] = [[ $field => $after[$field], '_id' => [ ($descending ? '$gte' : '$lte') => new \MongoDB\BSON\ObjectId($after['id']) ] ]];
         }
 
         $options = [
-            'projection' => [ '_id' => 1, 'addressbookid' => 1, 'uri' => 1, 'carddata' => 1, 'etag' => 1, 'fn_sort' => 1 ],
-            // Served by the { addressbookid, fn_sort, _id } index, merging one scan per address book. The cursor
+            'projection' => [ '_id' => 1, 'addressbookid' => 1, 'uri' => 1, 'carddata' => 1, 'etag' => 1, $field => 1 ],
+            // Served by the sort index, merging scans per book. The cursor
             // conditions above compare with the same collation, so a page resumes where the previous one stopped.
-            'sort' => [ 'fn_sort' => $descending ? -1 : 1, '_id' => $descending ? -1 : 1 ],
+            'sort' => $sortKeys,
             'collation' => self::CONTACT_SORT_COLLATION
         ];
         if ($limit > 0) $options['limit'] = (int) $limit;
@@ -399,7 +402,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'uri' => $card['uri'],
                 'carddata' => $card['carddata'],
                 'etag' => $card['etag'],
-                'fn_sort' => $card['fn_sort'] ?? ''
+                $field => $card[$field] ?? ''
             ];
         }
         return $cards;
@@ -470,7 +473,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'size' => $extraData['size'],
             'etag' => $extraData['etag'],
             'fn' => $extraData['fn'],
-            'fn_sort' => $extraData['fn_sort']
+            'fn_sort' => $extraData['fn_sort'],
+            'email_sort' => $extraData['email_sort']
         ];
 
         $collection->insertOne($obj);
@@ -490,7 +494,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'size' => $extraData['size'],
             'etag' => $extraData['etag'],
             'fn' => $extraData['fn'],
-            'fn_sort' => $extraData['fn_sort']
+            'fn_sort' => $extraData['fn_sort'],
+            'email_sort' => $extraData['email_sort']
         ];
         $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId), 'uri' => $cardUri ];
 
@@ -1156,9 +1161,12 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $fn = (string)$vcard->FN;
         $convertedFn = $this->CharAPI->getAsciiUpperCase($fn);
         $storedFn = ctype_alpha($convertedFn[0]) ? strtolower($convertedFn[0]) : '#';
+        // Sabre handles TYPE=PREF (vCard 3), lowest PREF (vCard 4), then the first email.
+        $email = trim((string)$vcard->preferred('EMAIL'));
         return [
             'fn'   => $storedFn,
             'fn_sort' => $this->getSortableFn($fn),
+            'email_sort' => $email,
             'size' => strlen($cardData),
             'etag' => '"' . md5($cardData) . '"'
         ];
@@ -1198,6 +1206,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $cardsCollection->createIndex(
             array('addressbookid' => 1, 'fn_sort' => 1, '_id' => 1),
             array('name' => 'addressbookid_1_fn_sort_1__id_1_en_strength1', 'collation' => self::CONTACT_SORT_COLLATION)
+        );
+        // Supports email sorting in both scan directions.
+        $cardsCollection->createIndex(
+            array('addressbookid' => 1, 'email_sort' => 1, '_id' => 1),
+            array('name' => 'addressbookid_1_email_sort_1__id_1_en_strength1', 'collation' => self::CONTACT_SORT_COLLATION)
         );
 
         // Sharees of an address book (getInvites, updateInvites), and address books shared with a user

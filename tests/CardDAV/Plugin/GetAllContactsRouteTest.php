@@ -212,4 +212,113 @@ class GetAllContactsRouteTest extends \ESN\CardDAV\PluginTestBase {
             'numeric order' => [$validKeys + ['order' => 1]]
         ];
     }
+
+    #[DataProvider('emailRoutePages')]
+    function testEmailSortPaginatesInRequestedOrder(string $order, array $expectedFirstPage, array $expectedLastPage) {
+        // Emails deliberately differ from names; card1 has no email.
+        $emails = ['card1' => null, 'card2' => 'alpha@example.org', 'card3' => 'BRAVO@example.org', 'card4' => 'zoe@example.org'];
+        foreach ($emails as $uri => $email) {
+            $data = $this->carddavCards[$uri];
+            if ($email !== null) {
+                $data = str_replace('END:VCARD', "EMAIL:" . $email . "\r\nEND:VCARD", $data);
+            }
+            $this->carddavBackend->updateCard($this->user1Book1Id, $uri, $data);
+        }
+        $path = '/contacts/' . $this->userTestId1 . '.json?sort=email&order=' . $order . '&limit=2';
+
+        $first = $this->makeRequest('GET', $path);
+        $this->assertEquals(200, $first->status);
+        $firstBody = json_decode($first->getBodyAsString());
+        $firstItems = $firstBody->{'_embedded'}->{'dav:item'};
+        $firstCards = array_map(fn($item) => basename($item->{'_links'}->self->href), $firstItems);
+        $this->assertSame($expectedFirstPage, $firstCards);
+        $this->assertNotEmpty($firstBody->next);
+
+        $last = $this->makeRequest('GET', $path . '&after=' . urlencode($firstBody->next));
+        $this->assertEquals(200, $last->status);
+        $lastBody = json_decode($last->getBodyAsString());
+        $lastItems = $lastBody->{'_embedded'}->{'dav:item'};
+        $lastCards = array_map(fn($item) => basename($item->{'_links'}->self->href), $lastItems);
+        $this->assertSame($expectedLastPage, $lastCards);
+        $this->assertObjectNotHasProperty('next', $lastBody);
+    }
+
+    static function emailRoutePages() {
+        return [
+            'ascending email' => ['asc', ['card1', 'card2'], ['card3', 'card4']],
+            'descending email' => ['desc', ['card4', 'card3'], ['card2', 'card1']]
+        ];
+    }
+
+    #[DataProvider('supportedOrders')]
+    function testEmailCursorPreservesSortKeys(string $order) {
+        $card = ['email_sort' => 'elodie@example.org', 'id' => self::CURSOR_CARD['id']];
+        $cursor = ContactCursor::encode($card, $order, 'email');
+        $decodedCard = ContactCursor::decode($cursor, $order, 'email');
+
+        $this->assertSame($card, $decodedCard);
+    }
+
+    #[DataProvider('differentSortFields')]
+    function testCursorCannotBeUsedWithDifferentSortField(string $cursorSort, string $requestedSort) {
+        $card = self::CURSOR_CARD + ['email_sort' => 'elodie@example.org'];
+        $cursor = ContactCursor::encode($card, 'asc', $cursorSort);
+
+        $this->expectException(BadRequest::class);
+        ContactCursor::decode($cursor, 'asc', $requestedSort);
+    }
+
+    static function differentSortFields() {
+        return [
+            'name cursor with email request' => ['fn', 'email'],
+            'email cursor with name request' => ['email', 'fn']
+        ];
+    }
+
+    function testArraySortIsRejected() {
+        $response = $this->makeRequest('GET', '/contacts/' . $this->userTestId1 . '.json?sort[]=email');
+
+        $this->assertEquals(400, $response->status);
+    }
+
+    function testEmailSortIsStoredOnCreateUpdateAndRemoval() {
+        $query = ['addressbookid' => new \MongoDB\BSON\ObjectId($this->user1Book1Id), 'uri' => 'email-card'];
+        $cardData = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Email Card\r\nEMAIL: zoe@example.org \r\nEMAIL:alpha@example.org\r\nEND:VCARD\r\n";
+
+        $this->carddavBackend->createCard($this->user1Book1Id, 'email-card', $cardData);
+        $created = $this->sabredb->cards->findOne($query);
+        $this->assertSame('zoe@example.org', $created['email_sort']);
+        $this->assertArrayNotHasKey('email_sort_missing', $created);
+
+        $updatedData = str_replace('zoe@example.org', 'middle@example.org', $cardData);
+        $this->carddavBackend->updateCard($this->user1Book1Id, 'email-card', $updatedData);
+        $updated = $this->sabredb->cards->findOne($query);
+        $this->assertSame('middle@example.org', $updated['email_sort']);
+        $this->assertArrayNotHasKey('email_sort_missing', $updated);
+
+        $this->carddavBackend->updateCard($this->user1Book1Id, 'email-card', "BEGIN:VCARD\r\nFN:Email Card\r\nEND:VCARD\r\n");
+        $withoutEmail = $this->sabredb->cards->findOne($query);
+        $this->assertSame('', $withoutEmail['email_sort']);
+        $this->assertArrayNotHasKey('email_sort_missing', $withoutEmail);
+    }
+
+    #[DataProvider('preferredEmails')]
+    function testEmailSortUsesPreferredEmail(string $version, string $emails, string $expectedEmail) {
+        $cardData = "BEGIN:VCARD\r\nVERSION:" . $version . "\r\nFN:Email Card\r\n" . $emails . "END:VCARD\r\n";
+        $this->carddavBackend->createCard($this->user1Book1Id, 'email-card', $cardData);
+        $query = ['addressbookid' => new \MongoDB\BSON\ObjectId($this->user1Book1Id), 'uri' => 'email-card'];
+
+        $created = $this->sabredb->cards->findOne($query);
+        $this->assertSame($expectedEmail, $created['email_sort']);
+    }
+
+    static function preferredEmails() {
+        return [
+            'vCard 3 preferred type' => ['3.0', "EMAIL:zoe@example.org\r\nEMAIL;TYPE=INTERNET,PREF: alpha@example.org \r\n", 'alpha@example.org'],
+            'vCard 4 lowest preference' => ['4.0', "EMAIL:zoe@example.org\r\nEMAIL;PREF=50:bravo@example.org\r\nEMAIL;PREF=2:alpha@example.org\r\n", 'alpha@example.org'],
+            'vCard 4 preference 100 before unpreferred' => ['4.0', "EMAIL:zoe@example.org\r\nEMAIL;PREF=100:alpha@example.org\r\n", 'alpha@example.org'],
+            'same preference keeps first' => ['4.0', "EMAIL;PREF=2:zoe@example.org\r\nEMAIL;PREF=2:alpha@example.org\r\n", 'zoe@example.org'],
+            'no preference keeps first' => ['4.0', "EMAIL:zoe@example.org\r\nEMAIL:alpha@example.org\r\n", 'zoe@example.org']
+        ];
+    }
 }

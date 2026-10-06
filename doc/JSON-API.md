@@ -310,7 +310,7 @@ List all address books in the addressbookHome.
 List contacts across the user's own, delegated and subscribed address books. The optional
 `domainMember=true` and `domainContacts=true` parameters include domain address books.
 
-**Query Parameters:** `sort=fn` (the only supported sort, default `fn`), `order=asc|desc`
+**Query Parameters:** `sort=fn|email` (default `fn`), `order=asc|desc`
 (default `asc`), `limit` (1–1000, default 50),
 `after` (the `next` cursor from the previous page), `delegate`, `share`, `domainMember`,
 and `domainContacts`.
@@ -320,12 +320,16 @@ user requests another user's contacts, 404 for an unknown user.
 
 The response embeds `dav:item` contacts. Each item's self link points to its original
 address book; the listing's self link points to `/contacts/{userId}.json`. A non-final
-page also has a `next` cursor to pass as `after`. Keep the same `order` on subsequent
-pages; changing the order requires restarting without `after`. A cursor issued before
+page also has a `next` cursor to pass as `after`. Keep the same `sort` and `order` on subsequent
+pages; changing either requires restarting without `after`. A cursor issued before
 order was supported is accepted only for `asc`.
 
 Example: `GET /contacts/{userId}.json?sort=fn&order=desc&limit=50` lists contacts by
 full name in descending order, with `_id` descending to break equal-name ties.
+
+`sort=email` uses the preferred email (`TYPE=PREF` in vCard 3, lowest `PREF` in vCard 4),
+falling back to the first email; equal preferences keep the first email. Missing emails
+sort first for `asc`, last for `desc`. Existing cards require `email_sort` to be populated before enabling email sorting.
 
 ## POST /addressbooks/{addressbookHomeId}.json
 

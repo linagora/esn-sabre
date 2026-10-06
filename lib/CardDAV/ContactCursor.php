@@ -6,37 +6,39 @@ use \Sabre\DAV\Exception\BadRequest;
 use ESN\DAV\SortOrder;
 
 /**
- * Position in a contact listing sorted by full name, handed to clients as an opaque string:
- * base64url({"fn_sort": ..., "_id": ..., "order": ...}), the sort keys and order of the last card of a page.
+ * Position in a contact listing, handed to clients as an opaque string. The fn_sort or email_sort key
+ * binds the cursor to its sort field, while _id and order determine its position and direction.
  */
 final class ContactCursor
 {
     /**
      * @param array $card a card returned by Backend\Mongo::getCardsOfAddressBooks
      */
-    public static function encode(array $card, string $order = SortOrder::ASC): string
+    public static function encode(array $card, string $order = SortOrder::ASC, string $sort = ContactSort::FN): string
     {
-        $json = json_encode([ 'fn_sort' => $card['fn_sort'], '_id' => $card['id'], SortOrder::PARAMETER => $order ]);
+        $field = ContactSort::FIELDS[$sort];
+        $json = json_encode([ $field => $card[$field], '_id' => $card['id'], SortOrder::PARAMETER => $order ]);
 
         return rtrim(strtr(base64_encode($json), '+/', '-_'), '=');
     }
 
     /**
-     * @return array|null the ['fn_sort' => ..., 'id' => ...] Backend\Mongo::getCardsOfAddressBooks resumes after,
+     * @return array|null the sort value and id Backend\Mongo::getCardsOfAddressBooks resumes after,
      *                    null for the first page
      * @throws BadRequest when the cursor was not built by encode
      */
-    public static function decode(?string $cursor, string $order = SortOrder::ASC): ?array
+    public static function decode(?string $cursor, string $order = SortOrder::ASC, string $sort = ContactSort::FN): ?array
     {
         if ($cursor === null) {
             return null;
         }
 
         $data = self::decodeJsonObject($cursor);
-        $fnSort = $data['fn_sort'] ?? null;
+        $field = ContactSort::FIELDS[$sort];
+        $sortValue = $data[$field] ?? null;
         $id = $data['_id'] ?? null;
 
-        if (!is_string($fnSort) || !self::isObjectId($id)) {
+        if (!is_string($sortValue) || !self::isObjectId($id)) {
             throw new BadRequest('Invalid after cursor');
         }
 
@@ -46,7 +48,7 @@ final class ContactCursor
             throw new BadRequest('Invalid after cursor order');
         }
 
-        return [ 'fn_sort' => $fnSort, 'id' => $id ];
+        return [ $field => $sortValue, 'id' => $id ];
     }
 
     /**

@@ -659,9 +659,9 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     /**
-     * Whether the contacts of an address book are listed sorted by full name and paginated with the opaque 'after'
+     * Whether the contacts of an address book are listed sorted by full name or email and paginated with the opaque 'after'
      * cursor of getAggregatedContacts rather than with an offset: when an 'after' cursor is given, or for the first
-     * page of a 'sort=fn' listing without offset nor filter.
+     * page of a 'sort=fn|email' listing without offset nor filter.
      */
     private function isCursorPaginated(array $queryParams): bool {
         $offsetOrFilters = isset($queryParams['offset']) || isset($queryParams['search']) || isset($queryParams['modifiedBefore']);
@@ -674,22 +674,18 @@ class Plugin extends \ESN\JSON\BasePlugin {
             return true;
         }
 
-        return Utils::getArrayValue($queryParams, ContactSort::PARAMETER) === ContactSort::FN && !$offsetOrFilters;
+        return in_array(Utils::getArrayValue($queryParams, ContactSort::PARAMETER), [ContactSort::FN, ContactSort::EMAIL], true) && !$offsetOrFilters;
     }
 
     /**
-     * Lists the contacts of one address book (own, delegated, subscribed or domain one) sorted by full name, a page
+     * Lists the contacts of one address book (own, delegated, subscribed or domain one) sorted by full name or email, a page
      * after the 'after' cursor returned as 'next'.
      */
     private function getCursorPaginatedContacts($nodePath, IContactsPageAddressBook $node, array $queryParams) {
-        // Only the full name sort is cursor paginated for a single address book
-        $sort = Utils::getArrayValue($queryParams, ContactSort::PARAMETER, ContactSort::FN);
-        if ($sort !== ContactSort::FN) {
-            throw new BadRequest('Unsupported sort: ' . (is_string($sort) ? $sort : gettype($sort)));
-        }
+        $sort = $this->contactsPageSort($queryParams);
 
         $order = $this->contactsPageOrder($queryParams);
-        $page = $node->getContactsPage($nodePath, $this->contactsPageLimit($queryParams), $this->afterCursor($queryParams, $order, $sort), $order);
+        $page = $node->getContactsPage($nodePath, $this->contactsPageLimit($queryParams), $this->afterCursor($queryParams, $order, $sort), $order, $sort);
 
         $result = $this->contactsPageResult($nodePath, $page);
         $result['dav:syncToken'] = $node->getSyncToken();

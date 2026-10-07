@@ -119,8 +119,8 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
         return $this->carddavBackend->getCardCount($this->addressBookInfo['id']);
     }
 
-    function getContactsPage(string $path, int $limit, ?array $after, string $order = SortOrder::ASC): array {
-        return ContactsPage::read($this->carddavBackend, [ (string)$this->addressBookInfo['id'] => $path ], $limit, $after, $order);
+    function getContactsPage(string $path, int $limit, ?array $after, string $order = SortOrder::ASC, string $sort = ContactSort::FN): array {
+        return ContactsPage::read($this->carddavBackend, [ (string)$this->addressBookInfo['id'] => $path ], $limit, $after, $order, $sort);
     }
 
     public function getSupportedPublicRights() {

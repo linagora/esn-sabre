@@ -4,6 +4,7 @@ namespace ESN\CardDAV\Subscriptions;
 
 use ESN\CardDAV\Backend\SubscriptionSupport;
 use ESN\CardDAV\ContactsPage;
+use ESN\CardDAV\ContactSort;
 use ESN\CardDAV\IContactsPageAddressBook;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 use ESN\DAV\SortOrder;
@@ -351,13 +352,13 @@ class Subscription extends Collection implements ISubscription, IAddressBook, IS
     /**
      * Returns a page of the contacts of the source address book, none when it no longer exists.
      */
-    function getContactsPage(string $path, int $limit, ?array $after, string $order = SortOrder::ASC): array {
+    function getContactsPage(string $path, int $limit, ?array $after, string $order = SortOrder::ASC, string $sort = ContactSort::FN): array {
         $sourceAddressBookInfo = $this->getSourceAddressBookInfo();
         if (!$sourceAddressBookInfo) {
             return [ 'items' => [], 'next' => null ];
         }
 
-        return ContactsPage::read($this->carddavBackend, [ (string)$sourceAddressBookInfo['id'] => $path ], $limit, $after, $order);
+        return ContactsPage::read($this->carddavBackend, [ (string)$sourceAddressBookInfo['id'] => $path ], $limit, $after, $order, $sort);
     }
 
     /**

@@ -5,7 +5,7 @@ namespace ESN\CardDAV;
 use ESN\DAV\SortOrder;
 
 /**
- * Address book whose contacts can be listed sorted by full name, page after page (see ContactsPage).
+ * Address book whose contacts can be listed sorted by full name or email, page after page (see ContactsPage).
  */
 interface IContactsPageAddressBook
 {
@@ -15,5 +15,5 @@ interface IContactsPageAddressBook
      * @param string $order SortOrder::ASC or SortOrder::DESC, the order the cursor was decoded for
      * @return array [ 'items' => [ [ 'path', 'etag', 'carddata' ], ... ], 'next' => cursor or null ]
      */
-    function getContactsPage(string $path, int $limit, ?array $after, string $order = SortOrder::ASC): array;
+    function getContactsPage(string $path, int $limit, ?array $after, string $order = SortOrder::ASC, string $sort = ContactSort::FN): array;
 }

@@ -123,6 +123,33 @@ class Version0001BackfillContactSortFieldsTest extends TestCase
         $this->assertStringNotContainsString('PRIVATE INVALID VCARD', json_encode($records));
     }
 
+    public function testConcurrentContactUpdateIsNotOverwrittenByBackfill(): void
+    {
+        $bookId = new ObjectId();
+        $this->database->addressbooks->insertOne(['_id' => $bookId, 'synctoken' => 42]);
+        $this->database->cards->insertMany([
+            ['_id' => 1, 'addressbookid' => $bookId, 'uri' => 'contact.vcf',
+                'carddata' => $this->vCard('Old name', 'EMAIL:old@example.org')],
+            ['_id' => 2, 'carddata' => 'invalid'],
+        ]);
+        $updated = null;
+        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
+        // The warning occurs after contact 1 is read, but before the pending batch is written.
+        $logger->expects($this->once())->method('warning')->willReturnCallback(function () use ($bookId, &$updated) {
+            (new Mongo($this->database))->updateCard(
+                (string)$bookId, 'contact.vcf', $this->vCard('New name', 'EMAIL:new@example.org')
+            );
+            $updated = $this->database->cards->findOne(['_id' => 1]);
+        });
+
+        (new MigrationRunner($this->database, $logger))->run();
+
+        $this->assertSame('New name', $this->database->cards->findOne(['_id' => 1])['fn_sort']);
+        $this->assertSame('new@example.org', $this->database->cards->findOne(['_id' => 1])['email_sort']);
+        $this->assertEquals($updated, $this->database->cards->findOne(['_id' => 1]));
+        $this->assertSame(1, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+    }
+
     public static function invalidCards(): array
     {
         return [

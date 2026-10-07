@@ -62,8 +62,13 @@ class Version0001BackfillContactSortFields implements Migration
             }
 
             $missing = array_diff_key($values, $card);
+            // DAV remains writable: only backfill the payload and missing fields we actually read.
+            $filter = ['_id' => $card['_id'], 'carddata' => $card['carddata']];
+            foreach ($missing as $field => $value) {
+                $filter[$field] = ['$exists' => false];
+            }
             // Direct updates preserve payload, ETag, modification time and CardDAV sync state.
-            $operations[] = ['updateOne' => [['_id' => $card['_id']], ['$set' => $missing]]];
+            $operations[] = ['updateOne' => [$filter, ['$set' => $missing]]];
             if (count($operations) === self::BATCH_SIZE) {
                 $updated += $this->writeBatch($cards, $operations, ++$batch);
                 $operations = [];

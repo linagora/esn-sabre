@@ -9,6 +9,8 @@ sort fields extracted from their `carddata`, matching contact creation and updat
 - `email_sort`: trimmed email selected by Sabre's `preferred('EMAIL')`; an absent email becomes an empty string.
 
 Contact payloads, ETags, modification times, sync tokens and change history remain unchanged.
+Each update checks that the vCard payload is unchanged and the target fields are still missing, so concurrent DAV
+updates keep their current sort values.
 
 Contacts are read in `_id` order and updated in batches of at most 500. Missing or invalid vCard data is skipped
 with a WARNING containing the contact ID. Progress logs include the number of skipped contacts. Version `1` is saved

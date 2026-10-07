@@ -142,4 +142,7 @@ nginx -t || fail "invalid nginx configuration, see the error above"
 # Indexes are created here once, not on every request. A failure must not keep sabre from starting.
 php /var/www/scripts/create-indexes.php /var/www/config.json || echo "WARNING: MongoDB index creation failed, see doc/storage/MONGO.md to create them manually" >&2
 
+# Run migrations in the background so DAV startup does not wait; keep stdout/stderr for operational logs.
+php /var/www/scripts/migrate-database.php /var/www/config.json < /dev/null &
+
 /usr/bin/supervisord

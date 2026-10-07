@@ -11,10 +11,15 @@ use Monolog\Logger;
 $logger = new Logger('DatabaseMigration', [new StreamHandler('php://stdout', Logger::INFO)]);
 
 try {
-    if ($argc > 2 || (isset($argv[1]) && str_starts_with($argv[1], '--'))) {
-        throw new MigrationException('Usage: php scripts/migrate-database.php [config-path]');
+    $arguments = array_slice($argv, 1);
+    $onStartup = ($arguments[0] ?? null) === '--on-startup';
+    if ($onStartup) {
+        array_shift($arguments);
     }
-    $configPath = $argv[1] ?? __DIR__ . '/../config.json';
+    if (count($arguments) > 1 || (isset($arguments[0]) && str_starts_with($arguments[0], '--'))) {
+        throw new MigrationException('Usage: php scripts/migrate-database.php [--on-startup] [config-path]');
+    }
+    $configPath = $arguments[0] ?? __DIR__ . '/../config.json';
     $logger->info('Loading database migration configuration', ['config_path' => $configPath]);
     $contents = @file_get_contents($configPath);
     $config = $contents === false ? null : json_decode($contents, true);
@@ -22,6 +27,11 @@ try {
         throw new MigrationException('Unable to load Sabre database configuration');
     }
     \ESN\Utils\Env::init($config['environment'] ?? null);
+    // Only automatic startup honors this switch; explicit operator commands must still run.
+    if ($onStartup && !\ESN\Utils\Env::getBoolean('SABRE_MIGRATE_ON_STARTUP', true)) {
+        $logger->info('Automatic database migration disabled', ['setting' => 'SABRE_MIGRATE_ON_STARTUP']);
+        exit(0);
+    }
     $dbConfig = $config['database'];
     $connectionString = $dbConfig['sabre']['connectionString'];
     $dbName = \ESN\Utils\Utils::getDatabaseName('sabre', $connectionString, $dbConfig);

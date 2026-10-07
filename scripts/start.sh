@@ -143,6 +143,6 @@ nginx -t || fail "invalid nginx configuration, see the error above"
 php /var/www/scripts/create-indexes.php /var/www/config.json || echo "WARNING: MongoDB index creation failed, see doc/storage/MONGO.md to create them manually" >&2
 
 # Run migrations in the background so DAV startup does not wait; keep stdout/stderr for operational logs.
-php /var/www/scripts/migrate-database.php /var/www/config.json < /dev/null &
+php /var/www/scripts/migrate-database.php --on-startup /var/www/config.json < /dev/null &
 
 /usr/bin/supervisord

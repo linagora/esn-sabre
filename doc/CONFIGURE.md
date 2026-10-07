@@ -69,6 +69,7 @@ of `config.json`.
 | `SABRE_ADMIN_LOGIN` | unset — impersonation unavailable | Admin login used for impersonation |
 | `SABRE_ADMIN_PASSWORD` | unset — impersonation unavailable | Admin password used for impersonation |
 | `SABRE_IMPERSONATION_ENABLED` | `false` | Master switch for admin impersonation |
+| `SABRE_MIGRATE_ON_STARTUP` | `true` | Run database migrations in the background at startup; See [database migrations](storage/MONGO.md#database-migrations) |
 | `AUTO_PROVISION` | `true` | Create missing users on successful authentication |
 | `PRINCIPAL_PRIVACY` | `true` | Restrict DAV principal discovery |
 | `TRUSTED_VIDEO_URL_BASE` | unset | Keep only video conference URLs at this base; unset leaves links untouched |

@@ -12,9 +12,9 @@ use ESN\DAV\SortOrder;
 
 #[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
-    // Page sizes of the contact listing aggregated over the address books of a home
-    const DEFAULT_AGGREGATED_CONTACTS_LIMIT = 50;
-    const MAX_AGGREGATED_CONTACTS_LIMIT = 1000;
+    // Page sizes of the contact listings paginated with a cursor
+    const DEFAULT_CONTACTS_PAGE_LIMIT = 50;
+    const MAX_CONTACTS_PAGE_LIMIT = 1000;
 
     protected ?AuthTenant $authTenant = null;
 
@@ -574,6 +574,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
     private function getContacts($request, $response, $nodePath, $node) {
         $queryParams = $request->getQueryParameters();
+        if ($this->isCursorPaginated($queryParams)) {
+            return $this->getCursorPaginatedContacts($nodePath, $node, $queryParams);
+        }
+
         $offset = isset($queryParams['offset']) ? $queryParams['offset'] : 0;
         $limit = isset($queryParams['limit']) ? $queryParams['limit'] : 0;
         $search = isset($queryParams['search']) ? $queryParams['search'] : null;
@@ -640,16 +644,87 @@ class Plugin extends \ESN\JSON\BasePlugin {
             throw new Forbidden('Only the owner of an address book home can list its contacts');
         }
 
-        $after = Utils::getArrayValue($queryParams, 'after');
-        if ($after !== null && !is_string($after)) {
-            throw new BadRequest('Invalid after cursor');
+        $sort = $this->contactsPageSort($queryParams);
+        $order = $this->contactsPageOrder($queryParams);
+        $page = $node->getContactsPage(
+            ContactSources::fromQueryParameters($queryParams),
+            $this->contactsPageLimit($queryParams),
+            $this->afterCursor($queryParams, $order, $sort),
+            fn($path) => $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false),
+            $order,
+            $sort
+        );
+
+        return [200, $this->contactsPageResult($nodePath, $page)];
+    }
+
+    /**
+     * Whether the contacts of an address book are listed sorted by full name and paginated with the opaque 'after'
+     * cursor of getAggregatedContacts rather than with an offset: when an 'after' cursor is given, or for the first
+     * page of a 'sort=fn' listing without offset nor filter.
+     */
+    private function isCursorPaginated(array $queryParams): bool {
+        $offsetOrFilters = isset($queryParams['offset']) || isset($queryParams['search']) || isset($queryParams['modifiedBefore']);
+
+        if (isset($queryParams['after'])) {
+            if ($offsetOrFilters) {
+                throw new BadRequest('after cannot be used with offset, search or modifiedBefore');
+            }
+
+            return true;
         }
 
+        return Utils::getArrayValue($queryParams, ContactSort::PARAMETER) === ContactSort::FN && !$offsetOrFilters;
+    }
+
+    /**
+     * Lists the contacts of one address book (own, delegated, subscribed or domain one) sorted by full name, a page
+     * after the 'after' cursor returned as 'next'.
+     */
+    private function getCursorPaginatedContacts($nodePath, IContactsPageAddressBook $node, array $queryParams) {
+        // Only the full name sort is cursor paginated for a single address book
+        $sort = Utils::getArrayValue($queryParams, ContactSort::PARAMETER, ContactSort::FN);
+        if ($sort !== ContactSort::FN) {
+            throw new BadRequest('Unsupported sort: ' . (is_string($sort) ? $sort : gettype($sort)));
+        }
+
+        $order = $this->contactsPageOrder($queryParams);
+        $page = $node->getContactsPage($nodePath, $this->contactsPageLimit($queryParams), $this->afterCursor($queryParams, $order, $sort), $order);
+
+        $result = $this->contactsPageResult($nodePath, $page);
+        $result['dav:syncToken'] = $node->getSyncToken();
+
+        return [200, $result];
+    }
+
+    /**
+     * Validates the page size of a contact listing paginated with a cursor.
+     */
+    private function contactsPageLimit(array $queryParams): int {
+        $limit = Utils::getArrayValue($queryParams, 'limit', (string)self::DEFAULT_CONTACTS_PAGE_LIMIT);
+        if (!is_string($limit) || !ctype_digit($limit) || (int)$limit < 1 || (int)$limit > self::MAX_CONTACTS_PAGE_LIMIT) {
+            throw new BadRequest('limit must be an integer between 1 and ' . self::MAX_CONTACTS_PAGE_LIMIT);
+        }
+
+        return (int)$limit;
+    }
+
+    /**
+     * Validates the sort field of a contact listing paginated with a cursor.
+     */
+    private function contactsPageSort(array $queryParams): string {
         $sort = Utils::getArrayValue($queryParams, ContactSort::PARAMETER, ContactSort::FN);
         if (!is_string($sort) || !isset(ContactSort::FIELDS[$sort])) {
             throw new BadRequest('sort must be fn or email');
         }
 
+        return $sort;
+    }
+
+    /**
+     * Validates the sort order of a contact listing paginated with a cursor.
+     */
+    private function contactsPageOrder(array $queryParams): string {
         $order = Utils::getArrayValue($queryParams, SortOrder::PARAMETER, SortOrder::ASC);
         if (is_string($order)) {
             $order = strtolower($order);
@@ -658,15 +733,26 @@ class Plugin extends \ESN\JSON\BasePlugin {
             throw new BadRequest('order must be asc or desc');
         }
 
-        $page = $node->getContactsPage(
-            ContactSources::fromQueryParameters($queryParams),
-            $this->aggregatedContactsLimit($queryParams),
-            $after,
-            fn($path) => $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false),
-            $order,
-            $sort
-        );
+        return $order;
+    }
 
+    /**
+     * Decodes the 'after' cursor of a contact listing paginated with a cursor in the given sort and order, null for
+     * the first page.
+     */
+    private function afterCursor(array $queryParams, string $order, string $sort): ?array {
+        $after = Utils::getArrayValue($queryParams, 'after');
+        if ($after !== null && !is_string($after)) {
+            throw new BadRequest('Invalid after cursor');
+        }
+
+        return ContactCursor::decode($after, $order, $sort);
+    }
+
+    /**
+     * JSON listing of a page of contacts, see ContactsPage.
+     */
+    private function contactsPageResult($selfPath, array $page): array {
         $baseUri = $this->server->getBaseUri();
         $items = [];
         foreach ($page['items'] as $item) {
@@ -681,7 +767,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         $result = [
             '_links' => [
-                'self' => [ 'href' => $baseUri . $nodePath . '.json' ]
+                'self' => [ 'href' => $baseUri . $selfPath . '.json' ]
             ],
             '_embedded' => [ 'dav:item' => $items ]
         ];
@@ -691,7 +777,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $result['next'] = $page['next'];
         }
 
-        return [200, $result];
+        return $result;
     }
 
     private function serializeContactWithSortedEmails(string $cardData): array {
@@ -708,18 +794,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return $vcard->jsonSerialize();
-    }
-
-    /**
-     * Validates the page size of an aggregated contact listing, which is always paginated.
-     */
-    private function aggregatedContactsLimit(array $queryParams): int {
-        $limit = Utils::getArrayValue($queryParams, 'limit', (string)self::DEFAULT_AGGREGATED_CONTACTS_LIMIT);
-        if (!is_string($limit) || !ctype_digit($limit) || (int)$limit < 1 || (int)$limit > self::MAX_AGGREGATED_CONTACTS_LIMIT) {
-            throw new BadRequest('limit must be an integer between 1 and ' . self::MAX_AGGREGATED_CONTACTS_LIMIT);
-        }
-
-        return (int)$limit;
     }
 
     private function qualifySourcePath($sourcePath) {

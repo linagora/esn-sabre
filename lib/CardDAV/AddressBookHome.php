@@ -124,28 +124,11 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
      *
      * @param callable $canRead (string $path): bool, whether the current user can read an address book that is
      *                          not in this home (domain address book): access control stays with the caller
-     * @param string|null $after opaque cursor of the previous page, see ContactCursor
+     * @param array|null $after cursor of the previous page decoded by ContactCursor::decode, null for the first page
      * @return array [ 'items' => [ [ 'path', 'etag', 'carddata' ], ... ], 'next' => cursor or null ]
      */
-    function getContactsPage(ContactSources $sources, int $limit, ?string $after, callable $canRead, string $order = SortOrder::ASC, string $sort = ContactSort::FN): array {
-        $paths = $this->aggregatedAddressBookPaths($sources, $canRead);
-
-        // One more card than asked tells whether there is a next page
-        $cards = $this->carddavBackend->getCardsOfAddressBooks(
-            array_keys($paths), $limit + 1, ContactCursor::decode($after, $order, $sort), $order, $sort);
-
-        $next = count($cards) > $limit ? ContactCursor::encode($cards[$limit - 1], $order, $sort) : null;
-
-        $items = [];
-        foreach (array_slice($cards, 0, $limit) as $card) {
-            $items[] = [
-                'path' => $paths[$card['addressbookid']] . '/' . $card['uri'],
-                'etag' => $card['etag'],
-                'carddata' => $card['carddata']
-            ];
-        }
-
-        return [ 'items' => $items, 'next' => $next ];
+    function getContactsPage(ContactSources $sources, int $limit, ?array $after, callable $canRead, string $order = SortOrder::ASC, string $sort = ContactSort::FN): array {
+        return ContactsPage::read($this->carddavBackend, $this->aggregatedAddressBookPaths($sources, $canRead), $limit, $after, $order, $sort);
     }
 
     /**

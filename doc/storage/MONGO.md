@@ -101,7 +101,8 @@ Email sort field: `email_sort` (trimmed preferred email or `""`).
 `{ addressbookid, fn, _id }` — supports paginated `sort=fn` listings with a stable tie-breaker;
 `{ addressbookid, fn_sort, _id }` named `addressbookid_1_fn_sort_1__id_1_en_strength1`, with the collation
 `{ locale: "en", strength: 1 }` (`CardDAV\Backend\Mongo::CONTACT_SORT_COLLATION`) — supports contact listings
-aggregated over the address books of a user (`GET /contacts/{userId}.json`), merging one index scan per address book.
+aggregated over the address books of a user (`GET /contacts/{userId}.json`), merging one index scan per address book,
+and of a single address book (`GET /addressbooks/{addressbookHomeId}/{addressbookId}.json?sort=fn`).
 It only serves queries passing the very same collation: changing the language of the sort means changing the
 collation and recreating this index under another name, stored values staying as they are.
 

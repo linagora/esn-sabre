@@ -2,6 +2,7 @@
 
 namespace ESN\CardDAV;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\DAV\ServerPlugin;
 use Sabre\VObject\Document;
 use Sabre\VObject\ITip\Message;
@@ -445,6 +446,123 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals($cards[0]->{'_links'}->self->href, '/addressbooks/54b64eadf6d7d8e41d263e0f/book1/card3');
         $this->assertEquals($cards[0]->data[0], 'vcard');
         $this->assertEquals($cards[0]->data[1][0][3], 'b');
+    }
+
+    #[DataProvider('sortedCards')]
+    function testCursorPagesUseRequestedSortAndOrder(string $sort, string $order, array $expected) {
+        $this->addEmailsToContacts();
+
+        $path = '/addressbooks/' . $this->userTestId1 . '/book1.json?sort=' . $sort . '&order=' . $order . '&limit=2';
+        $first = $this->makeRequest('GET', $path);
+        $this->assertSame(200, $first->status);
+        $firstBody = json_decode($first->getBodyAsString());
+        $this->assertSame('/addressbooks/' . $this->userTestId1 . '/book1.json', $firstBody->{'_links'}->self->href);
+        $this->assertObjectHasProperty('dav:syncToken', $firstBody);
+        $this->assertNotEmpty($firstBody->next);
+        $this->assertObjectNotHasProperty('next', $firstBody->{'_links'});
+
+        $last = $this->makeRequest('GET', $path . '&after=' . urlencode($firstBody->next));
+        $this->assertSame(200, $last->status);
+        $lastBody = json_decode($last->getBodyAsString());
+        $items = array_merge($firstBody->{'_embedded'}->{'dav:item'}, $lastBody->{'_embedded'}->{'dav:item'});
+        $this->assertSame($expected, array_map(fn($item) => basename($item->{'_links'}->self->href), $items));
+        $this->assertObjectNotHasProperty('next', $lastBody);
+        $preferred = array_values(array_filter($items, fn($item) => basename($item->{'_links'}->self->href) === 'card4'))[0];
+        $emails = array_values(array_filter($preferred->data[1], fn($property) => $property[0] === 'email'));
+        $this->assertSame('zoe@example.org', $emails[0][3]);
+    }
+
+    static function sortedCards() {
+        return [
+            'name ascending' => ['fn', 'asc', ['card4', 'card3', 'card2', 'card1']],
+            'name descending' => ['fn', 'desc', ['card1', 'card2', 'card3', 'card4']],
+            'email ascending' => ['email', 'asc', ['card1', 'card2', 'card3', 'card4']],
+            'email descending' => ['email', 'desc', ['card4', 'card3', 'card2', 'card1']]
+        ];
+    }
+
+    #[DataProvider('differentSortFields')]
+    function testCursorCannotChangeSort(string $cursorSort, string $requestedSort) {
+        $this->addEmailsToContacts();
+
+        $path = '/addressbooks/' . $this->userTestId1 . '/book1.json';
+        $first = $this->makeRequest('GET', $path . '?sort=' . $cursorSort . '&limit=1');
+        $this->assertSame(200, $first->status);
+        $cursor = urlencode(json_decode($first->getBodyAsString())->next);
+
+        $response = $this->makeRequest('GET', $path . '?sort=' . $requestedSort . '&after=' . $cursor);
+        $this->assertSame(400, $response->status);
+    }
+
+    static function differentSortFields() {
+        return [['fn', 'email'], ['email', 'fn']];
+    }
+
+    function testEmailSortWithOffsetKeepsAscendingOffsetPagination() {
+        $this->addEmailsToContacts();
+
+        $path = '/addressbooks/' . $this->userTestId1 . '/book1.json?sort=email&order=desc&limit=2&offset=0';
+        $first = $this->makeRequest('GET', $path);
+        $this->assertSame(200, $first->status);
+        $firstBody = json_decode($first->getBodyAsString());
+        $firstCards = array_map(fn($item) => basename($item->{'_links'}->self->href), $firstBody->{'_embedded'}->{'dav:item'});
+        $this->assertSame(['card1', 'card2'], $firstCards);
+        $this->assertObjectNotHasProperty('next', $firstBody);
+        $this->assertStringContainsString('offset=2', $firstBody->{'_links'}->next->href);
+
+        $last = $this->makeRequest('GET', $firstBody->{'_links'}->next->href);
+        $this->assertSame(200, $last->status);
+        $lastBody = json_decode($last->getBodyAsString());
+        $lastCards = array_map(fn($item) => basename($item->{'_links'}->self->href), $lastBody->{'_embedded'}->{'dav:item'});
+        $this->assertSame(['card3', 'card4'], $lastCards);
+        $this->assertObjectNotHasProperty('next', $lastBody->{'_links'});
+    }
+
+    function testEmailSortWithSearchUsesAscendingFilteredListing() {
+        $this->addEmailsToContacts();
+
+        $response = $this->makeRequest('GET', '/addressbooks/' . $this->userTestId1 . '/book1.json?sort=email&search=example.org');
+        $this->assertSame(200, $response->status);
+        $body = json_decode($response->getBodyAsString());
+        $cards = array_map(fn($item) => basename($item->{'_links'}->self->href), $body->{'_embedded'}->{'dav:item'});
+        $this->assertSame(['card2', 'card3', 'card4'], $cards);
+        $this->assertObjectNotHasProperty('next', $body);
+    }
+
+    function testEquivalentEmailsPaginateInOppositeOrdersWithoutDuplicates() {
+        $this->addEmailsToContacts();
+
+        $this->carddavBackend->updateCard($this->user1Book1Id, 'card3', "BEGIN:VCARD\r\nFN:b\r\nEMAIL:ALPHA@example.org\r\nEND:VCARD\r\n");
+        $seen = [];
+        foreach (['asc', 'desc'] as $order) {
+            $path = '/addressbooks/' . $this->userTestId1 . '/book1.json?sort=email&order=' . $order . '&limit=1';
+            $next = null;
+            $seen[$order] = [];
+            do {
+                $response = $this->makeRequest('GET', $path . ($next === null ? '' : '&after=' . urlencode($next)));
+                $this->assertSame(200, $response->status);
+                $body = json_decode($response->getBodyAsString());
+                $seen[$order][] = basename($body->{'_embedded'}->{'dav:item'}[0]->{'_links'}->self->href);
+                $this->assertLessThanOrEqual(4, count($seen[$order]));
+                $next = $body->next ?? null;
+            } while ($next !== null);
+        }
+        $this->assertEqualsCanonicalizing(['card1', 'card2', 'card3', 'card4'], $seen['asc']);
+        $this->assertSame(array_reverse($seen['asc']), $seen['desc']);
+    }
+
+    private function addEmailsToContacts() {
+        // Email and name orders differ; the preferred email of card4 is deliberately not its first one.
+        $emailLines = [
+            'card1' => '',
+            'card2' => "EMAIL:alpha@example.org\r\n",
+            'card3' => "EMAIL:BRAVO@example.org\r\n",
+            'card4' => "EMAIL:aardvark@example.org\r\nEMAIL;TYPE=PREF:zoe@example.org\r\n"
+        ];
+        foreach ($emailLines as $uri => $lines) {
+            $data = str_replace('END:VCARD', $lines . 'END:VCARD', $this->carddavCards[$uri]);
+            $this->carddavBackend->updateCard($this->user1Book1Id, $uri, $data);
+        }
     }
 
     function testCreateAddressBook() {

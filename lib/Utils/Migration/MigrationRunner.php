@@ -3,6 +3,7 @@
 namespace ESN\Utils\Migration;
 
 use ESN\CardDAV\Migration\Version0001BackfillContactSortFields;
+use MongoDB\Collection;
 use MongoDB\Database;
 use Psr\Log\LoggerInterface;
 
@@ -22,23 +23,9 @@ class MigrationRunner
         $this->logger->info('Database migration runner starting', $context);
 
         try {
-            foreach ($this->migrations as $version => $migration) {
-                if (!is_int($version) || $version < 1 || !$migration instanceof Migration) {
-                    throw new MigrationException('Invalid migration registry');
-                }
-            }
-            ksort($this->migrations);
-            $target = $this->migrations ? max(array_keys($this->migrations)) : 0;
-            if ($target > 0 && array_keys($this->migrations) !== range(1, $target)) {
-                throw new MigrationException('Migration registry contains missing versions');
-            }
-
+            $target = $this->validateMigrationRegistry();
             $versions = $this->database->selectCollection('db_version');
-            $record = $versions->findOne(['_id' => 'schema']);
-            $current = $record === null ? 0 : ($record['version'] ?? null);
-            if (!is_int($current) || $current < 0) {
-                throw new MigrationException('Invalid database schema version');
-            }
+            $current = $this->loadCurrentVersion($versions);
             $context += ['current_version' => $current, 'target_version' => $target];
             $this->logger->info('Database schema version loaded', $context);
             if ($current > $target) {
@@ -60,8 +47,8 @@ class MigrationRunner
                     'elapsed_seconds' => round(microtime(true) - $migrationStarted, 3),
                 ]);
 
-                // The version is the checkpoint: failed or interrupted migrations must be safe to rerun.
-                $result = $versions->updateOne(['_id' => 'schema'], ['$set' => ['version' => $version]], ['upsert' => true]);
+                // A slower startup runner must not lower a checkpoint already saved by another replica.
+                $result = $versions->updateOne(['_id' => 'schema'], ['$max' => ['version' => $version]], ['upsert' => true]);
                 if (!$result->isAcknowledged()) {
                     throw new MigrationException('Database schema version write was not acknowledged');
                 }
@@ -83,5 +70,33 @@ class MigrationRunner
             ]);
             throw $error;
         }
+    }
+
+    private function validateMigrationRegistry(): int
+    {
+        foreach ($this->migrations as $version => $migration) {
+            if (!is_int($version) || $version < 1) {
+                throw new MigrationException('Invalid migration registry');
+            }
+            if (!$migration instanceof Migration) {
+                throw new MigrationException('Invalid migration registry');
+            }
+        }
+        ksort($this->migrations);
+        $target = $this->migrations ? max(array_keys($this->migrations)) : 0;
+        if ($target > 0 && array_keys($this->migrations) !== range(1, $target)) {
+            throw new MigrationException('Migration registry contains missing versions');
+        }
+        return $target;
+    }
+
+    private function loadCurrentVersion(Collection $versions): int
+    {
+        $record = $versions->findOne(['_id' => 'schema']);
+        $current = $record === null ? 0 : ($record['version'] ?? null);
+        if (!is_int($current) || $current < 0) {
+            throw new MigrationException('Invalid database schema version');
+        }
+        return $current;
     }
 }

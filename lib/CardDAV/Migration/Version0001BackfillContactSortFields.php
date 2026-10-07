@@ -39,18 +39,7 @@ class Version0001BackfillContactSortFields implements Migration
         foreach ($cursor as $card) {
             $read++;
             try {
-                if (!isset($card['carddata']) || !is_string($card['carddata'])) {
-                    throw new \UnexpectedValueException('Missing or non-string carddata');
-                }
-                $vcard = Reader::read($card['carddata']);
-                if (!$vcard instanceof VCard) {
-                    throw new \UnexpectedValueException('Expected a vCard');
-                }
-                // Match contact writes: trim FN and let Sabre select the preferred email.
-                $values = [
-                    'fn_sort' => trim((string)$vcard->FN),
-                    'email_sort' => trim((string)$vcard->preferred('EMAIL')),
-                ];
+                $operation = $this->buildUpdateOperation($card);
             } catch (ParseException | \UnexpectedValueException $error) {
                 $skipped++;
                 // Parser messages can contain vCard contents; log only a safe reason and the contact ID.
@@ -61,14 +50,7 @@ class Version0001BackfillContactSortFields implements Migration
                 continue;
             }
 
-            $missing = array_diff_key($values, $card);
-            // DAV remains writable: only backfill the payload and missing fields we actually read.
-            $filter = ['_id' => $card['_id'], 'carddata' => $card['carddata']];
-            foreach ($missing as $field => $value) {
-                $filter[$field] = ['$exists' => false];
-            }
-            // Direct updates preserve payload, ETag, modification time and CardDAV sync state.
-            $operations[] = ['updateOne' => [$filter, ['$set' => $missing]]];
+            $operations[] = $operation;
             if (count($operations) === self::BATCH_SIZE) {
                 $updated += $this->writeBatch($cards, $operations, ++$batch);
                 $operations = [];
@@ -93,6 +75,30 @@ class Version0001BackfillContactSortFields implements Migration
             'contacts_skipped' => $skipped,
             'elapsed_seconds' => round(microtime(true) - $started, 3),
         ]);
+    }
+
+    private function buildUpdateOperation(array $card): array
+    {
+        if (!isset($card['carddata']) || !is_string($card['carddata'])) {
+            throw new \UnexpectedValueException('Missing or non-string carddata');
+        }
+        $vcard = Reader::read($card['carddata']);
+        if (!$vcard instanceof VCard) {
+            throw new \UnexpectedValueException('Expected a vCard');
+        }
+        // Match contact writes: trim FN and let Sabre select the preferred email.
+        $values = [
+            'fn_sort' => trim((string)$vcard->FN),
+            'email_sort' => trim((string)$vcard->preferred('EMAIL')),
+        ];
+        $missing = array_diff_key($values, $card);
+        // DAV remains writable: only backfill the payload and missing fields we actually read.
+        $filter = ['_id' => $card['_id'], 'carddata' => $card['carddata']];
+        foreach ($missing as $field => $value) {
+            $filter[$field] = ['$exists' => false];
+        }
+        // Direct updates preserve payload, ETag, modification time and CardDAV sync state.
+        return ['updateOne' => [$filter, ['$set' => $missing]]];
     }
 
     private function writeBatch(\MongoDB\Collection $cards, array $operations, int $batch): int

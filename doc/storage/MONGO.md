@@ -140,6 +140,28 @@ These collections are owned by the ESN application and only read by Sabre.
 | `users`     | User accounts; fields `preferredEmail`, `emails`, `domains` | `DAVACL\PrincipalBackend\Mongo` |
 | `resources` | Room/equipment resources; field `administrators` | `DAVACL\PrincipalBackend\Mongo` |
 
+## Database migrations
+
+After index creation, `scripts/start.sh` launches the migration runner in the background,
+alongside DAV. `SABRE_MIGRATE_ON_STARTUP` defaults to `true`; setting it to `false` skips automatic migration
+and logs an INFO message without stopping DAV. Like other runtime settings, it can be set in the `environment`
+section of `config.json` or as an environment variable.
+
+Migrations can always be run manually with `php scripts/migrate-database.php [config-path]`, even when
+`SABRE_MIGRATE_ON_STARTUP=false`
+
+Migrations run in order. The current version is stored in the Sabre database's `db_version` collection,
+in the document with `_id: "schema"` and an integer `version`.
+No record means version `0`; the version advances only after a migration finishes. Invalid or unsupported versions
+and migration failures stop the runner without stopping DAV. A failed runner is not automatically restarted.
+
+Migration logs are written to stdout at INFO, WARNING and ERROR levels, with versions, batch progress and elapsed time.
+ERROR logs identify the failed migration and, when available, the contact ID. Fix the cause, then rerun the command
+or restart the application to retry. Run only one migration process at a time; wait for the background runner to finish
+before running a manual command.
+
+See the [database migration history](MIGRATIONS.md) for the changes introduced by each version.
+
 ## Index creation
 
 Indexes are created once when the container starts: `scripts/start.sh` runs `scripts/create-indexes.php`, which calls

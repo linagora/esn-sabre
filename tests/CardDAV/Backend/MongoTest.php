@@ -3,6 +3,7 @@
 namespace ESN\CardDAV\Backend;
 
 use \Sabre\DAV\Sharing\Plugin as SPlugin;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 require_once 'AbstractDatabaseTestBase.php';
 require_once ESN_TEST_BASE . '/DAV/MongoFindCounter.php';
@@ -93,6 +94,73 @@ class MongoTest extends AbstractDatabaseTestBase {
 
         $this->assertEquals(2, $queries);
         $this->assertEqualsCanonicalizing(array_slice($uris, 0, $count), array_column($cards, 'uri'));
+    }
+
+    function testResubscriptionDoesNotRestoreRevokedDelegation() {
+        $principal = 'principals/users/user2';
+        $sharee = new \Sabre\DAV\Xml\Element\Sharee([
+            'href' => 'mailto:user2@example.org',
+            'principal' => $principal,
+            'access' => SPlugin::ACCESS_READWRITE,
+            'inviteStatus' => SPlugin::INVITE_ACCEPTED
+        ]);
+        $this->backend->updateInvites($this->bookId, [$sharee]);
+        $shared = $this->backend->getSharedAddressBooksForUser($principal)[0];
+        $this->backend->deleteSharedAddressBook($shared['id']);
+        $sharee->access = SPlugin::ACCESS_NOACCESS;
+        $this->backend->updateInvites($this->bookId, [$sharee]);
+
+        $this->backend->createSubscription($principal, 'resubscribed', [
+            '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/user1/book1'),
+            '{DAV:}acl' => ['dav:read']
+        ]);
+
+        $this->assertCount(0, $this->backend->getSharedAddressBooksForUser($principal));
+        $this->assertCount(0, $this->backend->getInvites($this->bookId));
+        $subscriptions = $this->backend->getSubscriptionsForUser($principal);
+        $this->assertCount(1, $subscriptions);
+        $this->assertEquals('public', $subscriptions[0]['{http://open-paas.org/contacts}subscription-type']);
+        $this->assertEquals(['dav:read'], $subscriptions[0]['{DAV:}acl']);
+    }
+
+    #[DataProvider('delegationRemovalStates')]
+    function testRemovingDelegationOnlyNotifiesVisibleBooks($hidden, $deleteSource) {
+        $principal = 'principals/users/user2';
+        $sharee = new \Sabre\DAV\Xml\Element\Sharee([
+            'href' => 'mailto:user2@example.org',
+            'principal' => $principal,
+            'access' => SPlugin::ACCESS_READ,
+            'inviteStatus' => SPlugin::INVITE_ACCEPTED
+        ]);
+        $this->backend->updateInvites($this->bookId, [$sharee]);
+        $shared = $this->backend->getSharedAddressBooksForUser($principal)[0];
+        if ($hidden) {
+            $this->backend->deleteSharedAddressBook($shared['id']);
+        }
+        $events = [];
+        $this->backend->getEventEmitter()->on('sabre:addressBookSubscriptionDeleted', function ($event) use (&$events) {
+            $events[] = $event;
+        });
+
+        if ($deleteSource) {
+            $listener = new \ESN\CardDAV\Sharing\ListenerPlugin($this->backend);
+            $listener->initialize(new \Sabre\DAV\Server());
+            $this->backend->deleteAddressBook($this->bookId);
+        } else {
+            $sharee->access = SPlugin::ACCESS_NOACCESS;
+            $this->backend->updateInvites($this->bookId, [$sharee]);
+        }
+
+        $this->assertCount(0, $this->backend->getInvites($this->bookId));
+        $this->assertCount(0, $this->backend->getSharedAddressBooksForUser($principal));
+        $this->assertCount($hidden ? 0 : 1, $events);
+        if (!$hidden) {
+            $this->assertEquals('addressbooks/user2/' . $shared['uri'], $events[0]['path']);
+        }
+    }
+
+    static function delegationRemovalStates() {
+        return [[false, false], [true, false], [false, true], [true, true]];
     }
 
     function testConstruct() {

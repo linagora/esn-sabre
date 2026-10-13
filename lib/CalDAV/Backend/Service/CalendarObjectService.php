@@ -159,6 +159,24 @@ class CalendarObjectService {
         }
     }
 
+    public function findByUid(string $uid, array $calendarIds): array {
+        return iterator_to_array(
+            $this->calendarObjectDAO->findWithQuery(
+                [
+                    'uid' => $uid,
+                    'calendarid' => ['$in' => $calendarIds],
+                    'componenttype' => 'VEVENT'
+                ],
+                [
+                    '_id' => 0,
+                    'calendarid' => 1,
+                    'uri' => 1
+                ]
+            ),
+            false
+        );
+    }
+
     public function findBySchedulingRecipient(string $uid, string $principalUri, array $calendarIds): array {
         return iterator_to_array($this->calendarObjectDAO->findWithQuery([
             'uid' => $uid,

@@ -28,6 +28,78 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->server->addPlugin($plugin);
     }
 
+    function testCalendarHomeEventsReturnsMatchingOwnEvent() {
+        $response = $this->calendarHomeEventsRequest('ownCalendar=true');
+
+        $this->assertEquals(200, $response->status);
+        $body = json_decode($response->getBodyAsString(), true);
+        $this->assertEquals('/calendars/54b64eadf6d7d8e41d263e0f/events', $body['_links']['self']['href']);
+        $this->assertCount(1, $body['_embedded']['dav:item']);
+        $this->assertEquals(
+            '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event1.ics',
+            $body['_embedded']['dav:item'][0]['_links']['self']['href']
+        );
+        $events = $this->eventsOf($response);
+        $this->assertEquals('Monday 0h', (string) $events['event1']->SUMMARY);
+    }
+
+    function testCalendarHomeEventsDefaultsToNoSelectedSources() {
+        $response = $this->calendarHomeEventsRequest();
+
+        $this->assertEquals(200, $response->status);
+        $body = json_decode($response->getBodyAsString(), true);
+        $this->assertSame([], $body['_embedded']['dav:item']);
+    }
+
+    function testCalendarHomeEventsDoesNotMatchUidPrefixes() {
+        $response = $this->calendarHomeEventsRequest('ownCalendar=true', '{"uid":"event"}');
+
+        $this->assertEquals(200, $response->status);
+        $body = json_decode($response->getBodyAsString(), true);
+        $this->assertSame([], $body['_embedded']['dav:item']);
+    }
+
+    public static function invalidCalendarHomeEventFilters(): array {
+        return [
+            'missing UID' => ['{}'],
+            'non-string UID' => ['{"uid":42}'],
+            'blank UID' => ['{"uid":"  "}'],
+            'unsupported filter' => ['{"uid":"event1","summary":"Monday"}'],
+            'malformed JSON' => ['{'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('invalidCalendarHomeEventFilters')]
+    function testCalendarHomeEventsRejectsInvalidFilters($body) {
+        $response = $this->calendarHomeEventsRequest('ownCalendar=true', $body);
+
+        $this->assertEquals(400, $response->status);
+    }
+
+    function testCalendarHomeEventsRejectsInvalidSelector() {
+        $response = $this->calendarHomeEventsRequest('ownCalendar=yes');
+
+        $this->assertEquals(400, $response->status);
+    }
+
+    function testCalendarHomeEventsRequiresJsonContentType() {
+        $response = $this->calendarHomeEventsRequest('ownCalendar=true', '{"uid":"event1"}', 'text/plain');
+
+        $this->assertEquals(415, $response->status);
+    }
+
+    private function calendarHomeEventsRequest($query = '', $body = '{"uid":"event1"}', $contentType = 'application/json') {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD' => 'POST',
+            'HTTP_CONTENT_TYPE' => $contentType,
+            'HTTP_ACCEPT' => 'application/json',
+            'REQUEST_URI' => '/calendars/54b64eadf6d7d8e41d263e0f/events' . ($query ? '?' . $query : ''),
+        ]);
+        $request->setBody($body);
+
+        return $this->request($request);
+    }
+
     function testTimeRangeQuery() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

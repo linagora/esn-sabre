@@ -26,6 +26,79 @@ class CalendarObjectHandler {
         $this->currentUser = $currentUser;
     }
 
+    public function queryCalendarSources($homePath, $home, array $calendars, array $sources, $filters) {
+        $selected = $this->selectReadableCalendarSources($home, $calendars, $sources);
+
+        $items = [];
+        if ($selected) {
+            foreach ($home->getCalDAVBackend()->findCalendarObjectsByUid($filters->uid, array_keys($selected)) as $object) {
+                $source = $selected[(string) $object['calendarid']];
+                $result = $this->getMultipleDAVItems(
+                    $source['path'],
+                    $source['node'],
+                    [$object['uri']]
+                );
+                $items = array_merge($items, $result['_embedded']['dav:item']);
+            }
+        }
+
+        return [200, [
+            '_links' => [
+                'self' => [
+                    'href' => $this->server->getBaseUri() . $homePath . '/events'
+                ]
+            ],
+            '_embedded' => [
+                'dav:item' => $items
+            ]
+        ]];
+    }
+
+    private function selectReadableCalendarSources($home, array $calendars, array $sources) {
+        $selected = [];
+        $acl = $this->server->getPlugin('acl');
+
+        foreach ($calendars as $calendar) {
+            $subscription = isset($calendar['calendarserver:source']);
+            $source = $calendar['calendarserver:source'] ?? $calendar;
+            $href = $source['calendarserver:delegatedsource'] ?? $source['_links']['self']['href'];
+            $path = $this->server->calculateUri($href);
+            $path = preg_replace('/\.json$/', '', $path);
+
+            try {
+                $node = $this->server->tree->getNodeForPath($path);
+            } catch (DAV\Exception\NotFound $e) {
+                continue;
+            }
+
+            if (!$node instanceof \ESN\CalDAV\SharedCalendar) {
+                continue;
+            }
+
+            $owner = $node->getOwner();
+            if (Utils::isTeamCalendarFromPrincipal($owner)) {
+                $type = 'teamCalendars';
+            } else if (Utils::isResourceFromPrincipal($owner)) {
+                $type = 'resourceCalendars';
+            } else if ($subscription) {
+                $type = 'publicSubscriptions';
+            } else {
+                $type = $owner === $home->getPrincipalUri() ? 'ownCalendar' : 'sharedCalendars';
+            }
+
+            // Resolve to the source, then check its read ACL as well as the home instance's ACL.
+            if ($sources[$type]
+                && $acl->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+                $selected[(string) $node->getCalendarId()] = [
+                    'path' => $path,
+                    'node' => $node
+                ];
+            }
+        }
+
+        return $selected;
+    }
+
     public function getCalendarObjectByUID($nodePath, $node, $jsonData) {
         if (!isset($jsonData->uid)) {
             return [400, null];

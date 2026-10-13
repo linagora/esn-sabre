@@ -35,5 +35,10 @@ class DeleteSharedAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
 
         $this->assertEquals(204, $response->status);
         $this->assertCount(0, $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId1));
+        $this->assertCount(0, $this->carddavBackend->getSharedAddressBookSourcesForUser('principals/users/' . $this->userTestId1));
+        $this->assertCount(0, $this->carddavBackend->getSharedAddressBooksBySource($this->user2Book1Id));
+        $invites = $this->carddavBackend->getInvites($this->user2Book1Id);
+        $this->assertCount(1, $invites);
+        $this->assertEquals(SPlugin::ACCESS_READ, $invites[0]->access);
     }
 }

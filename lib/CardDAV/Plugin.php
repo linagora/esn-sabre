@@ -486,6 +486,13 @@ class Plugin extends \ESN\JSON\BasePlugin {
             '{DAV:}acl' => $privilege
         ];
 
+        if ($node->childExists($jsonData->id)) {
+            return [409, null];
+        }
+        if (isset($jsonData->{'carddav:description'})) {
+            $props['{urn:ietf:params:xml:ns:carddav}addressbook-description'] = $jsonData->{'carddav:description'};
+        }
+
         $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];

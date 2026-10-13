@@ -336,7 +336,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     function getSharedAddressBookSourcesForUser($principalUri) {
         $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
         $projection = [ 'uri' => 1, 'addressbookid' => 1, 'share_invitestatus' => 1 ];
-        $shares = $collection->find([ 'principaluri' => $principalUri ], [ 'projection' => $projection ])->toArray();
+        $shares = $collection->find([ 'principaluri' => $principalUri, 'hidden' => [ '$ne' => true ] ], [ 'projection' => $projection ])->toArray();
         if (!$shares) {
             return [];
         }
@@ -636,6 +636,12 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             throw new \Sabre\DAV\Exception\Forbidden('The {http://open-paas.org/contacts}source property is required when creating subscriptions');
         }
 
+        // Restore an unsubscribed delegation instead of creating a public subscription with weaker rights.
+        $restoredId = $this->restoreHiddenSharedAddressBook($principalUri, $uri, $properties);
+        if ($restoredId !== null) {
+            return $restoredId;
+        }
+
         $obj = [
             'displayname'  => '',
             'description'  => '',
@@ -670,6 +676,47 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         ]);
 
         return (string) $insertResult->getInsertedId();
+    }
+
+    private function restoreHiddenSharedAddressBook($principalUri, $uri, array $properties): ?string {
+        $source = explode('/', trim($properties['{http://open-paas.org/contacts}source']->getHref(), '/'));
+        if (count($source) !== 3 || $source[0] !== 'addressbooks') {
+            return null;
+        }
+
+        $addressBooks = $this->getAddressBooksByPrincipalAndUri([
+            [ 'principaluri' => 'principals/users/' . $source[1], 'uri' => $source[2] ]
+        ]);
+        if (!$addressBooks) {
+            return null;
+        }
+
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $addressBook = $collection->findOneAndUpdate([
+            'principaluri' => $principalUri,
+            'addressbookid' => new \MongoDB\BSON\ObjectId($addressBooks[0]['id']),
+            'share_invitestatus' => SPlugin::INVITE_ACCEPTED,
+            'hidden' => true
+        ], [ '$set' => $this->getSharedAddressBookRestorationValues($uri, $properties) ]);
+        if (!$addressBook) {
+            return null;
+        }
+
+        $this->eventEmitter->emit('sabre:addressBookSubscriptionCreated', [
+            [ 'path' => $this->buildAddressBookPath($principalUri, $uri) ]
+        ]);
+        return (string)$addressBook['_id'];
+    }
+
+    private function getSharedAddressBookRestorationValues($uri, array $properties): array {
+        $newValues = ['hidden' => false, 'uri' => $uri, 'lastmodified' => time()];
+        // Omitted properties keep the subscriber's metadata; an empty string explicitly clears it.
+        foreach ($this->sharedAddressBookPropertyMap as $property => $field) {
+            if (isset($properties[$property])) {
+                $newValues[$field] = $properties[$property];
+            }
+        }
+        return $newValues;
     }
 
     function updateSubscription($subscriptionId, \Sabre\DAV\PropPatch $propPatch) {
@@ -788,7 +835,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'share_href' => 1,
             'share_displayname' => 1
         ];
-        $query = [ 'principaluri' => $principalUri ];
+        $query = [ 'principaluri' => $principalUri, 'hidden' => [ '$ne' => true ] ];
         $res = $collection->find($query, [ 'projection' => $projection ]);
 
         $addressBooks = [];
@@ -837,7 +884,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         $query = [
             'addressbookid' => new \MongoDB\BSON\ObjectId($sourceAddressBookId),
-            'share_invitestatus' => SPlugin::INVITE_ACCEPTED
+            'share_invitestatus' => SPlugin::INVITE_ACCEPTED,
+            'hidden' => [ '$ne' => true ]
         ];
         $res = $collection->find($query, [ 'projection' => self::MINIMAL_ADDRESSBOOK_FIELDS ]);
 
@@ -889,7 +937,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
         $query = [ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ];
         $addressBook = $collection->findOne($query);
-        $collection->deleteMany($query);
+        // Keep the owner's delegation until it is explicitly revoked, as for calendars.
+        $collection->updateOne($query, [ '$set' => [ 'hidden' => true ] ]);
 
         $this->eventEmitter->emit('sabre:addressBookSubscriptionDeleted', [
             [
@@ -901,27 +950,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function deleteAddressBooksSharedFrom($addressBookId, $options = null) {
-        $addressBooks = [];
-        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
-        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
-
-        if (isset($options->sharees)) {
-            $shareeHrefs = [];
-            foreach($options->sharees as $sharee) {
-                $shareeHrefs[] = $sharee->href;
+        foreach ($this->deleteSharedAddressBookRecords($addressBookId, $options) as $addressBook) {
+            // Unsubscribing already notified clients; the old path may now belong to another book.
+            if ($addressBook['hidden'] ?? false) {
+                continue;
             }
-
-            $query['share_href'] = [ '$in' => $shareeHrefs ];
-        }
-
-        $cursor = $collection->find($query);
-        foreach($cursor as $doc) {
-            $addressBooks[] = $doc;
-        }
-
-        $collection->deleteMany($query);
-
-        foreach($addressBooks as $addressBook) {
             $this->eventEmitter->emit('sabre:addressBookSubscriptionDeleted', [
                 [
                     'addressbookid' => $addressBook['_id'],
@@ -930,6 +963,24 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 ]
             ]);
         }
+    }
+
+    private function deleteSharedAddressBookRecords($addressBookId, $options): array {
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
+
+        if (isset($options->sharees)) {
+            $shareeHrefs = [];
+            foreach ($options->sharees as $sharee) {
+                $shareeHrefs[] = $sharee->href;
+            }
+            $query['share_href'] = [ '$in' => $shareeHrefs ];
+        }
+
+        // Read the records before deleting them so callers can notify clients afterwards.
+        $addressBooks = $collection->find($query)->toArray();
+        $collection->deleteMany($query);
+        return $addressBooks;
     }
 
     /**

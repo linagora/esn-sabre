@@ -3,6 +3,7 @@
 namespace ESN\CardDAV\Subscription;
 
 use Sabre\DAV\ServerPlugin;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\VObject\Document;
 use Sabre\VObject\ITip\Message;
 
@@ -83,14 +84,111 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertEquals($addressBooks[0]['{http://open-paas.org/contacts}source'], 'addressbooks/' . $this->userTestId1 . '/book1');
     }
 
-    function testDeleteSubscriptionAddressBook() {
+    #[DataProvider('delegationAccessLevels')]
+    function testResubscribeDelegationThroughHttp($access) {
+        $principal = 'principals/users/' . $this->userTestId1;
+        $this->carddavBackend->updateInvites($this->user2Book1Id, [new \Sabre\DAV\Xml\Element\Sharee([
+            'href' => 'mailto:' . $this->userTestEmail1,
+            'principal' => $principal,
+            'access' => $access,
+            'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED
+        ])]);
+        $shared = $this->carddavBackend->getSharedAddressBooksForUser($principal)[0];
+        $home = '/addressbooks/' . $this->userTestId1;
+        $body = [
+            'id' => 'restored',
+            'openpaas:source' => ['_links' => ['self' => [
+                'href' => '/addressbooks/' . $this->userTestId2 . '/user2book1.json'
+            ]]]
+        ];
+
+        $this->assertEquals(204, $this->makeRequest('DELETE', $home . '/' . $shared['uri'] . '.json')->status);
+        $events = [];
+        $this->carddavBackend->getEventEmitter()->on('sabre:addressBookSubscriptionCreated', function ($event) use (&$events) {
+            $events[] = $event;
+        });
+        $this->assertEquals(201, $this->makeRequest('POST', $home . '.json', $body)->status);
+        $this->assertEquals([['path' => ltrim($home . '/restored', '/')]], $events);
+        $this->assertCount(1, $this->carddavBackend->getSharedAddressBookSourcesForUser($principal));
+        $this->assertCount(1, $this->carddavBackend->getSharedAddressBooksBySource($this->user2Book1Id));
+        $restored = $this->carddavBackend->getSharedAddressBooksForUser($principal)[0];
+        $this->assertEquals($shared['id'], $restored['id']);
+        $this->assertEquals('restored', $restored['uri']);
+        $this->assertEquals($shared['{DAV:}displayname'], $restored['{DAV:}displayname']);
+        $this->assertEquals($shared['{urn:ietf:params:xml:ns:carddav}addressbook-description'], $restored['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+        $this->assertEquals($access, $restored['share_access']);
+        $this->assertCount(0, $this->carddavBackend->getSubscriptionsForUser($principal));
+
+        $acl = $this->server->getPlugin('acl');
+        $path = ltrim($home . '/restored', '/');
+        $this->assertTrue($acl->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false));
+        $this->assertEquals($access !== \Sabre\DAV\Sharing\Plugin::ACCESS_READ, $acl->checkPrivileges($path, '{DAV:}write-content', \Sabre\DAVACL\Plugin::R_PARENT, false));
+        $this->assertEquals($access === \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION, $acl->checkPrivileges($path, '{DAV:}share', \Sabre\DAVACL\Plugin::R_PARENT, false));
+
+        $this->assertEquals(204, $this->makeRequest('DELETE', $home . '/restored.json')->status);
+        $body['id'] = 'cleared';
+        $body['dav:name'] = '';
+        $body['carddav:description'] = '';
+        $this->assertEquals(201, $this->makeRequest('POST', $home . '.json', $body)->status);
+        $shares = $this->carddavBackend->getSharedAddressBooksForUser($principal);
+        $this->assertCount(1, $shares);
+        $this->assertCount(0, $this->carddavBackend->getSubscriptionsForUser($principal));
+        $restored = $shares[0];
+        $this->assertEquals('', $restored['{DAV:}displayname']);
+        $this->assertEquals('', $restored['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+    }
+
+    static function delegationAccessLevels() {
+        return [
+            [\Sabre\DAV\Sharing\Plugin::ACCESS_READ],
+            [\Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE],
+            [\ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION]
+        ];
+    }
+
+    #[DataProvider('subscriptionCollisionStates')]
+    function testSubscriptionRejectsExistingUri($hiddenDelegation) {
+        $principal = 'principals/users/' . $this->userTestId1;
+        $this->carddavBackend->updateInvites($this->user2Book1Id, [new \Sabre\DAV\Xml\Element\Sharee([
+            'href' => 'mailto:' . $this->userTestEmail1,
+            'principal' => $principal,
+            'access' => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+            'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED
+        ])]);
+        $shared = $this->carddavBackend->getSharedAddressBooksForUser($principal)[0];
+        if ($hiddenDelegation) {
+            $this->carddavBackend->deleteSharedAddressBook($shared['id']);
+        }
+        $response = $this->makeRequest('POST', '/addressbooks/' . $this->userTestId1 . '.json', [
+            'id' => 'book1',
+            'openpaas:source' => ['_links' => ['self' => [
+                'href' => '/addressbooks/' . $this->userTestId2 . '/user2book1.json'
+            ]]]
+        ]);
+
+        $this->assertEquals(409, $response->status);
+        $this->assertCount(0, $this->carddavBackend->getSubscriptionsForUser($principal));
+        $shares = $this->carddavBackend->getSharedAddressBooksForUser($principal);
+        $this->assertCount($hiddenDelegation ? 0 : 1, $shares);
+        if (!$hiddenDelegation) {
+            $this->assertEquals($shared, $shares[0]);
+        }
+        $this->assertCount(1, $this->carddavBackend->getInvites($this->user2Book1Id));
+    }
+
+    static function subscriptionCollisionStates() {
+        return [[false], [true]];
+    }
+
+    #[DataProvider('subscriptionPrivileges')]
+    function testDeleteSubscriptionAddressBook($privileges) {
         $this->carddavBackend->createSubscription(
             'principals/users/' . $this->userTestId1,
             'subscription1',
             [
                 '{DAV:}displayname' => 'Subscription 1',
                 '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/' . $this->userTestId2 . '/user2book1', false),
-                '{DAV:}acl' => ['dav:read', 'dav:write', 'dav:unbind']
+                '{DAV:}acl' => $privileges
             ]
         );
 
@@ -102,11 +200,35 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
           '/addressbooks/' . $this->userTestId1 . '/subscription1.json'
         );
 
-        // Should succeed because subscription has dav:unbind privilege (ACCESS_READWRITE)
+        // The subscriber can unsubscribe even when the source is read-only.
         $this->assertEquals($response->status, 204);
 
         $subscriptions = $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId1);
         $this->assertCount(0, $subscriptions);
+    }
+
+    static function subscriptionPrivileges() {
+        return [
+            [['dav:read']],
+            [['dav:read', 'dav:write']]
+        ];
+    }
+
+    function testOtherUserCannotDeleteSubscriptionAddressBook() {
+        $this->carddavBackend->createSubscription(
+            'principals/users/' . $this->userTestId1,
+            'subscription1',
+            [
+                '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/' . $this->userTestId2 . '/user2book1', false),
+                '{DAV:}acl' => ['dav:read']
+            ]
+        );
+        $this->authBackend->setPrincipal('principals/users/' . $this->userTestId3);
+
+        $response = $this->makeRequest('DELETE', '/addressbooks/' . $this->userTestId1 . '/subscription1.json');
+
+        $this->assertEquals(403, $response->status);
+        $this->assertCount(1, $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId1));
     }
 
     function testPropPatchSubscriptionAddressBook() {

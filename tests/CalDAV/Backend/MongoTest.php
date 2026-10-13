@@ -73,7 +73,7 @@ class MongoTest extends AbstractDatabaseTestBase {
         $this->assertSame('preserved', $stored['metadata']['other']);
     }
 
-    function testFindCalendarObjectsBySchedulingRecipientShouldReturnPhysicalLocation() {
+    function testFindCalendarObjectsByUidShouldFilterSchedulingRecipient() {
         $backend = $this->getBackend();
         $alice = 'principals/users/alice';
         $bob = 'principals/users/bob';
@@ -85,13 +85,14 @@ class MongoTest extends AbstractDatabaseTestBase {
         $backend->createCalendarObject($destination, 'other-recipient.ics', $ics);
         $backend->setCalendarObjectSchedulingRecipient($destination[0], 'renamed.ics', $alice);
         $backend->setCalendarObjectSchedulingRecipient($destination[0], 'other-recipient.ics', $bob);
+        $this->assertCount(3, $backend->findCalendarObjectsByUid('event-123', [$personal[0], $destination[0]]));
 
         $this->assertSame([
             ['calendarid' => $destination[0], 'uri' => 'renamed.ics']
-        ], $backend->findCalendarObjectsBySchedulingRecipient('event-123', $alice, [$destination[0]]));
-        $this->assertSame([], $backend->findCalendarObjectsBySchedulingRecipient('event-123', $alice, [$personal[0]]));
-        $this->assertSame([], $backend->findCalendarObjectsBySchedulingRecipient('event-12', $alice, [$destination[0]]));
-        $this->assertSame([], $backend->findCalendarObjectsBySchedulingRecipient('event-123', 'principals/users/unknown', [$destination[0]]));
+        ], $backend->findCalendarObjectsByUid('event-123', [$destination[0]], ['metadata.schedulingRecipientPrincipalUri' => $alice]));
+        $this->assertSame([], $backend->findCalendarObjectsByUid('event-123', [$personal[0]], ['metadata.schedulingRecipientPrincipalUri' => $alice]));
+        $this->assertSame([], $backend->findCalendarObjectsByUid('event-12', [$destination[0]], ['metadata.schedulingRecipientPrincipalUri' => $alice]));
+        $this->assertSame([], $backend->findCalendarObjectsByUid('event-123', [$destination[0]], ['metadata.schedulingRecipientPrincipalUri' => 'principals/users/unknown']));
     }
 
     function testSettingSchedulingRecipientOnMissingObjectShouldFail() {
@@ -110,9 +111,9 @@ class MongoTest extends AbstractDatabaseTestBase {
         $backend->createCalendarObject($attendee, 'moved.ics', $ics);
         $backend->setCalendarObjectSchedulingRecipient($attendee[0], 'moved.ics', 'principals/users/alice');
         $this->assertSame([['calendarid' => $organizer[0], 'uri' => 'original.ics']],
-            $backend->findCalendarObjectsByUidWithoutSchedulingRecipient('reply-event', [$organizer[0], $attendee[0]]));
-        $this->assertSame([], $backend->findCalendarObjectsByUidWithoutSchedulingRecipient('reply-event', [$attendee[0]]));
-        $this->assertSame([], $backend->findCalendarObjectsByUidWithoutSchedulingRecipient('other-event', [$organizer[0]]));
+            $backend->findCalendarObjectsByUid('reply-event', [$organizer[0], $attendee[0]], ['metadata.schedulingRecipientPrincipalUri' => null]));
+        $this->assertSame([], $backend->findCalendarObjectsByUid('reply-event', [$attendee[0]], ['metadata.schedulingRecipientPrincipalUri' => null]));
+        $this->assertSame([], $backend->findCalendarObjectsByUid('other-event', [$organizer[0]], ['metadata.schedulingRecipientPrincipalUri' => null]));
     }
 
     function testConstruct() {

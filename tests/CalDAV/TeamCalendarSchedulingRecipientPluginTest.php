@@ -6,26 +6,41 @@ use ESN\DAV\Sharing\Plugin as SharingPlugin;
 use Sabre\DAV\Server;
 
 class TeamCalendarSchedulingRecipientPluginTest extends \PHPUnit\Framework\TestCase {
-    function testLookupShouldRestrictQueryToWritableTeamCalendars() {
-        $calendars = [];
-        foreach ([['personal', 'principals/users/bob', SharingPlugin::ACCESS_READWRITE],
-            ['read', 'principals/team-calendars/team', SharingPlugin::ACCESS_READ],
-            ['write', 'principals/team-calendars/team', SharingPlugin::ACCESS_READWRITE],
-            ['admin', 'principals/team-calendars/other', SharingPlugin::ACCESS_ADMINISTRATION]] as [$id, $owner, $access]) {
-            $calendar = $this->createStub(SharedCalendar::class);
-            $calendar->method('getName')->willReturn('mirror-' . $id);
-            $calendar->method('getCalendarId')->willReturn($id);
-            $calendar->method('getOwner')->willReturn($owner);
-            $calendar->method('getShareAccess')->willReturn($access);
-            $calendars[] = $calendar;
+    function testLookupShouldCheckTeamWriteAccessOnlyForUidMatches() {
+        foreach (['principals/users/alice', null] as $recipient) {
+            $calendars = [];
+            foreach ([['personal', 'principals/users/bob', SharingPlugin::ACCESS_READWRITE],
+                ['read', 'principals/team-calendars/team', SharingPlugin::ACCESS_READ],
+                ['unmatched', 'principals/team-calendars/team', SharingPlugin::ACCESS_READWRITE],
+                ['admin', 'principals/team-calendars/other', SharingPlugin::ACCESS_ADMINISTRATION]] as [$id, $owner, $access]) {
+                $calendar = $this->createMock(SharedCalendar::class);
+                $calendar->method('getName')->willReturn('mirror-' . $id);
+                $calendar->method('getCalendarId')->willReturn($id);
+                $calendar->expects($id === 'unmatched' ? $this->never() : $this->once())
+                    ->method('getOwner')->willReturn($owner);
+                $calendar->method('getShareAccess')->willReturn($access);
+                $calendars[] = $calendar;
+            }
+            $backend = $this->createMock(Backend\Mongo::class);
+            $backend->expects($this->once())->method('findCalendarObjectsByUid')
+                ->with('event', ['personal', 'read', 'unmatched', 'admin'],
+                    ['metadata.schedulingRecipientPrincipalUri' => $recipient])
+                ->willReturn([
+                    ['calendarid' => 'personal', 'uri' => 'personal.ics'],
+                    ['calendarid' => 'read', 'uri' => 'read.ics'],
+                    ['calendarid' => 'admin', 'uri' => 'renamed.ics']
+                ]);
+            $server = new Server([new \Sabre\DAV\SimpleCollection('alice', $calendars)]);
+            $plugin = new TeamCalendarSchedulingRecipientPlugin($backend);
+            $server->addPlugin($plugin);
+            if ($recipient === null) {
+                $this->assertSame(['alice/mirror-admin/renamed.ics'],
+                    $plugin->findCalendarObjectPathsWithoutSchedulingRecipient('alice', 'event'));
+            } else {
+                $this->assertSame('alice/mirror-admin/renamed.ics',
+                    $plugin->findSchedulingRecipientObjectPath('alice', 'event', $recipient));
+            }
         }
-        $backend = $this->createMock(Backend\Mongo::class);
-        $backend->expects($this->once())->method('findCalendarObjectsBySchedulingRecipient')
-            ->with('event', 'principals/users/alice', ['write', 'admin'])->willReturn([]);
-        $server = new Server([new \Sabre\DAV\SimpleCollection('alice', $calendars)]);
-        $plugin = new TeamCalendarSchedulingRecipientPlugin($backend);
-        $server->addPlugin($plugin);
-        $this->assertNull($plugin->findSchedulingRecipientObjectPath('alice', 'event', 'principals/users/alice'));
     }
 
     function testMoveShouldSaveCalendarOwnerAsSchedulingRecipient() {

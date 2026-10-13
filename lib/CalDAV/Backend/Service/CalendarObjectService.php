@@ -159,14 +159,14 @@ class CalendarObjectService {
         }
     }
 
-    public function findByUid(string $uid, array $calendarIds): array {
+    public function findByUid(string $uid, array $calendarIds, array $filters = []): array {
         return iterator_to_array(
             $this->calendarObjectDAO->findWithQuery(
                 [
                     'uid' => $uid,
                     'calendarid' => ['$in' => $calendarIds],
                     'componenttype' => 'VEVENT'
-                ],
+                ] + $filters,
                 [
                     '_id' => 0,
                     'calendarid' => 1,
@@ -175,22 +175,6 @@ class CalendarObjectService {
             ),
             false
         );
-    }
-
-    public function findBySchedulingRecipient(string $uid, string $principalUri, array $calendarIds): array {
-        return iterator_to_array($this->calendarObjectDAO->findWithQuery([
-            'uid' => $uid,
-            'metadata.schedulingRecipientPrincipalUri' => $principalUri,
-            'calendarid' => ['$in' => $calendarIds]
-        ], ['_id' => 0, 'calendarid' => 1, 'uri' => 1]), false);
-    }
-
-    public function findByUidWithoutSchedulingRecipient(string $uid, array $calendarIds): array {
-        return iterator_to_array($this->calendarObjectDAO->findWithQuery([
-            'uid' => $uid,
-            'calendarid' => ['$in' => $calendarIds],
-            'metadata.schedulingRecipientPrincipalUri' => null
-        ], ['_id' => 0, 'calendarid' => 1, 'uri' => 1]), false);
     }
 
     /**

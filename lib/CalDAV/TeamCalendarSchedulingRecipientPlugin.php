@@ -35,34 +35,40 @@ class TeamCalendarSchedulingRecipientPlugin extends ServerPlugin {
     }
 
     public function findSchedulingRecipientObjectPath(string $homePath, string $uid, string $principalUri): ?string {
-        $calendarPaths = $this->writableTeamCalendarPaths($homePath);
-        if (!$calendarPaths) return null;
-        $objects = $this->calendarBackend->findCalendarObjectsBySchedulingRecipient($uid, $principalUri, array_keys($calendarPaths));
-        if (!$objects) return null;
-        if (count($objects) !== 1) {
+        $paths = $this->findTeamCalendarObjectPathsByUid($homePath, $uid, $principalUri);
+        if (!$paths) return null;
+        if (count($paths) !== 1) {
             throw new \Sabre\DAV\Exception('Multiple calendar objects match scheduling recipient');
         }
-        $object = $objects[0];
-        return $calendarPaths[$object['calendarid']] . '/' . $object['uri'];
+        return $paths[0];
     }
 
     public function findCalendarObjectPathsWithoutSchedulingRecipient(string $homePath, string $uid): array {
-        $calendarPaths = $this->writableTeamCalendarPaths($homePath);
-        if (!$calendarPaths) return [];
+        return $this->findTeamCalendarObjectPathsByUid($homePath, $uid, null);
+    }
+
+    private function findTeamCalendarObjectPathsByUid(string $homePath, string $uid, ?string $recipient): array {
+        $calendars = $this->calendarInstancesById($homePath);
+        if (!$calendars) return [];
+
+        // Reuse the /events UID query before loading owners/invites of unrelated calendars.
         $paths = [];
-        foreach ($this->calendarBackend->findCalendarObjectsByUidWithoutSchedulingRecipient($uid, array_keys($calendarPaths)) as $object) {
-            $paths[] = $calendarPaths[$object['calendarid']] . '/' . $object['uri'];
+        foreach ($this->calendarBackend->findCalendarObjectsByUid($uid, array_keys($calendars),
+            ['metadata.schedulingRecipientPrincipalUri' => $recipient]) as $object) {
+            $calendar = $calendars[$object['calendarid']];
+            if ($this->isWritableTeamCalendar($calendar)) {
+                $paths[] = rtrim($homePath, '/') . '/' . $calendar->getName() . '/' . $object['uri'];
+            }
         }
         return $paths;
     }
 
-    private function writableTeamCalendarPaths(string $homePath): array {
-        $calendarPaths = [];
+    private function calendarInstancesById(string $homePath): array {
+        $calendars = [];
         foreach ($this->server->tree->getNodeForPath($homePath)->getChildren() as $calendar) {
-            if (!$this->isWritableTeamCalendar($calendar)) continue;
-            $calendarPaths[$calendar->getCalendarId()] = rtrim($homePath, '/') . '/' . $calendar->getName();
+            if ($calendar instanceof SharedCalendar) $calendars[$calendar->getCalendarId()] = $calendar;
         }
-        return $calendarPaths;
+        return $calendars;
     }
 
     private function isWritableTeamCalendar($calendar): bool {

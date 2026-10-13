@@ -25,8 +25,8 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     function testDeliveryLookupShouldFindMovedCopyInWritableTeamCalendar() {
         foreach (['REQUEST', 'CANCEL'] as $method) {
             $backend = $this->createMock(\ESN\CalDAV\Backend\Mongo::class);
-            $backend->expects($this->once())->method('findCalendarObjectsBySchedulingRecipient')
-                ->with('event-team', 'principals/users/alice', ['physical-id'])
+            $backend->expects($this->once())->method('findCalendarObjectsByUid')
+                ->with('event-team', ['physical-id'], ['metadata.schedulingRecipientPrincipalUri' => 'principals/users/alice'])
                 ->willReturn([['calendarid' => 'physical-id', 'uri' => 'renamed.ics']]);
             $object = $this->createStub(\Sabre\CalDAV\ICalendarObject::class);
             $object->method('get')->willReturn($this->newCalendarObject('event-team', 'bob@example.org'));
@@ -57,7 +57,7 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
         foreach (['REQUEST', 'CANCEL', 'REPLY'] as $method) {
             $backend = $this->createMock(\ESN\CalDAV\Backend\Mongo::class);
             $backend->expects($this->never())
-                ->method('findCalendarObjectsBySchedulingRecipient')->willReturn([]);
+                ->method('findCalendarObjectsByUid')->willReturn([]);
             $home = $this->createMock(\ESN\CalDAV\CalendarHome::class);
             $home->method('getName')->willReturn('alice');
             $home->expects($this->once())->method('getCalendarObjectByUID')->with('event-team')->willReturn(null);
@@ -80,8 +80,7 @@ class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     function testDeliveryLookupShouldPreferPersonalCopyWithoutMetadataQuery() {
         foreach (['REQUEST', 'CANCEL', 'REPLY'] as $method) {
             $backend = $this->createMock(\ESN\CalDAV\Backend\Mongo::class);
-            $backend->expects($this->never())->method('findCalendarObjectsBySchedulingRecipient');
-            $backend->expects($this->never())->method('findCalendarObjectsByUidWithoutSchedulingRecipient');
+            $backend->expects($this->never())->method('findCalendarObjectsByUid');
             $object = new SimpleFile('personal.ics', $this->newCalendarObject('event-team', 'bob@example.org'));
             $home = $this->createMock(\ESN\CalDAV\CalendarHome::class);
             $home->method('getName')->willReturn('alice');

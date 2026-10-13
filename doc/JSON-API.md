@@ -182,6 +182,32 @@ A UID query object.
 
 A dav:calendar resource, with the dav:item expanded.
 
+## POST /calendars/{userId}/events
+
+Query events by exact, case-sensitive UID across selected calendar sources.
+
+```http
+POST /calendars/{userId}/events?teamCalendars=true
+Content-Type: application/json
+
+{"uid":"xyz"}
+```
+
+Source selectors accept `true` or `false` (default: `false`):
+
+- `ownCalendar`: the home user's calendars.
+- `teamCalendars`: team calendars.
+- `publicSubscriptions`: subscribed public calendars.
+- `sharedCalendars`: calendars delegated by other users.
+- `resourceCalendars`: resource calendars.
+
+Only sources in the requested home that the caller can read are searched. Event privacy rules apply.
+
+- **200:** `_embedded["dav:item"]` contains events with their source hrefs and full event data;
+  empty when no match or no sources are selected.
+- **400:** invalid selectors or body (only a non-empty string `uid` is supported).
+- **415:** Content-Type is not `application/json`.
+
 ## POST /calendars/{calendarHomeId}/{calendarId}.json
 
 Define sharees (add or remove) on a particular calendar.

@@ -51,6 +51,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
         $server->on('beforeUnbind', [$this, 'beforeUnbind']);
         $server->on('method:REPORT', [$this, 'httpReport'], 80);
+        $server->on('method:POST', [$this, 'calendarHomeEvents'], 75);
         $server->on('method:POST', [$this, 'post'], 80);
         $server->on('method:GET', [$this, 'get'], 80);
         $server->on('method:PROPPATCH', [$this, 'proppatch'], 80);
@@ -191,6 +192,12 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         $this->currentUser = $newUser;
+
+        // POST /events queries sources; keep GET/REPORT's legacy default-calendar alias.
+        if ($request->getMethod() === 'POST'
+            && preg_match('#^calendars/[^/]+/events$#', $request->getPath())) {
+            return true;
+        }
 
         $calendarHandler = $this->getCalendarHandler();
         if ($calendarHandler->isOldDefaultCalendarUriNotFound($request->getPath())) {
@@ -335,6 +342,84 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             return $this->getCalendarObjectHandler()->expandEvent($path, $node, $jsonData);
         }
         return [400, null];
+    }
+
+    private function isValidCalendarEventFilter($filters) {
+        if (!is_object($filters)) {
+            return false;
+        }
+        if (array_keys(get_object_vars($filters)) !== ['uid']) {
+            return false;
+        }
+        return is_string($filters->uid) && trim($filters->uid) !== '';
+    }
+
+    private function parseCalendarSourceSelectors(array $query): array {
+        $sources = [];
+        foreach ([
+            'ownCalendar',
+            'teamCalendars',
+            'publicSubscriptions',
+            'sharedCalendars',
+            'resourceCalendars'
+        ] as $selector) {
+            if (isset($query[$selector]) && !in_array($query[$selector], ['true', 'false'], true)) {
+                throw new DAV\Exception\BadRequest('Source selectors must be true or false');
+            }
+            $sources[$selector] = ($query[$selector] ?? 'false') === 'true';
+        }
+
+        return $sources;
+    }
+
+    function calendarHomeEvents($request, $response) {
+        if (!preg_match('#^calendars/[^/]+/events$#', $request->getPath())) {
+            return true;
+        }
+
+        $contentType = strtolower(trim(
+            explode(';', $request->getHeader('Content-Type') ?? '')[0]
+        ));
+        if ($contentType !== 'application/json') {
+            throw new DAV\Exception\UnsupportedMediaType('Expected application/json');
+        }
+
+        $filters = json_decode($request->getBodyAsString());
+        if (!$this->isValidCalendarEventFilter($filters)) {
+            throw new DAV\Exception\BadRequest('Expected a non-empty uid filter');
+        }
+
+        $sources = $this->parseCalendarSourceSelectors($request->getQueryParameters());
+
+        $homePath = substr($request->getPath(), 0, -strlen('/events'));
+        $home = $this->server->tree->getNodeForPath($homePath);
+        if (!$home instanceof \ESN\CalDAV\CalendarHome) {
+            throw new DAV\Exception\NotFound('Calendar home not found');
+        }
+
+        $this->assertCanReadReportPath($homePath);
+        $calendars = $this->getCalendarHandler()->listAllCalendarsWithReadRight(
+            $homePath,
+            $home,
+            false,
+            [
+                'includePersonal' => true,
+                'includeShared' => true,
+                'includeSharedPublicSubscription' => true,
+                'sharedDelegationStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED
+            ],
+            false
+        );
+
+        list($code, $body) = $this->getCalendarObjectHandler()->queryCalendarSources(
+            $homePath,
+            $home,
+            $calendars,
+            $sources,
+            $filters
+        );
+
+        return $this->send($code, $body);
     }
 
     function post($request, $response) {

@@ -950,18 +950,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function deleteAddressBooksSharedFrom($addressBookId, $options = null) {
-        $addressBooks = [];
-        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
-        $query = $this->getSharedAddressBookDeletionQuery($addressBookId, $options);
-
-        $cursor = $collection->find($query);
-        foreach($cursor as $doc) {
-            $addressBooks[] = $doc;
-        }
-
-        $collection->deleteMany($query);
-
-        foreach($addressBooks as $addressBook) {
+        foreach ($this->deleteSharedAddressBookRecords($addressBookId, $options) as $addressBook) {
             // Unsubscribing already notified clients; the old path may now belong to another book.
             if ($addressBook['hidden'] ?? false) {
                 continue;
@@ -976,18 +965,22 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         }
     }
 
-    private function getSharedAddressBookDeletionQuery($addressBookId, $options): array {
+    private function deleteSharedAddressBookRecords($addressBookId, $options): array {
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
         $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
-        if (!isset($options->sharees)) {
-            return $query;
+
+        if (isset($options->sharees)) {
+            $shareeHrefs = [];
+            foreach ($options->sharees as $sharee) {
+                $shareeHrefs[] = $sharee->href;
+            }
+            $query['share_href'] = [ '$in' => $shareeHrefs ];
         }
 
-        $shareeHrefs = [];
-        foreach ($options->sharees as $sharee) {
-            $shareeHrefs[] = $sharee->href;
-        }
-        $query['share_href'] = [ '$in' => $shareeHrefs ];
-        return $query;
+        // Read the records before deleting them so callers can notify clients afterwards.
+        $addressBooks = $collection->find($query)->toArray();
+        $collection->deleteMany($query);
+        return $addressBooks;
     }
 
     /**

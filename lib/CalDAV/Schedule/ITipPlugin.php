@@ -181,29 +181,27 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
     private function counterProposesPastStart(VObject\Component\VCalendar $vcalendar): bool
     {
         $events = $vcalendar->select('VEVENT');
-        foreach ($events as $event) {
-            if (isset($event->RRULE)) {
-                return false;
-            }
+        if (array_filter($events, fn($event) => isset($event->RRULE))) {
+            return false;
         }
 
         $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-        foreach ($events as $event) {
-            if (!isset($event->DTSTART)) {
-                continue;
-            }
+        return (bool) array_filter($events, fn($event) => $this->startsBefore($event, $now));
+    }
 
-            $start = $event->DTSTART->getDateTime();
-            // An all-day proposal for today is still upcoming
-            $isPast = $event->DTSTART->hasTime()
-                ? $start < $now
-                : $start->format('Ymd') < $now->format('Ymd');
-            if ($isPast) {
-                return true;
-            }
+    private function startsBefore(VObject\Component $event, \DateTimeImmutable $now): bool
+    {
+        if (!isset($event->DTSTART)) {
+            return false;
         }
 
-        return false;
+        $start = $event->DTSTART->getDateTime();
+        if ($event->DTSTART->hasTime()) {
+            return $start < $now;
+        }
+
+        // An all-day proposal for today is still upcoming
+        return $start->format('Ymd') < $now->format('Ymd');
     }
 
     private function authenticatedCanActAsSender(Message $message, bool $allowDelegation): bool

@@ -79,6 +79,7 @@ of `config.json`.
 | `SABRE_ENFORCE_RFC_6638` | `true` | Reject attendee updates to organizer-controlled scheduling fields |
 | `SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING` | `true` | Recipient-aware scheduling for `ACTION:EMAIL` `VALARM` components |
 | `TW_CAL_REPLY_PROPAGATION_THRESHOLD` | `200` | Attendee count above which reply propagation is skipped |
+| `SABRE_MAX_RECURRENCES` | `3500` | Maximum number of occurrences generated when expanding a recurring event; See [recurrence expansion](#recurrence-expansion) |
 | `LOG_TRACE` | `false` | Add exception stack traces to the logs |
 
 Both spellings are equivalent — as an ENV variable:
@@ -166,6 +167,16 @@ If the event attendee count is greater than or equal to `TW_CAL_REPLY_PROPAGATIO
 - Set to `false`, `0`, `off`, or `no` to disable.
 
 When enabled, Sabre sends each attendee only the email alarms that explicitly list them as an alarm recipient, preserves attendee-local alarms during organizer updates, See [Alarm Scheduling Specification](ALARM-SCHEDULING.md) for the complete behavior.
+
+## Recurrence expansion
+
+`SABRE_MAX_RECURRENCES` caps the number of occurrences generated when a recurring event is expanded: calendar queries with a time range, `expand`, free/busy, iTIP processing...
+
+Expansion always starts from the first occurrence (`DTSTART`), whatever the requested time range. A long-running series exceeding the limit before reaching that range (e.g. a daily event started more than ~10 years ago with the default value) is stored fine but returns no occurrence for it.
+
+- Default: `3500`. Unset, empty, `0` or non-numeric values are treated as `3500`.
+- Set to a negative value to disable the limit. Expansion then remains bounded by year 2100.
+- This limit protects the server against events crafted to recur many times: raise it with care.
 
 ## Nginx rate limiting
 

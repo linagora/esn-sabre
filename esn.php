@@ -24,6 +24,8 @@ define('SABRE_ENV', \ESN\Utils\Env::getString('SABRE_ENV', SABRE_ENV_PRODUCTION)
 // settings
 date_default_timezone_set('UTC');
 
+\ESN\CalDAV\RecurrenceExpansionLimit::apply();
+
 define('PRINCIPALS_COLLECTION', 'principals');
 define('PRINCIPALS_USERS', 'principals/users');
 define('PRINCIPALS_TECHNICAL_USER', 'principals/technicalUser');

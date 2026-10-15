@@ -237,6 +237,84 @@ class CalendarQueryReportTest extends \ESN\DAV\ServerMock {
         $this->assertEquals('Paris', (string) $vObject->VEVENT->LOCATION);
     }
 
+    function testTimeRangeFilterReportOmitsLongRunningSeriesBeyondTheDefaultRecurrenceLimit() {
+        $this->withRecurrenceLimit(null, function () {
+            $items = $this->queryJanuary2026WithLongRunningDailySeries();
+
+            $this->assertArrayNotHasKey(self::LONG_RUNNING_DAILY_HREF, $items);
+        });
+    }
+
+    function testTimeRangeFilterReportReturnsLongRunningSeriesWithARaisedRecurrenceLimit() {
+        $this->withRecurrenceLimit(10000, function () {
+            $items = $this->queryJanuary2026WithLongRunningDailySeries();
+
+            $this->assertArrayHasKey(self::LONG_RUNNING_DAILY_HREF, $items);
+        });
+    }
+
+    function testTimeRangeFilterReportReturnsLongRunningSeriesWithADisabledRecurrenceLimit() {
+        $this->withRecurrenceLimit(-1, function () {
+            $items = $this->queryJanuary2026WithLongRunningDailySeries();
+
+            $this->assertArrayHasKey(self::LONG_RUNNING_DAILY_HREF, $items);
+        });
+    }
+
+    const LONG_RUNNING_DAILY_HREF = '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/long-running-daily.ics';
+
+    private function withRecurrenceLimit($configuredLimit, callable $assertions) {
+        $originalLimit = \Sabre\VObject\Settings::$maxRecurrences;
+        \ESN\Utils\Env::init($configuredLimit === null ? [] : [RecurrenceExpansionLimit::SETTING => $configuredLimit]);
+        try {
+            RecurrenceExpansionLimit::apply();
+            $assertions();
+        } finally {
+            \Sabre\VObject\Settings::$maxRecurrences = $originalLimit;
+            \ESN\Utils\Env::reset();
+        }
+    }
+
+    /**
+     * A daily series started in 2010 needs ~5800 occurrences to reach 2026.
+     */
+    private function queryJanuary2026WithLongRunningDailySeries() {
+        $calendarData = implode("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:long-running-daily',
+            'DTSTART:20100101T090000Z',
+            'DTEND:20100101T100000Z',
+            'RRULE:FREQ=DAILY',
+            'SUMMARY:Daily stand-up',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]) . "\r\n";
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'long-running-daily.ics', $calendarData);
+
+        $body = implode("\n", [
+            '<?xml version="1.0" encoding="utf-8" ?>',
+            '<c:calendar-query xmlns:d="DAV:" xmlns:c="' . self::CALDAV_NS . '">',
+            '  <d:prop><d:getetag/></d:prop>',
+            '  <c:filter>',
+            '    <c:comp-filter name="VCALENDAR">',
+            '      <c:comp-filter name="VEVENT">',
+            '        <c:time-range start="20260115T000000Z" end="20260116T000000Z"/>',
+            '      </c:comp-filter>',
+            '    </c:comp-filter>',
+            '  </c:filter>',
+            '</c:calendar-query>'
+        ]);
+
+        $response = $this->reportRequest('/calendars/54b64eadf6d7d8e41d263e0f/calendar1', $body);
+
+        $this->assertEquals(207, $response->status);
+
+        return $this->parseMultiStatus($response->getBodyAsString());
+    }
+
     function testDepthZeroOnCalendarIsRejected() {
         $response = $this->reportRequest(
             '/calendars/54b64eadf6d7d8e41d263e0f/calendar1',

@@ -79,6 +79,9 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
             if (!$this->authenticatedCanActAsSender($message, true)) {
                 return $this->send(403, null);
             }
+            if ($this->counterProposesPastStart($message->message)) {
+                return $this->send(400, null);
+            }
         } elseif (!$this->recipientMatchesCurrentUser($message)) {
             return $this->send(403, null);
         }
@@ -170,6 +173,35 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         $emailOrAddress = stripos($emailOrAddress, 'mailto:') === 0 ? substr($emailOrAddress, 7) : $emailOrAddress;
 
         return strtolower($calendarAddress) === strtolower($emailOrAddress);
+    }
+
+    // A proposal for a slot already past can never be accepted by the organizer.
+    // A counter on a whole series (RRULE) keeps the start of the series, which is legitimately
+    // past for an ongoing series, so such a counter is not checked.
+    private function counterProposesPastStart(VObject\Component\VCalendar $vcalendar): bool
+    {
+        $events = $vcalendar->select('VEVENT');
+        if (array_filter($events, fn($event) => isset($event->RRULE))) {
+            return false;
+        }
+
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        return (bool) array_filter($events, fn($event) => $this->startsBefore($event, $now));
+    }
+
+    private function startsBefore(VObject\Component $event, \DateTimeImmutable $now): bool
+    {
+        if (!isset($event->DTSTART)) {
+            return false;
+        }
+
+        $start = $event->DTSTART->getDateTime();
+        if ($event->DTSTART->hasTime()) {
+            return $start < $now;
+        }
+
+        // An all-day proposal for today is still upcoming
+        return $start->format('Ymd') < $now->format('Ymd');
     }
 
     private function authenticatedCanActAsSender(Message $message, bool $allowDelegation): bool

@@ -1510,6 +1510,16 @@ END:VCALENDAR
         $this->assertCount(0, $calendars);
     }
 
+    function testDeleteCalendarHomeOfAnotherUserIsForbidden() {
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0e');
+
+        $response = $this->makeRequest('DELETE', '/calendars/54b64eadf6d7d8e41d263e0f.json', null);
+
+        $this->assertEquals(403, $response->status);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
+    }
+
     function testPatchSubscription() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',

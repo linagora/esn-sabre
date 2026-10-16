@@ -147,10 +147,14 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                     '$set' => $updates
                 ],
                 [
-                    'projection' => [ 'principaluri' => 1, 'uri' => 1 ],
-                    'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER
+                    'projection' => [ 'principaluri' => 1, 'uri' => 1, 'displayname' => 1 ],
+                    'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_BEFORE
                 ]
             );
+
+            if (array_key_exists('displayname', $updates)) {
+                $this->updateSharedDisplayNamesStillMatchingSource($addressBookId, $updatedAddressBook['displayname'] ?? null, $updates['displayname']);
+            }
 
             $this->eventEmitter->emit('sabre:addressBookUpdated', [
                 [
@@ -161,6 +165,27 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
             return true;
         });
+    }
+
+    private function updateSharedDisplayNamesStillMatchingSource($addressBookId, $oldDisplayName, $newDisplayName) {
+        if ($oldDisplayName === $newDisplayName) {
+            return;
+        }
+
+        try {
+            // Delegated copies whose name differs from the source's previous name were customized by the delegate
+            $this->db->selectCollection($this->sharedAddressBooksTableName)->updateMany(
+                [
+                    'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
+                    'displayname' => $oldDisplayName
+                ],
+                [
+                    '$set' => [ 'displayname' => $newDisplayName ]
+                ]
+            );
+        } catch (\Throwable $e) {
+            error_log('Failed to propagate address book displayname to shared address books for address book ' . $addressBookId . ': ' . $e->getMessage());
+        }
     }
 
     function createAddressBook($principalUri, $uri, array $properties) {

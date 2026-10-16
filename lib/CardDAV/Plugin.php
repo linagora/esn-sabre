@@ -585,8 +585,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             return $this->getCursorPaginatedContacts($nodePath, $node, $queryParams);
         }
 
-        $offset = isset($queryParams['offset']) ? $queryParams['offset'] : 0;
-        $limit = isset($queryParams['limit']) ? $queryParams['limit'] : 0;
+        $offset = $this->nonNegativeIntegerParameter($queryParams, 'offset');
+        $limit = $this->nonNegativeIntegerParameter($queryParams, 'limit');
         $search = isset($queryParams['search']) ? $queryParams['search'] : null;
         $sort = isset($queryParams['sort']) ? $queryParams['sort'] : null;
         $modifiedBefore = isset($queryParams['modifiedBefore']) ? (int)$queryParams['modifiedBefore'] : 0;
@@ -637,6 +637,18 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return [200, $result];
+    }
+
+    /**
+     * Validates an optional non-negative integer query parameter of an offset paginated contact listing, 0 when absent.
+     */
+    private function nonNegativeIntegerParameter(array $queryParams, string $name): int {
+        $value = Utils::getArrayValue($queryParams, $name, '0');
+        if (!is_string($value) || !ctype_digit($value)) {
+            throw new BadRequest($name . ' must be a non-negative integer');
+        }
+
+        return (int)$value;
     }
 
     /**

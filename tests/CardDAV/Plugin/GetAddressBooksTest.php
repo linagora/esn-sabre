@@ -78,6 +78,32 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertEquals($addressBooks[2]->numberOfContacts, 0);
     }
 
+    function testGetPersonalAddressBooksOfAnotherUserOmitsPrivateBooks() {
+        $response = $this->makeRequest(
+            'GET',
+            '/addressbooks/' . $this->userTestId2 . '.json?personal=true&contactsCount=true'
+        );
+
+        $this->assertEquals(200, $response->status);
+        $body = json_decode($response->getBodyAsString(), true);
+        $this->assertSame([], $body['_embedded']['dav:addressbook']);
+    }
+
+    function testGetPersonalAddressBooksOfAnotherUserIncludesReadableBooks() {
+        $this->carddavBackend->setPublishStatus(['id' => $this->user2Book1Id], '{DAV:}read');
+
+        $response = $this->makeRequest(
+            'GET',
+            '/addressbooks/' . $this->userTestId2 . '.json?personal=true&contactsCount=true'
+        );
+
+        $this->assertEquals(200, $response->status);
+        $addressBooks = json_decode($response->getBodyAsString(), true)['_embedded']['dav:addressbook'];
+        $this->assertCount(1, $addressBooks);
+        $this->assertEquals('/addressbooks/' . $this->userTestId2 . '/user2book1.json', $addressBooks[0]['_links']['self']['href']);
+        $this->assertEquals(4, $addressBooks[0]['numberOfContacts']);
+    }
+
     function testGetPuclicAddressBooks() {
         $publicBookId = $this->carddavBackend->createAddressBook(
             'principals/users/' . $this->userTestId1,
@@ -171,6 +197,8 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
     }
 
     function testGetSubscribedAddressBooks() {
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant($this->userTestId2, SERVER_MOCK_DOMAIN_ID));
+
         $this->carddavBackend->createSubscription(
             'principals/users/'. $this->userTestId2,
             'user2Subscription1',
@@ -210,6 +238,8 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
     }
 
     function testGetSubscribedAddressBooksReturnNumberOfContactsAsNull() {
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant($this->userTestId2, SERVER_MOCK_DOMAIN_ID));
+
         $this->carddavBackend->createSubscription(
             'principals/users/'. $this->userTestId2,
             'user2Subscription1',

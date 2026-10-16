@@ -301,7 +301,7 @@ be used in the calendar url.
 
 ## GET /addressbooks/{addressbookHomeId}.json
 
-List all address books in the addressbookHome.
+List address books in the addressbookHome that the current principal can read.
 
 **Query Parameters:**
 

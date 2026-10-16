@@ -316,12 +316,21 @@ class Plugin extends \ESN\JSON\BasePlugin {
     private function getAddressBooks($nodePath, $node, $options) {
         $addressBooks = $node->getChildren();
         $baseUri = $this->server->getBaseUri();
+        $aclPlugin = $this->server->getPlugin('acl');
 
         $items = [];
         foreach ($addressBooks as $addressBook) {
-            if ($this->shouldIncludeAddressBook($addressBook, $options)) {
-                $items[] = $this->getAddressBookDetail($nodePath . '/' . $addressBook->getName(), $addressBook, $options);
+            if (!$this->shouldIncludeAddressBook($addressBook, $options)) {
+                continue;
             }
+
+            $addressBookPath = $nodePath . '/' . $addressBook->getName();
+            // Reading a home does not grant access to the properties or contact counts of its children.
+            if (!$aclPlugin->checkPrivileges($addressBookPath, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false)) {
+                continue;
+            }
+
+            $items[] = $this->getAddressBookDetail($addressBookPath, $addressBook, $options);
         }
 
         $requestPath = $baseUri . $nodePath . '.json';

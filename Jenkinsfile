@@ -31,6 +31,12 @@ pipeline {
           steps {
               sh 'bash run_test.sh --skip-php --skip-nginx --skip-build'
           }
+          post {
+              always {
+                  archiveArtifacts artifacts: 'tests/report/java/test-resources.txt,tests/report/java/*/target/test-run.log,tests/report/java/*/target/surefire-reports/*', allowEmptyArchive: true
+                  junit testResults: 'tests/report/java/*/target/surefire-reports/*.xml', allowEmptyResults: true
+              }
+          }
       }
       stage('Deliver Docker images for PR') {
         when {

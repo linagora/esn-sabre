@@ -509,7 +509,7 @@ END:VCALENDAR'
     protected function request($request) {
 
         if (is_array($request)) {
-            $request = HTTP\Request::createFromServerArray($request);
+            $request = \Sabre\HTTP\Sapi::createFromServerArray($request);
         }
         $this->server->httpRequest = $request;
         $this->server->httpResponse = new \Sabre\HTTP\ResponseMock();

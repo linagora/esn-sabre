@@ -2,6 +2,7 @@
 namespace ESN\JSON;
 
 use \Sabre\VObject;
+use \Sabre\DAV\Exception\BadRequest;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use DateTimeZone;
@@ -14,6 +15,12 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
      * This is the official CalDAV namespace
      */
     const NS_CALDAV = 'urn:ietf:params:xml:ns:caldav';
+
+    /**
+     * The widest window a bulk free/busy request may cover, so that a caller
+     * cannot dump every busy slot of a calendar in one go.
+     */
+    const MAX_RANGE_IN_DAYS = 366;
 
     function initialize(Server $server) {
         parent::initialize($server);
@@ -66,7 +73,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
 
         if ($path == 'calendars/freebusy') {
             list($code, $body) = $this->getBulkFreeBusy(
-                json_decode($request->getBodyAsString())
+                $this->parseBulkFreeBusyRequest($request->getBodyAsString())
             );
         } else {
             return true;
@@ -75,8 +82,72 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
         return $this->send($code, $body);
     }
 
+    /**
+     * Decodes and validates the body of a bulk free/busy request.
+     *
+     * @throws BadRequest when the body is not a valid bulk free/busy request
+     * @return object the request, its start and end dates being validated
+     */
+    private function parseBulkFreeBusyRequest($rawBody) {
+        $params = json_decode($rawBody);
+        if (!is_object($params)) {
+            throw new BadRequest('The body must be a JSON object');
+        }
+
+        $this->assertListOfStrings($params, 'users', true);
+        $this->assertListOfStrings($params, 'uids', false);
+        $this->assertValidRange(
+            $this->parseDate($params, 'start'),
+            $this->parseDate($params, 'end')
+        );
+
+        return $params;
+    }
+
+    private function assertListOfStrings($params, $name, $required) {
+        if (!isset($params->$name)) {
+            if ($required) {
+                throw new BadRequest($name . ' is required');
+            }
+
+            return;
+        }
+
+        if (!is_array($params->$name) || count(array_filter($params->$name, 'is_string')) !== count($params->$name)) {
+            throw new BadRequest($name . ' must be an array of strings');
+        }
+    }
+
+    /**
+     * Parses an iCalendar DATE-TIME (e.g. 20261019T000000Z). Unlike the
+     * DateTime constructor, this rejects relative formats such as 'yesterday'.
+     *
+     * @throws BadRequest when the date is missing or malformed
+     * @return \DateTimeImmutable
+     */
+    private function parseDate($params, $name) {
+        if (!isset($params->$name) || !is_string($params->$name)) {
+            throw new BadRequest($name . ' must be an iCalendar date-time string');
+        }
+
+        try {
+            return VObject\DateTimeParser::parseDateTime($params->$name);
+        } catch (VObject\InvalidDataException $e) {
+            throw new BadRequest($name . ' must be an iCalendar date-time string');
+        }
+    }
+
+    private function assertValidRange($start, $end) {
+        if ($start >= $end) {
+            throw new BadRequest('start must be before end');
+        }
+
+        if ($start->modify('+' . self::MAX_RANGE_IN_DAYS . ' days') < $end) {
+            throw new BadRequest('The requested range must not exceed ' . self::MAX_RANGE_IN_DAYS . ' days');
+        }
+    }
+
     function getBulkFreeBusy($params) {
-        $start = $params->start;
         $body = (object) [
             'start' => $params->start,
             'end' => $params->end,
@@ -102,8 +173,8 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function getFreeBusyCalendars($nodePath, $node, $params, $email) {
-        $start = new \DateTime($params->start);
-        $end = new \DateTime($params->end);
+        $start = VObject\DateTimeParser::parseDateTime($params->start);
+        $end = VObject\DateTimeParser::parseDateTime($params->end);
 
         $items = [];
         foreach ($node->getChildren() as $calendar) {
@@ -157,14 +228,17 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
             // The uid of an occurrence is the one of its master event, so this
             // excludes every occurrence of a filtered out event.
             $busyPeriods = array_filter($busyPeriods, function($busy) use ($params) {
-                return !in_array($busy->uid, $params->uids);
+                return !in_array($busy->uid, $params->uids, true);
             });
         }
 
-        // array_values() unconditionally: array_filter() preserves keys, and
-        // json_encode() turns an array with a hole in its keys into an object.
-        // 'busy' must always serialize as a JSON array.
-        return array_values($busyPeriods);
+        // The uid is only used for filtering: like an RFC 5545 FREEBUSY
+        // property, a busy period must not reveal which event occupies it.
+        // array_map() also reindexes: json_encode() turns an array with a hole
+        // in its keys into an object, and 'busy' must serialize as an array.
+        return array_map(function($busy) {
+            return (object) ['start' => $busy->start, 'end' => $busy->end];
+        }, array_values($busyPeriods));
     }
 
     /**

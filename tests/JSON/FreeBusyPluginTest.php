@@ -17,13 +17,13 @@ class FreeBusyPluginTest extends \ESN\DAV\ServerMock {
 
     protected $freebusyBulkData = [
         'start' => '20120101T000000Z',
-        'end' => '20150101T000000Z',
+        'end' => '20121231T000000Z',
         'users' => ['54b64eadf6d7d8e41d263e0f']
     ];
 
     protected $freebusyBulkWithFilterData = [
         'start' => '20120101T000000Z',
-        'end' => '20150101T000000Z',
+        'end' => '20121231T000000Z',
         'users' => ['54b64eadf6d7d8e41d263e0f'],
         'uids' => ['event1']
     ];
@@ -114,7 +114,7 @@ END:VCALENDAR
         $this->assertEquals($response->status, 200);
         $this->assertCount(1, $jsonResponse->users);
         $this->assertCount(count($this->user1Calendars['ownedCalendars']), $jsonResponse->users[0]->calendars);
-        $this->assertCount(2, $jsonResponse->users[0]->calendars[0]->busy);
+        $this->assertCount(1, $jsonResponse->users[0]->calendars[0]->busy);
     }
 
     function testFreeBusyWithFilteredEvent() {
@@ -133,7 +133,7 @@ END:VCALENDAR
         $this->assertEquals($response->status, 200);
         $this->assertCount(1, $jsonResponse->users);
         $this->assertCount(count($this->user1Calendars['ownedCalendars']), $jsonResponse->users[0]->calendars);
-        $this->assertCount(1, $jsonResponse->users[0]->calendars[0]->busy);
+        $this->assertCount(0, $jsonResponse->users[0]->calendars[0]->busy);
     }
 
     function testFreeBusyWithDurationEvent() {
@@ -147,7 +147,6 @@ END:VCALENDAR
         // Both the NEEDS-ACTION and the ACCEPTED copy hold their slot, and
         // DURATION:PT3H gives them an end three hours after their DTSTART.
         $durationPeriod = (object) [
-            'uid' => '28CCB90C-0F2F-48FC-B1D9-33A2BA3D9595',
             'start' => '20180401T000000Z',
             'end' => '20180401T030000Z'
         ];
@@ -163,7 +162,7 @@ END:VCALENDAR
         $this->assertCount(1, $jsonResponse->users);
         $this->assertCount(count($this->user1Calendars['ownedCalendars']), $jsonResponse->users[0]->calendars);
         $this->assertEquals(
-            [(object) ['uid' => 'recur', 'start' => '20180501T010000Z', 'end' => '20180501T020000Z']],
+            [(object) ['start' => '20180501T010000Z', 'end' => '20180501T020000Z']],
             $jsonResponse->users[0]->calendars[0]->busy
         );
     }
@@ -177,9 +176,9 @@ END:VCALENDAR
 
         $this->assertEquals(
             [
-                (object) ['uid' => 'recur', 'start' => '20180501T010000Z', 'end' => '20180501T020000Z'],
-                (object) ['uid' => 'recur', 'start' => '20180502T010000Z', 'end' => '20180502T020000Z'],
-                (object) ['uid' => 'recur', 'start' => '20180503T010000Z', 'end' => '20180503T020000Z']
+                (object) ['start' => '20180501T010000Z', 'end' => '20180501T020000Z'],
+                (object) ['start' => '20180502T010000Z', 'end' => '20180502T020000Z'],
+                (object) ['start' => '20180503T010000Z', 'end' => '20180503T020000Z']
             ],
             $jsonResponse->users[0]->calendars[0]->busy
         );
@@ -194,7 +193,7 @@ END:VCALENDAR
         ]);
 
         $this->assertEquals(
-            [(object) ['uid' => 'recur', 'start' => '20150228T030000Z', 'end' => '20150228T040000Z']],
+            [(object) ['start' => '20150228T030000Z', 'end' => '20150228T040000Z']],
             $jsonResponse->users[0]->calendars[0]->busy
         );
     }
@@ -223,8 +222,8 @@ END:VCALENDAR
 
         $this->assertEquals(
             [
-                (object) ['uid' => 'event-with-exdate', 'start' => '20180601T090000Z', 'end' => '20180601T100000Z'],
-                (object) ['uid' => 'event-with-exdate', 'start' => '20180603T090000Z', 'end' => '20180603T100000Z']
+                (object) ['start' => '20180601T090000Z', 'end' => '20180601T100000Z'],
+                (object) ['start' => '20180603T090000Z', 'end' => '20180603T100000Z']
             ],
             $jsonResponse->users[0]->calendars[0]->busy
         );
@@ -269,7 +268,7 @@ END:VCALENDAR
 
         // Paris is UTC+2 in July.
         $this->assertEquals(
-            [(object) ['uid' => 'paris-event', 'start' => '20180701T120000Z', 'end' => '20180701T130000Z']],
+            [(object) ['start' => '20180701T120000Z', 'end' => '20180701T130000Z']],
             $jsonResponse->users[0]->calendars[0]->busy
         );
     }
@@ -295,7 +294,7 @@ END:VCALENDAR
 
         // RFC 5545 3.6.1: a DATE-TIME DTSTART alone means a zero duration.
         $this->assertEquals(
-            [(object) ['uid' => 'event-without-end', 'start' => '20180901T090000Z', 'end' => '20180901T090000Z']],
+            [(object) ['start' => '20180901T090000Z', 'end' => '20180901T090000Z']],
             $jsonResponse->users[0]->calendars[0]->busy
         );
     }
@@ -333,7 +332,7 @@ END:VCALENDAR
         ]);
 
         $this->assertEquals(
-            [(object) ['uid' => 'opaque-event', 'start' => '20181101T100000Z', 'end' => '20181101T110000Z']],
+            [(object) ['start' => '20181101T100000Z', 'end' => '20181101T110000Z']],
             $jsonResponse->users[0]->calendars[0]->busy
         );
     }
@@ -371,7 +370,7 @@ END:VCALENDAR
         ]);
 
         $this->assertEquals(
-            [(object) ['uid' => 'confirmed-event', 'start' => '20181201T100000Z', 'end' => '20181201T110000Z']],
+            [(object) ['start' => '20181201T100000Z', 'end' => '20181201T110000Z']],
             $jsonResponse->users[0]->calendars[0]->busy
         );
     }
@@ -407,8 +406,8 @@ END:VCALENDAR
 
         $this->assertEquals(
             [
-                (object) ['uid' => 'partly-cancelled-event', 'start' => '20190101T090000Z', 'end' => '20190101T100000Z'],
-                (object) ['uid' => 'partly-cancelled-event', 'start' => '20190103T090000Z', 'end' => '20190103T100000Z']
+                (object) ['start' => '20190101T090000Z', 'end' => '20190101T100000Z'],
+                (object) ['start' => '20190103T090000Z', 'end' => '20190103T100000Z']
             ],
             $jsonResponse->users[0]->calendars[0]->busy
         );
@@ -464,7 +463,7 @@ END:VCALENDAR
 
         $this->assertIsArray($busy);
         $this->assertEquals(
-            [(object) ['uid' => 'accepted-second', 'start' => '20181001T100000Z', 'end' => '20181001T110000Z']],
+            [(object) ['start' => '20181001T100000Z', 'end' => '20181001T110000Z']],
             $busy
         );
     }
@@ -506,7 +505,7 @@ END:VCALENDAR
         ]);
 
         $this->assertEquals(
-            [(object) ['uid' => 'needs-action-event', 'start' => '20190202T090000Z', 'end' => '20190202T100000Z']],
+            [(object) ['start' => '20190202T090000Z', 'end' => '20190202T100000Z']],
             $this->getBusyPeriods('20190202T080000Z', '20190202T110000Z')
         );
     }
@@ -517,7 +516,7 @@ END:VCALENDAR
         ]);
 
         $this->assertEquals(
-            [(object) ['uid' => 'accepted-event', 'start' => '20190203T090000Z', 'end' => '20190203T100000Z']],
+            [(object) ['start' => '20190203T090000Z', 'end' => '20190203T100000Z']],
             $this->getBusyPeriods('20190203T080000Z', '20190203T110000Z')
         );
     }
@@ -528,7 +527,7 @@ END:VCALENDAR
         ]);
 
         $this->assertEquals(
-            [(object) ['uid' => 'no-partstat-event', 'start' => '20190204T090000Z', 'end' => '20190204T100000Z']],
+            [(object) ['start' => '20190204T090000Z', 'end' => '20190204T100000Z']],
             $this->getBusyPeriods('20190204T080000Z', '20190204T110000Z')
         );
     }
@@ -546,7 +545,7 @@ END:VCALENDAR
         ]);
 
         $this->assertEquals(
-            [(object) ['uid' => 'other-attendees-event', 'start' => '20190205T090000Z', 'end' => '20190205T100000Z']],
+            [(object) ['start' => '20190205T090000Z', 'end' => '20190205T100000Z']],
             $this->getBusyPeriods('20190205T080000Z', '20190205T110000Z')
         );
     }
@@ -569,7 +568,7 @@ END:VCALENDAR
         );
 
         $this->assertEquals(
-            [(object) ['uid' => 'unknown-email-event', 'start' => '20190206T090000Z', 'end' => '20190206T100000Z']],
+            [(object) ['start' => '20190206T090000Z', 'end' => '20190206T100000Z']],
             $calendars[0]->busy
         );
     }
@@ -601,8 +600,8 @@ END:VCALENDAR
 
         $this->assertEquals(
             [
-                (object) ['uid' => 'partly-declined-event', 'start' => '20190301T090000Z', 'end' => '20190301T100000Z'],
-                (object) ['uid' => 'partly-declined-event', 'start' => '20190303T090000Z', 'end' => '20190303T100000Z']
+                (object) ['start' => '20190301T090000Z', 'end' => '20190301T100000Z'],
+                (object) ['start' => '20190303T090000Z', 'end' => '20190303T100000Z']
             ],
             $this->getBusyPeriods('20190301T000000Z', '20190304T000000Z', ['recur'])
         );
@@ -652,11 +651,107 @@ END:VCALENDAR
             'REQUEST_URI'       => '/calendars/freebusy',
         ));
 
-        $request->setBody(json_encode($data));
-        $response = $this->request($request);
+        $response = $this->postFreeBusy(json_encode($data));
 
         $this->assertEquals(200, $response->status);
 
         return json_decode($response->getBodyAsString());
+    }
+
+    private function postFreeBusy($body) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/freebusy',
+        ));
+        $request->setBody($body);
+
+        return $this->request($request);
+    }
+
+    private function assertBadRequest($data) {
+        $body = is_string($data) ? $data : json_encode($data);
+
+        $this->assertEquals(400, $this->postFreeBusy($body)->status);
+    }
+
+    function testFreeBusyShouldNotRevealTheUidsOfTheBusyEvents() {
+        $this->createEventWithAttendees('secret.ics', 'secret-event', '20190401T090000Z', '20190401T100000Z', []);
+
+        $busy = $this->getBusyPeriods('20190401T080000Z', '20190401T110000Z');
+
+        $this->assertEquals([(object) ['start' => '20190401T090000Z', 'end' => '20190401T100000Z']], $busy);
+    }
+
+    function testFreeBusyShouldStillFilterOutTheGivenUids() {
+        $this->createEventWithAttendees('secret.ics', 'secret-event', '20190401T090000Z', '20190401T100000Z', []);
+
+        $this->assertEquals([], $this->getBusyPeriods('20190401T080000Z', '20190401T110000Z', ['secret-event']));
+    }
+
+    function testFreeBusyShouldAcceptAFloatingDateTime() {
+        $this->createEventWithAttendees('floating.ics', 'floating-event', '20190401T090000Z', '20190401T100000Z', []);
+
+        $busy = $this->getBusyPeriods('20190401T080000', '20190401T110000');
+
+        $this->assertEquals([(object) ['start' => '20190401T090000Z', 'end' => '20190401T100000Z']], $busy);
+    }
+
+    function testFreeBusyShouldRejectAMalformedJsonBody() {
+        $this->assertBadRequest('{bad');
+    }
+
+    function testFreeBusyShouldRejectANonObjectJsonBody() {
+        $this->assertBadRequest('[]');
+    }
+
+    function testFreeBusyShouldRejectNonArrayUsers() {
+        $this->assertBadRequest(['start' => '20261019T000000Z', 'end' => '20261020T000000Z', 'users' => 'x']);
+    }
+
+    function testFreeBusyShouldRejectMissingUsers() {
+        $this->assertBadRequest(['start' => '20261019T000000Z', 'end' => '20261020T000000Z']);
+    }
+
+    function testFreeBusyShouldRejectNonStringUsers() {
+        $this->assertBadRequest(['start' => '20261019T000000Z', 'end' => '20261020T000000Z', 'users' => [['id' => 1]]]);
+    }
+
+    function testFreeBusyShouldRejectNonArrayUids() {
+        $this->assertBadRequest([
+            'start' => '20261019T000000Z',
+            'end' => '20261020T000000Z',
+            'users' => [self::USER1_ID],
+            'uids' => 'event1'
+        ]);
+    }
+
+    function testFreeBusyShouldRejectARelativeDate() {
+        $this->assertBadRequest(['start' => 'yesterday', 'end' => 'tomorrow', 'users' => [self::USER1_ID]]);
+    }
+
+    function testFreeBusyShouldRejectAMissingDate() {
+        $this->assertBadRequest(['start' => '20261019T000000Z', 'users' => [self::USER1_ID]]);
+    }
+
+    function testFreeBusyShouldRejectANonStringDate() {
+        $this->assertBadRequest(['start' => 20261019, 'end' => '20261020T000000Z', 'users' => [self::USER1_ID]]);
+    }
+
+    function testFreeBusyShouldRejectAStartAfterTheEnd() {
+        $this->assertBadRequest(['start' => '20261020T000000Z', 'end' => '20261019T000000Z', 'users' => [self::USER1_ID]]);
+    }
+
+    function testFreeBusyShouldRejectAnEmptyRange() {
+        $this->assertBadRequest(['start' => '20261019T000000Z', 'end' => '20261019T000000Z', 'users' => [self::USER1_ID]]);
+    }
+
+    function testFreeBusyShouldRejectARangeWiderThanTheMaximum() {
+        $this->assertBadRequest(['start' => '19000101T000000Z', 'end' => '29991231T000000Z', 'users' => [self::USER1_ID]]);
+    }
+
+    function testFreeBusyShouldAcceptARangeOfExactlyTheMaximum() {
+        $this->assertEquals([], $this->getBusyPeriods('20250101T000000Z', '20260102T000000Z'));
     }
 }

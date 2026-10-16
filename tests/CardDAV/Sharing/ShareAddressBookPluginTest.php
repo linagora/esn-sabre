@@ -42,7 +42,7 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertEquals($shareAddressBooks[0]['share_owner'], 'principals/users/' . $this->userTestId1);
     }
 
-    function testShareAddressBookWithSharedOwnerAccessResponds400() {
+    function testShareAddressBookWithUnsupportedAccess() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -61,10 +61,31 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         $request->setBody(json_encode($body));
 
         $response = $this->request($request);
-        $this->assertEquals(400, $response->status);
+        $this->assertEquals(204, $response->status);
 
         $shareAddressBooks = $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId2);
         $this->assertCount(0, $shareAddressBooks);
+    }
+
+    function testShareAddressBookWithOwnerPrincipalShareeResponds204() {
+        $response = $this->makeRequest(
+            'POST',
+            '/addressbooks/' . $this->userTestId1 . '/book1.json',
+            ['dav:share-resource' => ['dav:sharee' => [
+                ['dav:href' => 'mailto:' . $this->userTestEmail2, 'dav:share-access' => SPlugin::ACCESS_READ],
+                ['dav:href' => 'principals/users/' . $this->userTestId1, 'dav:share-access' => SPlugin::ACCESS_SHAREDOWNER]
+            ]]]
+        );
+
+        $this->assertEquals(204, $response->status);
+        $this->assertCount(1, $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId2));
+    }
+
+    function testShareAddressBookWithUnknownPrincipalHrefResponds400() {
+        $response = $this->shareBook1With('principals/users/54b64eadf6d7d8e41d263e00', SPlugin::ACCESS_READ);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('dav:href must be a mailto: URI or a principal', $response->getBodyAsString());
     }
 
     function testShareAddressBookWithUnknownAccessResponds400() {

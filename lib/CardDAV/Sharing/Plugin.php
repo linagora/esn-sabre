@@ -237,6 +237,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
             \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
             \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS,
+            \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER,
             \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION
         ];
 
@@ -260,14 +261,24 @@ class Plugin extends \ESN\JSON\BasePlugin {
             return $href;
         }
 
-        $principal = null;
-        $this->server->emit('getPrincipalByUri', [$href, &$principal]);
-
-        if (is_null($principal)) {
+        if (!$this->isExistingPrincipal($href)) {
             throw new BadRequest('dav:href must be a mailto: URI or a principal');
         }
 
         return $href;
+    }
+
+    private function isExistingPrincipal($href) {
+        $path = ltrim($href, '/');
+
+        if (str_starts_with($path, 'principals/') && $this->server->tree->nodeExists($path)) {
+            return true;
+        }
+
+        $principal = null;
+        $this->server->emit('getPrincipalByUri', [$href, &$principal]);
+
+        return !is_null($principal);
     }
 
     private function assertNoSelfDelegation(ISharedAddressBook $node, array $sharees) {

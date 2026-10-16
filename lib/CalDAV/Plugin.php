@@ -49,6 +49,21 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $server->on('calendarObjectChange', [$this, 'captureWrittenObject'], self::PRIORITY_CAPTURE_WRITTEN_OBJECT);
         $server->on('propFind', [$this, 'propFindSharedCalendar'], 151);
         $server->on('beforeMove', [$this, 'validateBeforeMoveToTeamCalendar'], 40);
+        $server->on('beforeUnbind', [$this, 'checkCalendarHomeUnbindPrivilege']);
+    }
+
+    /**
+     * Sabre only checks {DAV:}unbind on the parent of the deleted node. The parent
+     * of a calendar home is the calendar root, which grants every privilege to any
+     * authenticated user: the privilege is thus checked on the home itself.
+     */
+    function checkCalendarHomeUnbindPrivilege($path) {
+        if (!$this->server->tree->getNodeForPath($path) instanceof CalendarHome) return;
+
+        $aclPlugin = $this->server->getPlugin('acl');
+        if ($aclPlugin) {
+            $aclPlugin->checkPrivileges($path, '{DAV:}unbind');
+        }
     }
 
     function validateBeforeMoveToTeamCalendar($sourcePath, $destinationPath) {

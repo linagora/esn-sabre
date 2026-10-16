@@ -79,6 +79,9 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
             if (!$this->authenticatedCanActAsSender($message, true)) {
                 return $this->send(403, null);
             }
+            if (!$this->recipientIsStoredOrganizer($message)) {
+                return $this->send(403, null);
+            }
             if ($this->counterProposesPastStart($message->message)) {
                 return $this->send(400, null);
             }
@@ -202,6 +205,41 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
 
         // An all-day proposal for today is still upcoming
         return $start->format('Ymd') < $now->format('Ymd');
+    }
+
+    // A COUNTER is only ever addressed to the organizer. The ORGANIZER is read from the
+    // sender's stored copy of the event: the submitted ICS is client-controlled.
+    private function recipientIsStoredOrganizer(Message $message): bool
+    {
+        $organizer = $this->findStoredOrganizer($message);
+        if (!$organizer) {
+            return false;
+        }
+
+        if ($this->matchesCalendarAddress($organizer, $message->recipient)) {
+            return true;
+        }
+
+        $organizerPrincipal = $this->normalizePrincipalUri(Utils::getPrincipalByUri($organizer, $this->server));
+        $recipientPrincipal = $this->normalizePrincipalUri(Utils::getPrincipalByUri($message->recipient, $this->server));
+        return $organizerPrincipal && $recipientPrincipal
+            && $this->principalsMatch($this->server->getPlugin('acl'), $recipientPrincipal, $organizerPrincipal);
+    }
+
+    protected function findStoredOrganizer(Message $message): ?string
+    {
+        $senderPrincipal = Utils::getPrincipalByUri($message->sender, $this->server);
+        try {
+            $storedEvent = Utils::getEventObjectFromAnotherPrincipalHome($senderPrincipal, $message->uid, $message->method, $this->server);
+        } catch (DAV\Exception $e) {
+            return null;
+        }
+        if (!$storedEvent) {
+            return null;
+        }
+
+        $vevent = VObject\Reader::read($storedEvent[1])->VEVENT;
+        return $vevent && isset($vevent->ORGANIZER) ? (string) $vevent->ORGANIZER : null;
     }
 
     private function authenticatedCanActAsSender(Message $message, bool $allowDelegation): bool

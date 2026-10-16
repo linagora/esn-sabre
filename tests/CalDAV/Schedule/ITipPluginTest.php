@@ -43,7 +43,7 @@ END:VCALENDAR'
 
     function setUp(): void
     {
-        $this->iTipPlugin = new ITipPlugin();
+        $this->iTipPlugin = new StoredOrganizerITipPlugin('mailto:b@linagora.com');
         $this->calDavPlugin = new CalDavPluginMock();
         $this->authPlugin = new AuthPluginMock('principals/users/b');
         $this->aclPlugin = new AclPluginMock([
@@ -321,6 +321,89 @@ END:VCALENDAR';
         $this->assertEquals(204, $response->getStatus());
     }
 
+    function testITipCounterShouldReturn403WhenRecipientIsNotStoredOrganizer()
+    {
+        $scheduleCalled = false;
+        $this->server->on('schedule', function() use (&$scheduleCalled) {
+            $scheduleCalled = true;
+        });
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+        $this->iTipRequestData['recipient'] = 'c@linagora.com';
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(403, $this->server->httpResponse->getStatus());
+        $this->assertFalse($scheduleCalled);
+    }
+
+    function testITipCounterShouldReturn403WhenRecipientIsExternalAddress()
+    {
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+        $this->iTipRequestData['recipient'] = 'qa-not-a-user@example.com';
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(403, $this->server->httpResponse->getStatus());
+    }
+
+    function testITipCounterShouldIgnoreOrganizerOfSubmittedIcs()
+    {
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+        $this->iTipRequestData['recipient'] = 'c@linagora.com';
+        $this->iTipRequestData['ical'] = str_replace('ORGANIZER;CN=B:mailto:b@linagora.com',
+            'ORGANIZER:mailto:c@linagora.com', $this->iTipRequestData['ical']);
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(403, $this->server->httpResponse->getStatus());
+    }
+
+    function testITipCounterShouldReturn403WhenStoredEventIsNotFound()
+    {
+        $this->iTipPlugin->setStoredOrganizer(null);
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(403, $this->server->httpResponse->getStatus());
+    }
+
+    function testITipCounterShouldMatchStoredOrganizerCaseInsensitively()
+    {
+        $this->iTipPlugin->setStoredOrganizer('MAILTO:B@linagora.com');
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(204, $this->server->httpResponse->getStatus());
+    }
+
+}
+
+#[\AllowDynamicProperties]
+class StoredOrganizerITipPlugin extends ITipPlugin
+{
+    private $storedOrganizer;
+
+    function __construct(?string $storedOrganizer)
+    {
+        $this->storedOrganizer = $storedOrganizer;
+    }
+
+    function setStoredOrganizer(?string $storedOrganizer): void
+    {
+        $this->storedOrganizer = $storedOrganizer;
+    }
+
+    protected function findStoredOrganizer(Message $message): ?string
+    {
+        return $this->storedOrganizer;
+    }
 }
 
 #[\AllowDynamicProperties]

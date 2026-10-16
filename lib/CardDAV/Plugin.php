@@ -437,7 +437,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     function createAddressBook($homePath, $jsonData) {
-        if (!isset($jsonData->id) || !$jsonData->id) {
+        if (!$this->hasValidId($jsonData)) {
             return [400, null];
         }
 
@@ -460,12 +460,12 @@ class Plugin extends \ESN\JSON\BasePlugin {
     function createSubscriptionAddressBook($nodePath, $node, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
-        if (!isset($jsonData->id) || !$jsonData->id) {
+        if (!$this->hasValidId($jsonData)) {
             return [400, null];
         }
 
         $sourcePath = $this->qualifySourcePath(
-            $this->server->calculateUri($issetdef('openpaas:source')->_links->self->href)
+            $this->server->calculateUri($this->subscriptionSourceHref($issetdef('openpaas:source')))
         );
 
         // Check if source addressbook exists
@@ -797,6 +797,19 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return $vcard->jsonSerialize();
+    }
+
+    private function hasValidId($jsonData): bool {
+        return isset($jsonData->id) && is_string($jsonData->id) && $jsonData->id !== '';
+    }
+
+    private function subscriptionSourceHref($source): string {
+        $href = $source->_links->self->href ?? null;
+        if (!is_string($href) || $href === '') {
+            throw new BadRequest('openpaas:source must be an object containing a non-empty _links.self.href string');
+        }
+
+        return $href;
     }
 
     private function qualifySourcePath($sourcePath) {

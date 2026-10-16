@@ -84,6 +84,71 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertEquals($addressBooks[0]['{http://open-paas.org/contacts}source'], 'addressbooks/' . $this->userTestId1 . '/book1');
     }
 
+    #[DataProvider('invalidSubscriptionSources')]
+    function testCreateSubscriptionAddressBookRejectsInvalidSource($source) {
+        $response = $this->makeRequest('POST', '/addressbooks/' . $this->userTestId2 . '.json', [
+            'id' => 'subscription-repro',
+            'dav:name' => 'Subscription reproduction',
+            'type' => 'subscription',
+            'openpaas:source' => $source
+        ]);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount(0, $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId2));
+    }
+
+    static function invalidSubscriptionSources() {
+        $href = '/addressbooks/userTestId1/book1.json';
+
+        return [
+            'string source' => [$href],
+            'list source' => [[$href]],
+            'missing _links' => [['self' => ['href' => $href]]],
+            'string _links' => [['_links' => $href]],
+            'missing self' => [['_links' => ['href' => $href]]],
+            'string self' => [['_links' => ['self' => $href]]],
+            'missing href' => [['_links' => ['self' => []]]],
+            'empty href' => [['_links' => ['self' => ['href' => '']]]],
+            'non string href' => [['_links' => ['self' => ['href' => ['nested' => $href]]]]]
+        ];
+    }
+
+    #[DataProvider('invalidAddressBookIds')]
+    function testCreateSubscriptionAddressBookRejectsInvalidId($id) {
+        $response = $this->makeRequest('POST', '/addressbooks/' . $this->userTestId2 . '.json', [
+            'id' => $id,
+            'openpaas:source' => ['_links' => ['self' => [
+                'href' => '/addressbooks/' . $this->userTestId1 . '/book1.json'
+            ]]]
+        ]);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount(0, $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId2));
+    }
+
+    #[DataProvider('invalidAddressBookIds')]
+    function testCreateAddressBookRejectsInvalidId($id) {
+        $principal = 'principals/users/' . $this->userTestId2;
+        $addressBookCount = count($this->carddavBackend->getAddressBooksForUser($principal));
+
+        $response = $this->makeRequest('POST', '/addressbooks/' . $this->userTestId2 . '.json', [
+            'id' => $id,
+            'dav:name' => 'NAME'
+        ]);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount($addressBookCount, $this->carddavBackend->getAddressBooksForUser($principal));
+    }
+
+    static function invalidAddressBookIds() {
+        return [
+            'empty string' => [''],
+            'number' => [42],
+            'list' => [['ID']],
+            'object' => [['value' => 'ID']]
+        ];
+    }
+
     #[DataProvider('delegationAccessLevels')]
     function testResubscribeDelegationThroughHttp($access) {
         $principal = 'principals/users/' . $this->userTestId1;

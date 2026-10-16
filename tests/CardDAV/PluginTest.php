@@ -448,6 +448,24 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals($cards[0]->data[1][0][3], 'b');
     }
 
+    #[DataProvider('invalidOffsetPaginationParameters')]
+    function testGetContactsRejectsInvalidOffsetPaginationParameters(string $query, string $expectedMessage) {
+        $response = $this->makeRequest('GET', '/addressbooks/' . $this->userTestId1 . '/book1.json?' . $query);
+
+        $this->assertSame(400, $response->status);
+        $this->assertStringContainsString($expectedMessage, $response->getBodyAsString());
+    }
+
+    static function invalidOffsetPaginationParameters() {
+        return [
+            'negative offset' => ['limit=5&offset=-1', 'offset must be a non-negative integer'],
+            'non-numeric offset' => ['limit=5&offset=abc', 'offset must be a non-negative integer'],
+            'non-numeric limit' => ['limit=abc&offset=0', 'limit must be a non-negative integer'],
+            'negative limit' => ['limit=-5&offset=0', 'limit must be a non-negative integer'],
+            'offset array' => ['limit=5&offset[]=1', 'offset must be a non-negative integer']
+        ];
+    }
+
     #[DataProvider('sortedCards')]
     function testCursorPagesUseRequestedSortAndOrder(string $sort, string $order, array $expected) {
         $this->addEmailsToContacts();

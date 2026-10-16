@@ -1050,27 +1050,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         $removeShareesOptions = new \stdClass();
         $removeShareesOptions->sharees = $shareesToRemove;
-        $removedCount = $this->deleteAddressBooksSharedFrom($mongoAddressBookId, $removeShareesOptions);
+        $delegationChanged = $this->deleteAddressBooksSharedFrom($mongoAddressBookId, $removeShareesOptions) > 0;
 
         foreach ($shareesToUpdate as $sharee) {
-            $query = [
-                'addressbookid' => $mongoAddressBookId,
-                'share_href' => $sharee->href
-            ];
-            $shareeCollection->updateMany($query, [ '$set' => [
-                'share_access' => $sharee->access,
-                'share_displayname' => isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null
-            ]]);
-
-            foreach ($shareeCollection->find($query) as $addressBook) {
-                // Hidden copies no longer own their old path, as for deletion notifications.
-                if ($addressBook['hidden'] ?? false) {
-                    continue;
-                }
-                $this->eventEmitter->emit('sabre:addressBookSubscriptionUpdated', [[
-                    'path' => $this->buildAddressBookPath($addressBook['principaluri'], $addressBook['uri'])
-                ]]);
-            }
+            $this->updateSharedAddressBookDelegation($mongoAddressBookId, $sharee);
+            $delegationChanged = true;
         }
 
         foreach ($shareesToCreate as $sharee) {
@@ -1086,6 +1070,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'share_displayname' => $this->getValue($sharee->properties, '{DAV:}displayname')
             ];
             $shareeCollection->insertOne($newShareeAddressBook);
+            $delegationChanged = true;
 
             $this->eventEmitter->emit('sabre:addressBookSubscriptionCreated', [
                 [
@@ -1094,9 +1079,31 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             ]);
         }
 
-        if ($removedCount || $shareesToUpdate || $shareesToCreate) {
+        if ($delegationChanged) {
             $this->eventEmitter->emit('sabre:addressBookUpdated', [[
                 'path' => $this->buildAddressBookPath($sharerAddressBook['principaluri'], $sharerAddressBook['uri'])
+            ]]);
+        }
+    }
+
+    private function updateSharedAddressBookDelegation($addressBookId, $sharee) {
+        $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
+        $query = [
+            'addressbookid' => $addressBookId,
+            'share_href' => $sharee->href
+        ];
+        $collection->updateMany($query, [ '$set' => [
+            'share_access' => $sharee->access,
+            'share_displayname' => $sharee->properties['{DAV:}displayname'] ?? null
+        ]]);
+
+        foreach ($collection->find($query) as $addressBook) {
+            // Hidden copies no longer own their old path, as for deletion notifications.
+            if ($addressBook['hidden'] ?? false) {
+                continue;
+            }
+            $this->eventEmitter->emit('sabre:addressBookSubscriptionUpdated', [[
+                'path' => $this->buildAddressBookPath($addressBook['principaluri'], $addressBook['uri'])
             ]]);
         }
     }

@@ -17,6 +17,7 @@ UPGRADE_NOTES.md
 
 # Tests (note: tests/ and phpunit.xml kept for Dockerfile.test, excluded by Dockerfile for production)
 .phpunit.cache/
+tests/report/java/
 
 # Docker
 docker-compose*.yaml

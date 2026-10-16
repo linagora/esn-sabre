@@ -950,7 +950,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function deleteAddressBooksSharedFrom($addressBookId, $options = null) {
-        foreach ($this->deleteSharedAddressBookRecords($addressBookId, $options) as $addressBook) {
+        $addressBooks = $this->deleteSharedAddressBookRecords($addressBookId, $options);
+        foreach ($addressBooks as $addressBook) {
             // Unsubscribing already notified clients; the old path may now belong to another book.
             if ($addressBook['hidden'] ?? false) {
                 continue;
@@ -963,6 +964,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 ]
             ]);
         }
+
+        return count($addressBooks);
     }
 
     private function deleteSharedAddressBookRecords($addressBookId, $options): array {
@@ -1047,16 +1050,27 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         $removeShareesOptions = new \stdClass();
         $removeShareesOptions->sharees = $shareesToRemove;
-        $this->deleteAddressBooksSharedFrom($mongoAddressBookId, $removeShareesOptions);
+        $removedCount = $this->deleteAddressBooksSharedFrom($mongoAddressBookId, $removeShareesOptions);
 
         foreach ($shareesToUpdate as $sharee) {
-            $shareeCollection->updateMany([
+            $query = [
                 'addressbookid' => $mongoAddressBookId,
                 'share_href' => $sharee->href
-            ], [ '$set' => [
+            ];
+            $shareeCollection->updateMany($query, [ '$set' => [
                 'share_access' => $sharee->access,
                 'share_displayname' => isset($sharee->properties['{DAV:}displayname']) ? $sharee->properties['{DAV:}displayname'] : null
             ]]);
+
+            foreach ($shareeCollection->find($query) as $addressBook) {
+                // Hidden copies no longer own their old path, as for deletion notifications.
+                if ($addressBook['hidden'] ?? false) {
+                    continue;
+                }
+                $this->eventEmitter->emit('sabre:addressBookSubscriptionUpdated', [[
+                    'path' => $this->buildAddressBookPath($addressBook['principaluri'], $addressBook['uri'])
+                ]]);
+            }
         }
 
         foreach ($shareesToCreate as $sharee) {
@@ -1078,6 +1092,12 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                     'path' => $this->buildAddressBookPath($newShareeAddressBook['principaluri'], $newShareeAddressBook['uri'])
                 ]
             ]);
+        }
+
+        if ($removedCount || $shareesToUpdate || $shareesToCreate) {
+            $this->eventEmitter->emit('sabre:addressBookUpdated', [[
+                'path' => $this->buildAddressBookPath($sharerAddressBook['principaluri'], $sharerAddressBook['uri'])
+            ]]);
         }
     }
 

@@ -163,6 +163,106 @@ class MongoTest extends AbstractDatabaseTestBase {
         return [[false, false], [true, false], [false, true], [true, true]];
     }
 
+    #[DataProvider('delegationNotificationChanges')]
+    function testDelegationNotifications($access, $hidden) {
+        $sharee = new \Sabre\DAV\Xml\Element\Sharee([
+            'href' => 'mailto:user2@example.org',
+            'principal' => 'principals/users/user2',
+            'access' => SPlugin::ACCESS_READ,
+            'inviteStatus' => SPlugin::INVITE_ACCEPTED
+        ]);
+        $this->backend->updateInvites($this->bookId, [$sharee]);
+        $shared = $this->backend->getSharedAddressBooksForUser($sharee->principal)[0];
+        if ($hidden) {
+            $this->backend->deleteSharedAddressBook($shared['id']);
+        }
+
+        $events = [];
+        foreach (['sabre:addressBookUpdated', 'sabre:addressBookSubscriptionUpdated', 'sabre:addressBookSubscriptionDeleted'] as $name) {
+            $this->backend->getEventEmitter()->on($name, function ($event) use (&$events, $name) {
+                $events[$name][] = $event;
+            });
+        }
+
+        $sharee->access = $access;
+        $this->backend->updateInvites($this->bookId, [$sharee]);
+
+        $this->assertEquals([['path' => 'addressbooks/user1/book1']], $events['sabre:addressBookUpdated']);
+        $copyEvent = $access === SPlugin::ACCESS_NOACCESS
+            ? 'sabre:addressBookSubscriptionDeleted'
+            : 'sabre:addressBookSubscriptionUpdated';
+        $this->assertCount($hidden ? 1 : 2, $events);
+        $this->assertCount($hidden ? 0 : 1, $events[$copyEvent] ?? []);
+        if (!$hidden) {
+            $this->assertEquals('addressbooks/user2/' . $shared['uri'], $events[$copyEvent][0]['path']);
+        }
+        $invites = $this->backend->getInvites($this->bookId);
+        if ($access === SPlugin::ACCESS_NOACCESS) {
+            $this->assertCount(0, $invites);
+        } else {
+            $this->assertEquals($access, $invites[0]->access);
+        }
+    }
+
+    static function delegationNotificationChanges() {
+        return [
+            'same rights' => [SPlugin::ACCESS_READ, false],
+            'changed rights' => [SPlugin::ACCESS_READWRITE, false],
+            'revoke' => [SPlugin::ACCESS_NOACCESS, false],
+            'hidden update' => [SPlugin::ACCESS_READWRITE, true],
+            'hidden revoke' => [SPlugin::ACCESS_NOACCESS, true]
+        ];
+    }
+
+    function testCreatingMultipleDelegationsNotifiesSourceOnce() {
+        $sourceEvents = [];
+        $copyEvents = [];
+        $this->backend->getEventEmitter()->on('sabre:addressBookUpdated', function ($event) use (&$sourceEvents) {
+            $sourceEvents[] = $event;
+        });
+        $this->backend->getEventEmitter()->on('sabre:addressBookSubscriptionCreated', function ($event) use (&$copyEvents) {
+            $copyEvents[] = $event;
+        });
+        $sharees = [];
+        foreach (['user2', 'user3'] as $user) {
+            $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => 'mailto:' . $user . '@example.org',
+                'principal' => 'principals/users/' . $user,
+                'access' => SPlugin::ACCESS_READ
+            ]);
+        }
+
+        $this->backend->updateInvites($this->bookId, $sharees);
+
+        $this->assertEquals([['path' => 'addressbooks/user1/book1']], $sourceEvents);
+        $this->assertCount(2, $copyEvents);
+        foreach ($sharees as $index => $sharee) {
+            $copy = $this->backend->getSharedAddressBooksForUser($sharee->principal)[0];
+            $this->assertEquals('addressbooks/user' . ($index + 2) . '/' . $copy['uri'], $copyEvents[$index]['path']);
+        }
+    }
+
+    function testIgnoredDelegationsDoNotNotifySource() {
+        $events = [];
+        $this->backend->getEventEmitter()->on('sabre:addressBookUpdated', function ($event) use (&$events) {
+            $events[] = $event;
+        });
+        $this->backend->updateInvites($this->bookId, []);
+        foreach ([
+            [SPlugin::ACCESS_NOACCESS, 'principals/users/missing'],
+            [SPlugin::ACCESS_READ, null],
+            [SPlugin::ACCESS_READ, 'principals/users/user1'],
+            [SPlugin::ACCESS_SHAREDOWNER, 'principals/users/user2']
+        ] as [$access, $principal]) {
+            $this->backend->updateInvites($this->bookId, [new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => 'mailto:missing@example.org',
+                'principal' => $principal,
+                'access' => $access
+            ])]);
+        }
+        $this->assertSame([], $events);
+    }
+
     function testConstruct() {
         $backend = $this->getBackend();
         $this->assertTrue($backend instanceof Mongo);

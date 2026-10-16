@@ -120,6 +120,9 @@ $server->addPlugin($loggerPlugin);
 // plugin can reach it through ESN\DAV\VObjectCachePlugin::cacheFor().
 $server->addPlugin(new ESN\DAV\VObjectCachePlugin($calendarBackend->getVObjectCache()));
 
+// Responses hold per-principal data: forbid browsers from reusing them across credentials.
+$server->addPlugin(new ESN\DAV\PrivateCachePlugin());
+
 // Auth backend
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm'], $principalBackend, $server, SABRE_ENV === SABRE_ENV_DEV);
 $server->on('auth:success',

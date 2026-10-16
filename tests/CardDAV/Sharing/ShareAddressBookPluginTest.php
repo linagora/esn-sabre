@@ -67,6 +67,112 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertCount(0, $shareAddressBooks);
     }
 
+    function testShareAddressBookWithOwnerPrincipalShareeResponds204() {
+        $response = $this->makeRequest(
+            'POST',
+            '/addressbooks/' . $this->userTestId1 . '/book1.json',
+            ['dav:share-resource' => ['dav:sharee' => [
+                ['dav:href' => 'mailto:' . $this->userTestEmail2, 'dav:share-access' => SPlugin::ACCESS_READ],
+                ['dav:href' => 'principals/users/' . $this->userTestId1, 'dav:share-access' => SPlugin::ACCESS_SHAREDOWNER]
+            ]]]
+        );
+
+        $this->assertEquals(204, $response->status);
+        $this->assertCount(1, $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId2));
+    }
+
+    function testShareAddressBookWithUnknownPrincipalHrefResponds400() {
+        $response = $this->shareBook1With('principals/users/54b64eadf6d7d8e41d263e00', SPlugin::ACCESS_READ);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('dav:href must be a mailto: URI or a principal', $response->getBodyAsString());
+    }
+
+    function testShareAddressBookWithUnknownAccessResponds400() {
+        $response = $this->shareBook1With('mailto:' . $this->userTestEmail2, 99);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('dav:share-access must be one of', $response->getBodyAsString());
+        $this->assertCount(0, $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId2));
+    }
+
+    function testShareAddressBookWithNonNumericAccessResponds400() {
+        $this->shareBook1With('mailto:' . $this->userTestEmail2, SPlugin::ACCESS_READ);
+
+        $response = $this->shareBook1With('mailto:' . $this->userTestEmail2, 'x');
+
+        $this->assertEquals(400, $response->status);
+        $shareAddressBooks = $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId2);
+        $this->assertCount(1, $shareAddressBooks);
+        $this->assertEquals(SPlugin::ACCESS_READ, $shareAddressBooks[0]['share_access']);
+    }
+
+    function testShareAddressBookWithNonPrincipalHrefResponds400() {
+        $response = $this->shareBook1With('javascript:alert(1)', SPlugin::ACCESS_READ);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('dav:href must be a mailto: URI or a principal', $response->getBodyAsString());
+    }
+
+    function testShareAddressBookWithInvalidMailtoHrefResponds400() {
+        $response = $this->shareBook1With('mailto:not-an-email', SPlugin::ACCESS_READ);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('dav:href is not a valid mailto: URI', $response->getBodyAsString());
+    }
+
+    function testShareAddressBookWithMissingHrefResponds400() {
+        $response = $this->makeRequest(
+            'POST',
+            '/addressbooks/' . $this->userTestId1 . '/book1.json',
+            ['dav:share-resource' => ['dav:sharee' => [['dav:share-access' => SPlugin::ACCESS_READ]]]]
+        );
+
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('dav:href must be a non-empty string', $response->getBodyAsString());
+    }
+
+    function testShareAddressBookWithNonArrayShareeResponds400() {
+        $response = $this->makeRequest(
+            'POST',
+            '/addressbooks/' . $this->userTestId1 . '/book1.json',
+            ['dav:share-resource' => ['dav:sharee' => 'mailto:' . $this->userTestEmail2]]
+        );
+
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('dav:sharee must be an array', $response->getBodyAsString());
+    }
+
+    function testPostMalformedJsonOnAddressBookResponds400() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/' . $this->userTestId1 . '/book1.json',
+        ));
+        $request->setBody('{x');
+
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('Invalid JSON body', $response->getBodyAsString());
+    }
+
+    private function shareBook1With($href, $access) {
+        return $this->makeRequest(
+            'POST',
+            '/addressbooks/' . $this->userTestId1 . '/book1.json',
+            array(
+                'dav:share-resource' => array(
+                    'dav:sharee' => array([
+                        'dav:href' => $href,
+                        'dav:share-access' => $access
+                    ])
+                )
+            )
+        );
+    }
+
     function testShareAddressBookToOwnerResponds400() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',

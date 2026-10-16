@@ -101,6 +101,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $requestBody = $request->getBodyAsString();
             $jsonData = json_decode($requestBody);
 
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new BadRequest('Invalid JSON body: ' . json_last_error_msg());
+            }
+
             $data = null;
 
             if ($data = Utils::getJsonValue($jsonData, 'dav:share-resource')) {
@@ -210,18 +214,60 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return $this->send($code, $body);
     }
 
-    private function jsonToSharees(array $sharees) {
-        $result = [];
-
-        foreach ($sharees as $sharee) {
-            $result[] = new \Sabre\DAV\Xml\Element\Sharee([
-                'href' => Utils::getJsonValue($sharee, 'dav:href'),
-                'access' => (int)Utils::getJsonValue($sharee, 'dav:share-access', \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS),
-                'properties' => []
-            ]);
+    private function jsonToSharees($sharees) {
+        if (!is_array($sharees)) {
+            throw new BadRequest('dav:sharee must be an array');
         }
 
-        return $result;
+        return array_map(function($sharee) {
+            if (!is_object($sharee)) {
+                throw new BadRequest('Each dav:sharee must be an object');
+            }
+
+            return new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => $this->validateShareeHref(Utils::getJsonValue($sharee, 'dav:href')),
+                'access' => $this->validateShareAccess(Utils::getJsonValue($sharee, 'dav:share-access', \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS)),
+                'properties' => []
+            ]);
+        }, $sharees);
+    }
+
+    private function validateShareAccess($access) {
+        $supportedAccesses = [
+            \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+            \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+            \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS,
+            \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION
+        ];
+
+        if (!is_int($access) || !in_array($access, $supportedAccesses, true)) {
+            throw new BadRequest('dav:share-access must be one of ' . join(',', $supportedAccesses));
+        }
+
+        return $access;
+    }
+
+    private function validateShareeHref($href) {
+        if (!is_string($href) || $href === '') {
+            throw new BadRequest('dav:href must be a non-empty string');
+        }
+
+        if (stripos($href, 'mailto:') === 0) {
+            if (!filter_var(substr($href, 7), FILTER_VALIDATE_EMAIL)) {
+                throw new BadRequest('dav:href is not a valid mailto: URI');
+            }
+
+            return $href;
+        }
+
+        $principal = null;
+        $this->server->emit('getPrincipalByUri', [$href, &$principal]);
+
+        if (is_null($principal)) {
+            throw new BadRequest('dav:href must be a mailto: URI or a principal');
+        }
+
+        return $href;
     }
 
     private function assertNoSelfDelegation(ISharedAddressBook $node, array $sharees) {

@@ -502,7 +502,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $props['{urn:ietf:params:xml:ns:carddav}addressbook-description'] = $jsonData->{'carddav:description'};
         }
 
-        $node->createExtendedCollection($jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
+        // Use the server pipeline so beforeBind enforces write access to the destination home.
+        $this->server->createCollection($nodePath . '/' . $jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];
     }

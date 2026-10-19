@@ -2,6 +2,7 @@
 
 namespace ESN\CardDAV\Subscription;
 
+use ESN\Utils\AuthTenant;
 use Sabre\DAV\ServerPlugin;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\VObject\Document;
@@ -55,7 +56,18 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertEquals($jsonResponse['acl'][1]['privilege'], '{DAV:}write-properties');
     }
 
-    function testCreateSubscriptionAddressBook() {
+    #[DataProvider('subscriptionCreationPermissions')]
+    function testCreateSubscriptionAddressBook($actor, $publicRight, $expectedStatus, $expectedPrivileges) {
+        $tenants = [
+            'subscriber' => new AuthTenant($this->userTestId2, SERVER_MOCK_DOMAIN_ID),
+            'source owner' => new AuthTenant($this->userTestId1, SERVER_MOCK_DOMAIN_ID)
+        ];
+        $this->authBackend->setAuthTenant($tenants[$actor]);
+        $this->carddavBackend->setPublishStatus($this->carddavAddressBook, $publicRight);
+        $events = [];
+        $this->carddavBackend->getEventEmitter()->on('sabre:addressBookSubscriptionCreated', function ($event) use (&$events) {
+            $events[] = $event;
+        });
         $addressBook = [
             'id' => 'ID',
             'dav:name' => 'SUB NAME',
@@ -73,15 +85,32 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
           $addressBook
         );
 
-        $this->assertEquals($response->status, 201);
+        $this->assertEquals($expectedStatus, $response->status, $response->getBodyAsString());
 
         $addressBooks = $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId2);
+        if ($expectedStatus === 403) {
+            $this->assertCount(0, $addressBooks);
+            $this->assertSame([], $events);
+            return;
+        }
         $this->assertCount(1, $addressBooks);
 
         $this->assertEquals($addressBooks[0]['{DAV:}displayname'], 'SUB NAME');
         $this->assertEquals($addressBooks[0]['uri'], 'ID');
         $this->assertEquals($addressBooks[0]['principaluri'], 'principals/users/' . $this->userTestId2);
         $this->assertEquals($addressBooks[0]['{http://open-paas.org/contacts}source'], 'addressbooks/' . $this->userTestId1 . '/book1');
+        $this->assertSame($expectedPrivileges, $addressBooks[0]['{DAV:}acl']);
+        $this->assertSame([['path' => 'addressbooks/' . $this->userTestId2 . '/ID']], $events);
+    }
+
+    static function subscriptionCreationPermissions() {
+        // Reading the source and writing the destination home are independent permissions.
+        return [
+            'subscribe to public read source' => ['subscriber', '{DAV:}read', 201, ['dav:read']],
+            'subscribe to public write source' => ['subscriber', '{DAV:}write', 201, ['dav:read', 'dav:write']],
+            'private source is denied' => ['subscriber', '', 403, []],
+            'source owner cannot write subscriber home' => ['source owner', '', 403, []]
+        ];
     }
 
     #[DataProvider('invalidSubscriptionSources')]

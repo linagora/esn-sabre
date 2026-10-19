@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# Default to linagora/master; override these to test a fork or another branch.
+# Temporary defaults for integration test PR #392; environment overrides still apply.
 INTEGRATION_TEST_REPO="${INTEGRATION_TEST_REPO:-https://github.com/linagora/twake-calendar-integration-tests.git}"
-INTEGRATION_TEST_BRANCH="${INTEGRATION_TEST_BRANCH:-master}"
+INTEGRATION_TEST_BRANCH="${INTEGRATION_TEST_BRANCH:-test/caldav-shared-calendar-status-acl}"
 
 # Usage: ./run_test.sh [--filter=TestClassName] [--skip-java] [--skip-php] [--skip-nginx] [--skip-build] [--java-sequential]
 # Examples:

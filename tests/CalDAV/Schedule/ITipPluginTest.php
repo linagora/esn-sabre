@@ -43,7 +43,7 @@ END:VCALENDAR'
 
     function setUp(): void
     {
-        $this->iTipPlugin = new StoredOrganizerITipPlugin('mailto:b@linagora.com');
+        $this->iTipPlugin = new StoredOrganizerITipPlugin(['principals/users/b' => 'mailto:b@linagora.com']);
         $this->calDavPlugin = new CalDavPluginMock();
         $this->authPlugin = new AuthPluginMock('principals/users/b');
         $this->aclPlugin = new AclPluginMock([
@@ -363,7 +363,7 @@ END:VCALENDAR';
 
     function testITipCounterShouldReturn403WhenStoredEventIsNotFound()
     {
-        $this->iTipPlugin->setStoredOrganizer(null);
+        $this->iTipPlugin->setStoredOrganizers([]);
         $this->iTipRequestData['method'] = 'COUNTER';
         $this->iTipRequestData['sender'] = 'b@linagora.com';
 
@@ -374,7 +374,7 @@ END:VCALENDAR';
 
     function testITipCounterShouldMatchStoredOrganizerCaseInsensitively()
     {
-        $this->iTipPlugin->setStoredOrganizer('MAILTO:B@linagora.com');
+        $this->iTipPlugin->setStoredOrganizers(['principals/users/b' => 'MAILTO:B@linagora.com']);
         $this->iTipRequestData['method'] = 'COUNTER';
         $this->iTipRequestData['sender'] = 'b@linagora.com';
 
@@ -388,21 +388,22 @@ END:VCALENDAR';
 #[\AllowDynamicProperties]
 class StoredOrganizerITipPlugin extends ITipPlugin
 {
-    private $storedOrganizer;
+    // Stored ORGANIZER of the event, by principal whose calendar holds a copy.
+    private $storedOrganizers;
 
-    function __construct(?string $storedOrganizer)
+    function __construct(array $storedOrganizers)
     {
-        $this->storedOrganizer = $storedOrganizer;
+        $this->storedOrganizers = $storedOrganizers;
     }
 
-    function setStoredOrganizer(?string $storedOrganizer): void
+    function setStoredOrganizers(array $storedOrganizers): void
     {
-        $this->storedOrganizer = $storedOrganizer;
+        $this->storedOrganizers = $storedOrganizers;
     }
 
-    protected function findStoredOrganizer(Message $message): ?string
+    protected function findStoredOrganizer(string $principalUri, Message $message): ?string
     {
-        return $this->storedOrganizer;
+        return $this->storedOrganizers[$principalUri] ?? null;
     }
 }
 

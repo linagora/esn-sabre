@@ -207,30 +207,39 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         return $start->format('Ymd') < $now->format('Ymd');
     }
 
-    // A COUNTER is only ever addressed to the organizer. The ORGANIZER is read from the
-    // sender's stored copy of the event: the submitted ICS is client-controlled.
+    // A COUNTER is only ever addressed to the organizer. The ORGANIZER is never read from the
+    // submitted ICS: it is client-controlled.
+    // A local recipient must organize the event in their own calendar, which the sender cannot
+    // write to. An external organizer has no copy here, so the sender's copy is the only one
+    // available: verifying the COUNTER is then up to the organizer's own server.
     private function recipientIsStoredOrganizer(Message $message): bool
     {
-        $organizer = $this->findStoredOrganizer($message);
-        if (!$organizer) {
-            return false;
+        $recipientPrincipal = $this->normalizePrincipalUri(Utils::getPrincipalByUri($message->recipient, $this->server));
+        if ($recipientPrincipal) {
+            $organizer = $this->findStoredOrganizer($recipientPrincipal, $message);
+            return $organizer && $this->addressBelongsToPrincipal($organizer, $message->recipient, $recipientPrincipal);
         }
 
-        if ($this->matchesCalendarAddress($organizer, $message->recipient)) {
+        $senderPrincipal = Utils::getPrincipalByUri($message->sender, $this->server);
+        $organizer = $senderPrincipal ? $this->findStoredOrganizer($senderPrincipal, $message) : null;
+        return $organizer && $this->matchesCalendarAddress($organizer, $message->recipient);
+    }
+
+    // Matches the address itself, or any alias resolving to the same principal.
+    private function addressBelongsToPrincipal(string $address, string $knownAddress, string $principal): bool
+    {
+        if ($this->matchesCalendarAddress($address, $knownAddress)) {
             return true;
         }
 
-        $organizerPrincipal = $this->normalizePrincipalUri(Utils::getPrincipalByUri($organizer, $this->server));
-        $recipientPrincipal = $this->normalizePrincipalUri(Utils::getPrincipalByUri($message->recipient, $this->server));
-        return $organizerPrincipal && $recipientPrincipal
-            && $this->principalsMatch($this->server->getPlugin('acl'), $recipientPrincipal, $organizerPrincipal);
+        $addressPrincipal = $this->normalizePrincipalUri(Utils::getPrincipalByUri($address, $this->server));
+        return $addressPrincipal && $this->principalsMatch($this->server->getPlugin('acl'), $addressPrincipal, $principal);
     }
 
-    protected function findStoredOrganizer(Message $message): ?string
+    protected function findStoredOrganizer(string $principalUri, Message $message): ?string
     {
-        $senderPrincipal = Utils::getPrincipalByUri($message->sender, $this->server);
         try {
-            $storedEvent = Utils::getEventObjectFromAnotherPrincipalHome($senderPrincipal, $message->uid, $message->method, $this->server);
+            $storedEvent = Utils::getEventObjectFromAnotherPrincipalHome($principalUri, $message->uid, $message->method, $this->server);
         } catch (DAV\Exception $e) {
             return null;
         }

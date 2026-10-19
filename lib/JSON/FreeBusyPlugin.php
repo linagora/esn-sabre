@@ -76,6 +76,10 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function getBulkFreeBusy($params) {
+        if (isset($params->timezone) && !$this->isValidTimeZone($params->timezone)) {
+            return [400, null];
+        }
+
         $start = $params->start;
         $body = (object) [
             'start' => $params->start,
@@ -102,8 +106,12 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function getFreeBusyCalendars($nodePath, $node, $params, $email) {
-        $start = new \DateTime($params->start);
-        $end = new \DateTime($params->end);
+        // Floating dates and times, such as those of all-day events, are read
+        // in the requested time zone: an all-day event is a whole day there,
+        // from its midnight to the next. UTC when none is given.
+        $timeZone = new DateTimeZone(isset($params->timezone) ? $params->timezone : 'UTC');
+        $start = (new \DateTime($params->start))->setTimezone($timeZone);
+        $end = (new \DateTime($params->end))->setTimezone($timeZone);
 
         $items = [];
         foreach ($node->getChildren() as $calendar) {
@@ -113,7 +121,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
 
             $items[] = (object) [
                 'id' => $calendar->getName(),
-                'busy' => $this->getCalendarBusyPeriods($calendar, $params, $start, $end, $email)
+                'busy' => $this->getCalendarBusyPeriods($calendar, $params, $start, $end, $timeZone, $email)
             ];
         }
 
@@ -125,7 +133,12 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
      *
      * @return array the busy periods, possibly empty
      */
-    private function getCalendarBusyPeriods($calendar, $params, $start, $end, $email) {
+    private function getCalendarBusyPeriods($calendar, $params, $start, $end, $timeZone, $email) {
+        // The occurrences the calendar backend indexes resolve floating dates
+        // and times in UTC: the window is widened by a day, more than any UTC
+        // offset, so that an all-day event of the requested time zone is not
+        // missed. The occurrences outside of the actual window are then dropped
+        // by the expansion.
         $busyEventUris = $calendar->calendarQuery([
             'name'         => 'VCALENDAR',
             'comp-filters' => [
@@ -135,8 +148,8 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
                     'prop-filters'   => [],
                     'is-not-defined' => false,
                     'time-range'     => [
-                        'start' => $start,
-                        'end'   => $end,
+                        'start' => (clone $start)->modify('-1 day'),
+                        'end'   => (clone $end)->modify('+1 day'),
                     ],
                 ],
             ],
@@ -149,7 +162,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
         foreach ($busyEventUris as $eventUri) {
             $busyPeriods = array_merge(
                 $busyPeriods,
-                $this->getEventBusyPeriods($calendar, $eventUri, $start, $end, $email)
+                $this->getEventBusyPeriods($calendar, $eventUri, $start, $end, $timeZone, $email)
             );
         }
 
@@ -179,11 +192,11 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
      *
      * @return array the busy periods, possibly empty
      */
-    private function getEventBusyPeriods($calendar, $eventUri, $start, $end, $email) {
+    private function getEventBusyPeriods($calendar, $eventUri, $start, $end, $timeZone, $email) {
         $vObject = VObject\Reader::read($calendar->getChild($eventUri)->get());
 
         try {
-            $expandedVObject = $vObject->expand($start, $end);
+            $expandedVObject = $vObject->expand($start, $end, $timeZone);
         } catch (VObject\InvalidDataException $e) {
             // A recurring VEVENT without a UID cannot be expanded. Drop that one
             // calendar object rather than failing the whole bulk request.
@@ -206,7 +219,7 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
                 continue;
             }
 
-            $busyPeriods[] = $this->buildBusyPeriod($vevent);
+            $busyPeriods[] = $this->buildBusyPeriod($vevent, $timeZone);
         }
 
         return $busyPeriods;
@@ -233,6 +246,8 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
      *
      * Both dates are converted to UTC before being formatted, so that the
      * trailing Z of the response is not a lie for an event carrying a TZID.
+     * The expansion converts every DATE-TIME to UTC but leaves DATE values
+     * floating: those are read in the requested time zone.
      *
      * A VEVENT with neither DTEND nor DURATION is given the duration RFC 5545
      * section 3.6.1 defines for it: none when DTSTART is a DATE-TIME, one full
@@ -240,12 +255,12 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
      *
      * @return object the busy period, as {uid, start, end}
      */
-    private function buildBusyPeriod($vevent) {
+    private function buildBusyPeriod($vevent, $timeZone) {
         $utc = new DateTimeZone('UTC');
-        $startDate = $vevent->DTSTART->getDateTime($utc);
+        $startDate = $vevent->DTSTART->getDateTime($timeZone);
 
         if (isset($vevent->DTEND)) {
-            $endDate = $vevent->DTEND->getDateTime($utc);
+            $endDate = $vevent->DTEND->getDateTime($timeZone);
         } elseif (isset($vevent->DURATION)) {
             $endDate = (clone $startDate)->add(VObject\DateTimeParser::parse($vevent->DURATION->getValue()));
         } elseif (!$vevent->DTSTART->hasTime()) {
@@ -259,6 +274,19 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
             'start' => $startDate->setTimezone($utc)->format('Ymd\\THis\\Z'),
             'end' => $endDate->setTimezone($utc)->format('Ymd\\THis\\Z')
         ];
+    }
+
+    private function isValidTimeZone($timeZone) {
+        if (!is_string($timeZone)) {
+            return false;
+        }
+
+        try {
+            new DateTimeZone($timeZone);
+            return true;
+        } catch (\Exception $e) {
+            return false;
+        }
     }
 
     function isCalendar($calendar) {

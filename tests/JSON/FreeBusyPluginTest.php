@@ -274,6 +274,116 @@ END:VCALENDAR
         );
     }
 
+    function testFreeBusyShouldReadAllDayEventsInUtcByDefault() {
+        $this->createAllDayEvent('all-day.ics', 'all-day-event', '20181019', '20181022');
+
+        $this->assertEquals(
+            [(object) ['uid' => 'all-day-event', 'start' => '20181019T000000Z', 'end' => '20181022T000000Z']],
+            $this->getBusyPeriods('20181001T000000Z', '20181101T000000Z', ['recur'])
+        );
+    }
+
+    function testFreeBusyShouldReadAllDayEventsInTheRequestedTimeZone() {
+        $this->createAllDayEvent('all-day.ics', 'all-day-event', '20181019', '20181022');
+
+        // Paris is UTC+2 in October, until the 28th.
+        $this->assertEquals(
+            [(object) ['uid' => 'all-day-event', 'start' => '20181018T220000Z', 'end' => '20181021T220000Z']],
+            $this->getBusyPeriods('20181001T000000Z', '20181101T000000Z', ['recur'], 'Europe/Paris')
+        );
+    }
+
+    function testFreeBusyShouldReadAllDayEventsWestOfUtcInTheRequestedTimeZone() {
+        $this->createAllDayEvent('all-day.ics', 'all-day-event', '20181019', '20181020');
+
+        // New York is UTC-4 in October.
+        $this->assertEquals(
+            [(object) ['uid' => 'all-day-event', 'start' => '20181019T040000Z', 'end' => '20181020T040000Z']],
+            $this->getBusyPeriods('20181001T000000Z', '20181101T000000Z', ['recur'], 'America/New_York')
+        );
+    }
+
+    function testFreeBusyShouldReturnAnAllDayEventStartingBeforeUtcMidnightInTheRequestedTimeZone() {
+        $this->createAllDayEvent('all-day.ics', 'all-day-event', '20181019', '20181020');
+
+        // The window ends before the UTC midnight the event starts at, but after the Paris one.
+        $this->assertEquals(
+            [(object) ['uid' => 'all-day-event', 'start' => '20181018T220000Z', 'end' => '20181019T220000Z']],
+            $this->getBusyPeriods('20181018T200000Z', '20181018T230000Z', ['recur'], 'Europe/Paris')
+        );
+    }
+
+    function testFreeBusyShouldLeaveOutAnAllDayEventEndingAtTheStartOfTheWindowInTheRequestedTimeZone() {
+        $this->createAllDayEvent('all-day.ics', 'all-day-event', '20181019', '20181020');
+
+        // The window starts after the Paris midnight ending the event, before the UTC one.
+        $this->assertEquals(
+            [],
+            $this->getBusyPeriods('20181019T230000Z', '20181020T010000Z', ['recur'], 'Europe/Paris')
+        );
+    }
+
+    function testFreeBusyShouldReadRecurringAllDayEventsInTheRequestedTimeZone() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'recurring-all-day.ics',
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:recurring-all-day-event
+SUMMARY:Weekly day off
+DTSTART;VALUE=DATE:20181001
+DTEND;VALUE=DATE:20181002
+RRULE:FREQ=WEEKLY;COUNT=2
+END:VEVENT
+END:VCALENDAR
+');
+
+        $this->assertEquals(
+            [
+                (object) ['uid' => 'recurring-all-day-event', 'start' => '20180930T220000Z', 'end' => '20181001T220000Z'],
+                (object) ['uid' => 'recurring-all-day-event', 'start' => '20181007T220000Z', 'end' => '20181008T220000Z']
+            ],
+            $this->getBusyPeriods('20181001T000000Z', '20181101T000000Z', ['recur'], 'Europe/Paris')
+        );
+    }
+
+    function testFreeBusyShouldNotShiftEventsWithATimeZoneWhenATimeZoneIsRequested() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'utc.ics',
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:utc-event
+SUMMARY:Meeting
+DTSTART:20181019T090000Z
+DTEND:20181019T100000Z
+END:VEVENT
+END:VCALENDAR
+');
+
+        $this->assertEquals(
+            [(object) ['uid' => 'utc-event', 'start' => '20181019T090000Z', 'end' => '20181019T100000Z']],
+            $this->getBusyPeriods('20181019T000000Z', '20181020T000000Z', ['recur'], 'Europe/Paris')
+        );
+    }
+
+    function testFreeBusyShouldRejectAnUnknownTimeZone() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/freebusy',
+        ));
+
+        $request->setBody(json_encode([
+            'start' => '20181001T000000Z',
+            'end' => '20181101T000000Z',
+            'users' => [self::USER1_ID],
+            'timezone' => 'Mars/Olympus_Mons'
+        ]));
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+    }
+
     function testFreeBusyShouldGiveAnEndToAnEventWithNeitherDtendNorDuration() {
         $this->caldavBackend->createCalendarObject($this->cal['id'], 'no-end.ics',
             'BEGIN:VCALENDAR
@@ -629,13 +739,35 @@ END:VCALENDAR
     }
 
     /**
+     * Creates an all-day event in user1's first calendar, between the given DATE values.
+     */
+    private function createAllDayEvent($uri, $uid, $dtstart, $dtend) {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], $uri, implode("\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:' . $uid,
+            'SUMMARY:' . $uid,
+            'DTSTART;VALUE=DATE:' . $dtstart,
+            'DTEND;VALUE=DATE:' . $dtend,
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]));
+    }
+
+    /**
      * Returns the busy periods of user1's first calendar over the given window.
      */
-    private function getBusyPeriods($start, $end, $uids = null) {
+    private function getBusyPeriods($start, $end, $uids = null, $timeZone = null) {
         $data = ['start' => $start, 'end' => $end, 'users' => [self::USER1_ID]];
 
         if (!is_null($uids)) {
             $data['uids'] = $uids;
+        }
+
+        if (!is_null($timeZone)) {
+            $data['timezone'] = $timeZone;
         }
 
         return $this->requestFreeBusy($data)->users[0]->calendars[0]->busy;

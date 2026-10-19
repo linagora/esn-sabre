@@ -597,6 +597,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $calendarHandler = $this->getCalendarHandler();
 
         if (isset($jsonData->{'invite-reply'})) {
+            // The invitation belongs to this home, including shares that only grant free/busy access.
+            list($homePath) = \Sabre\Uri\split($path);
+            $this->server->getPlugin('acl')->checkPrivileges($homePath, '{DAV:}write-properties');
             return $calendarHandler->updateInviteStatus($node, $jsonData);
         } else if (isset($jsonData->share)) {
             return $calendarHandler->updateSharees($path, $jsonData);

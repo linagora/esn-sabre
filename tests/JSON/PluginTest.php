@@ -2008,6 +2008,8 @@ END:VCALENDAR
     }
 
     function testCalendarUpdateInviteStatus() {
+        $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0e', SERVER_MOCK_DOMAIN_ID));
+
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',

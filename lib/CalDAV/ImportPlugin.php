@@ -104,6 +104,15 @@ class ImportPlugin extends \ESN\JSON\BasePlugin  {
 
         foreach($home->getDuplicateCalendarObjects($calendarUri, $objectUri) as $eventPath) {
             $fullPath = $homePath . '/' . $eventPath;
+            try {
+                // Cleanup must honor the same ACL and private-event checks as a normal DELETE.
+                if (!$this->server->emit('beforeUnbind', [$fullPath])) {
+                    continue;
+                }
+            } catch (\Sabre\DAV\Exception\Forbidden $e) {
+                // Import already succeeded; preserve duplicates the requester cannot delete.
+                continue;
+            }
             $this->server->tree->delete($fullPath);
             $this->server->emit('afterUnbind', [$fullPath]);
         }

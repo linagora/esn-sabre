@@ -123,6 +123,9 @@ class Plugin extends \ESN\JSON\BasePlugin {
             }
 
             if ($data = Utils::getJsonValue($jsonData, 'dav:invite-reply')) {
+                // POST does not enforce ACL automatically; the reply changes this instance's properties.
+                $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}write-properties');
+
                 $accepted = Utils::getJsonValue($data, 'dav:invite-accepted', false);
 
                 if ($accepted) {

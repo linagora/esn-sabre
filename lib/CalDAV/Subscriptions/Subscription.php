@@ -266,6 +266,30 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
         return $this->caldavBackend->getCalendarPublicRight($sourceCalendarInfo['id']);
     }
 
+    function getACL() {
+        $acl = parent::getACL();
+        if ($this->getSourcePublicRight() !== '{DAV:}read') {
+            return $acl;
+        }
+
+        // RFC 3744: managing this subscription's properties does not grant
+        // bind/unbind on its source events. Unsubscribing uses unbind on the
+        // calendar home instead. Derive advertised privileges from this ACL too.
+        $restricted = [];
+        foreach ($acl as $ace) {
+            if ($ace['privilege'] === '{DAV:}all') {
+                foreach (['{DAV:}read', '{DAV:}write-properties'] as $privilege) {
+                    $ace['privilege'] = $privilege;
+                    $restricted[] = $ace;
+                }
+            } else {
+                $restricted[] = $ace;
+            }
+        }
+
+        return $restricted;
+    }
+
     /**
      * Returns the owner of the source calendar.
      *

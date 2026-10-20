@@ -43,7 +43,7 @@ END:VCALENDAR'
 
     function setUp(): void
     {
-        $this->iTipPlugin = new ITipPlugin();
+        $this->iTipPlugin = new StoredOrganizerITipPlugin(['principals/users/b' => 'mailto:b@linagora.com']);
         $this->calDavPlugin = new CalDavPluginMock();
         $this->authPlugin = new AuthPluginMock('principals/users/b');
         $this->aclPlugin = new AclPluginMock([
@@ -321,6 +321,102 @@ END:VCALENDAR';
         $this->assertEquals(204, $response->getStatus());
     }
 
+    function testITipCounterShouldReturn403WhenRecipientIsNotStoredOrganizer()
+    {
+        $scheduleCalled = false;
+        $this->server->on('schedule', function() use (&$scheduleCalled) {
+            $scheduleCalled = true;
+        });
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+        $this->iTipRequestData['recipient'] = 'c@linagora.com';
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(403, $this->server->httpResponse->getStatus());
+        $this->assertFalse($scheduleCalled);
+    }
+
+    function testITipCounterShouldReturn403WhenRecipientIsExternalAddress()
+    {
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+        $this->iTipRequestData['recipient'] = 'qa-not-a-user@example.com';
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(403, $this->server->httpResponse->getStatus());
+    }
+
+    function testITipCounterShouldIgnoreOrganizerOfSubmittedIcs()
+    {
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+        $this->iTipRequestData['recipient'] = 'c@linagora.com';
+        $this->iTipRequestData['ical'] = str_replace('ORGANIZER;CN=B:mailto:b@linagora.com',
+            'ORGANIZER:mailto:c@linagora.com', $this->iTipRequestData['ical']);
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(403, $this->server->httpResponse->getStatus());
+    }
+
+    function testITipCounterShouldReturn403WhenStoredEventIsNotFound()
+    {
+        $this->iTipPlugin->setStoredOrganizers([]);
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(403, $this->server->httpResponse->getStatus());
+    }
+
+    function testITipCounterShouldMatchStoredOrganizerCaseInsensitively()
+    {
+        $this->iTipPlugin->setStoredOrganizers(['principals/users/b' => 'MAILTO:B@linagora.com']);
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+
+        $this->iTipPlugin->iTip($this->makeRequest($this->iTipRequestData));
+
+        $this->assertEquals(204, $this->server->httpResponse->getStatus());
+    }
+
+}
+
+#[\AllowDynamicProperties]
+class StoredOrganizerITipPlugin extends ITipPlugin
+{
+    // Stored ORGANIZER of the event, by principal whose calendar holds a copy.
+    private $storedOrganizers;
+    // ORGANIZERs of the Team Calendar copies, by principal writing to these Team Calendars.
+    private $teamCalendarOrganizers = [];
+
+    function __construct(array $storedOrganizers)
+    {
+        $this->storedOrganizers = $storedOrganizers;
+    }
+
+    function setStoredOrganizers(array $storedOrganizers): void
+    {
+        $this->storedOrganizers = $storedOrganizers;
+    }
+
+    function setTeamCalendarOrganizers(array $teamCalendarOrganizers): void
+    {
+        $this->teamCalendarOrganizers = $teamCalendarOrganizers;
+    }
+
+    protected function findStoredOrganizer(string $principalUri, Message $message): ?string
+    {
+        return $this->storedOrganizers[$principalUri] ?? null;
+    }
+
+    protected function findTeamCalendarOrganizers(string $principalUri, Message $message): array
+    {
+        return $this->teamCalendarOrganizers[$principalUri] ?? [];
+    }
 }
 
 #[\AllowDynamicProperties]

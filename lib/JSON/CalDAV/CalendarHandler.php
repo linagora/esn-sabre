@@ -132,15 +132,13 @@ class CalendarHandler {
         }
 
         $requestPath = $baseUri . $nodePath . '.json';
-        $result = [];
-        if (!empty($items)) {
-            $result = [
-                '_links' => [
-                    'self' => [ 'href' => $requestPath ]
-                ],
-                '_embedded' => [ 'dav:calendar' => $items ]
-            ];
-        }
+        // Keep the JSON envelope even when no calendar matches the filters.
+        $result = [
+            '_links' => [
+                'self' => [ 'href' => $requestPath ]
+            ],
+            '_embedded' => [ 'dav:calendar' => $items ]
+        ];
 
         return [200, $result];
     }

@@ -3,6 +3,7 @@
 namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\SharedCalendar;
+use ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin;
 use ESN\CalDAV\VideoConferenceDecorator;
 use \Sabre\VObject;
 use \Sabre\VObject\ITip\Message;
@@ -209,15 +210,24 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
 
     // A COUNTER is only ever addressed to the organizer. The ORGANIZER is never read from the
     // submitted ICS: it is client-controlled.
-    // A local recipient must organize the event in their own calendar, which the sender cannot
-    // write to. An external organizer has no copy here, so the sender's copy is the only one
-    // available: verifying the COUNTER is then up to the organizer's own server.
+    // A local recipient must organize the event in a calendar they own or in a Team Calendar they
+    // write to, which the sender cannot write to. An external organizer has no copy here, so the
+    // sender's copy is the only one available: verifying the COUNTER is then up to the
+    // organizer's own server.
     private function recipientIsStoredOrganizer(Message $message): bool
     {
         $recipientPrincipal = $this->normalizePrincipalUri(Utils::getPrincipalByUri($message->recipient, $this->server));
         if ($recipientPrincipal) {
-            $organizer = $this->findStoredOrganizer($recipientPrincipal, $message);
-            return $organizer && $this->addressBelongsToPrincipal($organizer, $message->recipient, $recipientPrincipal);
+            $organizers = array_merge(
+                array_filter([$this->findStoredOrganizer($recipientPrincipal, $message)]),
+                $this->findTeamCalendarOrganizers($recipientPrincipal, $message)
+            );
+            foreach ($organizers as $organizer) {
+                if ($this->addressBelongsToPrincipal($organizer, $message->recipient, $recipientPrincipal)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         $senderPrincipal = Utils::getPrincipalByUri($message->sender, $this->server);
@@ -247,7 +257,35 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
             return null;
         }
 
-        $vevent = VObject\Reader::read($storedEvent[1])->VEVENT;
+        return $this->organizerOf($storedEvent[1]);
+    }
+
+    // The organizer copy of a Team Calendar event is not in a calendar the organizer owns:
+    // look it up like scheduling does for a REPLY, in the Team Calendars the principal writes to.
+    protected function findTeamCalendarOrganizers(string $principalUri, Message $message): array
+    {
+        $plugin = $this->server->getPlugin(TeamCalendarSchedulingRecipientPlugin::PLUGIN_NAME);
+        if (!$plugin) {
+            return [];
+        }
+
+        $organizers = [];
+        try {
+            $paths = $plugin->findCalendarObjectPathsWithoutSchedulingRecipient('calendars/' . basename($principalUri), $message->uid);
+            foreach ($paths as $path) {
+                $data = $this->server->tree->getNodeForPath($path)->get();
+                $organizers[] = $this->organizerOf(is_resource($data) ? stream_get_contents($data) : $data);
+            }
+        } catch (DAV\Exception $e) {
+            return [];
+        }
+
+        return array_values(array_filter($organizers));
+    }
+
+    private function organizerOf(string $calendarData): ?string
+    {
+        $vevent = VObject\Reader::read($calendarData)->VEVENT;
         return $vevent && isset($vevent->ORGANIZER) ? (string) $vevent->ORGANIZER : null;
     }
 

@@ -390,6 +390,8 @@ class StoredOrganizerITipPlugin extends ITipPlugin
 {
     // Stored ORGANIZER of the event, by principal whose calendar holds a copy.
     private $storedOrganizers;
+    // ORGANIZERs of the Team Calendar copies, by principal writing to these Team Calendars.
+    private $teamCalendarOrganizers = [];
 
     function __construct(array $storedOrganizers)
     {
@@ -401,9 +403,19 @@ class StoredOrganizerITipPlugin extends ITipPlugin
         $this->storedOrganizers = $storedOrganizers;
     }
 
+    function setTeamCalendarOrganizers(array $teamCalendarOrganizers): void
+    {
+        $this->teamCalendarOrganizers = $teamCalendarOrganizers;
+    }
+
     protected function findStoredOrganizer(string $principalUri, Message $message): ?string
     {
         return $this->storedOrganizers[$principalUri] ?? null;
+    }
+
+    protected function findTeamCalendarOrganizers(string $principalUri, Message $message): array
+    {
+        return $this->teamCalendarOrganizers[$principalUri] ?? [];
     }
 }
 

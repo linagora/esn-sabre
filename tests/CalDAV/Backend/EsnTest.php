@@ -38,6 +38,32 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         }
     }
 
+    function testDefaultCalendarShouldBeCreatedWhenAnotherCalendarAlreadyExists() {
+        $backend = $this->getBackend();
+        $principalUri = 'principals/user/54b64eadf6d7d8e41d263e0f';
+        // A calendar named #default is not necessarily the principal's own main calendar.
+        $backend->createCalendar($principalUri, 'other-calendar', ['{DAV:}displayname' => '#default']);
+
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $calendars = $backend->getCalendarsForUser($principalUri);
+
+            $this->assertSame(['54b64eadf6d7d8e41d263e0f', 'other-calendar'], array_column($calendars, 'uri'));
+        }
+    }
+
+    function testDefaultCalendarShouldNotBeDuplicatedOrResetOnRepeatedListings() {
+        $backend = $this->getBackend();
+        $principalUri = 'principals/user/54b64eadf6d7d8e41d263e0f';
+        $backend->createCalendar($principalUri, '54b64eadf6d7d8e41d263e0f', ['{DAV:}displayname' => 'My calendar']);
+
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $calendars = $backend->getCalendarsForUser($principalUri);
+
+            $this->assertCount(1, $calendars);
+            $this->assertSame('My calendar', $calendars[0]['{DAV:}displayname']);
+        }
+    }
+
     function testResourceCalendarShouldBeCreatedWhenRequesting() {
         $backend = $this->getBackend();
         $calendars = $backend->getCalendarsForUser('principals/resources/resourceId');

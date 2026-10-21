@@ -129,6 +129,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function validateCalendarObjectBeforeScheduling(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
+        $this->calendarObjectValidator->validateEventDates($vCal);
+
         if ($this->server->getHTTPPrefer()['handling'] !== 'strict') {
             return;
         }

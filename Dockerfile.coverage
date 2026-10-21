@@ -5,7 +5,6 @@ FROM debian:trixie
 LABEL maintainer Linagora Folks <openpaas@linagora.com>
 
 ENV PHPVERSION=8.5
-ENV PHP_RELEASE=${PHPVERSION}.11
 
 ADD ./docker/config/20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
 ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini
@@ -23,10 +22,10 @@ RUN apt-get update && \
 
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \
-  DEBIAN_FRONTEND=noninteractive apt-get -y install "php${PHPVERSION}-fpm=${PHP_RELEASE}-*" "php${PHPVERSION}-cli=${PHP_RELEASE}-*" curl supervisor nginx git \
+  DEBIAN_FRONTEND=noninteractive apt-get -y install php${PHPVERSION}-fpm php${PHPVERSION}-cli curl supervisor nginx git \
     tzdata tzdata-legacy \
-    "php${PHPVERSION}-curl=${PHP_RELEASE}-*" "php${PHPVERSION}-ldap=${PHP_RELEASE}-*" "php${PHPVERSION}-bcmath=${PHP_RELEASE}-*" "php${PHPVERSION}-mbstring=${PHP_RELEASE}-*" "php${PHPVERSION}-zip=${PHP_RELEASE}-*" \
-    "php${PHPVERSION}-xml=${PHP_RELEASE}-*" php-pear "php${PHPVERSION}-dev=${PHP_RELEASE}-*" make pkg-config php${PHPVERSION}-apcu php${PHPVERSION}-xdebug && \
+    php${PHPVERSION}-curl php${PHPVERSION}-ldap php${PHPVERSION}-bcmath php${PHPVERSION}-mbstring php${PHPVERSION}-zip \
+    php${PHPVERSION}-xml php-pear php${PHPVERSION}-dev make pkg-config php${PHPVERSION}-apcu php${PHPVERSION}-xdebug && \
   DEBIAN_FRONTEND=noninteractive apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Configure PHP

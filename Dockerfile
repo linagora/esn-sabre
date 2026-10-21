@@ -8,7 +8,7 @@
 # - Clean up caches and temporary files
 #
 # Build:
-# docker build -t linagora/esn-sabre .
+# docker build --pull --no-cache -t linagora/esn-sabre .
 #
 # Run:
 # docker run -d -p 8001:80 -e "SABRE_MONGO_HOST=192.168.0.1" -e "ESN_MONGO_HOST=192.168.0.1" linagora/esn-sabre
@@ -18,7 +18,6 @@ FROM debian:trixie-slim
 LABEL maintainer="Linagora Folks <openpaas@linagora.com>"
 
 ENV PHPVERSION=8.5
-ENV PHP_RELEASE=${PHPVERSION}.11
 
 # Copy PHP configuration files first (these rarely change)
 ADD ./docker/config/20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
@@ -41,14 +40,14 @@ RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \
   DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends \
     # Runtime packages
-    "php${PHPVERSION}-fpm=${PHP_RELEASE}-*" \
-    "php${PHPVERSION}-cli=${PHP_RELEASE}-*" \
-    "php${PHPVERSION}-curl=${PHP_RELEASE}-*" \
-    "php${PHPVERSION}-ldap=${PHP_RELEASE}-*" \
-    "php${PHPVERSION}-bcmath=${PHP_RELEASE}-*" \
-    "php${PHPVERSION}-mbstring=${PHP_RELEASE}-*" \
-    "php${PHPVERSION}-zip=${PHP_RELEASE}-*" \
-    "php${PHPVERSION}-xml=${PHP_RELEASE}-*" \
+    php${PHPVERSION}-fpm \
+    php${PHPVERSION}-cli \
+    php${PHPVERSION}-curl \
+    php${PHPVERSION}-ldap \
+    php${PHPVERSION}-bcmath \
+    php${PHPVERSION}-mbstring \
+    php${PHPVERSION}-zip \
+    php${PHPVERSION}-xml \
     php${PHPVERSION}-apcu \
     supervisor \
     nginx \
@@ -59,7 +58,7 @@ RUN apt-get update && \
     tzdata-legacy \
     # Build tools (temporary)
     php-pear \
-    "php${PHPVERSION}-dev=${PHP_RELEASE}-*" \
+    php${PHPVERSION}-dev \
     make \
     pkg-config \
     git && \

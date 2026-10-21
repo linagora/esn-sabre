@@ -13,6 +13,26 @@ class CalendarObjectValidator {
         $this->validateExDates($vCalendar);
     }
 
+    /**
+     * Unlike validate(), runs on every write whatever the Prefer header: an
+     * event ending before it starts is stored with a lastoccurence earlier than
+     * its firstoccurence, and time-range queries covering its start miss it.
+     */
+    function validateEventDates(VCalendar $vCalendar) {
+        foreach ($vCalendar->select('VEVENT') as $vevent) {
+            if (!isset($vevent->DTSTART) || !isset($vevent->DTEND)) {
+                continue;
+            }
+
+            // RFC 5545 §3.6.1 requires DTEND to be later than DTSTART; an equal
+            // DTEND is still accepted as clients use it for instantaneous events.
+            // Compare instants, as DTSTART and DTEND may use different timezones.
+            if ($vevent->DTEND->getDateTime()->getTimestamp() < $vevent->DTSTART->getDateTime()->getTimestamp()) {
+                $this->fail('DTEND must not be before DTSTART');
+            }
+        }
+    }
+
     private function validateRRules(VCalendar $vCalendar): void
     {
         foreach ($vCalendar->select('VEVENT') as $vevent) {

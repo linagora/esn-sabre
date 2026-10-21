@@ -134,7 +134,6 @@ class PrivateEventPlugin extends ServerPlugin {
 
         $reflection = new \ReflectionClass($node);
         $prop = $reflection->getProperty('objectData');
-        $prop->setAccessible(true);
         $objectData = $prop->getValue($node);
 
         if (!isset($objectData['classification'])) {

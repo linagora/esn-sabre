@@ -191,10 +191,11 @@ if [ "$SKIP_BUILD" = false ]; then
   # old image in place and the test stages run against it without saying so.
   docker image rm -f "${BUILT_IMAGES[@]}" >/dev/null 2>&1 || true
 
-  docker build --pull -t esn-sabre-ldap-test -f Dockerfile.ldap . || exit 1
-  docker build --pull -t esn_sabre_test -f Dockerfile.test . || exit 1
+  # Refresh base images and APT layers so patch updates are included in every build.
+  docker build --pull --no-cache -t esn-sabre-ldap-test -f Dockerfile.ldap . || exit 1
+  docker build --pull --no-cache -t esn_sabre_test -f Dockerfile.test . || exit 1
   # The production image: the nginx rate limit test runs against it.
-  docker build --pull -t esn_sabre_nginx_test -f Dockerfile . || exit 1
+  docker build --pull --no-cache -t esn_sabre_nginx_test -f Dockerfile . || exit 1
 else
   for image in "${BUILT_IMAGES[@]}"; do
     if [ -z "$(docker images -q "$image" 2>/dev/null)" ]; then

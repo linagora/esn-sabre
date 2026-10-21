@@ -7,7 +7,7 @@ pipeline {
     }
 
     options {
-        timeout(time: 1, unit: 'HOURS')
+        timeout(time: 2, unit: 'HOURS')
         disableConcurrentBuilds()
     }
 
@@ -92,7 +92,7 @@ pipeline {
               }
             }
 
-            sh 'docker build -t linagora/esn-sabre-pr:$CHANGE_ID .'
+            sh 'docker build --pull --no-cache -t linagora/esn-sabre-pr:$CHANGE_ID .'
             sh 'docker login -u $DOCKER_HUB_CREDENTIAL_USR -p $DOCKER_HUB_CREDENTIAL_PSW'
             sh 'docker push linagora/esn-sabre-pr:$CHANGE_ID'
             sh """
@@ -124,7 +124,7 @@ pipeline {
             }
 
             echo "Docker tag: ${env.DOCKER_TAG}"
-                sh 'docker build -t linagora/esn-sabre:$DOCKER_TAG .'
+                sh 'docker build --pull --no-cache -t linagora/esn-sabre:$DOCKER_TAG .'
                 sh 'docker login -u $DOCKER_HUB_CREDENTIAL_USR -p $DOCKER_HUB_CREDENTIAL_PSW'
                 sh 'docker push linagora/esn-sabre:$DOCKER_TAG'
           }

@@ -51,7 +51,9 @@ class Esn extends Mongo {
     function getCalendarsForUser($principalUri) {
         $calendars = parent::getCalendarsForUser($principalUri);
 
-        if (count($calendars) == 0) {
+        // Delegated calendars can exist before the principal's own default calendar.
+        $defaultCalendarUri = basename($principalUri);
+        if (!in_array($defaultCalendarUri, array_column($calendars, 'uri'), true)) {
             $this->createDefaultCalendar($principalUri);
             $calendars = parent::getCalendarsForUser($principalUri);
         }

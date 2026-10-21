@@ -54,8 +54,15 @@ RUN apt-get update && \
     make \
     pkg-config \
     git && \
-  # Compile MongoDB extension
-  (pecl install mongodb-2.2.0 || pecl install mongodb) && \
+  # Download release archives directly to avoid PECL REST metadata lookups.
+  # Preserve the existing 2.2.0 preference and latest-release fallback.
+  ( (curl -fsSL --retry 3 https://github.com/mongodb/mongo-php-driver/releases/download/2.2.0/mongodb-2.2.0.tgz -o /tmp/mongodb.tgz && \
+    pecl install /tmp/mongodb.tgz) || \
+   (MONGODB_RELEASE_URL="$(curl -fsSL --retry 3 -o /dev/null -w '%{url_effective}' https://github.com/mongodb/mongo-php-driver/releases/latest)" && \
+    MONGODB_VERSION="${MONGODB_RELEASE_URL##*/}" && \
+    curl -fsSL --retry 3 "https://github.com/mongodb/mongo-php-driver/releases/download/${MONGODB_VERSION}/mongodb-${MONGODB_VERSION}.tgz" -o /tmp/mongodb.tgz && \
+    pecl install /tmp/mongodb.tgz) ) && \
+  rm -f /tmp/mongodb.tgz && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini && \
   # Remove build tools to reduce image size

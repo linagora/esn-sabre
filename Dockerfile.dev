@@ -12,8 +12,13 @@ ARG BASE_IMAGE="linagora/esn-sabre:2.4.6.4"
 FROM ${BASE_IMAGE}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    php-pear php8.4-dev make gcc g++ autoconf pkg-config \
- && pecl install xdebug \
+    php-pear php8.4-dev make gcc g++ autoconf pkg-config curl ca-certificates \
+ # Keep Xdebug unpinned, selecting the latest stable release as before.
+ && curl -fsSL --retry 3 https://api.github.com/repos/xdebug/xdebug/releases -o /tmp/xdebug-releases.json \
+ && XDEBUG_VERSION="$(php -r '$versions = array_filter(array_column(json_decode(file_get_contents("/tmp/xdebug-releases.json"), true, 512, JSON_THROW_ON_ERROR), "tag_name"), fn($v) => preg_match("/^[0-9]+\.[0-9]+\.[0-9]+$/", $v)); if (!$versions) { exit(1); } usort($versions, "version_compare"); echo end($versions);')" \
+ && curl -fsSL --retry 3 "https://xdebug.org/files/xdebug-${XDEBUG_VERSION}.tgz" -o /tmp/xdebug.tgz \
+ && pecl install /tmp/xdebug.tgz \
+ && rm -f /tmp/xdebug.tgz /tmp/xdebug-releases.json \
  && echo "zend_extension=$(find /usr/lib/php/ -name xdebug.so)" > /etc/php/8.4/mods-available/xdebug.ini \
  && echo "xdebug.mode=debug" >> /etc/php/8.4/mods-available/xdebug.ini \
  && echo "xdebug.start_with_request=yes" >> /etc/php/8.4/mods-available/xdebug.ini \

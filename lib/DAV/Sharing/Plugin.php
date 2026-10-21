@@ -24,7 +24,7 @@ class Plugin extends \Sabre\DAV\Sharing\Plugin {
                     });
     }
 
-    function __construct(\MongoDB\Database $esnDb = null) {
+    function __construct(?\MongoDB\Database $esnDb = null) {
         $this->esnDb = $esnDb;
     }
 

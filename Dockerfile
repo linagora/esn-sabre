@@ -17,7 +17,8 @@
 FROM debian:trixie-slim
 LABEL maintainer="Linagora Folks <openpaas@linagora.com>"
 
-ENV PHPVERSION=8.4
+ENV PHPVERSION=8.5
+ENV PHP_RELEASE=${PHPVERSION}.11
 
 # Copy PHP configuration files first (these rarely change)
 ADD ./docker/config/20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
@@ -27,20 +28,28 @@ ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.
 # Fix for CI environments with clock skew issues
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
 
+# Debian Trixie's default repository does not provide PHP 8.5.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
+    curl -fsSL https://packages.sury.org/debsuryorg-archive-keyring.deb -o /tmp/php-keyring.deb && \
+    dpkg -i /tmp/php-keyring.deb && rm /tmp/php-keyring.deb && \
+    . /etc/os-release && \
+    echo "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ ${VERSION_CODENAME} main" > /etc/apt/sources.list.d/php.list
+
 # Install runtime packages + build tools, compile mongodb extension, then remove build tools
 RUN apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \
   DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends \
     # Runtime packages
-    php${PHPVERSION}-fpm \
-    php${PHPVERSION}-cli \
-    php${PHPVERSION}-curl \
-    php${PHPVERSION}-ldap \
-    php${PHPVERSION}-bcmath \
-    php${PHPVERSION}-mbstring \
-    php${PHPVERSION}-zip \
-    php${PHPVERSION}-xml \
-    php-apcu \
+    "php${PHPVERSION}-fpm=${PHP_RELEASE}-*" \
+    "php${PHPVERSION}-cli=${PHP_RELEASE}-*" \
+    "php${PHPVERSION}-curl=${PHP_RELEASE}-*" \
+    "php${PHPVERSION}-ldap=${PHP_RELEASE}-*" \
+    "php${PHPVERSION}-bcmath=${PHP_RELEASE}-*" \
+    "php${PHPVERSION}-mbstring=${PHP_RELEASE}-*" \
+    "php${PHPVERSION}-zip=${PHP_RELEASE}-*" \
+    "php${PHPVERSION}-xml=${PHP_RELEASE}-*" \
+    php${PHPVERSION}-apcu \
     supervisor \
     nginx \
     gettext-base \
@@ -50,13 +59,14 @@ RUN apt-get update && \
     tzdata-legacy \
     # Build tools (temporary)
     php-pear \
-    php${PHPVERSION}-dev \
+    "php${PHPVERSION}-dev=${PHP_RELEASE}-*" \
     make \
     pkg-config \
     git && \
   # Download release archives directly to avoid PECL REST metadata lookups.
   # Preserve the existing 2.2.0 preference and latest-release fallback.
   ( (curl -fsSL --retry 3 https://github.com/mongodb/mongo-php-driver/releases/download/2.2.0/mongodb-2.2.0.tgz -o /tmp/mongodb.tgz && \
+    echo '02b0fc089176a1cc2133b5e12aba72bff103154d2ead4789749a99c1b47f8223  /tmp/mongodb.tgz' | sha256sum -c - && \
     pecl install /tmp/mongodb.tgz) || \
    (MONGODB_RELEASE_URL="$(curl -fsSL --retry 3 -o /dev/null -w '%{url_effective}' https://github.com/mongodb/mongo-php-driver/releases/latest)" && \
     MONGODB_VERSION="${MONGODB_RELEASE_URL##*/}" && \

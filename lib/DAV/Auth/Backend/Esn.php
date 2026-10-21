@@ -36,7 +36,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     protected string $technicalPrincipal = 'principals/technicalUser';
     protected string $technicalUserType = 'technical';
 
-    function __construct($apiroot, ?string $realm = null, $principalBackend, $server, bool $debug = false) {
+    function __construct($apiroot, ?string $realm, $principalBackend, $server, bool $debug = false) {
         $this->apiroot = $apiroot;
         $this->httpClient = new HTTP\Client();
         $this->principalBackend = $principalBackend;

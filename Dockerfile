@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.19
+
 #
 # Optimized Docker container for ESN Sabre frontend
 # Optimizations:
@@ -28,7 +30,7 @@ ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.
 RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
 
 # Install runtime packages + build tools, compile mongodb extension, then remove build tools
-RUN apt-get update && \
+RUN --mount=type=bind,source=docker/archives,target=/opt/php-extensions apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && \
   DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends \
     # Runtime packages
@@ -54,15 +56,9 @@ RUN apt-get update && \
     make \
     pkg-config \
     git && \
-  # Download release archives directly to avoid PECL REST metadata lookups.
-  # Preserve the existing 2.2.0 preference and latest-release fallback.
-  ( (curl -fsSL --retry 3 https://github.com/mongodb/mongo-php-driver/releases/download/2.2.0/mongodb-2.2.0.tgz -o /tmp/mongodb.tgz && \
-    pecl install /tmp/mongodb.tgz) || \
-   (MONGODB_RELEASE_URL="$(curl -fsSL --retry 3 -o /dev/null -w '%{url_effective}' https://github.com/mongodb/mongo-php-driver/releases/latest)" && \
-    MONGODB_VERSION="${MONGODB_RELEASE_URL##*/}" && \
-    curl -fsSL --retry 3 "https://github.com/mongodb/mongo-php-driver/releases/download/${MONGODB_VERSION}/mongodb-${MONGODB_VERSION}.tgz" -o /tmp/mongodb.tgz && \
-    pecl install /tmp/mongodb.tgz) ) && \
-  rm -f /tmp/mongodb.tgz && \
+  # Verify vendored release archives before compiling the pinned extension.
+  (cd /opt/php-extensions && sha256sum -c SHA256SUMS) && \
+  pecl install /opt/php-extensions/mongodb-2.2.0.tgz && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini && \
   # Remove build tools to reduce image size
@@ -105,7 +101,7 @@ COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
 WORKDIR /var/www
 
 # Copy application code
-COPY . /var/www
+COPY --exclude=docker/archives . /var/www
 
 # Install dependencies without dev packages (using install to respect composer.lock)
 RUN git config --global --add safe.directory '/var/www/vendor/sabre/vobject' && \

@@ -1,8 +1,10 @@
+# syntax=docker/dockerfile:1.19
+
 # Dockerfile for test coverage generation
 # Based on main Dockerfile with Xdebug added
 
 FROM debian:trixie
-LABEL maintainer Linagora Folks <openpaas@linagora.com>
+LABEL maintainer="Linagora Folks <openpaas@linagora.com>"
 
 ENV PHPVERSION=8.4
 
@@ -41,9 +43,8 @@ RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fp
 RUN sed -i "s/error_log = \/var\/log\/php${PHPVERSION}-fpm.log/error_log = \/proc\/self\/fd\/2/" /etc/php/${PHPVERSION}/fpm/php-fpm.conf && \
     sed -i "s/;catch_workers_output = yes/catch_workers_output = yes/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf
 
-RUN curl -fsSL --retry 3 https://github.com/mongodb/mongo-php-driver/releases/download/2.1.4/mongodb-2.1.4.tgz -o /tmp/mongodb.tgz \
-    && pecl install /tmp/mongodb.tgz \
-    && rm -f /tmp/mongodb.tgz \
+RUN --mount=type=bind,source=docker/archives,target=/opt/php-extensions (cd /opt/php-extensions && sha256sum -c SHA256SUMS) \
+    && pecl install /opt/php-extensions/mongodb-2.1.4.tgz \
     && echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini \
     && echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini
 
@@ -54,7 +55,7 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --file
 RUN ln -sf /dev/stdout /var/log/nginx/access.log && \
     ln -sf /dev/stderr /var/log/nginx/error.log
 
-COPY . /var/www
+COPY --exclude=docker/archives . /var/www
 COPY ./docker/config/nginx.conf /etc/nginx/nginx.conf
 COPY ./docker/config/nginx-site.conf /etc/nginx/sites-available/default
 

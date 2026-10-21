@@ -1157,7 +1157,8 @@ END:VCALENDAR
     function testFilteredCalendarLisWithSharedNoResponseOnly() {
         $jsonResponse = $this->_testFilteredCalendarList(null, null, 'noresponse');
 
-        $this->assertNull($jsonResponse);
+        $this->assertSame('/calendars/54b64eadf6d7d8e41d263e0f.json', $jsonResponse->{'_links'}->self->href);
+        $this->assertSame([], $jsonResponse->{'_embedded'}->{'dav:calendar'});
     }
 
     function testFilteredCalendarLisWithSharedAcceptedOnly() {
@@ -1589,7 +1590,8 @@ END:VCALENDAR
         $jsonResponse = json_decode($response->getBodyAsString());
 
         $this->assertEquals($response->status, 200);
-        $this->assertNull($jsonResponse);
+        $this->assertSame('/calendars/54b64eadf6d7d8e41d263e0f.json', $jsonResponse->{'_links'}->self->href);
+        $this->assertSame([], $jsonResponse->{'_embedded'}->{'dav:calendar'});
     }
 
     function testGetPublicCalendarsUserWithDelegatePublicCalendar() {
@@ -1627,7 +1629,8 @@ END:VCALENDAR
         $jsonResponse = json_decode($response2->getBodyAsString());
 
         $this->assertEquals($response2->status, 200);
-        $this->assertEquals($jsonResponse, null);
+        $this->assertSame('/calendars/54b64eadf6d7d8e41d263e0d.json', $jsonResponse->{'_links'}->self->href);
+        $this->assertSame([], $jsonResponse->{'_embedded'}->{'dav:calendar'});
     }
 
     function makeRequest($method, $uri, $body) {

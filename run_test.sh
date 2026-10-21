@@ -122,7 +122,8 @@ monitor_resources() {
 run_java_group() {
   cd "$JAVA_REPORT_DIR/$1"
   # exec lets cleanup signal Maven directly, rather than leaving it in a subshell.
-  exec mvn -B clean install -Dapi.version=1.43 -Dtest="$2" -Damqp.scheduling.enabled=true \
+  # Keep full startup traces when a test class fails during initialization.
+  exec mvn -B clean install -Dapi.version=1.43 -Dtest="$2" -DtrimStackTrace=false -Damqp.scheduling.enabled=true \
     -Daether.syncContext.named.factory=file-lock -Daether.syncContext.named.nameMapper=file-gav
 }
 

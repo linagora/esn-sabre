@@ -42,8 +42,10 @@ RUN apt-get update && \
     make \
     pkg-config \
     git && \
-  # Compile MongoDB extension and enable it for all SAPIs via conf.d
-  pecl install mongodb-2.2.1 && \
+  # Install the pinned release from GitHub to avoid PECL REST metadata lookups
+  curl -fsSL --retry 3 https://github.com/mongodb/mongo-php-driver/releases/download/2.2.1/mongodb-2.2.1.tgz -o /tmp/mongodb.tgz && \
+  pecl install /tmp/mongodb.tgz && \
+  rm -f /tmp/mongodb.tgz && \
   echo "extension=mongodb.so" | tee /etc/php/${PHPVERSION}/fpm/conf.d/20-mongodb.ini /etc/php/${PHPVERSION}/cli/conf.d/20-mongodb.ini > /dev/null
 
 # Configure PHP (combine all sed commands)

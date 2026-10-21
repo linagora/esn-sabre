@@ -32,7 +32,7 @@ class Esn extends \Sabre\DAV\Auth\Backend\AbstractBasic {
     protected $technicalPrincipal = 'principals/technicalUser';
     protected $technicalUserType = 'technical';
 
-    function __construct($apiroot, $realm = null, $principalBackend, $server) {
+    function __construct($apiroot, $realm, $principalBackend, $server) {
         $this->apiroot = $apiroot;
         $this->httpClient = new HTTP\Client();
         $this->eventEmitter = new EventEmitter();

@@ -221,6 +221,10 @@ class SharedAddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\I
             $response['{http://open-paas.org/contacts}source'] = new \Sabre\DAV\Xml\Property\Href($this->getShareResourceUri());
         }
 
+        if (in_array('{http://open-paas.org/contacts}numberOfContacts', $properties)) {
+            $response['{http://open-paas.org/contacts}numberOfContacts'] = $this->getChildCount();
+        }
+
         return $response;
     }
 

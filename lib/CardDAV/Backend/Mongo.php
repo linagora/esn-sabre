@@ -289,36 +289,17 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'etag' => 1,
             'size' => 1
         ];
-        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
+        $query = $this->getCardsQuery($addressBookId, $filters);
         $collection = $this->db->selectCollection($this->cardsTableName);
         $cards = [];
-
-        if ($filters) {
-            if (isset($filters['search'])) {
-                 $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
-                 'carddata' => new \MongoDB\BSON\Regex('.*' . $filters['search'] . '.*', 'i') ];
-            }
-            if (isset($filters['modifiedBefore'])) {
-                $query['lastmodified'] = [
-                    '$lt' => (int)$filters['modifiedBefore']
-                ];
-            }
-
-        }
 
         $options = [
             'projection' => $projection,
             'skip' => (int) $offset
         ];
         if ($limit > 0) $options['limit'] = (int) $limit;
-        if (isset($filters['email'])) {
-            // Exact match on the preferred email, case insensitive through the collation of the email sort index
-            $query['email_sort'] = $filters['email'];
-            $options['collation'] = self::CONTACT_SORT_COLLATION;
-            // The matching cards share their sort key, so the index returns them by _id
-            $options['sort'] = [ '_id' => 1 ];
-            $sort = null;
-        }
+        // Matching an email needs the collation of the email sort index, which then returns the cards by _id
+        if (isset($filters['email'])) $sort = ContactSort::EMAIL;
         if ($sort === ContactSort::EMAIL) {
             $sort = ContactSort::FIELDS[ContactSort::EMAIL];
             $options['collation'] = self::CONTACT_SORT_COLLATION;
@@ -336,6 +317,25 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             $cards[] = $card;
         }
         return $cards;
+    }
+
+    private function getCardsQuery($addressBookId, $filters) {
+        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
+
+        if (isset($filters['search'])) {
+            $query['carddata'] = new \MongoDB\BSON\Regex('.*' . $filters['search'] . '.*', 'i');
+        }
+        if (isset($filters['modifiedBefore'])) {
+            $query['lastmodified'] = [
+                '$lt' => (int)$filters['modifiedBefore']
+            ];
+        }
+        if (isset($filters['email'])) {
+            // Exact match on the preferred email, case insensitive through the collation
+            $query['email_sort'] = $filters['email'];
+        }
+
+        return $query;
     }
 
     /**

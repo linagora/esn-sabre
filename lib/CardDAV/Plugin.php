@@ -591,6 +591,9 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
     private function getContacts($request, $response, $nodePath, $node) {
         $queryParams = $request->getQueryParameters();
+        if (isset($queryParams['email'])) {
+            return $this->getContactsByEmail($request, $nodePath, $node, $queryParams);
+        }
         if ($this->isCursorPaginated($queryParams)) {
             return $this->getCursorPaginatedContacts($nodePath, $node, $queryParams);
         }
@@ -616,6 +619,42 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $cards = $node->getChildren($offset, $limit, $sort, $filters);
         $count = $node->getChildCount();
 
+        $result = $this->contactsResult($request, $nodePath, $node, $cards);
+
+        if ($limit > 0 && ($offset + $limit < $count)) {
+            $queryParams['offset'] = $offset + $limit;
+            $href = $result['_links']['self']['href'] . '?' . http_build_query($queryParams);
+            $result['_links']['next'] = [ 'href' => $href ];
+        }
+
+        return [200, $result];
+    }
+
+    /**
+     * Lists all the contacts of an address book whose preferred email is the given one, ignoring case. A lookup
+     * rather than a listing: it is neither paginated, sorted nor filtered otherwise.
+     */
+    private function getContactsByEmail($request, $nodePath, $node, array $queryParams) {
+        foreach (['offset', 'limit', ContactSort::PARAMETER, SortOrder::PARAMETER, 'search', 'after', 'modifiedBefore'] as $name) {
+            if (isset($queryParams[$name])) {
+                throw new BadRequest('email cannot be used with offset, limit, sort, order, search, after or modifiedBefore');
+            }
+        }
+
+        $email = $queryParams['email'];
+        if (!is_string($email) || trim($email) === '') {
+            throw new BadRequest('email must be a non-empty string');
+        }
+
+        $cards = $node->getChildren(0, 0, null, [ 'email' => trim($email) ]);
+
+        return [200, $this->contactsResult($request, $nodePath, $node, $cards)];
+    }
+
+    /**
+     * JSON listing of the given cards of an address book, see getContacts.
+     */
+    private function contactsResult($request, $nodePath, $node, array $cards): array {
         $items = [];
         $baseUri = $this->server->getBaseUri();
         foreach ($cards as $card) {
@@ -630,23 +669,13 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $items[] = $cardItem;
         }
 
-        $requestPath = $baseUri . $request->getPath() . '.json';
-
-        $result = [
+        return [
             '_links' => [
-                'self' => [ 'href' => $requestPath ]
+                'self' => [ 'href' => $baseUri . $request->getPath() . '.json' ]
             ],
             'dav:syncToken' => $node->getSyncToken(),
             '_embedded' => [ 'dav:item' => $items ]
         ];
-
-        if ($limit > 0 && ($offset + $limit < $count)) {
-            $queryParams['offset'] = $offset + $limit;
-            $href = $requestPath . '?' . http_build_query($queryParams);
-            $result['_links']['next'] = [ 'href' => $href ];
-        }
-
-        return [200, $result];
     }
 
     /**

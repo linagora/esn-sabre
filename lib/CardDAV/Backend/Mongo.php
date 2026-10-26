@@ -311,6 +311,14 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'skip' => (int) $offset
         ];
         if ($limit > 0) $options['limit'] = (int) $limit;
+        if (isset($filters['email'])) {
+            // Exact match on the preferred email, case insensitive through the collation of the email sort index
+            $query['email_sort'] = $filters['email'];
+            $options['collation'] = self::CONTACT_SORT_COLLATION;
+            // The matching cards share their sort key, so the index returns them by _id
+            $options['sort'] = [ '_id' => 1 ];
+            $sort = null;
+        }
         if ($sort === ContactSort::EMAIL) {
             $sort = ContactSort::FIELDS[ContactSort::EMAIL];
             $options['collation'] = self::CONTACT_SORT_COLLATION;

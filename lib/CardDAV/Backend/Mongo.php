@@ -5,6 +5,7 @@ namespace ESN\CardDAV\Backend;
 use Sabre\Event\EventEmitter;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 use ESN\DAV\SortOrder;
+use ESN\CardDAV\ContactFilters;
 use ESN\CardDAV\ContactSort;
 
 #[\AllowDynamicProperties]
@@ -289,7 +290,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'etag' => 1,
             'size' => 1
         ];
-        $query = $this->getCardsQuery($addressBookId, $filters);
+        $query = ContactFilters::query((string)$addressBookId, $filters);
         $collection = $this->db->selectCollection($this->cardsTableName);
         $cards = [];
 
@@ -317,25 +318,6 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             $cards[] = $card;
         }
         return $cards;
-    }
-
-    private function getCardsQuery($addressBookId, $filters) {
-        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
-
-        if (isset($filters['search'])) {
-            $query['carddata'] = new \MongoDB\BSON\Regex('.*' . $filters['search'] . '.*', 'i');
-        }
-        if (isset($filters['modifiedBefore'])) {
-            $query['lastmodified'] = [
-                '$lt' => (int)$filters['modifiedBefore']
-            ];
-        }
-        if (isset($filters['email'])) {
-            // Exact match on the preferred email, case insensitive through the collation
-            $query['email_sort'] = $filters['email'];
-        }
-
-        return $query;
     }
 
     /**

@@ -23,16 +23,24 @@ class BasePlugin extends ServerPlugin {
     }
 
     function beforeMethod($request, $response) {
-        $url = $request->getUrl();
-        if (strpos($url, '.json') !== false) {
-            $url = str_replace('.json','', $url);
-            $request->setUrl($url);
-        }
+        self::removeJsonExtension($request);
 
         $this->acceptHeader = explode(', ', $request->getHeader('Accept') ?? '');
         $this->currentUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
 
         return true;
+    }
+
+    /**
+     * Removes the .json extension from the path of the request, leaving the query string as is: a parameter value
+     * such as an email may contain .json.
+     */
+    static function removeJsonExtension($request) {
+        $url = explode('?', $request->getUrl(), 2);
+        if (strpos($url[0], '.json') !== false) {
+            $url[0] = str_replace('.json', '', $url[0]);
+            $request->setUrl(implode('?', $url));
+        }
     }
 
     protected function send($code, $body, $setContentType = true) {

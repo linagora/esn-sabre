@@ -174,11 +174,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     function beforeMethod($request, $response) {
-        $url = $request->getUrl();
-        if (strpos($url, '.json') !== false) {
-            $url = str_replace('.json','', $url);
-            $request->setUrl($url);
-        }
+        BasePlugin::removeJsonExtension($request);
 
         $this->acceptHeader = explode(', ', $request->getHeader('Accept') ?? '');
         $newUser = $this->server->getPlugin('auth')->getCurrentPrincipal();
@@ -202,10 +198,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $calendarHandler = $this->getCalendarHandler();
         if ($calendarHandler->isOldDefaultCalendarUriNotFound($request->getPath())) {
             $defaultCalendarUri = $calendarHandler->getDefaultCalendarUri($this->currentUser, $request->getPath());
-            $url = str_replace(\ESN\CalDAV\Backend\Esn::EVENTS_URI, $defaultCalendarUri, $url);
+            $url = str_replace(\ESN\CalDAV\Backend\Esn::EVENTS_URI, $defaultCalendarUri, $request->getUrl());
+            $request->setUrl($url);
         }
-
-        $request->setUrl($url);
 
         return true;
     }

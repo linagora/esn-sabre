@@ -5,6 +5,7 @@ namespace ESN\CardDAV\Backend;
 use Sabre\Event\EventEmitter;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 use ESN\DAV\SortOrder;
+use ESN\CardDAV\ContactFilters;
 use ESN\CardDAV\ContactSort;
 
 #[\AllowDynamicProperties]
@@ -289,28 +290,17 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'etag' => 1,
             'size' => 1
         ];
-        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
+        $query = ContactFilters::query((string)$addressBookId, $filters);
         $collection = $this->db->selectCollection($this->cardsTableName);
         $cards = [];
-
-        if ($filters) {
-            if (isset($filters['search'])) {
-                 $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
-                 'carddata' => new \MongoDB\BSON\Regex('.*' . $filters['search'] . '.*', 'i') ];
-            }
-            if (isset($filters['modifiedBefore'])) {
-                $query['lastmodified'] = [
-                    '$lt' => (int)$filters['modifiedBefore']
-                ];
-            }
-
-        }
 
         $options = [
             'projection' => $projection,
             'skip' => (int) $offset
         ];
         if ($limit > 0) $options['limit'] = (int) $limit;
+        // Matching an email needs the collation of the email sort index, which then returns the cards by _id
+        if (isset($filters['email'])) $sort = ContactSort::EMAIL;
         if ($sort === ContactSort::EMAIL) {
             $sort = ContactSort::FIELDS[ContactSort::EMAIL];
             $options['collation'] = self::CONTACT_SORT_COLLATION;

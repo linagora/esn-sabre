@@ -163,51 +163,111 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         $ldapBase = Env::getString('LDAP_BASE');
         $ldapFilter = Env::getString('LDAP_FILTER');
 
-        # Open LDAP connection
-        $ldapCon = ldap_connect(Env::getString('LDAP_SERVER'));
-        if (!$ldapCon) {
-            error_log('Unable to connect to LDAP server');
-            throw new AuthException('Unable to connect to LDAP server');
+        if (!$this->ldapConfigured()) {
+            error_log('LDAP_SERVER is not set: LDAP authentication is disabled');
+            throw new AuthException('LDAP authentication is disabled');
         }
-        try {
-            ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
-            ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
 
+        $ldapCon = $this->openLdapConnection();
+        try {
             # Try to authenticate
             $safeUser = ldap_escape($user, '', 0);
 
             try {
                 $ldapBind = ldap_bind($ldapCon, "uid=$safeUser," . $ldapBase, $password);
             } catch (\ErrorException $e) {
-                error_log("LDAP bind user failed for $user: " . $e->getMessage());
-                throw new  AuthException("Bad credentials");
+                $ldapBind = false;
             }
             if (!$ldapBind) {
                 $code = ldap_errno($ldapCon);
                 $msg  = ldap_error($ldapCon);
+                if ($this->isLdapUnavailableError($code)) {
+                    error_log("LDAP unavailable while binding '$user': [$code] '$msg'");
+                    throw new LdapUnavailableException('LDAP server unavailable');
+                }
                 error_log("Bad credentials for '$user'. LDAP bind failed: [$code] '$msg'");
                 throw new AuthException("Bad credentials");
             }
 
-            $ldapBind2 = ldap_bind($ldapCon, Env::getString('LDAP_ADMIN_DN'), Env::getString('LDAP_ADMIN_PASSWORD'));
-            if (!$ldapBind2) {
-                $code = ldap_errno($ldapCon);
-                $msg  = ldap_error($ldapCon);
-                error_log("Bad admin credentials. LDAP bind failed: [$code] '$msg'");
-                throw new AuthException("Bad admin credentials");
-            }
+            $this->bindLdapAdmin($ldapCon);
 
             # Get real mail
-            $searchResult = null;
             if ($ldapFilter !== null) {
-                $searchResult = ldap_search($ldapCon, $ldapBase, "(& (uid=$safeUser) " . $ldapFilter . ')');
+                $entries = $this->searchLdap($ldapCon, $ldapBase, "(& (uid=$safeUser) " . $ldapFilter . ')');
             } else {
-                $searchResult = ldap_search($ldapCon, $ldapBase, "(uid=$safeUser)");
+                $entries = $this->searchLdap($ldapCon, $ldapBase, "(uid=$safeUser)");
             }
-            $entries = ldap_get_entries($ldapCon, $searchResult);
         }
         finally {
             ldap_close($ldapCon);
+        }
+
+        return $entries;
+    }
+
+    private function ldapConfigured(): bool {
+        return (bool) Env::getString('LDAP_SERVER');
+    }
+
+    private function openLdapConnection() {
+        try {
+            $ldapCon = ldap_connect(Env::getString('LDAP_SERVER'));
+        } catch (\ErrorException $e) {
+            $ldapCon = false;
+        }
+        if (!$ldapCon) {
+            error_log('Unable to connect to LDAP server');
+            throw new LdapUnavailableException('LDAP server unavailable');
+        }
+
+        $timeout = Env::getInteger('LDAP_TIMEOUT', 5);
+        ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
+        ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
+        ldap_set_option($ldapCon, LDAP_OPT_NETWORK_TIMEOUT, $timeout);
+        ldap_set_option($ldapCon, LDAP_OPT_TIMEOUT, $timeout);
+
+        return $ldapCon;
+    }
+
+    /**
+     * Negative codes are client-side failures (server down, timeout, connect
+     * error...), 51/52 are the server reporting itself busy or unavailable.
+     * Anything else is the directory answering about the credentials.
+     */
+    private function isLdapUnavailableError(int $code): bool {
+        return $code < 0 || $code === 51 || $code === 52;
+    }
+
+    /**
+     * The service account is ours, not the user's: any failure is an
+     * infrastructure problem.
+     */
+    private function bindLdapAdmin($ldapCon) {
+        try {
+            $ldapBind = ldap_bind($ldapCon, Env::getString('LDAP_ADMIN_DN'), Env::getString('LDAP_ADMIN_PASSWORD'));
+        } catch (\ErrorException $e) {
+            $ldapBind = false;
+        }
+        if (!$ldapBind) {
+            $code = ldap_errno($ldapCon);
+            $msg  = ldap_error($ldapCon);
+            error_log("LDAP admin bind failed: [$code] '$msg'");
+            throw new LdapUnavailableException('LDAP server unavailable');
+        }
+    }
+
+    private function searchLdap($ldapCon, $base, $filter): array {
+        try {
+            $searchResult = ldap_search($ldapCon, $base, $filter);
+            $entries = $searchResult === false ? false : ldap_get_entries($ldapCon, $searchResult);
+        } catch (\ErrorException $e) {
+            $entries = false;
+        }
+        if ($entries === false) {
+            $code = ldap_errno($ldapCon);
+            $msg  = ldap_error($ldapCon);
+            error_log("LDAP search '$filter' failed: [$code] '$msg'");
+            throw new LdapUnavailableException('LDAP server unavailable');
         }
 
         return $entries;
@@ -284,30 +344,20 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         $ldapBase = Env::getString('LDAP_BASE');
         $ldapFilter = Env::getString('LDAP_FILTER');
 
-        $ldapCon = ldap_connect(Env::getString('LDAP_SERVER'));
-        if (!$ldapCon) {
-            error_log('findLdapEntryByEmail: unable to connect to LDAP server');
+        if (!$this->ldapConfigured()) {
             return null;
         }
-        try {
-            ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
-            ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
 
-            $ldapBind = ldap_bind($ldapCon, Env::getString('LDAP_ADMIN_DN'), Env::getString('LDAP_ADMIN_PASSWORD'));
-            if (!$ldapBind) {
-                $code = ldap_errno($ldapCon);
-                $msg  = ldap_error($ldapCon);
-                error_log("findLdapEntryByEmail: bad admin credentials. LDAP bind failed: [$code] '$msg'");
-                return null;
-            }
+        $ldapCon = $this->openLdapConnection();
+        try {
+            $this->bindLdapAdmin($ldapCon);
 
             $safeEmail = ldap_escape($email, '', 0);
             if ($ldapFilter !== null) {
-                $searchResult = ldap_search($ldapCon, $ldapBase, "(& (mail=$safeEmail) " . $ldapFilter . ')');
+                $entries = $this->searchLdap($ldapCon, $ldapBase, "(& (mail=$safeEmail) " . $ldapFilter . ')');
             } else {
-                $searchResult = ldap_search($ldapCon, $ldapBase, "(mail=$safeEmail)");
+                $entries = $this->searchLdap($ldapCon, $ldapBase, "(mail=$safeEmail)");
             }
-            $entries = ldap_get_entries($ldapCon, $searchResult);
         } finally {
             ldap_close($ldapCon);
         }
@@ -402,6 +452,9 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         try {
             $tenant = $this->authenticateRequest($request, $response);
             return $this->checkSuccess($tenant);
+        } catch(LdapUnavailableException $e) {
+            // Not a credential problem: let it surface as a 503
+            throw $e;
         } catch(AuthException $e) {
             if($this->debug)
                 return [false, $e->getMessage()];

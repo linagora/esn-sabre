@@ -6,6 +6,8 @@ $GLOBALS['__ldap_bind_behavior'] = 'default';
 $GLOBALS['__ldap_mock_enabled'] = false;
 $GLOBALS['__ldap_mock_email'] = 'johndoe@linagora.com';
 $GLOBALS['__ldap_mock_entries_empty'] = false;
+$GLOBALS['__ldap_mock_search_fails'] = false;
+$GLOBALS['__ldap_errno'] = 49;
 
 function ldap_connect($host) {
     if ($GLOBALS['__ldap_mock_enabled']) {
@@ -27,6 +29,9 @@ function ldap_bind($conn, $dn = null, $pwd = null) {
             return false;
         case 'throw':
             throw new \ErrorException("Simulated LDAP exception");
+        case 'admin_false':
+            // User bind succeeds, service account bind fails
+            return str_starts_with((string) $dn, 'uid=');
         default:
             if ($GLOBALS['__ldap_mock_enabled']) {
                 return true;
@@ -37,6 +42,9 @@ function ldap_bind($conn, $dn = null, $pwd = null) {
 
 function ldap_search($conn, $base, $filter) {
     if ($GLOBALS['__ldap_mock_enabled']) {
+        if ($GLOBALS['__ldap_mock_search_fails']) {
+            return false;
+        }
         return 'mock_ldap_search_result';
     }
     return \ldap_search($conn, $base, $filter);
@@ -65,6 +73,14 @@ function ldap_close($conn) {
         return true;
     }
     return \ldap_close($conn);
+}
+
+function ldap_errno($conn) {
+    return $GLOBALS['__ldap_errno'];
+}
+
+function ldap_error($conn) {
+    return "Simulated LDAP error";
 }
 
 function ldap_escape($str, $ignore = '', $flags = 0) {
@@ -391,6 +407,114 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $GLOBALS['__ldap_bind_behavior'] = 'default';
     }
 
+
+    function testAuthenticateLdapServerDownReturns503() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        $GLOBALS['__ldap_bind_behavior'] = 'return_false';
+        $GLOBALS['__ldap_errno'] = -1; // LDAP_SERVER_DOWN
+
+        try {
+            $this->assertLdapUnavailable();
+        } finally {
+            $this->resetLdapMock();
+        }
+    }
+
+    function testAuthenticateLdapBindThrowsWhileServerDownReturns503() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        $GLOBALS['__ldap_bind_behavior'] = 'throw';
+        $GLOBALS['__ldap_errno'] = -1; // LDAP_SERVER_DOWN
+
+        try {
+            $this->assertLdapUnavailable();
+        } finally {
+            $this->resetLdapMock();
+        }
+    }
+
+    function testAuthenticateLdapBusyReturns503() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        $GLOBALS['__ldap_bind_behavior'] = 'return_false';
+        $GLOBALS['__ldap_errno'] = 51; // LDAP_BUSY
+
+        try {
+            $this->assertLdapUnavailable();
+        } finally {
+            $this->resetLdapMock();
+        }
+    }
+
+    function testAuthenticateLdapAdminBindFailureReturns503() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        $GLOBALS['__ldap_bind_behavior'] = 'admin_false';
+
+        try {
+            $this->assertLdapUnavailable();
+        } finally {
+            $this->resetLdapMock();
+        }
+    }
+
+    function testAuthenticateLdapSearchFailureReturns503() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        $GLOBALS['__ldap_mock_search_fails'] = true;
+
+        try {
+            $this->assertLdapUnavailable();
+        } finally {
+            $this->resetLdapMock();
+        }
+    }
+
+    function testAuthenticateWithoutLdapServerReturns401() {
+        $ldapServer = getenv('LDAP_SERVER');
+        putenv('LDAP_SERVER');
+
+        try {
+            $esnauth = new EsnMock('http://localhost:8080/');
+            $request = \Sabre\HTTP\Sapi::createFromServerArray([
+                'PHP_AUTH_USER' => 'username',
+                'PHP_AUTH_PW'   => 'password',
+                'REQUEST_URI' => '/',
+                'REQUEST_METHOD' => 'GET',
+            ]);
+            $response = new \Sabre\HTTP\Response();
+
+            list($rv, $msg) = $esnauth->check($request, $response);
+
+            $this->assertFalse($rv);
+            $this->assertEquals('LDAP authentication is disabled', $msg);
+        } finally {
+            if ($ldapServer !== false) {
+                putenv("LDAP_SERVER=$ldapServer");
+            }
+        }
+    }
+
+    private function assertLdapUnavailable() {
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'PHP_AUTH_USER' => 'username',
+            'PHP_AUTH_PW'   => 'password',
+            'REQUEST_URI' => '/',
+            'REQUEST_METHOD' => 'GET',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        try {
+            $esnauth->check($request, $response);
+            $this->fail('Expected LdapUnavailableException');
+        } catch (LdapUnavailableException $e) {
+            $this->assertEquals(503, $e->getHTTPCode());
+        }
+    }
+
+    private function resetLdapMock() {
+        $GLOBALS['__ldap_mock_enabled'] = false;
+        $GLOBALS['__ldap_bind_behavior'] = 'default';
+        $GLOBALS['__ldap_mock_search_fails'] = false;
+        $GLOBALS['__ldap_errno'] = 49;
+    }
 
     function testAdminImpersonationEnabledWithCorrectPassword() {
         putenv('SABRE_IMPERSONATION_ENABLED=true');

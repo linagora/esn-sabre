@@ -14,6 +14,7 @@ order.
 | `LDAP_ADMIN_PASSWORD` | Admin password |
 | `LDAP_FILTER`         | Optional extra filter ANDed into the search (e.g. `(objectClass=inetOrgPerson)`) |
 | `LDAP_USERNAME_MODE`  | Set to `username` to strip the `@domain` part before bind |
+| `LDAP_TIMEOUT`        | Network and operation timeout of LDAP calls, in seconds (default `5`) |
 
 ## Attributes
 
@@ -46,6 +47,9 @@ address, the search falls back to any other mail value associated with the user.
 | N > 1 results | Warning logged, first entry used, auth proceeds. This is likely an error on LDAP_BASE or LDAP_FILTER |
 | `mail` attribute missing | Auth denied — `$user has no mail attribute` |
 | No Sabre principal for that mail | Auth denied — `User not found` |
+| User bind fails with `invalidCredentials` or any other directory answer | `401` — `Bad credentials` |
+| User bind fails with a client-side error (server down, timeout, connect error) or `busy`/`unavailable` | `503` |
+| Admin bind fails, or the search fails | `503` — the service account is not the user's fault |
 
 ## Impersonation (optional)
 

@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# Default to linagora/master; override these to test a fork or another branch.
+# Use the matching integration tests for ISSUE-579; allow fork or branch overrides.
 INTEGRATION_TEST_REPO="${INTEGRATION_TEST_REPO:-https://github.com/linagora/twake-calendar-integration-tests.git}"
-INTEGRATION_TEST_BRANCH="${INTEGRATION_TEST_BRANCH:-master}"
+INTEGRATION_TEST_BRANCH="${INTEGRATION_TEST_BRANCH:-test-sabre-579-delegated-contacts-count}"
 
 # Usage: ./run_test.sh [--filter=TestClassName] [--skip-java] [--skip-php] [--skip-nginx] [--skip-build] [--java-sequential]
 # Examples:

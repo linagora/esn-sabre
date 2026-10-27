@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Default to linagora/master; override these to test a fork or another branch.
 INTEGRATION_TEST_REPO="${INTEGRATION_TEST_REPO:-https://github.com/linagora/twake-calendar-integration-tests.git}"
-INTEGRATION_TEST_BRANCH="${INTEGRATION_TEST_BRANCH:-test-sabre-578}"
+INTEGRATION_TEST_BRANCH="${INTEGRATION_TEST_BRANCH:-master}"
 
 # Usage: ./run_test.sh [--filter=TestClassName] [--skip-java] [--skip-php] [--skip-nginx] [--skip-build] [--java-sequential]
 # Examples:

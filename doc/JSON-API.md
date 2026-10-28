@@ -394,6 +394,9 @@ List all contacts in the address book.
 - offset: List offset for the contacts returned
 - limit: The number of contacts to be returned
 - sort: The column to sort by, e.g. "fn"
+- search: Case insensitive text the vCard of the returned contacts contains, matched literally (not as a pattern). A
+  search shorter than `SABRE_CONTACT_SEARCH_MIN_LENGTH` characters (default 3, leading and trailing blanks excluded)
+  returns no contact. A search that is not a single UTF-8 string, e.g. `search[]=...`, gets a 400.
 - modifiedBefore: Timestamp in seconds, to list contacts modified before a specificed time
 - after: The `next` cursor of the previous page, see below
 - order: `asc` (default) or `desc`, only applied to cursor pagination, see below

@@ -611,6 +611,12 @@ class Plugin extends \ESN\JSON\BasePlugin {
             ];
         }
         if (!($search === null)) {
+            if (!is_string($search) || !mb_check_encoding($search, 'UTF-8')) {
+                throw new BadRequest('search must be a UTF-8 string');
+            }
+            if (!ContactFilters::isSearchLongEnough($search)) {
+                return [200, $this->contactsResult($request, $nodePath, $node, [])];
+            }
             $filters = [
                 'search' => $search
             ];

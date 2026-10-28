@@ -547,6 +547,67 @@ class PluginTest extends PluginTestBase {
         $this->assertObjectNotHasProperty('next', $body);
     }
 
+    private function searchContacts(string $query) {
+        return $this->makeRequest('GET', '/addressbooks/' . $this->userTestId1 . '/book1.json?' . $query);
+    }
+
+    private function searchedCards($response): array {
+        $body = json_decode($response->getBodyAsString());
+        return array_map(fn($item) => basename($item->{'_links'}->self->href), $body->{'_embedded'}->{'dav:item'});
+    }
+
+    function testSearchIsALiteralSubstringMatch() {
+        $this->addEmailsToContacts();
+
+        $response = $this->searchContacts('search=' . urlencode('ALPHA@EXAMPLE.ORG'));
+        $this->assertSame(200, $response->status);
+        $this->assertSame(['card2'], $this->searchedCards($response));
+
+        // "." is not a wildcard
+        $response = $this->searchContacts('search=' . urlencode('alpha@example.or.'));
+        $this->assertSame(200, $response->status);
+        $this->assertSame([], $this->searchedCards($response));
+    }
+
+    function testSearchWithRegexMetacharactersIsNotAnError() {
+        foreach (['(p', '[abc', '\\', '*abc', '(a+)+$'] as $search) {
+            $response = $this->searchContacts('search=' . urlencode($search));
+            $this->assertSame(200, $response->status, $search);
+            $this->assertSame([], $this->searchedCards($response), $search);
+        }
+    }
+
+    function testSearchShorterThanTheMinimumReturnsNoContact() {
+        $this->addEmailsToContacts();
+
+        $response = $this->searchContacts('search=al&limit=1');
+        $this->assertSame(200, $response->status);
+        $this->assertSame([], $this->searchedCards($response));
+        $this->assertObjectNotHasProperty('next', json_decode($response->getBodyAsString())->{'_links'});
+    }
+
+    function testSearchMinimumLengthIsConfigurable() {
+        $this->addEmailsToContacts();
+        \ESN\Utils\Env::init([ContactFilters::SEARCH_MIN_LENGTH_SETTING => 0]);
+        try {
+            $response = $this->searchContacts('search=zo');
+            $this->assertSame(200, $response->status);
+            $this->assertSame(['card4'], $this->searchedCards($response));
+        } finally {
+            \ESN\Utils\Env::reset();
+        }
+    }
+
+    function testSearchAsAnArrayIsABadRequest() {
+        $response = $this->searchContacts('search[]=alpha&search[]=bravo');
+        $this->assertSame(400, $response->status);
+    }
+
+    function testSearchNotInUtf8IsABadRequest() {
+        $response = $this->searchContacts('search=%FF%FE%FD');
+        $this->assertSame(400, $response->status);
+    }
+
     function testEquivalentEmailsPaginateInOppositeOrdersWithoutDuplicates() {
         $this->addEmailsToContacts();
 

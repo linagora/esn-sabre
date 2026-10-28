@@ -81,6 +81,7 @@ of `config.json`.
 | `SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING` | `true` | Recipient-aware scheduling for `ACTION:EMAIL` `VALARM` components |
 | `TW_CAL_REPLY_PROPAGATION_THRESHOLD` | `200` | Attendee count above which reply propagation is skipped |
 | `SABRE_MAX_RECURRENCES` | `3500` | Maximum number of occurrences generated when expanding a recurring event; See [recurrence expansion](#recurrence-expansion) |
+| `SABRE_CONTACT_SEARCH_MIN_LENGTH` | `3` | Minimum length, in characters, of the `search` of a contact listing; a shorter search returns no contact. `0` or negative removes the minimum. See [JSON API](JSON-API.md) |
 | `LOG_TRACE` | `false` | Add exception stack traces to the logs |
 
 Both spellings are equivalent — as an ENV variable:

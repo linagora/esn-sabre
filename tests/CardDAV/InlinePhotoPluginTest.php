@@ -193,6 +193,69 @@ class InlinePhotoPluginTest extends TestCase {
         $this->assertSame('https://manh-drive.linagora.com/avatar.jpg', (string) reset($photos));
     }
 
+    static function misnamedPhotoProvider() {
+        return [
+            'invalid character' => ['pho@to'],
+            'space' => ['pho to'],
+            'non-ASCII character' => ['phoéto'],
+        ];
+    }
+
+    private static function jCardWithPhoto($name, $value) {
+        return json_encode([
+            'vcard',
+            [
+                ['version', new \stdClass(), 'text', '4.0'],
+                ['uid', new \stdClass(), 'text', 'jcard'],
+                ['fn', new \stdClass(), 'text', 'Bob'],
+                [$name, new \stdClass(), 'uri', $value],
+            ]
+        ]);
+    }
+
+    /**
+     * Sabre repairs PHO@TO into PHOTO after the plugin ran: the plugin must
+     * treat it as the PHOTO it will be stored as.
+     */
+    #[DataProvider('misnamedPhotoProvider')]
+    function testFilterStripsInlinePhotoUnderNameRepairedToPhoto($name) {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_FILTER);
+        $data = self::jCardWithPhoto($name, 'data:image/png;base64,iVBORw0KGgo=');
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertTrue($modified);
+        $repaired = VObject\Reader::read($data);
+        $repaired->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+        $this->assertCount(0, $repaired->select('PHOTO'));
+    }
+
+    #[DataProvider('misnamedPhotoProvider')]
+    function testRejectThrowsOnInlinePhotoUnderNameRepairedToPhoto($name) {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_REJECT);
+        $data = self::jCardWithPhoto($name, 'data:image/png;base64,iVBORw0KGgo=');
+        $modified = false;
+
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
+        $this->invokeProcess($plugin, $data, $modified);
+    }
+
+    #[DataProvider('misnamedPhotoProvider')]
+    function testTrustedBaseFiltersUntrustedPhotoUnderNameRepairedToPhoto($name) {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_ALLOW, 'https://{fdqn}-drive.linagora.com');
+        $data = self::jCardWithPhoto($name, 'https://evil.test/avatar.jpg');
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertTrue($modified);
+        $repaired = VObject\Reader::read($data);
+        $repaired->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+        $this->assertCount(0, $repaired->select('PHOTO'));
+    }
+
     function testRejectThrowsOnInlinePhotoFromStreamPayload() {
         $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_REJECT);
         $data = self::stream(self::vcard('PHOTO;ENCODING=b;TYPE=JPEG:dGVzdA=='));

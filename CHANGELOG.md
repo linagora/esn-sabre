@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
 ### Changes
 
+ - **Behaviour change**: an LDAP infrastructure failure during Basic authentication (server down or unreachable, timeout, server busy/unavailable, service account bind failure, failing search) is now answered `503 Service Unavailable` instead of `401`, so that an outage is no longer mistaken for bad credentials. Only an answer of the directory about the credentials keeps returning `401`. LDAP operations now time out after `LDAP_TIMEOUT` seconds (default `5`) instead of hanging
  - **Behaviour change**: requests rejected by the Nginx rate limit are now answered `429 Too Many Requests` with `Retry-After: 1` and the CORS headers, instead of `503 Service Unavailable`. Clients and monitoring that treat 503 as a rate-limit signal must be updated, or set `NGINX_RATE_LIMIT_STATUS=503` to keep the previous status
 
 ### Bug Fixes

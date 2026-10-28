@@ -47,6 +47,7 @@
     "LDAP_ADMIN_DN": "",
     "LDAP_ADMIN_PASSWORD": "",
     "LDAP_USERNAME_MODE": "",
+    "LDAP_TIMEOUT": 5,
 
     "SABRE_ADMIN_LOGIN": "",
     "SABRE_ADMIN_PASSWORD": "",

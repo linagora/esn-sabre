@@ -66,6 +66,7 @@ of `config.json`.
 | `LDAP_ADMIN_DN` | unset | Bind account used to search the directory after the user bind |
 | `LDAP_ADMIN_PASSWORD` | unset | Password of that bind account |
 | `LDAP_USERNAME_MODE` | unset — bind with the full address | Set to `username` to strip the `@domain` part before binding |
+| `LDAP_TIMEOUT` | `5` | Network and operation timeout of LDAP calls, in seconds |
 | `SABRE_ADMIN_LOGIN` | unset — impersonation unavailable | Admin login used for impersonation |
 | `SABRE_ADMIN_PASSWORD` | unset — impersonation unavailable | Admin password used for impersonation |
 | `SABRE_IMPERSONATION_ENABLED` | `false` | Master switch for admin impersonation |

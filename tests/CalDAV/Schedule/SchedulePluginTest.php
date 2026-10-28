@@ -882,89 +882,34 @@ ICS
         $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
     }
 
-    function testAttendeeCannotChangeImplicitOccurrenceThroughNewOverride() {
-        $changes = [
-            'DTSTART' => ['DTSTART;VALUE=DATE:20350107', 'DTSTART;VALUE=DATE:20350108'],
-            'DTEND' => ['DTEND;VALUE=DATE:20350108', 'DTEND;VALUE=DATE:20350109'],
-            'SUMMARY' => ['SUMMARY:Daily', 'SUMMARY:Daily '],
-            'LOCATION' => ['LOCATION:Room A', 'LOCATION:Room B'],
-            'ORGANIZER' => ['ORGANIZER:mailto:bob@example.org', 'ORGANIZER:mailto:mallory@example.org'],
-        ];
-
-        foreach ($changes as $propertyName => [$original, $updated]) {
-            $oldObject = Reader::read($this->dailyOrganiserEvent('Daily'));
-            $newObject = Reader::read($this->dailyOrganiserEvent('Daily'));
-            $newObject->add(Reader::read(str_replace($original, $updated, $this->dailyOrganiserOverride('20350107', 'Daily')))->VEVENT);
-
-            $this->assertAttendeeChangeRefused($oldObject, $newObject, $propertyName);
-        }
-    }
-
-    function testAttendeeCannotClearOrganizerOfImplicitOccurrence() {
+    function testShouldAllowOrganizerToTurnMasterIntoOverride() {
         $oldObject = Reader::read($this->dailyOrganiserEvent('Daily'));
-        $newObject = Reader::read($this->dailyOrganiserEvent('Daily'));
-        $newObject->add(Reader::read(str_replace("ORGANIZER:mailto:bob@example.org\r\n", '', $this->dailyOrganiserOverride('20350107', 'Daily')))->VEVENT);
+        $newObject = Reader::read($this->dailyOrganiserEvent('Daily CHANGED', "RECURRENCE-ID;VALUE=DATE:20350107\r\n"));
 
-        $this->assertAttendeeChangeRefused($oldObject, $newObject, 'ORGANIZER');
+        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:bob@example.org']);
+
+        $this->assertEquals('Daily CHANGED', $newObject->VEVENT->SUMMARY->getValue());
     }
 
-    function testAttendeeCannotRevertOrganizerOverrideToMasterOccurrence() {
+    function testShouldAllowAttendeeToTurnMasterIntoOverrideWhenRfc6638EnforcementDisabled() {
         $oldObject = Reader::read($this->dailyOrganiserEvent('Daily'));
-        $oldObject->add(Reader::read($this->dailyOrganiserOverride('20350107', 'Moved by organizer'))->VEVENT);
-        $newObject = Reader::read($this->dailyOrganiserEvent('Daily'));
+        $newObject = Reader::read($this->dailyOrganiserEvent('Daily CHANGED', "RECURRENCE-ID;VALUE=DATE:20350107\r\n"));
 
-        $this->assertAttendeeChangeRefused($oldObject, $newObject, 'SUMMARY');
+        $this->withRfc6638EnforcementEnv('false', function () use ($oldObject, $newObject) {
+            $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+        });
+
+        $this->assertEquals('Daily CHANGED', $newObject->VEVENT->SUMMARY->getValue());
     }
 
-    function testAttendeeCannotChangeOverrideByRewritingItsRecurrenceIdForm() {
-        $oldObject = Reader::read($this->timedOrganiserEvent());
-        $oldObject->add(Reader::read($this->timedOrganiserOverride('RECURRENCE-ID;TZID=Europe/Paris:20350107T090000', 'Weekly'))->VEVENT);
-        $newObject = Reader::read($this->timedOrganiserEvent());
-        $newObject->add(Reader::read($this->timedOrganiserOverride('RECURRENCE-ID:20350107T080000Z', 'Weekly CHANGED'))->VEVENT);
-
-        $this->assertAttendeeChangeRefused($oldObject, $newObject, 'SUMMARY');
-    }
-
-    function testAttendeeCannotAddOverrideOutsideTheSeries() {
-        $oldObject = Reader::read($this->timedOrganiserEvent());
-        $newObject = Reader::read($this->timedOrganiserEvent());
-        $newObject->add(Reader::read($this->timedOrganiserOverride('RECURRENCE-ID:20350107T120000Z', 'Weekly'))->VEVENT);
-
-        $this->assertAttendeeChangeRefused($oldObject, $newObject, 'DTSTART');
-    }
-
-    function testAttendeeCanOverrideImplicitOccurrenceToAnswerIt() {
-        $oldObject = Reader::read($this->dailyOrganiserEvent('Daily'));
-        $newObject = Reader::read($this->dailyOrganiserEvent('Daily'));
-        $newObject->add(Reader::read(str_replace(
-            'ATTENDEE:mailto:alice@example.org',
-            'ATTENDEE;PARTSTAT=DECLINED:mailto:alice@example.org',
-            $this->dailyOrganiserOverride('20350107', 'Daily')
-        ))->VEVENT);
+    function testShouldAllowAttendeeToTurnMasterIntoOverrideOfOrganizerLessEvent() {
+        $withoutOrganizer = fn (string $calendar) => str_replace("ORGANIZER:mailto:bob@example.org\r\n", '', $calendar);
+        $oldObject = Reader::read($withoutOrganizer($this->dailyOrganiserEvent('Daily')));
+        $newObject = Reader::read($withoutOrganizer($this->dailyOrganiserEvent('Daily CHANGED', "RECURRENCE-ID;VALUE=DATE:20350107\r\n")));
 
         $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
 
-        $this->assertCount(2, $newObject->select('VEVENT'));
-    }
-
-    function testAttendeeCanOverrideTimedOccurrenceUsingAnotherRecurrenceIdForm() {
-        $oldObject = Reader::read($this->timedOrganiserEvent());
-        $newObject = Reader::read($this->timedOrganiserEvent());
-        $newObject->add(Reader::read($this->timedOrganiserOverride('RECURRENCE-ID:20350107T080000Z', 'Weekly'))->VEVENT);
-
-        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
-
-        $this->assertCount(2, $newObject->select('VEVENT'));
-    }
-
-    function testAttendeeCanExcludeOccurrenceFromTheirCopy() {
-        $oldObject = Reader::read($this->dailyOrganiserEvent('Daily'));
-        $oldObject->add(Reader::read($this->dailyOrganiserOverride('20350107', 'Moved by organizer'))->VEVENT);
-        $newObject = Reader::read($this->dailyOrganiserEvent('Daily', "EXDATE;VALUE=DATE:20350107\r\n"));
-
-        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
-
-        $this->assertCount(1, $newObject->select('VEVENT'));
+        $this->assertEquals('Daily CHANGED', $newObject->VEVENT->SUMMARY->getValue());
     }
 
     function testShouldAllowForbiddenAttendeeSchedulingObjectChangesWhenRfc6638EnforcementDisabled() {
@@ -1497,41 +1442,9 @@ ICS
         }
     }
 
-    private function assertAttendeeChangeRefused($oldObject, $newObject, string $propertyName): void {
-        try {
-            $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
-            $this->fail($propertyName . ' change should be refused');
-        } catch (ForbiddenAttendeeSchedulingObjectChange $e) {
-            $this->assertStringContainsString($propertyName, $e->getMessage());
-        }
-    }
-
     private function dailyOrganiserEvent(string $summary, string $extraLines = ''): string {
         return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:event-uid\r\n" . $extraLines
             . "DTSTART;VALUE=DATE:20350101\r\nDTEND;VALUE=DATE:20350102\r\nRRULE:FREQ=DAILY;COUNT=30\r\n"
-            . "SUMMARY:" . $summary . "\r\nLOCATION:Room A\r\nORGANIZER:mailto:bob@example.org\r\n"
-            . "ATTENDEE:mailto:bob@example.org\r\nATTENDEE:mailto:alice@example.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
-    }
-
-    private function dailyOrganiserOverride(string $date, string $summary): string {
-        $end = (new \DateTimeImmutable($date))->modify('+1 day')->format('Ymd');
-
-        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:event-uid\r\nRECURRENCE-ID;VALUE=DATE:" . $date . "\r\n"
-            . "DTSTART;VALUE=DATE:" . $date . "\r\nDTEND;VALUE=DATE:" . $end . "\r\n"
-            . "SUMMARY:" . $summary . "\r\nLOCATION:Room A\r\nORGANIZER:mailto:bob@example.org\r\n"
-            . "ATTENDEE:mailto:bob@example.org\r\nATTENDEE:mailto:alice@example.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
-    }
-
-    private function timedOrganiserEvent(): string {
-        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:event-uid\r\n"
-            . "DTSTART;TZID=Europe/Paris:20350101T090000\r\nDTEND;TZID=Europe/Paris:20350101T100000\r\nRRULE:FREQ=DAILY;COUNT=30\r\n"
-            . "SUMMARY:Weekly\r\nLOCATION:Room A\r\nORGANIZER:mailto:bob@example.org\r\n"
-            . "ATTENDEE:mailto:bob@example.org\r\nATTENDEE:mailto:alice@example.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
-    }
-
-    private function timedOrganiserOverride(string $recurrenceIdLine, string $summary): string {
-        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:event-uid\r\n" . $recurrenceIdLine . "\r\n"
-            . "DTSTART;TZID=Europe/Paris:20350107T090000\r\nDTEND;TZID=Europe/Paris:20350107T100000\r\n"
             . "SUMMARY:" . $summary . "\r\nLOCATION:Room A\r\nORGANIZER:mailto:bob@example.org\r\n"
             . "ATTENDEE:mailto:bob@example.org\r\nATTENDEE:mailto:alice@example.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
     }

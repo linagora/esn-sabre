@@ -673,19 +673,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
-        $oldEvents = CalendarObjectHelper::indexEventsByRecurrenceKey($oldObject);
-
-        foreach ($newObject->select('VEVENT') as $newEvent) {
-            $oldEvent = $oldEvents[CalendarObjectHelper::recurrenceKey($newEvent)] ?? null;
-            if (!$oldEvent) {
-                continue;
-            }
-            foreach (self::FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES as $propertyName) {
-                if (CalendarObjectHelper::propertySignatures($oldEvent, $propertyName) !== CalendarObjectHelper::propertySignatures($newEvent, $propertyName)) {
-                    throw new ForbiddenAttendeeSchedulingObjectChange($propertyName);
-                }
-            }
-        }
+        AttendeeSchedulingObjectChangeGuard::assertAllowed($oldObject, $newObject, self::FORBIDDEN_ATTENDEE_CHANGE_PROPERTIES);
     }
 
     protected function isAttendeeSchedulingObject(VCalendar $calendarObject, array $addresses): bool {

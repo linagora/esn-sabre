@@ -3,7 +3,9 @@
 namespace ESN\CalDAV\Validation;
 
 use Sabre\DAV\Exception\BadRequest;
+use Sabre\VObject\Component;
 use Sabre\VObject\Component\VCalendar;
+use Sabre\VObject\Property;
 use Sabre\VObject\Property\ICalendar\DateTime as DateTimeProperty;
 
 class CalendarObjectValidator {
@@ -19,15 +21,18 @@ class CalendarObjectValidator {
      * its firstoccurence, and time-range queries covering its start miss it.
      */
     function validateEventDates(VCalendar $vCalendar) {
-        foreach ($vCalendar->select('VEVENT') as $vevent) {
+        foreach ($this->vevents($vCalendar) as $vevent) {
             if (!isset($vevent->DTSTART) || !isset($vevent->DTEND)) {
                 continue;
             }
 
+            $dtStart = $this->assertDateTimeProperty($vevent->DTSTART);
+            $dtEnd = $this->assertDateTimeProperty($vevent->DTEND);
+
             // RFC 5545 §3.6.1 requires DTEND to be later than DTSTART; an equal
             // DTEND is still accepted as clients use it for instantaneous events.
             // Compare instants, as DTSTART and DTEND may use different timezones.
-            if ($vevent->DTEND->getDateTime()->getTimestamp() < $vevent->DTSTART->getDateTime()->getTimestamp()) {
+            if ($dtEnd->getDateTime()->getTimestamp() < $dtStart->getDateTime()->getTimestamp()) {
                 $this->fail('DTEND must not be before DTSTART');
             }
         }
@@ -35,7 +40,7 @@ class CalendarObjectValidator {
 
     private function validateRRules(VCalendar $vCalendar): void
     {
-        foreach ($vCalendar->select('VEVENT') as $vevent) {
+        foreach ($this->vevents($vCalendar) as $vevent) {
             if (!isset($vevent->RRULE)) {
                 continue;
             }
@@ -47,8 +52,9 @@ class CalendarObjectValidator {
                 $this->fail('VEVENT with RRULE MUST have a DTSTART property');
             }
 
+            $dtStart = $this->assertDateTimeProperty($vevent->DTSTART);
             foreach ($vevent->select('RRULE') as $rrule) {
-                $this->validateRRule($rrule->getParts(), $vevent->DTSTART);
+                $this->validateRRule($rrule->getParts(), $dtStart);
             }
         }
     }
@@ -105,19 +111,19 @@ class CalendarObjectValidator {
         $mastersByUid = $this->mastersByUid($vCalendar);
         $seenRecurrenceIds = [];
 
-        foreach ($vCalendar->select('VEVENT') as $vevent) {
+        foreach ($this->vevents($vCalendar) as $vevent) {
             if (!isset($vevent->{'RECURRENCE-ID'})) {
                 continue;
             }
 
             $uid = (string)$vevent->UID;
             $master = $mastersByUid[$uid] ?? null;
-            $recurrenceId = $vevent->{'RECURRENCE-ID'};
+            $recurrenceId = $this->assertDateTimeProperty($vevent->{'RECURRENCE-ID'});
 
             $this->assertRecurringMasterExists($uid, $master);
 
             if (isset($master->DTSTART)) {
-                $this->assertSameDateTimePropertyShape($recurrenceId, $master->DTSTART);
+                $this->assertSameDateTimePropertyShape($recurrenceId, $this->assertDateTimeProperty($master->DTSTART));
             }
 
             $this->assertUniqueRecurrenceId($uid, $recurrenceId, $seenRecurrenceIds);
@@ -126,7 +132,7 @@ class CalendarObjectValidator {
 
     private function validateExDates(VCalendar $vCalendar): void
     {
-        foreach ($vCalendar->select('VEVENT') as $vevent) {
+        foreach ($this->vevents($vCalendar) as $vevent) {
             if (!isset($vevent->EXDATE)) {
                 continue;
             }
@@ -138,8 +144,9 @@ class CalendarObjectValidator {
                 $this->fail('VEVENT with EXDATE MUST have a DTSTART property');
             }
 
+            $dtStart = $this->assertDateTimeProperty($vevent->DTSTART);
             foreach ($vevent->select('EXDATE') as $exDate) {
-                $this->assertSameDateTimePropertyShape($exDate, $vevent->DTSTART);
+                $this->assertSameDateTimePropertyShape($this->assertDateTimeProperty($exDate), $dtStart);
             }
         }
     }
@@ -148,7 +155,7 @@ class CalendarObjectValidator {
     {
         $mastersByUid = [];
 
-        foreach ($vCalendar->select('VEVENT') as $vevent) {
+        foreach ($this->vevents($vCalendar) as $vevent) {
             if (isset($vevent->{'RECURRENCE-ID'})) {
                 continue;
             }
@@ -157,6 +164,31 @@ class CalendarObjectValidator {
         }
 
         return $mastersByUid;
+    }
+
+    /**
+     * select() also returns properties named VEVENT (kept by Sabre's REPAIR as
+     * Property\Unknown), which carry no sub-properties to validate.
+     */
+    private function vevents(VCalendar $vCalendar): array
+    {
+        return array_values(array_filter(
+            $vCalendar->select('VEVENT'),
+            fn($vevent) => $vevent instanceof Component
+        ));
+    }
+
+    /**
+     * Sabre's REPAIR keeps date properties carrying another VALUE type (e.g.
+     * DTEND;VALUE=DURATION or DTSTART;VALUE=PERIOD) under a non date-time class.
+     */
+    private function assertDateTimeProperty(Property $property): DateTimeProperty
+    {
+        if (!$property instanceof DateTimeProperty) {
+            $this->fail($property->name.' value type ('.$property->getValueType().') must be '.DateLikeValue::DATE.' or '.DateLikeValue::DATE_TIME);
+        }
+
+        return $property;
     }
 
     private function isRecurringMaster($vevent): bool

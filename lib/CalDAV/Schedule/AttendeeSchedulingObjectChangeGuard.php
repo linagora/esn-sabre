@@ -34,8 +34,8 @@ class AttendeeSchedulingObjectChangeGuard {
 
         self::assertSameMaster($oldMaster, $newMaster, $forbiddenProperties);
 
-        $oldOccurrences = self::occurrenceCursor($oldMaster, $timeZone);
-        $newOccurrences = self::occurrenceCursor($newMaster, $timeZone);
+        $oldGeneratedInstances = self::generatedInstances($oldMaster, $timeZone);
+        $newGeneratedInstances = self::generatedInstances($newMaster, $timeZone);
 
         // Cursors only move forward, so instances must be visited in chronological order.
         $instanceKeys = self::chronological(array_unique(array_merge(array_keys($oldEvents), array_keys($newEvents))));
@@ -49,8 +49,8 @@ class AttendeeSchedulingObjectChangeGuard {
             }
 
             self::assertSameInstance(
-                self::instanceAt($oldEvent, $oldMaster, $oldOccurrences, $key, $timeZone),
-                self::instanceAt($newEvent, $newMaster, $newOccurrences, $key, $timeZone),
+                self::instanceAt($oldEvent, $oldGeneratedInstances, $key, $timeZone),
+                self::instanceAt($newEvent, $newGeneratedInstances, $key, $timeZone),
                 $forbiddenProperties
             );
         }
@@ -67,12 +67,12 @@ class AttendeeSchedulingObjectChangeGuard {
 
     /**
      * Organizer-owned fields of the instance at $key, carried by $event when
-     * there is one, generated from $master otherwise.
+     * there is one, generated from the master otherwise.
      */
-    private static function instanceAt($event, $master, \Closure $occurrences, string $key, \DateTimeZone $timeZone): ?array {
+    private static function instanceAt($event, \Closure $generatedInstances, string $key, \DateTimeZone $timeZone): ?array {
         return $event
             ? self::explicitInstance($event, $timeZone)
-            : self::generatedInstance($master, $occurrences, $key, $timeZone);
+            : $generatedInstances($key);
     }
 
     private static function assertSameInstance(?array $oldInstance, ?array $newInstance, array $forbiddenProperties): void {
@@ -158,6 +158,16 @@ class AttendeeSchedulingObjectChangeGuard {
 
     private static function sortKey(string $key): array {
         return str_starts_with($key, 'at:') ? [0, (int)substr($key, 3)] : [1, 0];
+    }
+
+    /**
+     * Looks up the instances a master generates, see generatedInstance(): keys
+     * must be passed in chronological order.
+     */
+    private static function generatedInstances($master, \DateTimeZone $timeZone): \Closure {
+        $occurrences = self::occurrenceCursor($master, $timeZone);
+
+        return fn(string $key): ?array => self::generatedInstance($master, $occurrences, $key, $timeZone);
     }
 
     /**

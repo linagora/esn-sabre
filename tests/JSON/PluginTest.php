@@ -2650,23 +2650,25 @@ END:VCALENDAR
         $this->assertCount(0, $this->vEventsOfExpandResponse($response));
     }
 
-    function testExpandEventWithoutDtstartShouldNotFail() {
-        // Issue #607: a VEVENT without DTSTART must not be dereferenced during post-filtering
-        $ics = 'BEGIN:VCALENDAR
+    function testRemoveEventsOutsideTimeRangeShouldKeepEventWithoutDtstart() {
+        // Issue #607: a VEVENT without DTSTART must not be dereferenced during post-filtering.
+        // Such an object can neither be stored nor expanded, hence the post-filter is exercised directly.
+        $vObject = \Sabre\VObject\Reader::read('BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
 UID:no-dtstart
 DTSTAMP:20150101T000000Z
-RECURRENCE-ID:20350301T000000Z
 SUMMARY:No dtstart
 END:VEVENT
 END:VCALENDAR
-';
-        $this->caldavBackend->createCalendarObject($this->cal['id'], 'no-dtstart.ics', $ics);
+');
+        $handler = new CalDAV\CalendarObjectHandler($this->server, null);
+        $removeEventsOutsideTimeRange = new \ReflectionMethod($handler, 'removeEventsOutsideTimeRange');
 
-        $response = $this->expandEventRequest('no-dtstart.ics', '20350101T000000Z', '20351201T000000Z');
+        $removeEventsOutsideTimeRange->invoke($handler, $vObject,
+            new \DateTime('2035-01-01T00:00:00Z'), new \DateTime('2035-12-01T00:00:00Z'));
 
-        $this->assertEquals(200, $response->status);
+        $this->assertCount(1, $vObject->select('VEVENT'));
     }
 
     private function expandEventRequest($eventUri, $start, $end) {

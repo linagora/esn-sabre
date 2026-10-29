@@ -76,18 +76,11 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
                 
                 if (isset($resourceType) && ($resourceType->is("{http://calendarserver.org/ns/}shared") || $resourceType->is("{http://calendarserver.org/ns/}subscribed"))) {
-                    $sourceHref = isset($responseProps[200]['{http://calendarserver.org/ns/}source']) ?
-                                    $responseProps[200]['{http://calendarserver.org/ns/}source']->getHref()
-                                    : $xmlResponse->getHref();
-
-                    $sharedNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
-                    $userPrincipal = $this->server->tree->getNodeForPath($sharedNode->getOwner());
-
-                    $userDisplayName = XmlText::stripIllegalCharacters($userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address'])));
-
-                    $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
-                                    $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
-                                    "Agenda - " . $userDisplayName;
+                    try {
+                        $responseProps[200]['{DAV:}displayname'] = $this->sharedCalendarDisplayName($xmlResponse, $responseProps);
+                    } catch (\Sabre\DAV\Exception | \TypeError $e) {
+                        // An unresolvable source keeps its original display name: it must not fail the whole PROPFIND
+                    }
                 } else {
                     if (isset($responseProps[200]['{DAV:}displayname']) && $responseProps[200]['{DAV:}displayname'] === '#default') {
                         $responseProps[200]['{DAV:}displayname'] = "My agenda";
@@ -101,9 +94,25 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
             }
 
             $service = new \Sabre\Xml\Service();
-            $data = $service->write('{DAV:}multistatus', $xml);
+            // Hrefs are already absolute paths: an empty context URI writes them unchanged
+            $data = $service->write('{DAV:}multistatus', $xml, '');
             
             $response->setBody($data);
         }
+    }
+
+    private function sharedCalendarDisplayName($xmlResponse, $responseProps) {
+        $sourceHref = isset($responseProps[200]['{http://calendarserver.org/ns/}source']) ?
+                        $responseProps[200]['{http://calendarserver.org/ns/}source']->getHref()
+                        : $xmlResponse->getHref();
+
+        $sharedNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
+        $userPrincipal = $this->server->tree->getNodeForPath($sharedNode->getOwner());
+
+        $userDisplayName = XmlText::stripIllegalCharacters($userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address'])));
+
+        return isset($responseProps[200]['{DAV:}displayname']) ?
+                        $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
+                        "Agenda - " . $userDisplayName;
     }
 }

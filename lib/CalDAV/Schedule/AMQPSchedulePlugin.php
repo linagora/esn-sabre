@@ -214,7 +214,7 @@ class AMQPSchedulePlugin extends Plugin {
         }
         $payload['connectedUser'] = $this->getConnectedUser();
 
-        $this->amqpPublisher->publish(self::TOPIC_LOCAL_DELIVERY, json_encode($payload));
+        $this->publishLocalDelivery($payload);
     }
 
     private function resolveCounterOldMessage(ITip\Message $iTipMessage, RequestInterface $req): ?string {
@@ -427,14 +427,28 @@ class AMQPSchedulePlugin extends Plugin {
                 $delivery['calendarId'] = $this->currentCalendarId;
             }
             $delivery['connectedUser'] = $this->getConnectedUser();
-            $this->amqpPublisher->publish(
-                self::TOPIC_LOCAL_DELIVERY,
-                json_encode($delivery)
-            );
+            $this->publishLocalDelivery($delivery);
         }
         $this->pendingDeliveries  = [];
         $this->currentOldMessage  = null;
         $this->currentCalendarId  = null;
+    }
+
+    /**
+     * Clients may store non-UTF-8 parameter values (Sabre only converts property
+     * values), which json_encode() rejects by returning false: substitute them
+     * rather than publishing an empty message, and never publish a payload that
+     * could not be encoded.
+     */
+    private function publishLocalDelivery(array $payload): void {
+        try {
+            $json = json_encode($payload, JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            error_log('Could not encode iTIP local delivery for ' . ($payload['uid'] ?? '?') . ': ' . $e->getMessage());
+            return;
+        }
+
+        $this->amqpPublisher->publish(self::TOPIC_LOCAL_DELIVERY, $json);
     }
 
     /**

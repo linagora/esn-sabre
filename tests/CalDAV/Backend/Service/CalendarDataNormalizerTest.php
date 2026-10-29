@@ -2,12 +2,91 @@
 
 namespace ESN\CalDAV\Backend\Service;
 
+use PHPUnit\Framework\TestCase;
+use Sabre\DAV\Exception\BadRequest;
+
 /**
  * The stored first/last occurrence window is what the backend uses to discard
  * objects before post-filtering time-range queries: it must always cover every
  * instance the event generates.
  */
-class CalendarDataNormalizerTest extends \PHPUnit\Framework\TestCase {
+class CalendarDataNormalizerTest extends TestCase {
+    private $normalizer;
+
+    protected function setUp(): void {
+        $this->normalizer = new CalendarDataNormalizer();
+    }
+
+    function testDurationShouldExtendLastOccurrence() {
+        $data = $this->normalizer->getDenormalizedData($this->eventWith([
+            'DTSTART:20260101T100000Z',
+            'DURATION:PT1H'
+        ]));
+
+        $this->assertSame(strtotime('2026-01-01T10:00:00Z'), $data['firstOccurence']);
+        $this->assertSame(strtotime('2026-01-01T11:00:00Z'), $data['lastOccurence']);
+    }
+
+    function testPeriodDtStartShouldBeRejected() {
+        $this->assertRejected([
+            'DTSTART;VALUE=PERIOD:20260101T100000Z/20260101T110000Z'
+        ]);
+    }
+
+    function testPeriodDtEndShouldBeRejected() {
+        $this->assertRejected([
+            'DTSTART:20260101T100000Z',
+            'DTEND;VALUE=PERIOD:20260101T100000Z/20260101T110000Z'
+        ]);
+    }
+
+    function testPeriodDtEndOfRecurringEventShouldBeRejected() {
+        $this->assertRejected([
+            'DTSTART:20260101T100000Z',
+            'DTEND;VALUE=PERIOD:20260101T100000Z/20260101T110000Z',
+            'RRULE:FREQ=DAILY;COUNT=3'
+        ]);
+    }
+
+    function testMissingDtStartShouldBeRejected() {
+        $this->assertRejected([
+            'DTEND:20260101T110000Z'
+        ]);
+    }
+
+    function testEmptyDurationShouldBeRejected() {
+        $this->assertRejected([
+            'DTSTART:20260101T100000Z',
+            'DURATION:'
+        ]);
+    }
+
+    function testInvalidDurationShouldBeRejected() {
+        $this->assertRejected([
+            'DTSTART:20260101T100000Z',
+            'DURATION:one hour'
+        ]);
+    }
+
+    private function assertRejected(array $dateLines): void {
+        $this->expectException(BadRequest::class);
+
+        $this->normalizer->getDenormalizedData($this->eventWith($dateLines));
+    }
+
+    private function eventWith(array $dateLines): string {
+        return implode("\r\n", array_merge([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260101T000000Z'
+        ], $dateLines, [
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ])) . "\r\n";
+    }
 
     private function denormalize(string $vevent): array {
         $ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Example//EN\r\n"

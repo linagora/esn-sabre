@@ -3,7 +3,9 @@
 namespace ESN\CalDAV\Backend\Service;
 
 use ESN\Utils\VObjectCache;
+use \Sabre\DAV\Exception\BadRequest;
 use \Sabre\VObject;
+use \Sabre\VObject\Property\ICalendar\DateTime as DateTimeProperty;
 
 /**
  * Calendar Data Normalizer
@@ -108,6 +110,8 @@ class CalendarDataNormalizer {
         // recurring master. Include every stored VEVENT in the denormalized
         // range so MongoDB does not discard later instances before post-filtering.
         foreach ($vObject->select('VEVENT') as $event) {
+            $this->validateEventDates($event);
+
             $start = $event->DTSTART->getDateTime()->getTimeStamp();
             // A negative DURATION, or an infinite rule starting after the
             // MAX_DATE fallback, must never yield a window ending before it starts.
@@ -118,6 +122,49 @@ class CalendarDataNormalizer {
         }
 
         return [$firstOccurence, $lastOccurence];
+    }
+
+    /**
+     * Ensure the dates the occurrence range is computed from can be read:
+     * neither the CalDAV write pipeline nor iTIP delivery guarantee that
+     * DTSTART/DTEND hold date-times (VALUE=PERIOD is legal syntax) nor that
+     * DURATION is non empty.
+     *
+     * @param VObject\Component $event
+     * @throws BadRequest If a date property cannot be read
+     */
+    private function validateEventDates($event) {
+        if (!$event->DTSTART instanceof DateTimeProperty) {
+            throw new BadRequest('VEVENT must have a DTSTART holding a DATE or DATE-TIME value');
+        }
+
+        if (isset($event->DTEND) && !$event->DTEND instanceof DateTimeProperty) {
+            throw new BadRequest('VEVENT DTEND must hold a DATE or DATE-TIME value');
+        }
+
+        if (isset($event->DURATION)) {
+            $this->parseDuration($event->DURATION);
+        }
+    }
+
+    /**
+     * @param VObject\Property $duration
+     * @return \DateInterval
+     * @throws BadRequest If the value is not a valid DURATION
+     */
+    private function parseDuration($duration) {
+        $value = (string) $duration->getValue();
+
+        try {
+            // An empty value is not rejected by the parser but read out of bounds.
+            if ($value !== '') {
+                return VObject\DateTimeParser::parseDuration($value);
+            }
+        } catch (VObject\InvalidDataException $e) {
+            // Rejected below, like an empty value
+        }
+
+        throw new BadRequest('VEVENT DURATION must hold a valid DURATION value');
     }
 
     /**
@@ -151,7 +198,7 @@ class CalendarDataNormalizer {
         // Has DURATION
         if (isset($component->DURATION)) {
             $endDate = $component->DTSTART->getDateTime()->add(
-                VObject\DateTimeParser::parse($component->DURATION->getValue())
+                $this->parseDuration($component->DURATION)
             );
             return $endDate->getTimeStamp();
         }

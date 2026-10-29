@@ -498,6 +498,21 @@ class CalendarObjectValidatorTest extends TestCase {
         ], ['DTEND value type (DURATION) must be DATE or DATE-TIME']);
     }
 
+    function testPeriodTypedDtEndIsRejectedByEventDatesValidation() {
+        $this->assertEventDatesValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260515T090000Z',
+            'DTEND;VALUE=PERIOD:20260515T090000Z/20260515T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['DTEND value type (PERIOD) must be DATE or DATE-TIME']);
+    }
+
     function testPeriodTypedDtStartIsRejectedByEventDatesValidation() {
         $this->assertEventDatesValidationFails([
             'BEGIN:VCALENDAR',

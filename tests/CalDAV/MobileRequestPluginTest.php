@@ -83,4 +83,19 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             }
         }
     }
+
+    function testRewrittenHrefsAreNotEncodedTwice() {
+        $body = '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"><d:response>'
+            . '<d:href>/calendars/54b64eadf6d7d8e41d263e0f/a%2Bb/</d:href><d:propstat><d:prop>'
+            . '<d:resourcetype><d:collection/></d:resourcetype><d:displayname>#default</d:displayname></d:prop>'
+            . '<d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>';
+        $request = new \Sabre\HTTP\Request('PROPFIND', '/calendars/54b64eadf6d7d8e41d263e0f/', ['User-Agent' => 'Thunderbird/115.0']);
+        $response = new \Sabre\HTTP\Response(207, [], $body);
+
+        $this->server->getPlugin('mobile-request')->afterMethodPropfind($request, $response);
+
+        $this->assertStringContainsStringIgnoringCase('/calendars/54b64eadf6d7d8e41d263e0f/a%2Bb/<', $response->getBodyAsString());
+        $this->assertStringNotContainsString('%25', $response->getBodyAsString());
+        $this->assertStringContainsString('My agenda', $response->getBodyAsString());
+    }
 }

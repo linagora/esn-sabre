@@ -127,6 +127,82 @@ END:VCALENDAR'
         $this->assertEquals(400, $response->getStatus());
     }
 
+    private function assertRawBodyIsRejected(string $body)
+    {
+        $request = $this->makeRequest([]);
+        $request->setBody($body);
+
+        $this->assertFalse($this->iTipPlugin->iTip($request));
+        $this->assertEquals(400, $this->server->httpResponse->getStatus());
+    }
+
+    function testITipShouldReturn400IfSenderIsAbsent()
+    {
+        $this->assertRawBodyIsRejected('{"uid":"x","recipient":"b@linagora.com","ical":"X"}');
+    }
+
+    function testITipShouldReturn400IfBodyIsNotAnObject()
+    {
+        $this->assertRawBodyIsRejected('"not an object"');
+    }
+
+    function testITipShouldReturn400IfBodyIsNotJson()
+    {
+        $this->assertRawBodyIsRejected('not json');
+    }
+
+    function testITipShouldReturn400IfIcalIsNotParsable()
+    {
+        $this->iTipRequestData['ical'] = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nEND:VEVE:T\r\nEND:VCALENDAR\r\n";
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
+    function testITipShouldReturn400IfIcalIsNotICalendar()
+    {
+        $this->iTipRequestData['ical'] = 'not ical';
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
+    function testITipShouldReturn400IfIcalIsAVCard()
+    {
+        $this->iTipRequestData['ical'] = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:a\r\nEND:VCARD\r\n";
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
+    function testITipShouldReturn400IfSenderIsNotAString()
+    {
+        $this->iTipRequestData['sender'] = ['a@linagora.com'];
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
+    function testITipShouldReturn400IfReplyToIsNotAString()
+    {
+        $this->iTipRequestData['replyTo'] = 42;
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
+    function testITipShouldReturn400IfMethodIsNotAScalar()
+    {
+        $this->iTipRequestData['method'] = ['COUNTER'];
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
+    function testITipCounterShouldReturn400WhenDtstartIsNotParsable()
+    {
+        $this->iTipRequestData['method'] = 'COUNTER';
+        $this->iTipRequestData['sender'] = 'b@linagora.com';
+        $this->iTipRequestData['ical'] = str_replace('DTSTART;TZID=Europe/Berlin:30120227T000000',
+            'DTSTART:', $this->iTipRequestData['ical']);
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
     function testITipRequestShouldReturn204WhenAttendeeAddressDiffersFromRecipient()
     {
         // The ICS carries an arbitrary participant address (organizer b, attendees b/a) that

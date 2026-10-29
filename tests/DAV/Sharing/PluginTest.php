@@ -74,6 +74,27 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->sharePlugin->shareResource('/calendars/54b64eadf6d7d8e41d263e0f/calendar1', $sharees);
     }
 
+    function testShareResourceComparesShareeDomainCaseInsensitively() {
+        $path = '/calendars/54b64eadf6d7d8e41d263e0f/calendar1';
+        $sharees = [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'       => 'mailto:johndoe@Example.ORG',
+                'properties' => [],
+                'access'     => Plugin::ACCESS_READ,
+                'comment'    => ''
+            ])
+        ];
+
+        $this->aclMock->expects($this->once())
+            ->method('checkPrivileges')
+            ->with(
+                $this->equalTo($path),
+                $this->equalTo('{DAV:}share')
+            );
+
+        $this->sharePlugin->shareResource($path, $sharees);
+    }
+
     function testTechnicalTokenCanShareTeamCalendarWithoutOwnerAcl() {
         $path = '/calendars/' . self::TEAM_CALENDAR_ID . '/' . self::TEAM_CALENDAR_ID;
         $principalUri = 'principals/team-calendars/' . self::TEAM_CALENDAR_ID;

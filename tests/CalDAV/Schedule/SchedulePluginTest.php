@@ -874,6 +874,44 @@ ICS
         });
     }
 
+    function testAttendeeCannotChangeSummaryByTurningMasterIntoOverride() {
+        $oldObject = Reader::read($this->dailyOrganiserEvent('Daily'));
+        $newObject = Reader::read($this->dailyOrganiserEvent('Daily CHANGED', "RECURRENCE-ID;VALUE=DATE:20350107\r\n"));
+
+        $this->expectException(ForbiddenAttendeeSchedulingObjectChange::class);
+        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+    }
+
+    function testShouldAllowOrganizerToTurnMasterIntoOverride() {
+        $oldObject = Reader::read($this->dailyOrganiserEvent('Daily'));
+        $newObject = Reader::read($this->dailyOrganiserEvent('Daily CHANGED', "RECURRENCE-ID;VALUE=DATE:20350107\r\n"));
+
+        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:bob@example.org']);
+
+        $this->assertEquals('Daily CHANGED', $newObject->VEVENT->SUMMARY->getValue());
+    }
+
+    function testShouldAllowAttendeeToTurnMasterIntoOverrideWhenRfc6638EnforcementDisabled() {
+        $oldObject = Reader::read($this->dailyOrganiserEvent('Daily'));
+        $newObject = Reader::read($this->dailyOrganiserEvent('Daily CHANGED', "RECURRENCE-ID;VALUE=DATE:20350107\r\n"));
+
+        $this->withRfc6638EnforcementEnv('false', function () use ($oldObject, $newObject) {
+            $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+        });
+
+        $this->assertEquals('Daily CHANGED', $newObject->VEVENT->SUMMARY->getValue());
+    }
+
+    function testShouldAllowAttendeeToTurnMasterIntoOverrideOfOrganizerLessEvent() {
+        $withoutOrganizer = fn (string $calendar) => str_replace("ORGANIZER:mailto:bob@example.org\r\n", '', $calendar);
+        $oldObject = Reader::read($withoutOrganizer($this->dailyOrganiserEvent('Daily')));
+        $newObject = Reader::read($withoutOrganizer($this->dailyOrganiserEvent('Daily CHANGED', "RECURRENCE-ID;VALUE=DATE:20350107\r\n")));
+
+        $this->invokeAssertAllowedAttendeeSchedulingObjectChange($oldObject, $newObject, ['mailto:alice@example.org']);
+
+        $this->assertEquals('Daily CHANGED', $newObject->VEVENT->SUMMARY->getValue());
+    }
+
     function testShouldAllowForbiddenAttendeeSchedulingObjectChangesWhenRfc6638EnforcementDisabled() {
         $oldObject = Reader::read($this->newSchedulingObject());
         $newObject = Reader::read(str_replace(
@@ -1402,6 +1440,13 @@ ICS
                 putenv('SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING=' . $previousValue);
             }
         }
+    }
+
+    private function dailyOrganiserEvent(string $summary, string $extraLines = ''): string {
+        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:event-uid\r\n" . $extraLines
+            . "DTSTART;VALUE=DATE:20350101\r\nDTEND;VALUE=DATE:20350102\r\nRRULE:FREQ=DAILY;COUNT=30\r\n"
+            . "SUMMARY:" . $summary . "\r\nLOCATION:Room A\r\nORGANIZER:mailto:bob@example.org\r\n"
+            . "ATTENDEE:mailto:bob@example.org\r\nATTENDEE:mailto:alice@example.org\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
     }
 
     private function newSchedulingObject(): string {

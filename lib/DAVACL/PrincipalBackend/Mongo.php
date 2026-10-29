@@ -285,18 +285,20 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return null;
         }
 
+        // Domain names are stored lower-case: compare the whole address case-insensitively.
+        $email = strtolower($email);
         $projection = ['_id' => 1, 'preferredEmail' => 1, 'emails' => 1, 'accounts' => 1, 'domains' => 1 ];
-        $query = ['accounts.emails' => strtolower($email)];
+        $query = ['accounts.emails' => $email];
 
         $user = $this->db->users->findOne($query, ['projection' => $projection]);
 
         if (!$user) {
             // Try alternative query patterns
-            $altQuery = ['preferredEmail' => strtolower($email)];
+            $altQuery = ['preferredEmail' => $email];
             $user = $this->db->users->findOne($altQuery, ['projection' => $projection]);
 
             if (!$user) {
-                $altQuery2 = ['emails' => strtolower($email)];
+                $altQuery2 = ['emails' => $email];
                 $user = $this->db->users->findOne($altQuery2, ['projection' => $projection]);
 
                 if (!$user) {
@@ -403,7 +405,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
         $domainObjectId = $resource['domain'];
         $domain = $this->db->domains->findOne(
-            [ '_id' => $domainObjectId, 'name' => $domain ],
+            [ '_id' => $domainObjectId, 'name' => strtolower($domain) ],
             [ 'projection' => [ '_id' => 1 ] ]
         );
         if (!$domain) {
@@ -438,7 +440,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $domainMatches = isset($teamCalendar['domainName']) && strcasecmp($teamCalendar['domainName'], $domain) === 0;
         if (!$domainMatches) {
             $domainDocument = $this->db->domains->findOne(
-                [ '_id' => $teamCalendar['domainId'], 'name' => $domain ],
+                [ '_id' => $teamCalendar['domainId'], 'name' => strtolower($domain) ],
                 [ 'projection' => [ '_id' => 1 ] ]
             );
             if (!$domainDocument) {

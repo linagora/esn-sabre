@@ -244,6 +244,35 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         }
     }
 
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCanAnswerSeveralOccurrencesListedOutOfChronologicalOrder(string $kind) {
+        $answer = ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org'];
+
+        $this->assertAllowed(
+            self::calendar(self::master($kind)),
+            self::calendar(
+                self::master($kind),
+                self::override($kind, self::addDays(self::OCCURRENCE, 10), $answer),
+                self::override($kind, self::OCCURRENCE, $answer),
+                self::override($kind, self::addDays(self::OCCURRENCE, 5), $answer)
+            )
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotChangeOneOfSeveralOccurrencesListedOutOfChronologicalOrder(string $kind) {
+        $this->assertRefused(
+            self::calendar(self::master($kind)),
+            self::calendar(
+                self::master($kind),
+                self::override($kind, self::addDays(self::OCCURRENCE, 10)),
+                self::override($kind, self::OCCURRENCE),
+                self::override($kind, self::addDays(self::OCCURRENCE, 5), ['SUMMARY' => 'SUMMARY:Daily changed'])
+            ),
+            'SUMMARY'
+        );
+    }
+
     public static function seriesKinds(): iterable {
         foreach (self::SERIES_KINDS as $kind) {
             yield $kind => [$kind];

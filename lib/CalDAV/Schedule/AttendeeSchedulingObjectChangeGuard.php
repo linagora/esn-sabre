@@ -39,7 +39,11 @@ class AttendeeSchedulingObjectChangeGuard {
             throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
         }
 
-        $instanceKeys = array_unique(array_merge(array_keys($oldEvents), array_keys($newEvents)));
+        $oldOccurrences = self::occurrenceCursor($oldMaster, $timeZone);
+        $newOccurrences = self::occurrenceCursor($newMaster, $timeZone);
+
+        // Cursors only move forward, so instances must be visited in chronological order.
+        $instanceKeys = self::chronological(array_unique(array_merge(array_keys($oldEvents), array_keys($newEvents))));
         foreach ($instanceKeys as $key) {
             $oldEvent = $oldEvents[$key] ?? null;
             $newEvent = $newEvents[$key] ?? null;
@@ -51,10 +55,10 @@ class AttendeeSchedulingObjectChangeGuard {
 
             $oldInstance = $oldEvent
                 ? self::explicitInstance($oldEvent, $timeZone)
-                : self::generatedInstance($oldMaster, $key, $timeZone);
+                : self::generatedInstance($oldMaster, $oldOccurrences, $key, $timeZone);
             $newInstance = $newEvent
                 ? self::explicitInstance($newEvent, $timeZone)
-                : self::generatedInstance($newMaster, $key, $timeZone);
+                : self::generatedInstance($newMaster, $newOccurrences, $key, $timeZone);
 
             if (!$newInstance) {
                 // The attendee removed the instance from their copy (declined / deleted occurrence).
@@ -126,28 +130,61 @@ class AttendeeSchedulingObjectChangeGuard {
     }
 
     /**
+     * Instant keys in increasing order, unparsable ("raw:") keys last: those
+     * never need a generated instance.
+     */
+    private static function chronological(array $keys): array {
+        usort($keys, function (string $a, string $b): int {
+            return self::sortKey($a) <=> self::sortKey($b);
+        });
+
+        return $keys;
+    }
+
+    private static function sortKey(string $key): array {
+        return str_starts_with($key, 'at:') ? [0, (int)substr($key, 3)] : [1, 0];
+    }
+
+    /**
+     * Looks up the occurrence a master generates at a given instant, returning
+     * its start or null when there is none. The iterator is created on first
+     * use and only moves forward, so the series is expanded at most once
+     * whatever the number of instances looked up: calls must be made with
+     * increasing timestamps.
+     */
+    private static function occurrenceCursor($master, \DateTimeZone $timeZone): \Closure {
+        $iterator = null;
+
+        return function (int $timestamp) use (&$iterator, $master, $timeZone): ?\DateTimeInterface {
+            $iterator ??= new EventIterator([$master], null, $timeZone);
+            while ($iterator->valid() && $iterator->current()->getTimestamp() < $timestamp) {
+                $iterator->next();
+            }
+
+            return $iterator->valid() && $iterator->current()->getTimestamp() === $timestamp
+                ? $iterator->current()
+                : null;
+        };
+    }
+
+    /**
      * Organizer-owned fields of the instance the master generates at the
      * instant of $key, or null when the master generates no instance there.
      *
      * @throws ForbiddenAttendeeSchedulingObjectChange when the recurrence cannot be expanded up to $key
      */
-    private static function generatedInstance($master, string $key, \DateTimeZone $timeZone): ?array {
+    private static function generatedInstance($master, \Closure $occurrences, string $key, \DateTimeZone $timeZone): ?array {
         if (!$master || !str_starts_with($key, 'at:')) {
             return null;
         }
-        $timestamp = (int)substr($key, 3);
 
         try {
-            $iterator = new EventIterator([$master], null, $timeZone);
-            while ($iterator->valid() && $iterator->current()->getTimestamp() < $timestamp) {
-                $iterator->next();
-            }
-            if (!$iterator->valid() || $iterator->current()->getTimestamp() !== $timestamp) {
+            $start = $occurrences((int)substr($key, 3));
+            if (!$start) {
                 return null;
             }
 
             [$masterStart, $masterEnd] = self::eventBounds($master, $timeZone);
-            $start = $iterator->current();
 
             return self::instanceFields(
                 $master,

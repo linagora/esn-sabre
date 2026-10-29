@@ -84,4 +84,20 @@ class RealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->plugin->createMessage('topic', $data);
         $this->plugin->publishMessages();
     }
+
+    function testPublishMessagesSubstitutesNonUtf8BytesInsteadOfPublishingFalse() {
+        $data = ['event' => "ATTENDEE;CN=Ren\xE9:mailto:a@x"];
+        $this->plugin->expects($this->any())->method('buildData')->with($data)->willReturn($data);
+
+        $this->publisher->expects($this->once())->method('publish')
+            ->with('topic', $this->callback(function($payload) {
+                $decoded = json_decode($payload, true);
+
+                return is_string($payload)
+                    && $decoded['event'] === "ATTENDEE;CN=Ren\u{FFFD}:mailto:a@x";
+            }));
+
+        $this->plugin->createMessage('topic', $data);
+        $this->plugin->publishMessages();
+    }
 }

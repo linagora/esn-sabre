@@ -14,6 +14,7 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
     protected $dummyCard3 = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Zelda\r\nEND:VCARD\r\n";
     protected $nonStandardFNCard1 = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:拔君\r\nEND:VCARD\r\n";
     protected $nonStandardFNCard2 = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:+++\r\nEND:VCARD\r\n";
+    protected $emptyFNCard = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:c1\r\nFN:\r\nN:;;;;\r\nEMAIL:alice@example.org\r\nEND:VCARD\r\n";
     protected $etienneCard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Etienne\r\nEND:VCARD\r\n";
     protected $accentedEtienneCard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ⓔtienne\r\nEND:VCARD\r\n";
 
@@ -394,5 +395,21 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($result[0]['uri'], '拔君');
         $this->assertEquals($result[1]['uri'], '++++');
         $this->assertEquals($result[2]['uri'], 'hello');
+    }
+
+    public function testCreateCardWithEmptyFnShouldBeSortedAsNonAlphabetic() {
+        $backend = $this->backend;
+        $id = $backend->createAddressBook(
+            'principals/users/admin',
+            'admin',
+            []
+        );
+        $backend->createCard($id, 'hello', $this->dummyCard);
+        $etag = $backend->createCard($id, 'emptyFn', $this->emptyFNCard);
+
+        $this->assertEquals('"' . md5($this->emptyFNCard) . '"', $etag);
+        $result = $backend->getCards($id, 0, 0, 'fn');
+        $this->assertEquals($result[0]['uri'], 'emptyFn');
+        $this->assertEquals($result[1]['uri'], 'hello');
     }
 }

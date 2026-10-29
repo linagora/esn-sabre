@@ -1257,7 +1257,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $vcard = \Sabre\VObject\Reader::read($cardData);
         $fn = (string)$vcard->FN;
         $convertedFn = $this->CharAPI->getAsciiUpperCase($fn);
-        $storedFn = ctype_alpha($convertedFn[0]) ? strtolower($convertedFn[0]) : '#';
+        $storedFn = ($convertedFn !== '' && ctype_alpha($convertedFn[0])) ? strtolower($convertedFn[0]) : '#';
         // Sabre handles TYPE=PREF (vCard 3), lowest PREF (vCard 4), then the first email.
         $email = trim((string)$vcard->preferred('EMAIL'));
         return [

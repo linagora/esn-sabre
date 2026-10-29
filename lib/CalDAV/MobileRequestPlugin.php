@@ -86,7 +86,8 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     }
                 }
 
-                $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
+                // Response::xmlSerialize encodes the href: give it back the decoded path
+                $newResponse = new \Sabre\DAV\Xml\Element\Response(\Sabre\HTTP\decodePath($xmlResponse->getHref()), $responseProps, $xmlResponse->getHttpStatus());
 
                 $xml[] = ['{DAV:}response' => $newResponse];
             }

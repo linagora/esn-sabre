@@ -8,6 +8,7 @@ $GLOBALS['__ldap_mock_email'] = 'johndoe@linagora.com';
 $GLOBALS['__ldap_mock_entries_empty'] = false;
 $GLOBALS['__ldap_mock_search_fails'] = false;
 $GLOBALS['__ldap_errno'] = 49;
+$GLOBALS['__ldap_bind_calls'] = 0;
 
 function ldap_connect($host) {
     if ($GLOBALS['__ldap_mock_enabled']) {
@@ -24,6 +25,7 @@ function ldap_set_option($conn, $option, $value) {
 }
 
 function ldap_bind($conn, $dn = null, $pwd = null) {
+    $GLOBALS['__ldap_bind_calls']++;
     switch ($GLOBALS['__ldap_bind_behavior']) {
         case 'return_false':
             return false;
@@ -514,6 +516,29 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $GLOBALS['__ldap_bind_behavior'] = 'default';
         $GLOBALS['__ldap_mock_search_fails'] = false;
         $GLOBALS['__ldap_errno'] = 49;
+        $GLOBALS['__ldap_bind_calls'] = 0;
+    }
+
+    function testAuthenticateEmptyPasswordIsRejectedWithoutBinding() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        $GLOBALS['__ldap_bind_calls'] = 0;
+
+        try {
+            $esnauth = new EsnMock('http://localhost:8080/');
+            $request = new \Sabre\HTTP\Request('GET', '/', [
+                'Authorization' => 'Basic ' . base64_encode('username:'),
+            ]);
+            $response = new \Sabre\HTTP\Response();
+
+            list($rv, $msg) = $esnauth->check($request, $response);
+
+            $this->assertFalse($rv);
+            $this->assertEquals("Bad credentials", $msg);
+            $this->assertNull($esnauth->getCurrentPrincipal());
+            $this->assertEquals(0, $GLOBALS['__ldap_bind_calls']);
+        } finally {
+            $this->resetLdapMock();
+        }
     }
 
     function testAdminImpersonationEnabledWithCorrectPassword() {

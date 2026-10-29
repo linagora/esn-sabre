@@ -163,6 +163,13 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         $ldapBase = Env::getString('LDAP_BASE');
         $ldapFilter = Env::getString('LDAP_FILTER');
 
+        # A simple bind with an empty password is an unauthenticated bind
+        # (RFC 4513 5.1.2) that many directories accept: never send it.
+        if ((string) $password === '') {
+            error_log("Bad credentials for '$user': empty password");
+            throw new AuthException("Bad credentials");
+        }
+
         if (!$this->ldapConfigured()) {
             error_log('LDAP_SERVER is not set: LDAP authentication is disabled');
             throw new AuthException('LDAP authentication is disabled');

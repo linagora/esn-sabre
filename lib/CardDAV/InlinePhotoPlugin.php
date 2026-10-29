@@ -145,7 +145,7 @@ class InlinePhotoPlugin extends ServerPlugin {
     protected function applyPolicy(VObject\Component\VCard $vcard, &$filtered) {
         $toRemove = [];
 
-        foreach ($vcard->select(self::$PHOTO_PROPERTY) as $photo) {
+        foreach ($this->selectPhotos($vcard) as $photo) {
             if ($this->isInline($photo)) {
                 if ($this->mode !== self::MODE_ALLOW) {
                     $this->rejectIfConfigured();
@@ -160,6 +160,30 @@ class InlinePhotoPlugin extends ServerPlugin {
             $vcard->remove($photo);
             $filtered = true;
         }
+    }
+
+    /**
+     * Returns every property that will be stored as a PHOTO.
+     *
+     * The plugin sees the raw payload, before Sabre's CardDAV validation
+     * repairs invalid property names: PHO@TO or pho_to would slip through a
+     * plain select('PHOTO') and then be stored as a PHOTO. Match on the name
+     * the repair will produce instead.
+     *
+     * @return VObject\Property[]
+     */
+    private function selectPhotos(VObject\Component\VCard $vcard): array {
+        return array_values(array_filter(
+            $vcard->children(),
+            fn($child) => $child instanceof VObject\Property && self::repairedName($child->name) === self::$PHOTO_PROPERTY
+        ));
+    }
+
+    /**
+     * Mirrors the property name repair of VObject\Property::validate().
+     */
+    private static function repairedName(string $name): string {
+        return preg_replace('/[^A-Z0-9-]/u', '', strtoupper(str_replace('_', '-', $name)));
     }
 
     /**

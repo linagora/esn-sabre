@@ -647,20 +647,26 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return [ '_id' => null ];
         }
 
+        $customAddressQuery = [ 'emailAddress' => [ '$regex' => '^' . preg_quote($value) . '$', '$options' => 'i' ] ];
+        $idQuery = $this->teamCalendarIdEmailQuery($value);
+
+        return $idQuery ? [ '$or' => [ $customAddressQuery, $idQuery ] ] : $customAddressQuery;
+    }
+
+    private function teamCalendarIdEmailQuery(string $value): ?array {
         [$possibleId, $domain] = explode('@', $value, 2);
-        $domain = strtolower($domain);
         try {
             $objectId = new \MongoDB\BSON\ObjectId($possibleId);
         } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
-            return [ '_id' => null ];
+            return null;
         }
 
         $domainQuery = [
             '_id' => new \MongoDB\BSON\ObjectId($this->requireAuthDomainId()),
-            'name' => $domain
+            'name' => strtolower($domain)
         ];
         if (!$this->db->domains->findOne($domainQuery, ['projection' => ['_id' => 1]])) {
-            return [ '_id' => null ];
+            return null;
         }
 
         return [ '_id' => $objectId ];

@@ -436,6 +436,45 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $backend->getPrincipalByPath('principals/team-calendars/' . self::OTHER_TEAM_CALENDAR_ID);
     }
 
+    function testTeamCalendarCustomAddressResolves() {
+        $customId = '82113fcc398fef406b0041c0';
+        $otherDomainCustomId = '82113fcc398fef406b0041c1';
+        self::$esndb->team_calendars->insertMany([
+            [
+                '_id' => new \MongoDB\BSON\ObjectId($customId),
+                'domainId' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
+                'domainName' => 'example.com',
+                'name' => 'team',
+                'emailAddress' => 'team@example.com'
+            ],
+            [
+                '_id' => new \MongoDB\BSON\ObjectId($otherDomainCustomId),
+                'domainId' => new \MongoDB\BSON\ObjectId(self::OTHER_DOMAIN_ID),
+                'domainName' => 'other.test',
+                'name' => 'team',
+                'emailAddress' => 'other-team@other.test'
+            ]
+        ]);
+
+        try {
+            $backend = new Mongo(self::$esndb, self::$tenant);
+
+            $this->assertSame("principals/team-calendars/$customId",
+                $backend->findByUri('mailto:team@example.com', 'principals/team-calendars'));
+            $this->assertSame("principals/team-calendars/$customId",
+                $backend->findByUri('mailto:Team@EXAMPLE.com', 'principals/team-calendars'));
+            $this->assertSame("principals/team-calendars/$customId",
+                $backend->findByUri("mailto:$customId@example.com", 'principals/team-calendars'));
+            $this->assertNull($backend->findByUri('mailto:other-team@other.test', 'principals/team-calendars'));
+            $this->assertNull($backend->findByUri('mailto:xteam@example.com', 'principals/team-calendars'));
+        } finally {
+            self::$esndb->team_calendars->deleteMany(['_id' => ['$in' => [
+                new \MongoDB\BSON\ObjectId($customId),
+                new \MongoDB\BSON\ObjectId($otherDomainCustomId)
+            ]]]);
+        }
+    }
+
     function testGetGroupMemberSet() {
         $backend = new Mongo(self::$esndb, self::$tenant);
         $expected = array('principals/users/' . self::USER_ID);

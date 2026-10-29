@@ -18,6 +18,11 @@
             "type": "vcs",
             "url": "https://github.com/linagora/sabre-vobject.git",
             "no-api": true
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/linagora/xml.git",
+            "no-api": true
         }
     ],
     "config": {
@@ -29,6 +34,7 @@
         "php": ">=8.4",
         "sabre/dav": "4.7.1",
         "sabre/vobject": "dev-linagora-waiting-merges-5.0.0#df1c97432b5d1f6a0a2a99cc1b235ef6ca9c8463",
+        "sabre/xml": "dev-linagora-waiting-merges-2.2#8335f379653ba5db881ee3c0ae8d79f8f464e03a",
         "mongodb/mongodb": "^2.5@stable",
         "monolog/monolog": "^2.9",
         "firebase/php-jwt": "^7.0"

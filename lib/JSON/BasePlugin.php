@@ -12,6 +12,12 @@ class BasePlugin extends ServerPlugin {
         "/DAVx5*/"
     ];
 
+    /**
+     * Context URI used when re-serialising a multistatus read back from the response body: its hrefs already
+     * carry the base URI, so an empty context keeps them as is instead of resolving them against a null one.
+     */
+    const ALREADY_RESOLVED_HREFS_CONTEXT_URI = '';
+
     protected $server;
     protected $acceptHeader;
     protected $currentUser;

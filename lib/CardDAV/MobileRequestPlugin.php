@@ -6,6 +6,7 @@ use \Sabre\Uri;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use Sabre\DAV\Exception;
+use ESN\Utils\XmlText;
 
 #[\AllowDynamicProperties]
 class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
@@ -64,7 +65,8 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
             try {
                 // With some client (DAVDroid), On a PROPFIND for a gab addressBook
                 // the xml is not good so we try to parse it, if we can't we do nothing
-                $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
+                // Stored display names may also carry characters XML 1.0 forbids: strip them first
+                $propFindXml = $this->server->xml->expect('{DAV:}multistatus', XmlText::stripIllegalCharacters($response->getBodyAsString()));
             } catch (\Exception $e) {
                 return true;
             }
@@ -89,7 +91,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     if ($bookId !== $ownerId) continue;
 
                     $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getShareOwner());
-                    $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
+                    $userDisplayName = XmlText::stripIllegalCharacters($userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address'])));
 
                     if($shareOwnerId === $currentUserId) {
                         if($addressbookType === 'contacts') {

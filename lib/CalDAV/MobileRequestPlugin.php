@@ -4,6 +4,7 @@ namespace ESN\CalDAV;
 use \Sabre\VObject;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
+use \ESN\Utils\XmlText;
 
 #[\AllowDynamicProperties]
 class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
@@ -60,7 +61,14 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
         $node = $this->server->tree->getNodeForPath($path);
 
         if($node instanceof \Sabre\CalDAV\CalendarHome) {
-            $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
+            try {
+                // Stored display names may carry characters XML 1.0 forbids: strip them so the
+                // body can be parsed, and leave the response untouched if it still cannot be
+                $propFindXml = $this->server->xml->expect('{DAV:}multistatus', XmlText::stripIllegalCharacters($response->getBodyAsString()));
+            } catch (\Exception $e) {
+                return true;
+            }
+
             $xmlResponses = $propFindXml->getResponses();
 
             foreach($xmlResponses as $index => $xmlResponse) {
@@ -75,7 +83,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                     $sharedNode = $this->server->tree->getNodeForPath($this->server->calculateUri($sourceHref));
                     $userPrincipal = $this->server->tree->getNodeForPath($sharedNode->getOwner());
 
-                    $userDisplayName = $userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address']));
+                    $userDisplayName = XmlText::stripIllegalCharacters($userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address'])));
 
                     $responseProps[200]['{DAV:}displayname'] = isset($responseProps[200]['{DAV:}displayname']) ?
                                     $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :

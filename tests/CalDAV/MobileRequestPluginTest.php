@@ -30,8 +30,8 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $plugin = new \ESN\JSON\Plugin('json');
         $this->server->addPlugin($plugin);
 
-        $plugin = new MobileRequestPlugin();
-        $this->server->addPlugin($plugin);
+        $this->mobileRequestPlugin = new MobileRequestPlugin();
+        $this->server->addPlugin($this->mobileRequestPlugin);
     }
 
     function testAfterPropFind() {
@@ -97,5 +97,32 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $this->assertStringContainsStringIgnoringCase('/calendars/54b64eadf6d7d8e41d263e0f/a%2Bb/<', $response->getBodyAsString());
         $this->assertStringNotContainsString('%25', $response->getBodyAsString());
         $this->assertStringContainsString('My agenda', $response->getBodyAsString());
+    }
+
+    function testAfterPropFindKeepsAWellFormedResponseWhenADisplayNameIsNotXmlSafe() {
+        $body = '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"><d:response><d:href>/calendars/54b64eadf6d7d8e41d263e0f/default/</d:href>'
+            . '<d:propstat><d:prop><d:resourcetype><d:collection/><cal:calendar xmlns:cal="urn:ietf:params:xml:ns:caldav"/></d:resourcetype>'
+            . "<d:displayname>My\x01calendar</d:displayname></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+            . '</d:response></d:multistatus>';
+        $request = new \Sabre\HTTP\Request('PROPFIND', '/calendars/54b64eadf6d7d8e41d263e0f', ['User-Agent' => 'Thunderbird/115.0']);
+        $response = new \Sabre\HTTP\Response(207, [], $body);
+
+        $this->mobileRequestPlugin->afterMethodPropfind($request, $response);
+
+        $this->assertSame(207, $response->getStatus());
+        $responseProps = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString())
+            ->getResponses()[0]->getResponseProperties();
+        $this->assertSame('Mycalendar', $responseProps[200]['{DAV:}displayname']);
+    }
+
+    function testAfterPropFindLeavesTheResponseUntouchedWhenItCannotBeParsed() {
+        $body = '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"><d:response>';
+        $request = new \Sabre\HTTP\Request('PROPFIND', '/calendars/54b64eadf6d7d8e41d263e0f', ['User-Agent' => 'Thunderbird/115.0']);
+        $response = new \Sabre\HTTP\Response(207, [], $body);
+
+        $this->mobileRequestPlugin->afterMethodPropfind($request, $response);
+
+        $this->assertSame(207, $response->getStatus());
+        $this->assertSame($body, $response->getBodyAsString());
     }
 }

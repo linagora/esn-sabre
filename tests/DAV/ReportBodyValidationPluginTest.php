@@ -13,13 +13,18 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
         return $server;
     }
 
-    private function report($body) {
+    private function request($method, $body, array $headers = []) {
         $server = $this->prepareServer();
-        $request = new \Sabre\HTTP\Request('REPORT', '/', ['Content-Type' => 'application/xml'], $body);
+        $headers = array_merge(['Content-Type' => 'application/xml'], $headers);
+        $request = new \Sabre\HTTP\Request($method, '/', $headers, $body);
         $server->httpRequest = $request;
         $server->exec();
 
         return $server->httpResponse;
+    }
+
+    private function report($body) {
+        return $this->request('REPORT', $body);
     }
 
     function testJsonBodyShouldAnswerBadRequest() {
@@ -46,5 +51,45 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
 
         $this->assertEquals(415, $response->getStatus());
         $this->assertStringContainsString('ReportNotSupported', $response->getBodyAsString());
+    }
+
+    /**
+     * A mismatched end tag after an empty element, nested inside a `{DAV:}prop`,
+     * used to spin Sabre's deserialiser until max_execution_time instead of
+     * raising a parse error. It must now answer 400 immediately.
+     */
+    function testIllFormedCalendarQueryDoesNotHang() {
+        $body = file_get_contents(__DIR__ . '/fixtures/report-keyvalue-loop.xml');
+
+        $start = microtime(true);
+        $response = $this->request('REPORT', $body, ['Depth' => '1']);
+        $elapsed = microtime(true) - $start;
+
+        $this->assertLessThan(2.0, $elapsed);
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testMalformedPropfindBodyShouldAnswerBadRequest() {
+        $response = $this->request('PROPFIND', '<D:propfind xmlns:D="DAV:"><D:a><D:b><D:prop><D:getetag/></D6prop>', ['Depth' => '0']);
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testMalformedProppatchBodyShouldAnswerBadRequest() {
+        $response = $this->request('PROPPATCH', '<D:propertyupdate xmlns:D="DAV:"><D:a><D:b><D:prop><D:getetag/></D6prop>');
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testWellFormedPropfindBodyShouldStillBeHandled() {
+        $response = $this->request('PROPFIND', '<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:propfind>', ['Depth' => '0']);
+
+        $this->assertEquals(207, $response->getStatus());
+    }
+
+    function testEmptyPropfindBodyShouldStillMeanAllprop() {
+        $response = $this->request('PROPFIND', '', ['Depth' => '0']);
+
+        $this->assertEquals(207, $response->getStatus());
     }
 }

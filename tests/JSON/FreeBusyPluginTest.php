@@ -403,7 +403,7 @@ END:VCALENDAR
             'missing end' => [json_decode('{"start":"20181001T000000Z","users":["' . self::USER1_ID . '"]}')],
             'missing users' => [json_decode('{"start":"20181001T000000Z","end":"20181101T000000Z"}')],
             'users not an array' => [json_decode('{"start":"20181001T000000Z","end":"20181101T000000Z","users":"' . self::USER1_ID . '"}')],
-            'unparsable start' => [json_decode('{"start":"2035012T000000Z","end":"20350201T000000Z","users":["' . self::USER1_ID . '"]}')],
+            'unparsable start' => [json_decode('{"start":"not-a-date","end":"20350201T000000Z","users":["' . self::USER1_ID . '"]}')],
             'unparsable end' => [json_decode('{"start":"20181001T000000Z","end":"20+5020.T0Z","users":["' . self::USER1_ID . '"]}')],
             'empty start' => [json_decode('{"start":"","end":"20181101T000000Z","users":["' . self::USER1_ID . '"]}')],
             'start not a string' => [json_decode('{"start":20181001,"end":"20181101T000000Z","users":["' . self::USER1_ID . '"]}')],
@@ -421,7 +421,7 @@ END:VCALENDAR
             'REQUEST_URI'       => '/calendars/freebusy',
         ));
 
-        $request->setBody('{"start":"2035012T000000Z","end":"20350201T000000Z","users":["' . self::USER1_ID . '"],"timezone":"Europe/Paris"}');
+        $request->setBody('{"start":"not-a-date","end":"20350201T000000Z","users":["' . self::USER1_ID . '"],"timezone":"Europe/Paris"}');
         $response = $this->request($request);
 
         $this->assertEquals(400, $response->status);

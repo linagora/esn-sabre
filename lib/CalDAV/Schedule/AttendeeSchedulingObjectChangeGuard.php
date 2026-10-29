@@ -32,12 +32,7 @@ class AttendeeSchedulingObjectChangeGuard {
         $oldEvents = self::indexEvents($oldObject, $timeZone);
         $newEvents = self::indexEvents($newObject, $timeZone);
 
-        if ($oldMaster && $newMaster) {
-            self::assertSameExplicitEvent($oldMaster, $newMaster, $forbiddenProperties);
-        } elseif ($newMaster) {
-            // A master the old copy did not have generates instances the organizer never sent.
-            throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
-        }
+        self::assertSameMaster($oldMaster, $newMaster, $forbiddenProperties);
 
         $oldOccurrences = self::occurrenceCursor($oldMaster, $timeZone);
         $newOccurrences = self::occurrenceCursor($newMaster, $timeZone);
@@ -53,26 +48,46 @@ class AttendeeSchedulingObjectChangeGuard {
                 continue;
             }
 
-            $oldInstance = $oldEvent
-                ? self::explicitInstance($oldEvent, $timeZone)
-                : self::generatedInstance($oldMaster, $oldOccurrences, $key, $timeZone);
-            $newInstance = $newEvent
-                ? self::explicitInstance($newEvent, $timeZone)
-                : self::generatedInstance($newMaster, $newOccurrences, $key, $timeZone);
+            self::assertSameInstance(
+                self::instanceAt($oldEvent, $oldMaster, $oldOccurrences, $key, $timeZone),
+                self::instanceAt($newEvent, $newMaster, $newOccurrences, $key, $timeZone),
+                $forbiddenProperties
+            );
+        }
+    }
 
-            if (!$newInstance) {
-                // The attendee removed the instance from their copy (declined / deleted occurrence).
-                continue;
-            }
-            if (!$oldInstance) {
-                // The attendee invented an instance the organizer never scheduled.
-                throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
-            }
+    private static function assertSameMaster($oldMaster, $newMaster, array $forbiddenProperties): void {
+        if ($oldMaster && $newMaster) {
+            self::assertSameExplicitEvent($oldMaster, $newMaster, $forbiddenProperties);
+        } elseif ($newMaster) {
+            // A master the old copy did not have generates instances the organizer never sent.
+            throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
+        }
+    }
 
-            foreach ($forbiddenProperties as $propertyName) {
-                if ($oldInstance[$propertyName] !== $newInstance[$propertyName]) {
-                    throw new ForbiddenAttendeeSchedulingObjectChange($propertyName);
-                }
+    /**
+     * Organizer-owned fields of the instance at $key, carried by $event when
+     * there is one, generated from $master otherwise.
+     */
+    private static function instanceAt($event, $master, \Closure $occurrences, string $key, \DateTimeZone $timeZone): ?array {
+        return $event
+            ? self::explicitInstance($event, $timeZone)
+            : self::generatedInstance($master, $occurrences, $key, $timeZone);
+    }
+
+    private static function assertSameInstance(?array $oldInstance, ?array $newInstance, array $forbiddenProperties): void {
+        if (!$newInstance) {
+            // The attendee removed the instance from their copy (declined / deleted occurrence).
+            return;
+        }
+        if (!$oldInstance) {
+            // The attendee invented an instance the organizer never scheduled.
+            throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
+        }
+
+        foreach ($forbiddenProperties as $propertyName) {
+            if ($oldInstance[$propertyName] !== $newInstance[$propertyName]) {
+                throw new ForbiddenAttendeeSchedulingObjectChange($propertyName);
             }
         }
     }

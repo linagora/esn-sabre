@@ -7,6 +7,36 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\VObject\Reader;
 use Sabre\VObject\Settings;
 
+enum SeriesKind: string {
+    case Timed = 'timed';
+    case AllDay = 'all-day';
+}
+
+/**
+ * Ways an attendee can reshape their copy while keeping an instance.
+ */
+enum ReshapeScenario: string {
+    case NewOverride = 'new override of an implicit occurrence';
+    case MasterTurnedIntoOverride = 'master turned into an override';
+    case MasterDropped = 'master dropped, occurrence kept as an override';
+    case OrganizerOverrideDropped = 'organizer override dropped in favour of the master';
+    case ExistingOverrideChanged = 'existing override changed';
+    case MasterChanged = 'master changed';
+    case RecurrenceIdAsUtc = 'override recurrence id rewritten in UTC';
+    case RecurrenceIdAsFloating = 'override recurrence id rewritten as floating';
+
+    /**
+     * Whether one side of the comparison is an occurrence generated from the
+     * master, rather than both sides being explicit VEVENTs sharing a key.
+     */
+    function comparesGeneratedInstance(): bool {
+        return match ($this) {
+            self::NewOverride, self::MasterTurnedIntoOverride, self::MasterDropped, self::OrganizerOverrideDropped => true,
+            default => false,
+        };
+    }
+}
+
 /**
  * An attendee must not change DTSTART, DTEND, SUMMARY, LOCATION or ORGANIZER
  * of any instance of their copy, whichever VEVENT (master or override) carries
@@ -15,83 +45,56 @@ use Sabre\VObject\Settings;
 class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCase {
     private const FORBIDDEN_PROPERTIES = ['DTSTART', 'DTEND', 'LOCATION', 'SUMMARY', 'ORGANIZER'];
 
-    private const SERIES_KINDS = ['timed', 'all-day'];
-
-    private const NEW_OVERRIDE = 'new override of an implicit occurrence';
-    private const MASTER_TURNED_INTO_OVERRIDE = 'master turned into an override';
-    private const MASTER_DROPPED = 'master dropped, occurrence kept as an override';
-    private const ORGANIZER_OVERRIDE_DROPPED = 'organizer override dropped in favour of the master';
-    private const EXISTING_OVERRIDE_CHANGED = 'existing override changed';
-    private const MASTER_CHANGED = 'master changed';
-    private const RECURRENCE_ID_AS_UTC = 'override recurrence id rewritten in UTC';
-    private const RECURRENCE_ID_AS_FLOATING = 'override recurrence id rewritten as floating';
-
-    /** Scenarios where one side of the comparison is an occurrence generated from the master. */
-    private const GENERATED_INSTANCE_SCENARIOS = [
-        self::NEW_OVERRIDE,
-        self::MASTER_TURNED_INTO_OVERRIDE,
-        self::MASTER_DROPPED,
-        self::ORGANIZER_OVERRIDE_DROPPED,
-    ];
-
-    /** Scenarios where both sides are explicit VEVENTs sharing a recurrence key. */
-    private const EXPLICIT_INSTANCE_SCENARIOS = [
-        self::EXISTING_OVERRIDE_CHANGED,
-        self::MASTER_CHANGED,
-        self::RECURRENCE_ID_AS_UTC,
-        self::RECURRENCE_ID_AS_FLOATING,
-    ];
-
     private const SERIES_START = '20350101';
     private const OCCURRENCE = '20350107';
 
     public static function forbiddenChanges(): iterable {
-        foreach (self::SERIES_KINDS as $kind) {
-            foreach (array_merge(self::GENERATED_INSTANCE_SCENARIOS, self::EXPLICIT_INSTANCE_SCENARIOS) as $scenario) {
+        foreach (SeriesKind::cases() as $kind) {
+            foreach (ReshapeScenario::cases() as $scenario) {
                 if (!self::appliesTo($kind, $scenario)) {
                     continue;
                 }
                 foreach (self::forbiddenChangesOf($kind, self::scenarioDay($scenario)) as $label => [$changes, $propertyName]) {
-                    yield "$kind / $scenario / $label" => [$kind, $scenario, $changes, $propertyName];
+                    yield "$kind->value / $scenario->value / $label" => [$kind, $scenario, $changes, $propertyName];
                 }
             }
         }
     }
 
     public static function allowedChanges(): iterable {
-        foreach (self::SERIES_KINDS as $kind) {
-            foreach (array_merge(self::GENERATED_INSTANCE_SCENARIOS, self::EXPLICIT_INSTANCE_SCENARIOS) as $scenario) {
+        foreach (SeriesKind::cases() as $kind) {
+            foreach (ReshapeScenario::cases() as $scenario) {
                 if (!self::appliesTo($kind, $scenario)) {
                     continue;
                 }
                 $changes = self::attendeeLocalChangesOf();
-                if (in_array($scenario, self::GENERATED_INSTANCE_SCENARIOS, true)) {
+                if ($scenario->comparesGeneratedInstance()) {
                     // Generated occurrences are compared by value, so equivalent spellings are fine.
                     $changes += self::equivalentSpellingsOf($kind, self::scenarioDay($scenario));
                 }
                 foreach ($changes as $label => $change) {
-                    yield "$kind / $scenario / $label" => [$kind, $scenario, $change];
+                    yield "$kind->value / $scenario->value / $label" => [$kind, $scenario, $change];
                 }
             }
         }
     }
 
     #[DataProvider('forbiddenChanges')]
-    function testAttendeeCannotChangeOrganizerOwnedFieldOfAnyInstance(string $kind, string $scenario, array $changes, string $propertyName) {
+    function testAttendeeCannotChangeOrganizerOwnedFieldOfAnyInstance(SeriesKind $kind, ReshapeScenario $scenario, array $changes, string $propertyName) {
         [$oldObject, $newObject] = self::reshape($kind, $scenario, $changes);
 
         $this->assertRefused($oldObject, $newObject, $propertyName);
     }
 
     #[DataProvider('allowedChanges')]
-    function testAttendeeCanReshapeTheirCopyWithoutChangingOrganizerOwnedFields(string $kind, string $scenario, array $changes) {
+    function testAttendeeCanReshapeTheirCopyWithoutChangingOrganizerOwnedFields(SeriesKind $kind, ReshapeScenario $scenario, array $changes) {
         [$oldObject, $newObject] = self::reshape($kind, $scenario, $changes);
 
         $this->assertAllowed($oldObject, $newObject);
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCanTurnMasterIntoOverrideKeepingTheOccurrenceUnchanged(string $kind) {
+    function testAttendeeCanTurnMasterIntoOverrideKeepingTheOccurrenceUnchanged(SeriesKind $kind) {
         // Truncating the series to one occurrence only removes instances from the attendee's copy.
         $this->assertAllowed(
             self::calendar(self::master($kind)),
@@ -100,7 +103,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCanExcludeAnOccurrenceFromTheirCopy(string $kind) {
+    function testAttendeeCanExcludeAnOccurrenceFromTheirCopy(SeriesKind $kind) {
         $this->assertAllowed(
             self::calendar(self::master($kind)),
             self::calendar(self::master($kind, ['EXDATE' => self::exdateLine($kind, self::OCCURRENCE)]))
@@ -108,7 +111,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCanExcludeAnOrganizerOverrideFromTheirCopy(string $kind) {
+    function testAttendeeCanExcludeAnOrganizerOverrideFromTheirCopy(SeriesKind $kind) {
         $this->assertAllowed(
             self::calendar(self::master($kind), self::override($kind, self::OCCURRENCE, ['SUMMARY' => 'SUMMARY:Moved by organizer'])),
             self::calendar(self::master($kind, ['EXDATE' => self::exdateLine($kind, self::OCCURRENCE)]))
@@ -116,7 +119,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCanAnswerTheOnlyOccurrenceTheyAreInvitedTo(string $kind) {
+    function testAttendeeCanAnswerTheOnlyOccurrenceTheyAreInvitedTo(SeriesKind $kind) {
         $this->assertAllowed(
             self::calendar(self::override($kind, self::OCCURRENCE)),
             self::calendar(self::override($kind, self::OCCURRENCE, ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org']))
@@ -124,7 +127,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCanDropOneOfTheOccurrencesTheyAreInvitedTo(string $kind) {
+    function testAttendeeCanDropOneOfTheOccurrencesTheyAreInvitedTo(SeriesKind $kind) {
         $otherOccurrence = self::addDays(self::OCCURRENCE, 1);
 
         $this->assertAllowed(
@@ -134,7 +137,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCannotAddAMasterToACopyWithoutOne(string $kind) {
+    function testAttendeeCannotAddAMasterToACopyWithoutOne(SeriesKind $kind) {
         $this->assertRefused(
             self::calendar(self::override($kind, self::OCCURRENCE)),
             self::calendar(self::master($kind), self::override($kind, self::OCCURRENCE)),
@@ -143,7 +146,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCannotOverrideAnOccurrenceBeyondTheEndOfTheSeries(string $kind) {
+    function testAttendeeCannotOverrideAnOccurrenceBeyondTheEndOfTheSeries(SeriesKind $kind) {
         $this->assertRefused(
             self::calendar(self::master($kind)),
             self::calendar(self::master($kind), self::override($kind, '20350301')),
@@ -152,7 +155,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCannotOverrideAnOccurrenceTheOrganizerExcluded(string $kind) {
+    function testAttendeeCannotOverrideAnOccurrenceTheOrganizerExcluded(SeriesKind $kind) {
         $master = self::master($kind, ['EXDATE' => self::exdateLine($kind, self::OCCURRENCE)]);
 
         $this->assertRefused(
@@ -163,7 +166,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCannotAddAnOverrideWithAnUnparsableRecurrenceId(string $kind) {
+    function testAttendeeCannotAddAnOverrideWithAnUnparsableRecurrenceId(SeriesKind $kind) {
         $this->assertRefused(
             self::calendar(self::master($kind)),
             self::calendar(self::master($kind), self::override($kind, self::OCCURRENCE, ['RECURRENCE-ID' => 'RECURRENCE-ID:not-a-date'])),
@@ -172,7 +175,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCannotKeepAnUnparsableRecurrenceIdOverrideWhileChangingIt(string $kind) {
+    function testAttendeeCannotKeepAnUnparsableRecurrenceIdOverrideWhileChangingIt(SeriesKind $kind) {
         $override = ['RECURRENCE-ID' => 'RECURRENCE-ID:not-a-date'];
 
         $this->assertRefused(
@@ -184,46 +187,46 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
 
     function testAttendeeCannotOverrideATimedOccurrenceAtAnotherTimeOfTheSameDay() {
         $this->assertRefused(
-            self::calendar(self::master('timed')),
-            self::calendar(self::master('timed'), self::override('timed', self::OCCURRENCE, ['RECURRENCE-ID' => 'RECURRENCE-ID:' . self::OCCURRENCE . 'T120000Z'])),
+            self::calendar(self::master(SeriesKind::Timed)),
+            self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE, ['RECURRENCE-ID' => 'RECURRENCE-ID:' . self::OCCURRENCE . 'T120000Z'])),
             'DTSTART'
         );
     }
 
     function testAttendeeCannotOverrideATimedOccurrenceWithADateRecurrenceId() {
         $this->assertRefused(
-            self::calendar(self::master('timed')),
-            self::calendar(self::master('timed'), self::override('timed', self::OCCURRENCE, ['RECURRENCE-ID' => 'RECURRENCE-ID;VALUE=DATE:' . self::OCCURRENCE])),
+            self::calendar(self::master(SeriesKind::Timed)),
+            self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE, ['RECURRENCE-ID' => 'RECURRENCE-ID;VALUE=DATE:' . self::OCCURRENCE])),
             'DTSTART'
         );
     }
 
     function testAttendeeCannotOverrideAnAllDayOccurrenceWithATimedRecurrenceId() {
         $this->assertRefused(
-            self::calendar(self::master('all-day')),
-            self::calendar(self::master('all-day'), self::override('all-day', self::OCCURRENCE, ['RECURRENCE-ID' => 'RECURRENCE-ID:' . self::OCCURRENCE . 'T120000Z'])),
+            self::calendar(self::master(SeriesKind::AllDay)),
+            self::calendar(self::master(SeriesKind::AllDay), self::override(SeriesKind::AllDay, self::OCCURRENCE, ['RECURRENCE-ID' => 'RECURRENCE-ID:' . self::OCCURRENCE . 'T120000Z'])),
             'DTSTART'
         );
     }
 
     function testAttendeeCannotChangeAFarOccurrenceOfAnEndlessSeries() {
-        $master = self::master('timed', ['RRULE' => 'RRULE:FREQ=DAILY']);
+        $master = self::master(SeriesKind::Timed, ['RRULE' => 'RRULE:FREQ=DAILY']);
         $farOccurrence = '20360107';
 
         $this->assertRefused(
             self::calendar($master),
-            self::calendar($master, self::override('timed', $farOccurrence, ['SUMMARY' => 'SUMMARY:Daily changed'])),
+            self::calendar($master, self::override(SeriesKind::Timed, $farOccurrence, ['SUMMARY' => 'SUMMARY:Daily changed'])),
             'SUMMARY'
         );
     }
 
     function testAttendeeCanAnswerAFarOccurrenceOfAnEndlessSeries() {
-        $master = self::master('timed', ['RRULE' => 'RRULE:FREQ=DAILY']);
+        $master = self::master(SeriesKind::Timed, ['RRULE' => 'RRULE:FREQ=DAILY']);
         $farOccurrence = '20360107';
 
         $this->assertAllowed(
             self::calendar($master),
-            self::calendar($master, self::override('timed', $farOccurrence, ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=DECLINED:mailto:alice@example.org']))
+            self::calendar($master, self::override(SeriesKind::Timed, $farOccurrence, ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=DECLINED:mailto:alice@example.org']))
         );
     }
 
@@ -232,11 +235,11 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         $previousLimit = Settings::$maxRecurrences;
         Settings::$maxRecurrences = 10;
         try {
-            $master = self::master('timed', ['RRULE' => 'RRULE:FREQ=DAILY']);
+            $master = self::master(SeriesKind::Timed, ['RRULE' => 'RRULE:FREQ=DAILY']);
 
             $this->assertRefused(
                 self::calendar($master),
-                self::calendar($master, self::override('timed', self::addDays(self::SERIES_START, 20))),
+                self::calendar($master, self::override(SeriesKind::Timed, self::addDays(self::SERIES_START, 20))),
                 'DTSTART'
             );
         } finally {
@@ -245,7 +248,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCanAnswerSeveralOccurrencesListedOutOfChronologicalOrder(string $kind) {
+    function testAttendeeCanAnswerSeveralOccurrencesListedOutOfChronologicalOrder(SeriesKind $kind) {
         $answer = ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org'];
 
         $this->assertAllowed(
@@ -260,7 +263,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
-    function testAttendeeCannotChangeOneOfSeveralOccurrencesListedOutOfChronologicalOrder(string $kind) {
+    function testAttendeeCannotChangeOneOfSeveralOccurrencesListedOutOfChronologicalOrder(SeriesKind $kind) {
         $this->assertRefused(
             self::calendar(self::master($kind)),
             self::calendar(
@@ -274,61 +277,61 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     public static function seriesKinds(): iterable {
-        foreach (self::SERIES_KINDS as $kind) {
-            yield $kind => [$kind];
+        foreach (SeriesKind::cases() as $kind) {
+            yield $kind->value => [$kind];
         }
     }
 
     /**
      * @return array{0: string, 1: string} old and new copies of the attendee's scheduling object
      */
-    private static function reshape(string $kind, string $scenario, array $changes): array {
+    private static function reshape(SeriesKind $kind, ReshapeScenario $scenario, array $changes): array {
         $day = self::scenarioDay($scenario);
         $master = self::master($kind);
 
         return match ($scenario) {
-            self::NEW_OVERRIDE => [
+            ReshapeScenario::NewOverride => [
                 self::calendar($master),
                 self::calendar($master, self::override($kind, $day, $changes)),
             ],
-            self::MASTER_TURNED_INTO_OVERRIDE => [
+            ReshapeScenario::MasterTurnedIntoOverride => [
                 self::calendar($master),
                 self::calendar(self::master($kind, ['RECURRENCE-ID' => self::recurrenceIdLine($kind, $day)] + $changes)),
             ],
-            self::MASTER_DROPPED => [
+            ReshapeScenario::MasterDropped => [
                 self::calendar($master),
                 self::calendar(self::override($kind, $day, $changes)),
             ],
-            self::ORGANIZER_OVERRIDE_DROPPED => [
+            ReshapeScenario::OrganizerOverrideDropped => [
                 self::calendar($master, self::override($kind, $day, $changes)),
                 self::calendar($master),
             ],
-            self::EXISTING_OVERRIDE_CHANGED => [
+            ReshapeScenario::ExistingOverrideChanged => [
                 self::calendar($master, self::override($kind, $day)),
                 self::calendar($master, self::override($kind, $day, $changes)),
             ],
-            self::MASTER_CHANGED => [
+            ReshapeScenario::MasterChanged => [
                 self::calendar($master),
                 self::calendar(self::master($kind, $changes)),
             ],
-            self::RECURRENCE_ID_AS_UTC => [
+            ReshapeScenario::RecurrenceIdAsUtc => [
                 self::calendar($master, self::override($kind, $day)),
                 self::calendar($master, self::override($kind, $day, ['RECURRENCE-ID' => 'RECURRENCE-ID:' . $day . 'T080000Z'] + $changes)),
             ],
-            self::RECURRENCE_ID_AS_FLOATING => [
+            ReshapeScenario::RecurrenceIdAsFloating => [
                 self::calendar($master, self::override($kind, $day)),
                 self::calendar($master, self::override($kind, $day, ['RECURRENCE-ID' => 'RECURRENCE-ID:' . $day . 'T090000'] + $changes)),
             ],
         };
     }
 
-    private static function appliesTo(string $kind, string $scenario): bool {
+    private static function appliesTo(SeriesKind $kind, ReshapeScenario $scenario): bool {
         // An all-day RECURRENCE-ID only has the DATE form.
-        return $kind === 'timed' || !in_array($scenario, [self::RECURRENCE_ID_AS_UTC, self::RECURRENCE_ID_AS_FLOATING], true);
+        return $kind === SeriesKind::Timed || !in_array($scenario, [ReshapeScenario::RecurrenceIdAsUtc, ReshapeScenario::RecurrenceIdAsFloating], true);
     }
 
-    private static function scenarioDay(string $scenario): string {
-        return in_array($scenario, [self::MASTER_TURNED_INTO_OVERRIDE, self::MASTER_CHANGED], true)
+    private static function scenarioDay(ReshapeScenario $scenario): string {
+        return in_array($scenario, [ReshapeScenario::MasterTurnedIntoOverride, ReshapeScenario::MasterChanged], true)
             ? self::SERIES_START
             : self::OCCURRENCE;
     }
@@ -336,8 +339,8 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     /**
      * @return array<string, array{0: array, 1: string}> label => [property changes, property the guard must report]
      */
-    private static function forbiddenChangesOf(string $kind, string $day): array {
-        $timed = $kind === 'timed';
+    private static function forbiddenChangesOf(SeriesKind $kind, string $day): array {
+        $timed = $kind === SeriesKind::Timed;
 
         return [
             'DTSTART moved' => [['DTSTART' => $timed
@@ -381,19 +384,19 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     /**
      * @return array<string, array> label => property changes spelling the same values differently
      */
-    private static function equivalentSpellingsOf(string $kind, string $day): array {
+    private static function equivalentSpellingsOf(SeriesKind $kind, string $day): array {
         $spellings = [
-            'DTEND written as the equivalent DURATION' => ['DTEND' => null, 'DURATION' => $kind === 'timed' ? 'DURATION:PT1H' : 'DURATION:P1D'],
+            'DTEND written as the equivalent DURATION' => ['DTEND' => null, 'DURATION' => $kind === SeriesKind::Timed ? 'DURATION:PT1H' : 'DURATION:P1D'],
             'ORGANIZER written in another case' => ['ORGANIZER' => 'ORGANIZER:MAILTO:BOB@EXAMPLE.ORG'],
         ];
-        if ($kind === 'timed') {
+        if ($kind === SeriesKind::Timed) {
             $spellings['DTSTART and DTEND written in UTC'] = ['DTSTART' => 'DTSTART:' . $day . 'T080000Z', 'DTEND' => 'DTEND:' . $day . 'T090000Z'];
         }
 
         return $spellings;
     }
 
-    private static function master(string $kind, array $changes = []): array {
+    private static function master(SeriesKind $kind, array $changes = []): array {
         return self::applyChanges(
             ['UID' => 'UID:event-uid']
             + self::boundsOf($kind, self::SERIES_START)
@@ -403,7 +406,7 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         );
     }
 
-    private static function override(string $kind, string $day, array $changes = []): array {
+    private static function override(SeriesKind $kind, string $day, array $changes = []): array {
         return self::applyChanges(
             ['UID' => 'UID:event-uid', 'RECURRENCE-ID' => self::recurrenceIdLine($kind, $day)]
             + self::boundsOf($kind, $day)
@@ -412,8 +415,8 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         );
     }
 
-    private static function boundsOf(string $kind, string $day): array {
-        return $kind === 'timed'
+    private static function boundsOf(SeriesKind $kind, string $day): array {
+        return $kind === SeriesKind::Timed
             ? ['DTSTART' => 'DTSTART;TZID=Europe/Paris:' . $day . 'T090000', 'DTEND' => 'DTEND;TZID=Europe/Paris:' . $day . 'T100000']
             : ['DTSTART' => 'DTSTART;VALUE=DATE:' . $day, 'DTEND' => 'DTEND;VALUE=DATE:' . self::addDays($day, 1)];
     }
@@ -428,14 +431,14 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         ];
     }
 
-    private static function recurrenceIdLine(string $kind, string $day): string {
-        return $kind === 'timed'
+    private static function recurrenceIdLine(SeriesKind $kind, string $day): string {
+        return $kind === SeriesKind::Timed
             ? 'RECURRENCE-ID;TZID=Europe/Paris:' . $day . 'T090000'
             : 'RECURRENCE-ID;VALUE=DATE:' . $day;
     }
 
-    private static function exdateLine(string $kind, string $day): string {
-        return $kind === 'timed'
+    private static function exdateLine(SeriesKind $kind, string $day): string {
+        return $kind === SeriesKind::Timed
             ? 'EXDATE;TZID=Europe/Paris:' . $day . 'T090000'
             : 'EXDATE;VALUE=DATE:' . $day;
     }

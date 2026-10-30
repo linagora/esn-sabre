@@ -43,7 +43,7 @@ class CalendarHandler {
     public function createCalendar($homePath, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
-        if (!$this->isValidResourceId($jsonData->id ?? null)) {
+        if (!$this->isValidResourceId($jsonData->id ?? null) || $this->hasXmlIllegalText($jsonData)) {
             return [400, null];
         }
 
@@ -71,6 +71,10 @@ class CalendarHandler {
         // List of read-only properties that cannot be modified
         $readonlyProps = ['dav:getetag', 'dav:getctag', 'calendarserver:ctag'];
 
+        if ($this->hasXmlIllegalText($jsonData)) {
+            return [400, null];
+        }
+
         $davProps = [];
         foreach ($jsonData as $jsonProp => $value) {
             // Check if trying to modify a read-only property
@@ -86,6 +90,13 @@ class CalendarHandler {
         $result = $this->server->updateProperties($nodePath, $davProps);
 
         return [$this->statusCodeFromUpdateResult($result), null];
+    }
+
+    private function hasXmlIllegalText($jsonData): bool {
+        $textProps = ['dav:name', 'caldav:description'];
+
+        return !empty(array_filter($textProps, fn($prop) =>
+            \ESN\Utils\XmlText::containsIllegalCharacters($jsonData->$prop ?? null)));
     }
 
     private function statusCodeFromUpdateResult($result): int {

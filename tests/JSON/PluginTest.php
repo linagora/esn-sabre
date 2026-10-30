@@ -1782,6 +1782,20 @@ END:VCALENDAR
         $this->assertEquals(204, $response->status);
     }
 
+    function testPatchCalendarRejectsNameWithXmlIllegalCharacter() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPPATCH',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+
+        $data = [ 'dav:name' => "My\x01calendar" ];
+        $request->setBody(json_encode($data));
+
+        $response = $this->request($request);
+        $this->assertEquals(400, $response->status);
+    }
+
     function testPatchCalendarReadonlyProp() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',

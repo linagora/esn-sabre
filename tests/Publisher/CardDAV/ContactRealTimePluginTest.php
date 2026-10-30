@@ -124,6 +124,24 @@ class ContactRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertNotNull($client->message);
     }
 
+    function testAfterWriteContentWithNonUtf8ParameterShouldPublishJson() {
+        $plugin = $this->getPlugin();
+        $server = $plugin->getServer();
+        $client = $plugin->getClient();
+
+        $nodeMock = $this->getMockBuilder('\Sabre\CardDAV\Card')
+            ->disableOriginalConstructor()
+            ->getMock();
+        $nodeMock->method('getOwner')
+            ->willReturn(self::USER_PRINCIPAL);
+        $nodeMock->method('get')
+            ->willReturn("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:a\r\nEMAIL;X-P=\xE9:a@x\r\nEND:VCARD\r\n");
+
+        $this->assertTrue($server->emit('afterWriteContent', ["addressbooks/bookId/bookName/contact.vcf", $nodeMock]));
+        $this->assertIsString($client->message);
+        $this->assertStringContainsString("EMAIL;X-P=\u{FFFD}:a@x", json_decode($client->message, true)['carddata']);
+    }
+
     function testAfterWriteContentGroupContactEventShouldPublishMessage() {
         $plugin = $this->getPlugin();
         $server = $plugin->getServer();

@@ -62,7 +62,10 @@ abstract class RealTimePlugin extends ServerPlugin {
                 if (is_array($message['data'])) {
                     $message['data']['connectedUser'] = $connectedUser;
                 }
-                $this->client->publish($message['topic'], json_encode($message['data']));
+                // Parameter values (e.g. a Latin-1 ATTENDEE;CN) are not repaired to UTF-8 by Sabre
+                // validation: substitute invalid bytes rather than publishing `false` as the body.
+                $payload = json_encode($message['data'], JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
+                $this->client->publish($message['topic'], $payload);
             } catch (\Exception $e) {
                 // Be lenient: a malformed event (e.g. an invalid RRULE UNTIL value) that cannot be
                 // serialized must not crash the request that triggered the notification. The event

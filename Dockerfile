@@ -55,8 +55,8 @@ RUN apt-get update && \
     pkg-config \
     git && \
   # Download release archives directly to avoid PECL REST metadata lookups.
-  # Preserve the existing 2.2.0 preference and latest-release fallback.
-  ( (curl -fsSL --retry 3 https://github.com/mongodb/mongo-php-driver/releases/download/2.2.0/mongodb-2.2.0.tgz -o /tmp/mongodb.tgz && \
+  # Preserve the existing version preference and latest-release fallback.
+  ( (curl -fsSL --retry 3 https://github.com/mongodb/mongo-php-driver/releases/download/2.5.5/mongodb-2.5.5.tgz -o /tmp/mongodb.tgz && \
     pecl install /tmp/mongodb.tgz) || \
    (MONGODB_RELEASE_URL="$(curl -fsSL --retry 3 -o /dev/null -w '%{url_effective}' https://github.com/mongodb/mongo-php-driver/releases/latest)" && \
     MONGODB_VERSION="${MONGODB_RELEASE_URL##*/}" && \

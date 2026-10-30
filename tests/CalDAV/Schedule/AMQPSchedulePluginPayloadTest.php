@@ -2,31 +2,41 @@
 
 namespace ESN\CalDAV\Schedule;
 
-require_once ESN_TEST_BASE . '/DAV/ServerMock.php';
-
 /**
  * Sabre converts property values to UTF-8 but leaves parameter values alone,
  * so a Latin-1 CN reaches the iTIP message as is. The delivery published for
  * it must still be JSON, never the `false` json_encode() returns on it.
- *
- * @medium
  */
-class AMQPSchedulePluginPayloadTest extends \ESN\DAV\ServerMock {
+class AMQPSchedulePluginPayloadTest extends \PHPUnit\Framework\TestCase {
 
     const EVENT_PATH = '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/latin1.ics';
 
     private $publisher;
+    private $plugin;
 
     function setUp(): void {
-        parent::setUp();
+        $server = new \Sabre\DAV\Server();
+        $server->httpRequest = new \Sabre\HTTP\Request('PUT', self::EVENT_PATH);
 
         $this->publisher = new RecordingAmqpPublisher();
-        $this->server->addPlugin(new AMQPSchedulePlugin($this->publisher, $this->principalBackend));
+        $this->plugin = new AMQPSchedulePlugin($this->publisher);
+        $server->addPlugin($this->plugin);
     }
 
     function testDeliveryWithNonUtf8ParameterIsPublishedAsJson() {
-        $response = $this->request($this->putRequest($this->eventWithAttendeeCn("Ren\xE9")));
-        $this->assertContains($response->status, [201, 204], 'PUT should succeed');
+        // Exercise outgoing delivery directly: MongoDB rejects non-UTF-8 calendar storage.
+        $message = new \Sabre\VObject\ITip\Message();
+        $message->method = 'REQUEST';
+        $message->uid = 'latin1';
+        $message->sender = 'mailto:robertocarlos@realmadrid.com';
+        $message->recipient = 'mailto:alice@example.org';
+        $message->hasChange = true;
+        $message->message = \Sabre\VObject\Reader::read($this->eventWithAttendeeCn("Ren\xE9"));
+        $this->assertFalse(json_encode($message->message->serialize()), 'the fixture must contain invalid UTF-8');
+
+        $this->plugin->scheduleLocalDelivery($message);
+        $this->assertEmpty($this->publishedOn(AMQPSchedulePlugin::TOPIC_LOCAL_DELIVERY));
+        $this->plugin->afterWrite();
 
         $deliveries = $this->publishedOn(AMQPSchedulePlugin::TOPIC_LOCAL_DELIVERY);
 
@@ -37,6 +47,7 @@ class AMQPSchedulePluginPayloadTest extends \ESN\DAV\ServerMock {
             $this->assertIsArray($decoded, 'AMQP payload is not JSON: ' . json_last_error_msg());
             $this->assertSame('REQUEST', $decoded['method']);
             $this->assertStringContainsString('alice@example.org', $decoded['message']);
+            $this->assertStringContainsString("CN=Ren\u{FFFD}", $decoded['message']);
         });
     }
 
@@ -45,17 +56,6 @@ class AMQPSchedulePluginPayloadTest extends \ESN\DAV\ServerMock {
             array_filter($this->publisher->published, fn($message) => $message[0] === $topic),
             1
         );
-    }
-
-    private function putRequest($body) {
-        $request = \Sabre\HTTP\Sapi::createFromServerArray([
-            'REQUEST_METHOD' => 'PUT',
-            'REQUEST_URI'    => self::EVENT_PATH,
-            'CONTENT_TYPE'   => 'text/calendar'
-        ]);
-        $request->setBody($body);
-
-        return $request;
     }
 
     private function eventWithAttendeeCn($cn) {

@@ -132,7 +132,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
             }
 
             $service = new \Sabre\Xml\Service();
-            $data = $service->write('{DAV:}multistatus', $xml);
+            $data = $service->write('{DAV:}multistatus', $xml, self::ALREADY_RESOLVED_HREFS_CONTEXT_URI);
             
             $response->setBody($data);
         }

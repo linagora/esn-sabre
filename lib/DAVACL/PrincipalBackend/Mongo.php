@@ -647,7 +647,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
             return [ '_id' => null ];
         }
 
-        $customAddressQuery = [ 'emailAddress' => [ '$regex' => '^' . preg_quote($value) . '$', '$options' => 'i' ] ];
+        // Twake Calendar always stores emailAddress lower-cased: exact match keeps this an index lookup
+        $customAddressQuery = [ 'emailAddress' => strtolower($value) ];
         $idQuery = $this->teamCalendarIdEmailQuery($value);
 
         return $idQuery ? [ '$or' => [ $customAddressQuery, $idQuery ] ] : $customAddressQuery;

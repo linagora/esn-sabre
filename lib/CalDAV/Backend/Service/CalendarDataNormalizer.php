@@ -109,7 +109,9 @@ class CalendarDataNormalizer {
         // range so MongoDB does not discard later instances before post-filtering.
         foreach ($vObject->select('VEVENT') as $event) {
             $start = $event->DTSTART->getDateTime()->getTimeStamp();
-            $end = $this->calculateLastOccurrence($event, $vObject);
+            // A negative DURATION, or an infinite rule starting after the
+            // MAX_DATE fallback, must never yield a window ending before it starts.
+            $end = max($start, $this->calculateLastOccurrence($event, $vObject));
 
             $firstOccurence = $firstOccurence === null ? $start : min($firstOccurence, $start);
             $lastOccurence = $lastOccurence === null ? $end : max($lastOccurence, $end);
@@ -126,7 +128,8 @@ class CalendarDataNormalizer {
      * @return int Last occurrence timestamp
      */
     private function calculateLastOccurrence($component, $vObject) {
-        if (!isset($component->RRULE)) {
+        // RDATE generates instances just like RRULE does: only the iterator sees them.
+        if (!isset($component->RRULE) && !isset($component->RDATE)) {
             return $this->calculateSimpleEndDate($component);
         }
 
@@ -195,15 +198,18 @@ class CalendarDataNormalizer {
     /**
      * Find the last recurrence date by iterating through occurrences
      *
+     * Each instance contributes the later of its start and end, so that a
+     * negative duration cannot hide the instances themselves.
+     *
      * @param VObject\Recur\EventIterator $it
      * @param \DateTime $maxDate
      * @return int Last occurrence timestamp
      */
     private function findLastRecurrenceDate($it, $maxDate) {
-        $end = $it->getDtEnd();
+        $end = max($it->getDtStart(), $it->getDtEnd());
 
         while($it->valid() && $end < $maxDate) {
-            $end = $it->getDtEnd();
+            $end = max($end, $it->getDtStart(), $it->getDtEnd());
             $it->next();
         }
 

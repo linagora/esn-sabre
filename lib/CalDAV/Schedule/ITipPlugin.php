@@ -61,9 +61,13 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
     function iTip($request)
     {
         $payload = json_decode($request->getBodyAsString());
+        if (!$this->isWellFormedPayload($payload)) {
+            return $this->send(400, null);
+        }
         $issetdef = $this->propertyOrDefault($payload);
 
-        if (!isset($payload->uid) || !$payload->sender || !$payload->recipient || !$payload->ical) {
+        $calendar = $this->parseCalendar($payload->ical);
+        if (!$calendar) {
             return $this->send(400, null);
         }
 
@@ -72,7 +76,7 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         $message->uid = $payload->uid;
         $message->method = $issetdef('method', 'REQUEST');
         $message->sequence = (int) $issetdef('sequence', 0);
-        $message->message = VObject\Reader::read($payload->ical);
+        $message->message = $calendar;
         $message->sender = $this->resolveSenderFromItipMessage($message, $issetdef('replyTo', $payload->sender));
         $message->recipient = 'mailto:' . $payload->recipient;
 
@@ -83,7 +87,7 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
             if (!$this->recipientIsStoredOrganizer($message)) {
                 return $this->send(403, null);
             }
-            if ($this->counterProposesPastStart($message->message)) {
+            if (!$this->hasValidStarts($message->message) || $this->counterProposesPastStart($message->message)) {
                 return $this->send(400, null);
             }
         } elseif (!$this->recipientMatchesCurrentUser($message)) {
@@ -137,6 +141,57 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         $this->server->httpResponse->setStatus($code);
         
         return false;
+    }
+
+    // Every field is client-controlled: the ical is a mail attachment relayed verbatim.
+    private function isWellFormedPayload($payload): bool
+    {
+        if (!is_object($payload)) {
+            return false;
+        }
+
+        $requiredStrings = ['uid', 'sender', 'recipient', 'ical'];
+        $optionalScalars = ['method', 'sequence'];
+
+        return array_reduce($requiredStrings, fn($valid, $key) => $valid && $this->isNonEmptyString($payload, $key), true)
+            && (!isset($payload->replyTo) || $this->isNonEmptyString($payload, 'replyTo'))
+            && array_reduce($optionalScalars, fn($valid, $key) => $valid && (!isset($payload->{$key}) || is_scalar($payload->{$key})), true);
+    }
+
+    private function isNonEmptyString($payload, string $key): bool
+    {
+        return isset($payload->{$key}) && is_string($payload->{$key}) && $payload->{$key} !== '';
+    }
+
+    private function parseCalendar(string $ical): ?VObject\Component\VCalendar
+    {
+        try {
+            $document = VObject\Reader::read($ical);
+        } catch (VObject\ParseException | VObject\InvalidDataException $e) {
+            return null;
+        }
+
+        return $document instanceof VObject\Component\VCalendar ? $document : null;
+    }
+
+    private function hasValidStarts(VObject\Component\VCalendar $vcalendar): bool
+    {
+        $events = $vcalendar->select('VEVENT');
+        return !array_filter($events, fn($event) => isset($event->DTSTART) && !$this->isParsableDateTime($event->DTSTART));
+    }
+
+    private function isParsableDateTime(VObject\Property $property): bool
+    {
+        if (!($property instanceof VObject\Property\ICalendar\DateTime)) {
+            return false;
+        }
+
+        try {
+            $property->getDateTime();
+            return true;
+        } catch (\Exception | \ValueError $e) {
+            return false;
+        }
     }
 
     private function propertyOrDefault($jsonData)

@@ -550,6 +550,92 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         ), $backend->calendarQuery($id, $filters));
     }
 
+    private function buildEventQueryFilters($topLevelName, array $compFilters) {
+        return array(
+            'name' => $topLevelName,
+            'comp-filters' => array_map(function($compFilter) {
+                return $compFilter + array(
+                    'comp-filters' => array(),
+                    'prop-filters' => array(),
+                    'is-not-defined' => false,
+                    'time-range' => false,
+                );
+            }, $compFilters),
+            'prop-filters' => array(),
+            'is-not-defined' => false,
+            'time-range' => null,
+        );
+    }
+
+    function testCalendarQueryTimeRangeStartIsExclusive() {
+        $id = $this->generateId();
+
+        $backend = $this->getBackend();
+        $backend->createCalendarObject($id, "event", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e1\r\nDTSTART:20350101T090000Z\r\nDTEND:20350101T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $filters = $this->buildEventQueryFilters('VCALENDAR', array(
+            array(
+                'name' => 'VEVENT',
+                'time-range' => array('start' => new \DateTime('20350101T100000Z'), 'end' => null),
+            ),
+        ));
+
+        $this->assertEquals(array(), $backend->calendarQuery($id, $filters));
+    }
+
+    function testCalendarQueryComponentNameIsCaseInsensitive() {
+        $id = $this->generateId();
+
+        $backend = $this->getBackend();
+        $backend->createCalendarObject($id, "event", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e1\r\nDTSTART:20350101T090000Z\r\nDURATION:PT1H\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $backend->createCalendarObject($id, "todo", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+
+        $filters = $this->buildEventQueryFilters('VCALENDAR', array(array('name' => 'vevent')));
+
+        $this->assertEquals(array("event"), $backend->calendarQuery($id, $filters));
+    }
+
+    function testCalendarQueryLowerCaseComponentNameKeepsTimeRange() {
+        $id = $this->generateId();
+
+        $backend = $this->getBackend();
+        $backend->createCalendarObject($id, "event", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e1\r\nDTSTART:20350101T090000Z\r\nDTEND:20350101T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $backend->createCalendarObject($id, "event2", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e2\r\nDTSTART:20350105T090000Z\r\nDTEND:20350105T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $filters = $this->buildEventQueryFilters('VCALENDAR', array(
+            array(
+                'name' => 'vevent',
+                'time-range' => array('start' => new \DateTime('20350102T000000Z'), 'end' => null),
+            ),
+        ));
+
+        $this->assertEquals(array("event2"), $backend->calendarQuery($id, $filters));
+    }
+
+    function testCalendarQueryRejectsUnknownTopLevelComponent() {
+        $id = $this->generateId();
+
+        $backend = $this->getBackend();
+        $backend->createCalendarObject($id, "event", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e1\r\nDTSTART:20350101T090000Z\r\nDURATION:PT1H\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $this->assertEquals(array(), $backend->calendarQuery($id, $this->buildEventQueryFilters('VCALEARND', array(array('name' => 'VEVENT')))));
+        $this->assertEquals(array(), $backend->calendarQuery($id, $this->buildEventQueryFilters('VCALEARND', array())));
+    }
+
+    function testCalendarQueryChecksSiblingComponentFilters() {
+        $id = $this->generateId();
+
+        $backend = $this->getBackend();
+        $backend->createCalendarObject($id, "event", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e1\r\nDTSTART:20350101T090000Z\r\nDURATION:PT1H\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $filters = $this->buildEventQueryFilters('VCALENDAR', array(
+            array('name' => 'VEVENT'),
+            array('name' => 'VTIMEZONE'),
+        ));
+
+        $this->assertEquals(array(), $backend->calendarQuery($id, $filters));
+    }
+
     /**
      * Test calendarQuery with boolean filter values (issue #188)
      *

@@ -483,6 +483,122 @@ class CalendarObjectValidatorTest extends TestCase {
         ]);
     }
 
+    function testDurationTypedDtEndIsRejectedByEventDatesValidation() {
+        $this->assertEventDatesValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260101T000000Z',
+            'DTSTART:20260101T100000Z',
+            'DTEND;VALUE=DURATION:PT1H',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['DTEND value type (DURATION) must be DATE or DATE-TIME']);
+    }
+
+    function testPeriodTypedDtStartIsRejectedByEventDatesValidation() {
+        $this->assertEventDatesValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260101T000000Z',
+            'DTSTART;VALUE=PERIOD:20260101T100000Z/PT1H',
+            'DTEND:20260101T110000Z',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['DTSTART value type (PERIOD) must be DATE or DATE-TIME']);
+    }
+
+    function testPeriodTypedDtStartWithRRuleIsRejected() {
+        $this->assertValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART;VALUE=PERIOD:20260515T090000Z/PT1H',
+            'RRULE:FREQ=DAILY;COUNT=3',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['DTSTART value type (PERIOD) must be DATE or DATE-TIME']);
+    }
+
+    function testPeriodTypedExDateIsRejected() {
+        $this->assertValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260515T090000Z',
+            'RRULE:FREQ=DAILY;COUNT=3',
+            'EXDATE;VALUE=PERIOD:20260516T090000Z/PT1H',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['EXDATE value type (PERIOD) must be DATE or DATE-TIME']);
+    }
+
+    function testPeriodTypedMasterDtStartWithOverrideIsRejected() {
+        $this->assertValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART;VALUE=PERIOD:20260515T090000Z/PT1H',
+            'RDATE:20260516T090000Z',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260516T110000Z',
+            'RECURRENCE-ID:20260516T090000Z',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['DTSTART value type (PERIOD) must be DATE or DATE-TIME']);
+    }
+
+    function testTextTypedRecurrenceIdIsRejected() {
+        $this->assertValidationFails($this->recurringCalendarWithOverride([
+            'DTSTART:20260516T110000Z',
+            'RECURRENCE-ID;VALUE=TEXT:tomorrow',
+        ]), ['RECURRENCE-ID value type (TEXT) must be DATE or DATE-TIME']);
+    }
+
+    function testVEventPropertyIsNotTreatedAsAMaster() {
+        $this->assertValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'VEVENT:not-a-component',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260516T110000Z',
+            'RECURRENCE-ID:20260516T090000Z',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['has no matching recurring master VEVENT']);
+    }
+
+    private function assertEventDatesValidationFails(array $lines, array $expectedMessages): void {
+        try {
+            $this->validator->validateEventDates($this->readCalendar($lines));
+            $this->fail('Expected a BadRequest validation failure');
+        } catch (BadRequest $e) {
+            foreach ($expectedMessages as $message) {
+                $this->assertStringContainsString($message, $e->getMessage());
+            }
+        }
+    }
+
     private function assertValidationFails(array $lines, array $expectedMessages): void {
         try {
             $this->validator->validate($this->readCalendar($lines));

@@ -323,12 +323,19 @@ class CalendarObjectService {
         list($componentType, $timeRange, $requirePostFilter) =
             $this->extractComponentFilters($filters, $requirePostFilter);
 
+        // The validator compares the top-level name case-sensitively and rejects
+        // anything that is not VCALENDAR: only the post-filter can reproduce that.
+        if (!$this->isVCalendarFilter($filters)) {
+            $requirePostFilter = true;
+        }
+
         if ($componentType) {
             $query['componenttype'] = $componentType;
         }
 
+        // RFC 4791 §9.9: an event overlaps the range only when it ends strictly after its start
         if ($timeRange && $timeRange['start']) {
-            $query['lastoccurence'] = ['$gte' => $timeRange['start']->getTimeStamp()];
+            $query['lastoccurence'] = ['$gt' => $timeRange['start']->getTimeStamp()];
         }
         if ($timeRange && $timeRange['end']) {
             $query['firstoccurence'] = ['$lt' => $timeRange['end']->getTimeStamp()];
@@ -353,9 +360,11 @@ class CalendarObjectService {
         // Figuring out if there's a component filter
         if (!empty($filters['comp-filters']) && is_array($filters['comp-filters']) && !$filters['comp-filters'][0]['is-not-defined']) {
             $compFilter = $filters['comp-filters'][0];
-            $componentType = $compFilter['name'];
+            // componenttype is stored upper-case, the validator matches component names case-insensitively
+            $componentType = strtoupper($compFilter['name']);
 
-            $hasNoPropFilters = empty($filters['prop-filters']);
+            // Only the first comp-filter is pushed down: siblings must be checked by the post-filter
+            $hasNoPropFilters = empty($filters['prop-filters']) && count($filters['comp-filters']) === 1;
             $hasNoOtherSubFilters = empty($compFilter['comp-filters']) && empty($compFilter['prop-filters']);
 
             // Checking if we need post-filters (no filters at all)
@@ -378,6 +387,14 @@ class CalendarObjectService {
         }
 
         return [$componentType, $timeRange, $requirePostFilter];
+    }
+
+    /**
+     * @param array $filters
+     * @return bool true when the top-level comp-filter targets VCALENDAR, as the validator expects
+     */
+    private function isVCalendarFilter(array $filters) {
+        return isset($filters['name']) && $filters['name'] === 'VCALENDAR';
     }
 
     /**

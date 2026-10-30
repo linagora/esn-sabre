@@ -75,7 +75,7 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 $responseProps = $xmlResponse->getResponseProperties();
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
                 if (isset($resourceType) && $resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook")) {
-                    $addressBookPath = $xmlResponse->getHref();
+                    $addressBookPath = \Sabre\HTTP\decodePath($xmlResponse->getHref());
                     list($type, $bookId, $addressbookType) = explode('/', trim($addressBookPath, '/'));
                     list(,, $currentUserId) = explode('/', $this->currentUser);
 
@@ -123,11 +123,9 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
                     $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;
 
-                    $newResponse = new \Sabre\DAV\Xml\Element\Response($xmlResponse->getHref(), $responseProps);
-
-                    $xml[] = ['{DAV:}response' => $newResponse];
+                    $xml[] = ['{DAV:}response' => $this->rebuildResponse($xmlResponse, $responseProps)];
                 } else {
-                    $xml[] = ['{DAV:}response' => $xmlResponse];
+                    $xml[] = ['{DAV:}response' => $this->rebuildResponse($xmlResponse, $xmlResponse->getResponseProperties())];
                 }
             }
 
@@ -136,5 +134,18 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
             
             $response->setBody($data);
         }
+    }
+
+    /**
+     * Parsed hrefs are percent-encoded while Response::xmlSerialize encodes
+     * the href it is given: rebuild the response from the decoded path so
+     * that the href is not encoded twice.
+     */
+    private function rebuildResponse($xmlResponse, array $responseProps) {
+        return new \Sabre\DAV\Xml\Element\Response(
+            \Sabre\HTTP\decodePath($xmlResponse->getHref()),
+            $responseProps,
+            $xmlResponse->getHttpStatus()
+        );
     }
 }

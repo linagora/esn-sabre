@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV\Subscriptions;
 
+use Sabre\CalDAV\Calendar;
 use Sabre\CalDAV\CalendarHome;
 use Sabre\CalDAV\Plugin as CalDAVPlugin;
 use Sabre\CalDAV\Subscriptions\ISubscription;
@@ -15,6 +16,8 @@ use Sabre\DAV\Server;
  * the supported-calendar-component-set property in PROPFIND responses.
  */
 class Plugin extends \Sabre\CalDAV\Subscriptions\Plugin {
+
+    const SOURCE_PROPERTY = '{http://calendarserver.org/ns/}source';
 
     protected $server;
 
@@ -30,12 +33,15 @@ class Plugin extends \Sabre\CalDAV\Subscriptions\Plugin {
 
         // Add our propFind handler with higher priority to run after the parent's handler
         $server->on('propFind', [$this, 'propFindSubscription'], 151);
-        $server->on('beforeMethod:MKCOL', [$this, 'beforeMkcol'], 30);
+        // Before Sabre's MKCOL handler (100).
+        $server->on('method:MKCOL', [$this, 'httpMkcol'], 90);
         $server->on('propPatch', [$this, 'checkSubscriptionSource'], 90);
     }
 
     // XML MKCOL bypasses the JSON subscription handler's source ACL check.
-    function beforeMkcol($request, $response) {
+    // Subscriptions are created here rather than by Sabre's MKCOL handler, which
+    // would store the raw source href instead of the path whose access was checked.
+    function httpMkcol($request, $response) {
         list($parentPath) = \Sabre\Uri\split($request->getPath());
         if (!$this->server->tree->nodeExists($parentPath)
             || !$this->server->tree->getNodeForPath($parentPath) instanceof CalendarHome) {
@@ -57,28 +63,70 @@ class Plugin extends \Sabre\CalDAV\Subscriptions\Plugin {
         } catch (\Sabre\Xml\ParseException $e) {
             return;
         }
-        if (($properties['{DAV:}resourcetype'] ?? null)?->is('{http://calendarserver.org/ns/}subscribed')) {
-            $this->assertReadableSource($properties['{http://calendarserver.org/ns/}source'] ?? null);
+        $resourceType = $properties['{DAV:}resourcetype'] ?? null;
+        if (!$resourceType?->is('{http://calendarserver.org/ns/}subscribed')) {
+            return;
         }
+
+        $properties[self::SOURCE_PROPERTY] = $this->readableSource($properties[self::SOURCE_PROPERTY] ?? null);
+        unset($properties['{DAV:}resourcetype']);
+
+        $result = $this->server->createCollection($request->getPath(), new DAV\MkCol($resourceType->getValue(), $properties));
+
+        if (is_array($result)) {
+            $response->setStatus(207);
+            $response->setHeader('Content-Type', 'application/xml; charset=utf-8');
+            $response->setBody($this->server->generateMultiStatus([$result]));
+        } else {
+            $response->setHeader('Content-Length', '0');
+            $response->setStatus(201);
+        }
+
+        return false;
     }
 
     function checkSubscriptionSource($path, DAV\PropPatch $propPatch) {
         $mutations = $propPatch->getRemainingValues();
-        $sourceProperty = '{http://calendarserver.org/ns/}source';
-        if (array_key_exists($sourceProperty, $mutations)
-            && $this->server->tree->getNodeForPath($path) instanceof ISubscription) {
-            // Owning a subscription does not grant access to a different source calendar.
-            $this->assertReadableSource($mutations[$sourceProperty]);
+        if (!array_key_exists(self::SOURCE_PROPERTY, $mutations)) {
+            return;
         }
+        $node = $this->server->tree->getNodeForPath($path);
+        if (!$node instanceof ISubscription) {
+            return;
+        }
+
+        // Owning a subscription does not grant access to a different source calendar.
+        $source = $this->readableSource($mutations[self::SOURCE_PROPERTY]);
+
+        // The PropPatch value cannot be replaced, so store the checked path through a PropPatch of our own.
+        $propPatch->handle(self::SOURCE_PROPERTY, function() use ($node, $source) {
+            $sourcePatch = new DAV\PropPatch([self::SOURCE_PROPERTY => $source]);
+            $node->propPatch($sourcePatch);
+
+            return $sourcePatch->commit();
+        });
     }
 
-    private function assertReadableSource($source) {
+    /**
+     * Checks that the current user may read the calendar a source href points to.
+     *
+     * @return DAV\Xml\Property\Href the canonical calendars/<home>/<uri> path that was checked
+     */
+    private function readableSource($source) {
         if (!$source instanceof DAV\Xml\Property\Href || !$source->getHref()) {
             throw new DAV\Exception\BadRequest('A subscription requires a source href');
         }
 
         $sourcePath = $this->server->calculateUri($source->getHref());
+        if (!preg_match('|^calendars/[^/]+/[^/]+$|', $sourcePath)
+            || !$this->server->tree->nodeExists($sourcePath)
+            || !$this->server->tree->getNodeForPath($sourcePath) instanceof Calendar) {
+            throw new DAV\Exception\BadRequest('A subscription source must be a calendar');
+        }
+
         $this->server->getPlugin('acl')->checkPrivileges($sourcePath, '{DAV:}read');
+
+        return new DAV\Xml\Property\Href($sourcePath, false);
     }
 
     /**

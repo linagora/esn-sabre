@@ -2,6 +2,7 @@
 
 namespace ESN\JSON;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\DAV\ServerPlugin;
 use Sabre\VObject\Document;
 use Sabre\VObject\ITip\Message;
@@ -382,6 +383,60 @@ END:VCALENDAR
         $response = $this->request($request);
 
         $this->assertEquals(400, $response->status);
+    }
+
+    #[DataProvider('malformedBulkRequests')]
+    function testFreeBusyShouldRejectAMalformedRequest($params) {
+        [$code, $body] = $this->server->getPlugin('caldav-freebusy')->getBulkFreeBusy($params);
+
+        $this->assertSame(400, $code);
+        $this->assertNull($body);
+    }
+
+    static function malformedBulkRequests() {
+        $valid = '"start":"20181001T000000Z","end":"20181101T000000Z","users":["' . self::USER1_ID . '"]';
+
+        return [
+            'not a JSON object' => [json_decode('null')],
+            'a scalar' => [json_decode('42')],
+            'missing start' => [json_decode('{"end":"20181101T000000Z","users":["' . self::USER1_ID . '"]}')],
+            'missing end' => [json_decode('{"start":"20181001T000000Z","users":["' . self::USER1_ID . '"]}')],
+            'missing users' => [json_decode('{"start":"20181001T000000Z","end":"20181101T000000Z"}')],
+            'users not an array' => [json_decode('{"start":"20181001T000000Z","end":"20181101T000000Z","users":"' . self::USER1_ID . '"}')],
+            'unparsable start' => [json_decode('{"start":"not-a-date","end":"20350201T000000Z","users":["' . self::USER1_ID . '"]}')],
+            'unparsable end' => [json_decode('{"start":"20181001T000000Z","end":"20+5020.T0Z","users":["' . self::USER1_ID . '"]}')],
+            'empty start' => [json_decode('{"start":"","end":"20181101T000000Z","users":["' . self::USER1_ID . '"]}')],
+            'start not a string' => [json_decode('{"start":20181001,"end":"20181101T000000Z","users":["' . self::USER1_ID . '"]}')],
+            'end before start' => [json_decode('{"start":"20181101T000000Z","end":"20181001T000000Z","users":["' . self::USER1_ID . '"]}')],
+            'uids not an array' => [json_decode('{' . $valid . ',"uids":"event1"}')],
+            'timezone not a string' => [json_decode('{' . $valid . ',"timezone":1}')],
+        ];
+    }
+
+    function testFreeBusyShouldAnswerAMalformedBodyWith400() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/freebusy',
+        ));
+
+        $request->setBody('{"start":"not-a-date","end":"20350201T000000Z","users":["' . self::USER1_ID . '"],"timezone":"Europe/Paris"}');
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+    }
+
+    function testFreeBusyShouldSkipUsersThatAreNotCalendarHomes() {
+        [$code, $body] = $this->server->getPlugin('caldav-freebusy')->getBulkFreeBusy(json_decode(json_encode([
+            'start' => '20120101T000000Z',
+            'end' => '20150101T000000Z',
+            'users' => ['', null, 42, ['nested'], self::USER1_ID . '/' . $this->cal['uri'], self::USER1_ID]
+        ])));
+
+        $this->assertSame(200, $code);
+        $this->assertCount(1, $body->users);
+        $this->assertEquals(self::USER1_ID, $body->users[0]->id);
     }
 
     function testFreeBusyShouldGiveAnEndToAnEventWithNeitherDtendNorDuration() {

@@ -76,25 +76,23 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
     }
 
     function getBulkFreeBusy($params) {
-        if (isset($params->timezone) && !$this->isValidTimeZone($params->timezone)) {
+        if (!$this->isValidBulkRequest($params)) {
             return [400, null];
         }
 
-        $start = $params->start;
         $body = (object) [
             'start' => $params->start,
             'end' => $params->end,
             'users' => []
         ];
 
-        foreach ($params->users as $key => $userId) {
-            $nodePath = 'calendars/' . $userId;
-            $node = $this->server->tree->getNodeForPath($nodePath);
+        foreach ($params->users as $userId) {
+            $node = $this->getCalendarHome($userId);
             if (!is_null($node)) {
-                $principal = $node->getOwner();
-                $email = Utils::getPrincipalEmail($principal, $this->server);
+                $nodePath = 'calendars/' . $userId;
+                $email = Utils::getPrincipalEmail($node->getOwner(), $this->server);
                 $calendars = $this->getFreeBusyCalendars($nodePath, $node, $params, $email);
-              
+
                 array_push($body->users, (object) [
                     'id' => $userId,
                     'calendars' => $calendars
@@ -103,6 +101,66 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
         }
 
         return [200, $body];
+    }
+
+    /**
+     * Tells whether the body of a bulk free/busy request can be answered: an
+     * object carrying a parsable start and end, the latter not before the
+     * former, an array of users and, when given, a known time zone and an
+     * array of uids.
+     *
+     * @return bool
+     */
+    private function isValidBulkRequest($params) {
+        if (!is_object($params) || !isset($params->users) || !is_array($params->users)) {
+            return false;
+        }
+
+        if (isset($params->timezone) && !$this->isValidTimeZone($params->timezone)) {
+            return false;
+        }
+
+        if (isset($params->uids) && !is_array($params->uids)) {
+            return false;
+        }
+
+        $start = $this->parseDateTime($params->start ?? null);
+        $end = $this->parseDateTime($params->end ?? null);
+
+        return !is_null($start) && !is_null($end) && $start <= $end;
+    }
+
+    /**
+     * @return \DateTime|null the parsed date, null when it is not a non-empty
+     *                        string \DateTime understands
+     */
+    private function parseDateTime($date) {
+        if (!is_string($date) || trim($date) === '') {
+            return null;
+        }
+
+        try {
+            return new \DateTime($date);
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Returns the calendar home of a user, null when the given id does not
+     * designate one: not a string, an unknown user, or a path that would
+     * reach some other node of the calendars tree.
+     *
+     * @return \Sabre\CalDAV\CalendarHome|null
+     */
+    private function getCalendarHome($userId) {
+        if (!is_string($userId) || $userId === '' || strpos($userId, '/') !== false) {
+            return null;
+        }
+
+        $node = $this->server->tree->getNodeForPath('calendars/' . $userId);
+
+        return $node instanceof \Sabre\CalDAV\CalendarHome ? $node : null;
     }
 
     function getFreeBusyCalendars($nodePath, $node, $params, $email) {

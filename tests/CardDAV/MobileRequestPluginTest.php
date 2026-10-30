@@ -316,4 +316,34 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $this->assertStringContainsStringIgnoringCase('/addressbooks/54b64eadf6d7d8e41d263e0f/a%2Bb/<', $response->getBodyAsString());
         $this->assertStringNotContainsString('%25', $response->getBodyAsString());
     }
+
+    function testAfterPropFindWithEncodedAddressBookUri() {
+        $this->carddavBackend->createAddressBook('principals/users/54b64eadf6d7d8e41d263e0f', 'book 2', ['{DAV:}displayname' => 'Spaced']);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPFIND',
+            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'HTTP_ACCEPT'       => 'application/xml',
+            'HTTP_USER_AGENT'   => 'Thunderbird/115.0',
+            'HTTP_DEPTH'        => '1',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/',
+        ));
+
+        $request->setBody('<?xml version="1.0" encoding="utf-8" ?>
+            <D:propfind xmlns:D="DAV:">
+                <D:prop>
+                    <D:displayname/>
+                    <D:resourcetype/>
+                </D:prop>
+            </D:propfind>'
+        );
+
+        $response = $this->request($request);
+
+        $this->assertEquals(207, $response->status);
+        $body = $response->getBodyAsString();
+        $this->assertStringContainsString('/addressbooks/54b64eadf6d7d8e41d263e0f/book%202/', $body);
+        $this->assertStringContainsString('Spaced', $body);
+        $this->assertStringContainsString('My Contacts', $body);
+    }
 }

@@ -77,65 +77,85 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 $responseProps = $xmlResponse->getResponseProperties();
                 $resourceType = isset($responseProps[200]['{DAV:}resourcetype']) ? $responseProps[200]['{DAV:}resourcetype'] : null;
                 if (isset($resourceType) && $resourceType->is("{urn:ietf:params:xml:ns:carddav}addressbook")) {
-                    $addressBookPath = \Sabre\HTTP\decodePath($xmlResponse->getHref());
-                    list($type, $bookId, $addressbookType) = explode('/', trim($addressBookPath, '/'));
-                    list(,, $currentUserId) = explode('/', $this->currentUser);
-
-                    $addressBookNode = $this->server->tree->getNodeForPath($addressBookPath);
-                    list(,, $ownerId) = explode('/', $addressBookNode->getOwner());
-                    list(,, $shareOwnerId) = explode('/', $addressBookNode->getShareOwner());
-
-                    if ($addressBookNode instanceof Group\GroupAddressBook && $addressBookNode->isDisabled()) continue;
-
-                    // Do not return address book if the query book ID is not owner ID
-                    if ($bookId !== $ownerId) continue;
-
-                    $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getShareOwner());
-                    $userDisplayName = XmlText::stripIllegalCharacters($userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address'])));
-
-                    if($shareOwnerId === $currentUserId) {
-                        if($addressbookType === 'contacts') {
-                            $addressBookDisplayName = 'My Contacts';
-                        }
-                        else if($addressbookType === 'collected') {
-                            $addressBookDisplayName = 'My Collected Contacts';
-                        }
-                        else {
-                            $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] ?? "Carnet d'addresse - nom indefinit";
-                        }
-                    } else {
-                        if (array_key_exists("{DAV:}displayname", $responseProps[200])) {
-                            if($responseProps[200]['{DAV:}displayname'] === 'Collected contacts') {
-                                $addressBookDisplayName = 'Collected Contacts - '. $userDisplayName;
-                            }
-                            else if($responseProps[200]['{DAV:}displayname'] === 'My contacts') {
-                                $addressBookDisplayName = 'Contacts - ' . $userDisplayName;
-                            }
-                            else {
-                                $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName;
-                            }
-                        }
-                        else if($addressbookType === 'dab') {
-                            $addressBookDisplayName = 'Domain address book - '. $userDisplayName;
-                        }
-                        else {
-                            $addressBookDisplayName = "Domain members";
-                        }
+                    try {
+                        $newResponse = $this->rewriteAddressBookResponse($xmlResponse, $responseProps);
+                    } catch (Exception | \TypeError $e) {
+                        // An entry that cannot be resolved is kept as is: it must not fail the whole PROPFIND
+                        $newResponse = $this->rebuildResponse($xmlResponse, $responseProps);
                     }
 
-                    $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;
-
-                    $xml[] = ['{DAV:}response' => $this->rebuildResponse($xmlResponse, $responseProps)];
+                    if ($newResponse) {
+                        $xml[] = ['{DAV:}response' => $newResponse];
+                    }
                 } else {
-                    $xml[] = ['{DAV:}response' => $this->rebuildResponse($xmlResponse, $xmlResponse->getResponseProperties())];
+                    $xml[] = ['{DAV:}response' => $this->rebuildResponse($xmlResponse, $responseProps)];
                 }
             }
 
             $service = new \Sabre\Xml\Service();
-            $data = $service->write('{DAV:}multistatus', $xml);
+            // Hrefs are already absolute paths: an empty context URI writes them unchanged
+            $data = $service->write('{DAV:}multistatus', $xml, '');
             
             $response->setBody($data);
         }
+    }
+
+    /**
+     * Rewrites the display name of an address book response for mobile clients.
+     *
+     * @return \Sabre\DAV\Xml\Element\Response|null null when the address book must not be returned
+     */
+    private function rewriteAddressBookResponse($xmlResponse, $responseProps) {
+        // The multistatus href is URL-encoded and prefixed by the base URI
+        $addressBookPath = $this->server->calculateUri($xmlResponse->getHref());
+        list($type, $bookId, $addressbookType) = array_pad(explode('/', trim($addressBookPath, '/')), 3, null);
+        list(,, $currentUserId) = explode('/', $this->currentUser);
+
+        $addressBookNode = $this->server->tree->getNodeForPath($addressBookPath);
+        list(,, $ownerId) = explode('/', $addressBookNode->getOwner());
+        list(,, $shareOwnerId) = explode('/', $addressBookNode->getShareOwner());
+
+        if ($addressBookNode instanceof Group\GroupAddressBook && $addressBookNode->isDisabled()) return null;
+
+        // Do not return address book if the query book ID is not owner ID
+        if ($bookId !== $ownerId) return null;
+
+        $userPrincipal = $this->server->tree->getNodeForPath($addressBookNode->getShareOwner());
+        $userDisplayName = XmlText::stripIllegalCharacters($userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address'])));
+
+        if($shareOwnerId === $currentUserId) {
+            if($addressbookType === 'contacts') {
+                $addressBookDisplayName = 'My Contacts';
+            }
+            else if($addressbookType === 'collected') {
+                $addressBookDisplayName = 'My Collected Contacts';
+            }
+            else {
+                $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] ?? "Carnet d'addresse - nom indefinit";
+            }
+        } else {
+            if (array_key_exists("{DAV:}displayname", $responseProps[200])) {
+                if($responseProps[200]['{DAV:}displayname'] === 'Collected contacts') {
+                    $addressBookDisplayName = 'Collected Contacts - '. $userDisplayName;
+                }
+                else if($responseProps[200]['{DAV:}displayname'] === 'My contacts') {
+                    $addressBookDisplayName = 'Contacts - ' . $userDisplayName;
+                }
+                else {
+                    $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName;
+                }
+            }
+            else if($addressbookType === 'dab') {
+                $addressBookDisplayName = 'Domain address book - '. $userDisplayName;
+            }
+            else {
+                $addressBookDisplayName = "Domain members";
+            }
+        }
+
+        $responseProps[200]['{DAV:}displayname'] = $addressBookDisplayName;
+
+        return $this->rebuildResponse($xmlResponse, $responseProps);
     }
 
     /**

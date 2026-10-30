@@ -81,6 +81,54 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(400, $response->getStatus());
     }
 
+    /**
+     * The keyValue loop is also reachable through `{DAV:}set/{DAV:}prop` of an
+     * extended MKCOL, which ESN's calendar subscription plugin parses itself on
+     * `beforeMethod:MKCOL` (priority 30): the pre-check must run before it.
+     */
+    function testMalformedMkcolBodyShouldAnswerBadRequestBeforeOtherParsers() {
+        $server = $this->prepareServer();
+        $parsed = false;
+        $server->on('beforeMethod:MKCOL', function() use (&$parsed) {
+            $parsed = true;
+        }, 30);
+        $server->httpRequest = new \Sabre\HTTP\Request('MKCOL', '/new', ['Content-Type' => 'application/xml'],
+            '<D:mkcol xmlns:D="DAV:"><D:set><D:prop><D:a><D:b><D:prop><D:getetag/></D6prop>');
+
+        $start = microtime(true);
+        $server->exec();
+        $elapsed = microtime(true) - $start;
+
+        $this->assertLessThan(2.0, $elapsed);
+        $this->assertEquals(400, $server->httpResponse->getStatus());
+        $this->assertFalse($parsed);
+    }
+
+    function testMalformedShareResourcePostShouldAnswerBadRequest() {
+        $response = $this->request('POST', '<D:share-resource xmlns:D="DAV:"><D:sharee><D:a><D:b><D:prop><D:getetag/></D6prop>',
+            ['Content-Type' => 'application/davsharing+xml']);
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testMalformedLockBodyShouldAnswerBadRequest() {
+        $response = $this->request('LOCK', '<D:lockinfo xmlns:D="DAV:"><D:a><D:b><D:prop><D:getetag/></D6prop>');
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testMalformedAclBodyShouldAnswerBadRequest() {
+        $response = $this->request('ACL', '<D:acl xmlns:D="DAV:"><D:ace><D:a><D:b><D:prop><D:getetag/></D6prop>');
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testNonXmlPostBodyShouldNotBeChecked() {
+        $response = $this->request('POST', '{"not": "xml"', ['Content-Type' => 'application/json']);
+
+        $this->assertNotEquals(400, $response->getStatus());
+    }
+
     function testWellFormedPropfindBodyShouldStillBeHandled() {
         $response = $this->request('PROPFIND', '<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:propfind>', ['Depth' => '0']);
 

@@ -179,4 +179,45 @@ class AddressBookHomeTest extends \PHPUnit\Framework\TestCase {
         $this->assertContains('collected', $childrenNames);
         $this->assertContains('contacts', $childrenNames);
     }
+
+    function testContactsPageLeavesOutSharedDisabledGroupAddressBook() {
+        $groupAddressBookId = $this->carddavBackend->createAddressBook($this->domainPrincipal, 'GAB', [
+            '{DAV:}acl' => [ '{DAV:}read' ],
+            '{http://open-paas.org/contacts}state' => 'disabled'
+        ]);
+        $this->carddavBackend->createCard($groupAddressBookId, 'gabcard', "BEGIN:VCARD\r\nFN:gab\r\nEND:VCARD\r\n");
+        $this->shareWithUser($groupAddressBookId);
+
+        $page = $this->books->getContactsPage(new ContactSources(), 50, null, fn($path) => true);
+
+        $this->assertNotEmpty($this->carddavBackend->getSharedAddressBookSourcesForUser('principals/users/' . self::USER_ID));
+        foreach ($page['items'] as $item) {
+            $this->assertStringStartsNotWith('addressbooks/' . self::DOMAIN_ID . '/GAB/', $item['path']);
+        }
+    }
+
+    function testContactsPageListsSharedEnabledGroupAddressBook() {
+        $groupAddressBookId = $this->carddavBackend->createAddressBook($this->domainPrincipal, 'GAB', [
+            '{DAV:}acl' => [ '{DAV:}read' ]
+        ]);
+        $this->carddavBackend->createCard($groupAddressBookId, 'gabcard', "BEGIN:VCARD\r\nFN:gab\r\nEND:VCARD\r\n");
+        $this->shareWithUser($groupAddressBookId);
+
+        $page = $this->books->getContactsPage(new ContactSources(), 50, null, fn($path) => true);
+
+        $paths = array_map(fn($item) => $item['path'], $page['items']);
+        $this->assertContains('addressbooks/' . self::DOMAIN_ID . '/GAB/gabcard', $paths);
+    }
+
+    private function shareWithUser($addressBookId) {
+        $this->carddavBackend->updateInvites($addressBookId, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => self::USER_ID,
+                'access' => SPlugin::ACCESS_READ,
+                'inviteStatus' => SPlugin::INVITE_ACCEPTED,
+                'properties' => [ '{DAV:}displayname' => 'DelegatedGAB' ],
+                'principal' => 'principals/users/' . self::USER_ID
+            ])
+        ]);
+    }
 }

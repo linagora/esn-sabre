@@ -165,11 +165,19 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
                 continue;
             }
 
+            if (Utils::isUserPrincipal($share['source_principaluri'])) {
+                $paths[$share['addressbookid']] ??= $this->homePath($share['uri']);
+                continue;
+            }
+
+            // Disabled group address books are left out, as from getChildren and the domainContacts source
+            if ($share['source_state'] === 'disabled') {
+                continue;
+            }
+
             // Delegated group address books are not exposed in this home (see removeChildrenSharedByGroupAddressBooks),
             // they are read directly
-            $paths[$share['addressbookid']] ??= Utils::isUserPrincipal($share['source_principaluri'])
-                ? $this->homePath($share['uri'])
-                : $this->directPath($share['source_principaluri'], $share['source_uri']);
+            $paths[$share['addressbookid']] ??= $this->directPath($share['source_principaluri'], $share['source_uri']);
         }
 
         return $paths;

@@ -611,23 +611,12 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     }
                     break;
                 case '{http://sabredav.org/ns}email-address':
-                    if ($groupName === 'team-calendars') {
-                        $query[] = $this->teamCalendarEmailSearchQuery($value);
-                        break;
-                    }
-                    if ($groupName === 'resources') {
-                        list($possibleId) = explode('@', $value);
-                        try {
-                            $query[] = [ '_id' => new \MongoDB\BSON\ObjectId($possibleId) ];
-                        } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
-                            $query[] = [ '_id' => null ];
-                        }
+                    if ($groupName === 'team-calendars' || $groupName === 'resources') {
+                        $query[] = $this->tenantIdAddressSearchQuery($value);
                         break;
                     }
 
-                    $query[] = [ 'email' => [
-                        '$elemMatch' => ['$regex' => '^' . preg_quote($value) . '$', '$options' => 'i' ]
-                    ] ];
+                    $query[] = [ 'email' => [ '$elemMatch' => $this->exactAddressMatch($value) ] ];
                     break;
             }
         }
@@ -642,7 +631,11 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         return $this->queryPrincipals($groupName, $collection, $query, $test);
     }
 
-    private function teamCalendarEmailSearchQuery($value): array {
+    /**
+     * Resources and team calendars are addressed as <id>@<tenant domain>: the
+     * whole address, domain part included, must match.
+     */
+    private function tenantIdAddressSearchQuery($value): array {
         if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
             return [ '_id' => null ];
         }
@@ -735,14 +728,27 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     ] ];
                     break;
                 case '{http://sabredav.org/ns}email-address':
-                    $query[] = [ 'accounts.emails' => [
-                        '$elemMatch' => ['$regex' => '^' . preg_quote($value) . '$', '$options' => 'i' ]
-                    ] ];
+                    $query[] = [ 'accounts.emails' => [ '$elemMatch' => $this->exactAddressMatch($value) ] ];
                     break;
             }
         }
 
         return $query;
+    }
+
+    /**
+     * Matches an address exactly, ignoring ASCII case only. MongoDB's '$options' => 'i'
+     * also folds non-ASCII characters (e.g. 'ſ' matches 's'), so letters are expanded
+     * into explicit [xX] classes instead.
+     */
+    private function exactAddressMatch($value): array {
+        $pattern = preg_replace_callback(
+            '/[a-z]/i',
+            fn($letter) => '[' . strtolower($letter[0]) . strtoupper($letter[0]) . ']',
+            preg_quote((string) $value)
+        );
+
+        return [ '$regex' => '\\A' . $pattern . '\\z' ];
     }
 
     /**

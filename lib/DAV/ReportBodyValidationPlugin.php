@@ -10,14 +10,15 @@ use \Sabre\HTTP\ResponseInterface;
 use \Sabre\Xml\ParseException;
 
 /**
- * Guards the XML request body of the DAV methods whose body Sabre deserialises
- * with the shared `{DAV:}prop` deserialiser: REPORT, PROPFIND and PROPPATCH.
+ * Guards the XML request body of the DAV methods whose body Sabre deserialises:
+ * REPORT, PROPFIND, PROPPATCH, ACL and the XML POSTs of CalDAV sharing.
  *
- * Two distinct problems are handled here, both before Sabre's core handler runs:
+ * Two distinct problems are handled here, both before Sabre's handler runs:
  *
- *  1. Sabre's core REPORT handler lets XML parse errors of the request body
- *     escape as 500, while PROPFIND/PROPPATCH already map them to 400. We run
- *     the core REPORT handler ourselves and report a parse error as 400.
+ *  1. Sabre's REPORT, ACL and CalDAV sharing POST handlers let XML parse
+ *     errors of the request body (malformed document, unexpected root element,
+ *     empty body) escape as 500, while PROPFIND/PROPPATCH already map them to
+ *     400. We run those handlers ourselves and report a parse error as 400.
  *
  *  2. A malformed body can make Sabre's deserialiser spin forever instead of
  *     raising a parse error. `Sabre\Xml\Deserializer\keyValue()` (used for
@@ -35,7 +36,7 @@ use \Sabre\Xml\ParseException;
  */
 #[\AllowDynamicProperties]
 class ReportBodyValidationPlugin extends ServerPlugin {
-    // Right before Sabre\DAV\CorePlugin's handlers (default priority 100).
+    // Right before Sabre's core, ACL and CalDAV sharing handlers (default priority 100).
     const PRIORITY = 99;
 
     protected $server;
@@ -49,23 +50,42 @@ class ReportBodyValidationPlugin extends ServerPlugin {
         $server->on('method:REPORT', [$this, 'httpReport'], self::PRIORITY);
         $server->on('method:PROPFIND', [$this, 'assertWellFormedBody'], self::PRIORITY);
         $server->on('method:PROPPATCH', [$this, 'assertWellFormedBody'], self::PRIORITY);
+        $server->on('method:ACL', [$this, 'httpAcl'], self::PRIORITY);
+        $server->on('method:POST', [$this, 'httpPost'], self::PRIORITY);
     }
 
     function httpReport(RequestInterface $request, ResponseInterface $response) {
         $this->assertWellFormedBody($request, $response);
 
-        try {
-            return $this->server->getPlugin('core')->httpReport($request, $response);
-        } catch (ParseException $e) {
-            throw new BadRequest('The REPORT request body is not a valid XML document: ' . $e->getMessage());
+        return $this->delegate('core', 'httpReport', 'REPORT', $request, $response);
+    }
+
+    function httpAcl(RequestInterface $request, ResponseInterface $response) {
+        $this->assertWellFormedBody($request, $response);
+
+        return $this->delegate('acl', 'httpAcl', 'ACL', $request, $response);
+    }
+
+    /**
+     * Only XML POSTs are guarded: they are the ones Sabre's CalDAV sharing
+     * plugin parses. Other POSTs (JSON, iCalendar, forms) are left untouched.
+     */
+    function httpPost(RequestInterface $request, ResponseInterface $response) {
+        if (!$this->hasXmlContentType($request)) {
+            return;
         }
+
+        $this->assertWellFormedBody($request, $response);
+
+        return $this->delegate('caldav-sharing', 'httpPost', 'POST', $request, $response);
     }
 
     /**
      * Ensures the request body, when present, is a well-formed XML document.
      *
      * Returns (letting Sabre proceed) on an empty body: an empty PROPFIND means
-     * `allprop`, and Sabre maps an empty REPORT/PROPPATCH body to its own error.
+     * `allprop`, and Sabre maps an empty REPORT/PROPPATCH/ACL body to its own
+     * error.
      * Throws BadRequest on a malformed body, so Sabre never deserialises it.
      */
     function assertWellFormedBody(RequestInterface $request, ResponseInterface $response) {
@@ -82,6 +102,30 @@ class ReportBodyValidationPlugin extends ServerPlugin {
         if (!$this->isWellFormedXml($body)) {
             throw new BadRequest('The request body is not a well-formed XML document');
         }
+    }
+
+    /**
+     * Runs the handler of the given Sabre plugin, reporting the XML parse
+     * errors it lets escape as 400. Lets the event chain go on when the plugin
+     * is not registered.
+     */
+    private function delegate(string $pluginName, string $handler, string $method, RequestInterface $request, ResponseInterface $response) {
+        $plugin = $this->server->getPlugin($pluginName);
+        if (!$plugin) {
+            return;
+        }
+
+        try {
+            return $plugin->$handler($request, $response);
+        } catch (ParseException $e) {
+            throw new BadRequest('The ' . $method . ' request body is not a valid XML document: ' . $e->getMessage());
+        }
+    }
+
+    private function hasXmlContentType(RequestInterface $request): bool {
+        $contentType = (string) $request->getHeader('Content-Type');
+
+        return str_contains($contentType, 'application/xml') || str_contains($contentType, 'text/xml');
     }
 
     /**

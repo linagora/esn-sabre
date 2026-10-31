@@ -81,6 +81,64 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(400, $response->getStatus());
     }
 
+    /**
+     * MKCOL, MKCALENDAR, ACL and XML POST bodies go through the same deserialisers.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('xmlBodyMethods')]
+    function testIllFormedBodyIsRejectedForEveryXmlMethod($method, $fixture, array $headers) {
+        $body = file_get_contents(__DIR__ . '/fixtures/' . $fixture);
+
+        $start = microtime(true);
+        $response = $this->request($method, $body, $headers);
+
+        $this->assertLessThan(2.0, microtime(true) - $start);
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    static function xmlBodyMethods() {
+        $methods = [];
+        foreach (['report-keyvalue-loop.xml', 'mkcol-prop-loop.xml'] as $fixture) {
+            $methods += [
+                "MKCOL $fixture" => ['MKCOL', $fixture, []],
+                "MKCOL text/xml $fixture" => ['MKCOL', $fixture, ['Content-Type' => 'text/xml; charset=utf-8']],
+                "MKCALENDAR $fixture" => ['MKCALENDAR', $fixture, []],
+                "MKCALENDAR without Content-Type $fixture" => ['MKCALENDAR', $fixture, ['Content-Type' => 'text/plain']],
+                "ACL $fixture" => ['ACL', $fixture, []],
+                "POST $fixture" => ['POST', $fixture, []],
+                "POST davsharing $fixture" => ['POST', $fixture, ['Content-Type' => 'application/davsharing+xml']]
+            ];
+        }
+
+        return $methods;
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonXmlBodies')]
+    function testNonXmlBodiesAreLeftToTheirHandlers($method, $contentType) {
+        $response = $this->request($method, '{"id":"not xml"}', ['Content-Type' => $contentType]);
+
+        $this->assertNotEquals(400, $response->getStatus());
+    }
+
+    static function nonXmlBodies() {
+        return [
+            'JSON POST' => ['POST', 'application/json'],
+            'iCalendar POST' => ['POST', 'text/calendar'],
+            'JSON MKCOL' => ['MKCOL', 'application/json']
+        ];
+    }
+
+    function testIllFormedBodyIsRejectedThroughMethodOverride() {
+        $server = $this->prepareServer();
+        $server->addPlugin(new XHttpMethodOverridePlugin());
+        $server->httpRequest = new \Sabre\HTTP\Request('POST', '/', [
+            'Content-Type' => 'text/plain',
+            'X-Http-Method-Override' => 'ACL'
+        ], file_get_contents(__DIR__ . '/fixtures/report-keyvalue-loop.xml'));
+        $server->exec();
+
+        $this->assertEquals(400, $server->httpResponse->getStatus());
+    }
+
     function testWellFormedPropfindBodyShouldStillBeHandled() {
         $response = $this->request('PROPFIND', '<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:propfind>', ['Depth' => '0']);
 

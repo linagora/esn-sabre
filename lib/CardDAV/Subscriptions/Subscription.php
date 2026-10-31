@@ -48,6 +48,13 @@ class Subscription extends Collection implements ISubscription, IAddressBook, IS
     protected $subscriptionInfo;
 
     /**
+     * Public right of the source, wrapped in an array once read
+     *
+     * @var array|null
+     */
+    private $sourcePublicRight = null;
+
+    /**
      * Constructor
      *
      * @param SubscriptionSupport $carddavBackend
@@ -504,6 +511,20 @@ class Subscription extends Collection implements ISubscription, IAddressBook, IS
         $acl = [];
         $principal = $this->getOwner();
 
+        // Always allow the owner to modify subscription properties (displayname, description)
+        $writeProperties = [
+            'privilege' => '{DAV:}write-properties',
+            'principal' => $principal,
+            'protected' => true
+        ];
+
+        // The privileges stored at subscription time are bounded by what the source is published with now:
+        // nothing on the contacts once it is unpublished, no write once it is published read only.
+        $publicRight = $this->getSourcePublicRight();
+        if (!in_array($publicRight, ['{DAV:}read', '{DAV:}write'], true)) {
+            return [$writeProperties];
+        }
+
         // Get privilege from subscriptionInfo (default to read-only)
         $privilege = isset($this->subscriptionInfo['{DAV:}acl'])
             ? $this->subscriptionInfo['{DAV:}acl']
@@ -511,7 +532,8 @@ class Subscription extends Collection implements ISubscription, IAddressBook, IS
 
         // Convert privilege array to detailed ACL
         // Check what privileges are in the array
-        $hasWrite = in_array('dav:write', $privilege) || in_array('dav:unbind', $privilege);
+        $hasWrite = $publicRight === '{DAV:}write'
+            && (in_array('dav:write', $privilege) || in_array('dav:unbind', $privilege));
         $hasShare = in_array('dav:share', $privilege) || in_array('dav:administration', $privilege);
 
         // Grant privileges based on the privilege array
@@ -548,14 +570,36 @@ class Subscription extends Collection implements ISubscription, IAddressBook, IS
             'protected' => true
         ];
 
-        // Always allow the owner to modify subscription properties (displayname, description)
-        $acl[] = [
-            'privilege' => '{DAV:}write-properties',
-            'principal' => $principal,
-            'protected' => true
-        ];
+        $acl[] = $writeProperties;
 
         return $acl;
+    }
+
+    /**
+     * Current public right of the source address book, null when it is not published or no longer exists. Read
+     * once per node: the ACL is evaluated for the subscription and for each of its cards.
+     */
+    private function getSourcePublicRight(): ?string {
+        if ($this->sourcePublicRight === null) {
+            $this->sourcePublicRight = [ $this->readSourcePublicRight() ];
+        }
+
+        return $this->sourcePublicRight[0];
+    }
+
+    private function readSourcePublicRight(): ?string {
+        // Same resolution as getSourceAddressBookInfo
+        $parts = explode('/', trim($this->subscriptionInfo['{http://open-paas.org/contacts}source'], '/'));
+        if (count($parts) < 3 || $parts[0] !== 'addressbooks') {
+            return null;
+        }
+
+        $found = $this->carddavBackend->getAddressBooksByPrincipalAndUri([
+            [ 'principaluri' => 'principals/users/' . $parts[1], 'uri' => $parts[2] ]
+        ]);
+        $publicRight = $found[0]['public_right'] ?? null;
+
+        return is_string($publicRight) ? $publicRight : null;
     }
 
 }

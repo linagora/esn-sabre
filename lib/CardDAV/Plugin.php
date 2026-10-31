@@ -482,6 +482,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
             return [404, null];
         }
 
+        if (!$this->isSubscribableAddressBook($sourcePath)) {
+            return [400, null];
+        }
+
         $privilege = $this->resolveSourcePrivileges($sourcePath);
         if ($privilege === null) {
             return [403, null];
@@ -506,6 +510,22 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $this->server->createCollection($nodePath . '/' . $jsonData->id, new \Sabre\DAV\MkCol($rt, $props));
 
         return [201, null];
+    }
+
+    /**
+     * Only an address book of a home, addressbooks/<home>/<uri>, can be the source of a subscription: the source is
+     * stored as is, then resolved from these two segments and matched exactly when the source is unpublished.
+     */
+    private function isSubscribableAddressBook(string $sourcePath): bool {
+        $parts = explode('/', $sourcePath);
+        if (count($parts) !== 3 || $parts[0] !== \Sabre\CardDAV\Plugin::ADDRESSBOOK_ROOT) {
+            return false;
+        }
+
+        $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+
+        return $sourceNode instanceof \Sabre\CardDAV\IAddressBook
+            && !($sourceNode instanceof \ESN\CardDAV\Subscriptions\ISubscription);
     }
 
     /**

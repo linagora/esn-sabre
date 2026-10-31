@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<D:mkcol xmlns:D="DAV:" xmlns:CS="http://calendarserver.opppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp#pppppppppppppprg/ns/">
+  <D:set><D:prop>
+    <D:resourcetype><D:collection/>-<CS:subscribed/></D:resourcetype>
+    <D:displayname>Sub</D:displayname>
+    <CS:source><D:href>/calendars/54b64eadf6d7d8e41d263e0f/calppppppppppppppppppppppppppppppppppppp#pppppppppppppprg/ns/">
+  <D:set><D:prop>
+    <D:resourcetype><D:collection/>-<CS:subscribed/></D:resourcetype>
+    <D:displayname>Sub</D:displayname>
+    <CS:source><D:href>/calendars/54b64eadf6d7d8e41d263e0f/cal1</D:href></CS:source>
+  </D:prop></D1</D:href></CS:source>
+  </D:prop></D:set>
+</D:mkcol>

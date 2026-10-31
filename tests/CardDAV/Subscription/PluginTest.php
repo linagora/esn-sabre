@@ -23,6 +23,7 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
     }
 
     function testPropFindRequestSubscriptionAddressBook() {
+        $this->carddavBackend->setPublishStatus($this->carddavAddressBook, '{DAV:}read');
         $this->carddavBackend->createSubscription(
             'principals/users/' . $this->userTestId2,
             'user2subscription1',
@@ -110,6 +111,98 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
             'subscribe to public write source' => ['subscriber', '{DAV:}write', 201, ['dav:read', 'dav:write']],
             'private source is denied' => ['subscriber', '', 403, []],
             'source owner cannot write subscriber home' => ['source owner', '', 403, []]
+        ];
+    }
+
+    function testSubscriptionLosesWriteWhenSourceIsRepublishedReadOnly() {
+        $path = $this->subscribeWhilePublishedWritable();
+
+        $this->assertEquals(201, $this->putCard($path . '/written.vcf')->status);
+
+        $this->republish('{DAV:}read');
+
+        $this->assertEquals(403, $this->putCard($path . '/denied.vcf')->status);
+        $this->assertEquals(403, $this->request($this->rawRequest('DELETE', $path . '/written.vcf'))->status);
+        $this->assertEquals(200, $this->request($this->rawRequest('GET', $path . '/written.vcf'))->status);
+        $this->assertEquals(204, $this->makeRequest('PROPPATCH', $path . '.json', ['dav:name' => 'renamed'])->status);
+        $this->assertNotNull($this->carddavBackend->getCard($this->carddavAddressBook['id'], 'written.vcf'));
+        $this->assertFalse($this->carddavBackend->getCard($this->carddavAddressBook['id'], 'denied.vcf'));
+    }
+
+    function testSubscriptionWhoseSourceIsUnpublishedGivesNoAccessToTheContacts() {
+        // A row unpublishing does not find: its source has an extra segment, which is still resolved to book1
+        $this->carddavBackend->setPublishStatus($this->carddavAddressBook, '{DAV:}write');
+        $this->carddavBackend->createSubscription('principals/users/' . $this->userTestId2, 'sub', [
+            '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/' . $this->userTestId1 . '/book1/card1', false),
+            '{DAV:}acl' => ['dav:read', 'dav:write']
+        ]);
+        $this->carddavBackend->createCard($this->carddavAddressBook['id'], 'card.vcf', "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:card\r\nFN:Card\r\nEND:VCARD\r\n");
+        $this->authBackend->setPrincipal('principals/users/' . $this->userTestId2);
+        $path = '/addressbooks/' . $this->userTestId2 . '/sub';
+        $this->assertEquals(200, $this->request($this->rawRequest('GET', $path . '/card.vcf'))->status);
+
+        $this->republish(false);
+
+        $this->assertEquals(403, $this->request($this->rawRequest('GET', $path . '/card.vcf'))->status);
+        $this->assertEquals(403, $this->putCard($path . '/denied.vcf')->status);
+        $this->assertEquals(403, $this->request($this->rawRequest('DELETE', $path . '/card.vcf'))->status);
+        $this->assertNotNull($this->carddavBackend->getCard($this->carddavAddressBook['id'], 'card.vcf'));
+    }
+
+    private function republish($publicRight) {
+        $this->carddavBackend->setPublishStatus($this->carddavAddressBook, $publicRight);
+        // Each production request builds its nodes again, the test server keeps them
+        $this->server->tree->markDirty('addressbooks');
+    }
+
+    private function subscribeWhilePublishedWritable(): string {
+        $this->carddavBackend->setPublishStatus($this->carddavAddressBook, '{DAV:}write');
+        $this->authBackend->setPrincipal('principals/users/' . $this->userTestId2);
+        $response = $this->makeRequest('POST', '/addressbooks/' . $this->userTestId2 . '.json', [
+            'id' => 'sub',
+            'dav:name' => 'user1',
+            'openpaas:source' => ['_links' => ['self' => ['href' => '/addressbooks/' . $this->userTestId1 . '/book1.json']]]
+        ]);
+        $this->assertEquals(201, $response->status);
+
+        return '/addressbooks/' . $this->userTestId2 . '/sub';
+    }
+
+    private function putCard(string $uri) {
+        $request = $this->rawRequest('PUT', $uri, 'text/vcard');
+        $request->setBody("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:" . basename($uri) . "\r\nFN:Written\r\nEND:VCARD\r\n");
+
+        return $this->request($request);
+    }
+
+    private function rawRequest(string $method, string $uri, string $contentType = 'text/vcard') {
+        return \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD' => $method,
+            'HTTP_CONTENT_TYPE' => $contentType,
+            'REQUEST_URI' => $uri
+        ]);
+    }
+
+    #[DataProvider('sourcesThatAreNotAddressBooks')]
+    function testCreateSubscriptionAddressBookRequiresAnAddressBookSource($href) {
+        $this->carddavBackend->setPublishStatus($this->carddavAddressBook, '{DAV:}read');
+
+        $response = $this->makeRequest('POST', '/addressbooks/' . $this->userTestId2 . '.json', [
+            'id' => 'sub1',
+            'dav:name' => 'user1',
+            'openpaas:source' => ['_links' => ['self' => ['href' => $href]]]
+        ]);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount(0, $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId2));
+    }
+
+    static function sourcesThatAreNotAddressBooks() {
+        $home = '/addressbooks/54b64eadf6d7d8e41d263e0f';
+
+        return [
+            'card' => [$home . '/book1/card1.json'],
+            'address book home' => [$home . '.json']
         ];
     }
 

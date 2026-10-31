@@ -122,6 +122,25 @@ class SubscriptionTest extends \ESN\DAV\ServerMock {
         return null;
     }
 
+    /**
+     * ESN parses an XML MKCOL under a calendar home before Sabre does: the body is checked before both.
+     */
+    function testIllFormedMkcolBodyIsRejected() {
+        $this->server->addPlugin(new \ESN\DAV\ReportBodyValidationPlugin());
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'MKCOL',
+            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/cal1',
+        ]);
+        $request->setBody(file_get_contents(__DIR__ . '/../../DAV/fixtures/mkcol-prop-loop.xml'));
+
+        $start = microtime(true);
+        $response = $this->request($request);
+
+        $this->assertLessThan(2.0, microtime(true) - $start);
+        $this->assertEquals(400, $response->getStatus());
+    }
+
     private function mkcolSubscription($uri, $source) {
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'REQUEST_METHOD'    => 'MKCOL',

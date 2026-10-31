@@ -43,8 +43,12 @@ class CalendarSubscriptionDAO extends BaseDAO {
         return $this->deleteOne(['_id' => new \MongoDB\BSON\ObjectId($subscriptionId)]);
     }
 
+    /**
+     * Subscriptions to the calendar at calendars/<home>/<uri>, also when their source was stored with a leading or
+     * trailing slash, which they are resolved the same with.
+     */
     public function findSubscribersBySource($source, array $projection = []) {
-        $query = ['source' => $source];
+        $query = ['source' => ['$in' => \ESN\Utils\Utils::slashVariants($source)]];
         $options = empty($projection) ? [] : ['projection' => $projection];
         return $this->find($query, $options);
     }

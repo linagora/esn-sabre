@@ -138,8 +138,16 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
             'string self' => [['_links' => ['self' => $href]]],
             'missing href' => [['_links' => ['self' => []]]],
             'empty href' => [['_links' => ['self' => ['href' => '']]]],
-            'non string href' => [['_links' => ['self' => ['href' => ['nested' => $href]]]]]
+            'non string href' => [['_links' => ['self' => ['href' => ['nested' => $href]]]]],
+            'url without path' => [['_links' => ['self' => ['href' => 'http://example.org']]]],
+            'unparsable url' => [['_links' => ['self' => ['href' => '?://']]]]
         ];
+    }
+
+    function testCreateSubscriptionAddressBookRejectsASourceThatIsNotAnAddressBook() {
+        $this->testCreateSubscriptionAddressBookRejectsInvalidSource(
+            ['_links' => ['self' => ['href' => '/addressbooks/' . $this->userTestId1 . '.json']]]
+        );
     }
 
     #[DataProvider('invalidAddressBookIds')]

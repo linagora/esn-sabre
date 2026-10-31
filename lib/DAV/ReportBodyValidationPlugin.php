@@ -11,7 +11,10 @@ use \Sabre\Xml\ParseException;
 
 /**
  * Guards the XML request body of the DAV methods whose body Sabre deserialises
- * with the shared `{DAV:}prop` deserialiser: REPORT, PROPFIND and PROPPATCH.
+ * (REPORT, PROPFIND, PROPPATCH, MKCOL, MKCALENDAR, ACL and XML POST), all of which
+ * go through the shared `keyValue` / `{DAV:}prop` deserialisers: `Service::expect`
+ * deserialises the whole document with the server's element map before checking
+ * its root, so any of them can reach any registered request deserialiser.
  *
  * Two distinct problems are handled here, both before Sabre's core handler runs:
  *
@@ -24,9 +27,8 @@ use \Sabre\Xml\ParseException;
  *     `{DAV:}prop`) advances with `XMLReader::next()`; on a mismatched end tag
  *     following an empty element, `next()` fails silently and leaves the cursor
  *     on the same element, so the loop re-parses it until `max_execution_time`.
- *     Any authenticated user could tie up one PHP worker per request (a REPORT,
- *     PROPFIND or PROPPATCH on their own collection is enough) and, with enough
- *     parallel requests, exhaust the FPM pool — a denial of service.
+ *     The same malformed body can also make `Prop::xmlDeserialize` re-enter
+ *     itself on the same element until the stack limit.
  *
  *     The loop lives in the vendored sabre/xml, which `XMLReader::next()`'s
  *     silent failure defeats. We instead pre-check that the body is a
@@ -35,8 +37,11 @@ use \Sabre\Xml\ParseException;
  */
 #[\AllowDynamicProperties]
 class ReportBodyValidationPlugin extends ServerPlugin {
-    // Right before Sabre\DAV\CorePlugin's handlers (default priority 100).
+    // Right before Sabre's handlers (default priority 100), after ESN's JSON handlers (75-85), which stop
+    // the event when they handle the request.
     const PRIORITY = 99;
+    // Before ESN\CalDAV\Subscriptions\Plugin#httpMkcol (90), which parses the XML MKCOL body itself.
+    const MKCOL_PRIORITY = 89;
 
     protected $server;
 
@@ -49,6 +54,25 @@ class ReportBodyValidationPlugin extends ServerPlugin {
         $server->on('method:REPORT', [$this, 'httpReport'], self::PRIORITY);
         $server->on('method:PROPFIND', [$this, 'assertWellFormedBody'], self::PRIORITY);
         $server->on('method:PROPPATCH', [$this, 'assertWellFormedBody'], self::PRIORITY);
+        // Sabre parses these bodies whatever their Content-Type
+        $server->on('method:MKCALENDAR', [$this, 'assertWellFormedBody'], self::PRIORITY);
+        $server->on('method:ACL', [$this, 'assertWellFormedBody'], self::PRIORITY);
+        // Only parsed as XML with an XML Content-Type; JSON and iCalendar bodies go elsewhere
+        $server->on('method:MKCOL', [$this, 'assertWellFormedXmlTypedBody'], self::MKCOL_PRIORITY);
+        $server->on('method:POST', [$this, 'assertWellFormedXmlTypedBody'], self::PRIORITY);
+    }
+
+    /**
+     * Same as assertWellFormedBody, for the methods whose handlers only parse a body declared as XML
+     * (application/xml, text/xml, application/davsharing+xml...).
+     */
+    function assertWellFormedXmlTypedBody(RequestInterface $request, ResponseInterface $response) {
+        $contentType = strtolower($request->getHeader('Content-Type') ?? '');
+        if (strpos($contentType, 'xml') === false) {
+            return;
+        }
+
+        $this->assertWellFormedBody($request, $response);
     }
 
     function httpReport(RequestInterface $request, ResponseInterface $response) {

@@ -24,6 +24,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $server->on('beforeUnbind', [$this, 'beforeUnbind']);
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
         $server->on('beforeCreateFile', [$this, 'beforeCreateFile']);
+        // After the ACL check (100), before the node applies the update (200)
+        $server->on('propPatch', [$this, 'propPatch'], 150);
         // Serve the virtual JSON route before plugins that resolve GET paths in the DAV tree.
         $server->on('method:GET', [$this, 'httpGetAllContacts'], 79);
         $server->on('method:GET', [$this, 'httpGet'], 80);
@@ -79,18 +81,39 @@ class Plugin extends \ESN\JSON\BasePlugin {
         // Check domain-members access first (works for both cards and addressbooks)
         $this->checkDomainMembersAccess($path);
 
-        $protectedAddressBook = array(
-            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
-            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
+        $node = $this->server->tree->getNodeForPath($path);
+
+        if ($node instanceof \Sabre\CardDAV\AddressBook && $this->isProtectedAddressBook($node)) {
+            throw new \Sabre\DAV\Exception\Forbidden('Forbidden: You can not delete '.$node->getName().' address book');
+        }
+    }
+
+    /**
+     * Refuses renaming the default address books on every PROPPATCH route
+     * (XML included), as the JSON one does.
+     */
+    function propPatch($path, DAV\PropPatch $propPatch) {
+        $protectedProperties = array_intersect(
+            ['{DAV:}displayname', '{urn:ietf:params:xml:ns:carddav}addressbook-description'],
+            array_keys($propPatch->getMutations())
         );
+
+        if (empty($protectedProperties) || !$this->server->tree->nodeExists($path)) {
+            return;
+        }
 
         $node = $this->server->tree->getNodeForPath($path);
 
-        if ($node instanceof \Sabre\CardDAV\AddressBook) {
-            if (in_array($node->getName(), $protectedAddressBook)) {
-                throw new \Sabre\DAV\Exception\Forbidden('Forbidden: You can not delete '.$node->getName().' address book');
-            }
+        if ($node instanceof \Sabre\CardDAV\AddressBook && $this->isProtectedAddressBook($node)) {
+            $propPatch->setResultCode($protectedProperties, 403);
         }
+    }
+
+    private function isProtectedAddressBook(\Sabre\CardDAV\AddressBook $node): bool {
+        return in_array($node->getName(), [
+            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
+            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
+        ]);
     }
 
     function beforeWriteContent($path, DAV\IFile $node, &$data, &$modified) {
@@ -545,12 +568,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     private function changeAddressBookProperties($nodePath, $node, $jsonData) {
-        $protectedAddressBook = array(
-            \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
-            \ESN\CardDAV\Backend\Esn::COLLECTED_URI
-        );
-
-        if (in_array($node->getName(), $protectedAddressBook)) {
+        if ($this->isProtectedAddressBook($node)) {
             return [403, [
                 'status' => 403,
                 'message' => 'Forbidden: You can not update '.$node->getName().' address book'

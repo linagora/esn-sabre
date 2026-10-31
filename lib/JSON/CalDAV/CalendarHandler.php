@@ -453,9 +453,13 @@ class CalendarHandler {
     public function updateSharees($path, $jsonData) {
         $sharingPlugin = $this->server->getPlugin('sharing');
 
+        if (!is_object($jsonData->share)) {
+            throw new DAV\Exception\BadRequest('share must be an object');
+        }
+
         $sharees = array_merge(
-            $this->buildShareesToSet($jsonData->share->set ?? []),
-            $this->buildShareesToRemove($jsonData->share->remove ?? [])
+            $this->buildShareesToSet($this->validatedShareeList($jsonData->share, 'set')),
+            $this->buildShareesToRemove($this->validatedShareeList($jsonData->share, 'remove'))
         );
 
         $sharingPlugin->shareResource($path, $sharees);
@@ -464,6 +468,26 @@ class CalendarHandler {
         $this->server->httpResponse->setHeader('X-Sabre-Status', 'everything-went-well');
 
         return [200, null];
+    }
+
+    private function validatedShareeList($share, string $member): array {
+        $sharees = $share->$member ?? [];
+
+        if (!is_array($sharees)) {
+            throw new DAV\Exception\BadRequest("share.$member must be an array");
+        }
+
+        foreach ($sharees as $sharee) {
+            if (!is_object($sharee)) {
+                throw new DAV\Exception\BadRequest("Each share.$member entry must be an object");
+            }
+            $href = $sharee->{'dav:href'} ?? null;
+            if (!is_string($href) || $href === '') {
+                throw new DAV\Exception\BadRequest("share.$member dav:href must be a non-empty string");
+            }
+        }
+
+        return $sharees;
     }
 
     private function buildShareesToSet($shareesToSet): array {

@@ -15,14 +15,16 @@ trait ValidatesResourceIds {
      * - Dot-segments (..)
      * - Percent-encoded slashes (%2F, %2f, %5C, %5c)
      *
-     * @param string|null $id The ID to validate
+     * @param mixed $id The ID to validate
      * @return bool True if valid, false otherwise
      */
     private function isValidResourceId($id) {
-        // ID must be non-empty
-        if (!isset($id) || !$id) {
+        // ID must be a non-empty string or an integer
+        if (!(is_string($id) || is_int($id)) || !$id) {
             return false;
         }
+
+        $id = (string) $id;
 
         // Reject path injection characters
         if (strpos($id, '/') !== false ||

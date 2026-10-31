@@ -430,10 +430,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         // Only handle calendar nodes, let other plugins handle other nodes (like addressbooks)
         if ($node instanceof \Sabre\CalDAV\ICalendarObjectContainer) {
-            $jsonData = json_decode($request->getBodyAsString());
+            $jsonData = $this->decodeJsonObjectBody($request);
             list($code, $body) = $this->handleJsonRequest($path, $node, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\CalendarHome) {
-            $jsonData = json_decode($request->getBodyAsString());
+            $jsonData = $this->decodeJsonObjectBody($request);
             list($code, $body) = $this->handleCalendarHomePost($path, $jsonData);
         } else {
             // Not a calendar node - let other plugins handle it
@@ -543,10 +543,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $body = null;
 
         if ($node instanceof \Sabre\CalDAV\Calendar) {
-            $jsonData = json_decode($request->getBodyAsString());
+            $jsonData = $this->decodeJsonObjectBody($request);
             list($code, $body) = $this->handleCalendarProppatch($path, $jsonData);
         } else if ($node instanceof \Sabre\CalDAV\Subscriptions\Subscription) {
-            $jsonData = json_decode($request->getBodyAsString());
+            $jsonData = $this->decodeJsonObjectBody($request);
             list($code, $body) = $this->handleSubscriptionProppatch($path, $jsonData);
         }
 
@@ -572,12 +572,12 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $node = $this->server->tree->getNodeForPath($path);
 
         if ($node instanceof \Sabre\CalDAV\SharedCalendar) {
-            $jsonData = json_decode($request->getBodyAsString(), true);
+            $props = $this->requestedProperties($this->decodeJsonObjectBody($request));
             $result = array();
-            if (in_array('cs:invite', $jsonData['prop'])) {
+            if (in_array('cs:invite', $props, true)) {
                 $result['invite'] = $node->getInvites();
             }
-            if (in_array('acl', $jsonData['prop'])) {
+            if (in_array('acl', $props, true)) {
                 $result['acl'] = $node instanceof \ESN\CalDAV\SharedCalendar ? $node->getReportedACL() : $node->getACL();
             }
 
@@ -586,6 +586,26 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return true;
+    }
+
+    private function decodeJsonObjectBody($request) {
+        $jsonData = json_decode($request->getBodyAsString());
+
+        if (!is_object($jsonData)) {
+            throw new DAV\Exception\BadRequest('JSON body must be an object');
+        }
+
+        return $jsonData;
+    }
+
+    private function requestedProperties($jsonData): array {
+        $props = $jsonData->prop ?? null;
+
+        if (!is_array($props) || !empty(array_filter($props, fn($prop) => !is_string($prop)))) {
+            throw new DAV\Exception\BadRequest('prop must be an array of strings');
+        }
+
+        return $props;
     }
 
     function handleJsonRequest($path, $node, $jsonData) {

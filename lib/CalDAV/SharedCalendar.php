@@ -7,8 +7,11 @@ use ESN\Utils\Utils;
 
 #[\AllowDynamicProperties]
 class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
+    /**
+     * The only rights that can be granted to every authenticated user: a public right never grants
+     * re-sharing ({DAV:}share) nor the ACL privileges.
+     */
     const PUBLIC_RIGHTS = [
-        '{DAV:}all',
         '{DAV:}read',
         '{DAV:}write',
         '{' . Plugin::NS_CALDAV . '}read-free-busy'
@@ -145,9 +148,8 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     }
 
     private function updateAclWithPublicRight($acl) {
-        $public_right = $this->getPublicRight();
-
-        if (isset($public_right) && strlen($public_right) > 0) {
+        if ($this->isPublic()) {
+            $public_right = $this->getPublicRight();
             $index = array_search('{DAV:}authenticated', array_column($acl, 'principal'));
             if ($index !== false) {
                 $acl[$index]['privilege'] = $public_right;
@@ -170,8 +172,12 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
         $public = $this->getPublicRight();
 
-        return in_array($public, self::PUBLIC_RIGHTS);
+        return self::isSupportedPublicRight($public);
 
+    }
+
+    static function isSupportedPublicRight($publicRight): bool {
+        return in_array($publicRight, self::PUBLIC_RIGHTS, true);
     }
 
     function getPublicRight() {

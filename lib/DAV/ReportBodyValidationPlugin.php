@@ -61,7 +61,7 @@ class ReportBodyValidationPlugin extends ServerPlugin {
 
     // Run after JSON handlers (80), before Sabre's XML handlers (100).
     // REPORT and ACL validate in their wrappers at the same priority.
-    const XML_BODY_METHODS = ['PROPFIND', 'PROPPATCH', 'LOCK'];
+    const XML_BODY_METHODS = ['PROPFIND', 'PROPPATCH', 'MKCALENDAR', 'LOCK'];
 
     // Methods whose body is deserialised as XML only with an XML content type
     // (MKCOL extended bodies, POST share-resource / CalDAV sharing).

@@ -346,7 +346,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
      * Address books shared with a principal along with their source address book, read in two queries whatever
      * their number, unlike getSharedAddressBooksForUser. Shares whose source no longer exists are left out.
      *
-     * @return array [ [ 'uri', 'share_invitestatus', 'addressbookid', 'source_principaluri', 'source_uri' ], ... ]
+     * @return array [ [ 'uri', 'share_invitestatus', 'addressbookid', 'source_principaluri', 'source_uri', 'source_state' ], ... ]
      */
     function getSharedAddressBookSourcesForUser($principalUri) {
         $collection = $this->db->selectCollection($this->sharedAddressBooksTableName);
@@ -359,7 +359,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $sources = [];
         $ids = array_map(fn($share) => $share['addressbookid'], $shares);
         $collection = $this->db->selectCollection($this->addressBooksTableName);
-        foreach ($collection->find([ '_id' => [ '$in' => $ids ] ], [ 'projection' => self::MINIMAL_ADDRESSBOOK_FIELDS ]) as $row) {
+        $sourceProjection = self::MINIMAL_ADDRESSBOOK_FIELDS + [ 'state' => 1 ];
+        foreach ($collection->find([ '_id' => [ '$in' => $ids ] ], [ 'projection' => $sourceProjection ]) as $row) {
             $sources[(string)$row['_id']] = $row;
         }
 
@@ -374,7 +375,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'share_invitestatus' => $this->getValue($share, 'share_invitestatus', SPlugin::INVITE_INVALID),
                 'addressbookid' => (string)$share['addressbookid'],
                 'source_principaluri' => $source['principaluri'],
-                'source_uri' => $source['uri']
+                'source_uri' => $source['uri'],
+                'source_state' => $this->getValue($source, 'state', '')
             ];
         }
 

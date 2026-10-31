@@ -55,6 +55,36 @@ class GetAllContactsRouteTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertObjectNotHasProperty('dav:item', $body->{'_embedded'});
     }
 
+    #[DataProvider('subscriptionSourceForms')]
+    function testSubscriptionIsNotListedOnceItsSourceIsUnpublished(string $source) {
+        $sourceBook = [ 'id' => $this->user2Book1Id, 'principaluri' => 'principals/users/' . $this->userTestId2, 'uri' => 'user2book1' ];
+        $this->carddavBackend->setPublishStatus($sourceBook, '{DAV:}read');
+        // Stored as is, so unpublishing does not find it
+        $this->carddavBackend->createSubscription('principals/users/' . $this->userTestId1, 'sub1', [
+            '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href(sprintf($source, $this->userTestId2), false)
+        ]);
+        $this->assertCount(8, $this->listContacts());
+
+        $this->carddavBackend->setPublishStatus($sourceBook, false);
+
+        $this->assertCount(4, $this->listContacts());
+    }
+
+    static function subscriptionSourceForms() {
+        return [
+            'leading slash' => ['/addressbooks/%s/user2book1'],
+            'trailing slash' => ['addressbooks/%s/user2book1/'],
+            'card' => ['addressbooks/%s/user2book1/user2book1Card1']
+        ];
+    }
+
+    private function listContacts(): array {
+        $response = $this->makeRequest('GET', '/contacts/' . $this->userTestId1 . '.json');
+        $this->assertEquals(200, $response->status);
+
+        return json_decode($response->getBodyAsString())->{'_embedded'}->{'dav:item'};
+    }
+
     function testOtherUserCannotGetAllContacts() {
         $response = $this->makeRequest('GET', '/contacts/' . $this->userTestId2 . '.json');
 

@@ -57,7 +57,7 @@ class SubscriptionHandler {
             return [404, null];
         }
 
-        if (!$this->server->tree->getNodeForPath($sourcePath) instanceof \Sabre\CalDAV\ICalendar) {
+        if (!$this->server->tree->getNodeForPath($sourcePath) instanceof \Sabre\CalDAV\Calendar) {
             return [400, null];
         }
 

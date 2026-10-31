@@ -96,6 +96,26 @@ class MongoTest extends AbstractDatabaseTestBase {
         $this->assertEqualsCanonicalizing(array_slice($uris, 0, $count), array_column($cards, 'uri'));
     }
 
+    function testUnpublishingDeletesSubscriptionsWhateverTheSlashesOfTheirSource() {
+        $bookInfo = ['id' => $this->bookId, 'principaluri' => 'principals/users/user1', 'uri' => 'book1'];
+        $this->backend->setPublishStatus($bookInfo, '{DAV:}read');
+        $sources = ['addressbooks/user1/book1', '/addressbooks/user1/book1', 'addressbooks/user1/book1/', '/addressbooks/user1/book1/'];
+        foreach ($sources as $index => $source) {
+            $this->backend->createSubscription('principals/users/user2', 'sub' . $index, [
+                '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href($source, false)
+            ]);
+        }
+        $this->backend->createSubscription('principals/users/user2', 'other', [
+            '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/user1/book10', false)
+        ]);
+        $this->assertCount(4, $this->backend->getSubscriptionsBySource('addressbooks/user1/book1'));
+
+        $this->backend->setPublishStatus($bookInfo, false);
+
+        $remaining = $this->backend->getSubscriptionsForUser('principals/users/user2');
+        $this->assertEquals(['other'], array_column($remaining, 'uri'));
+    }
+
     function testResubscriptionDoesNotRestoreRevokedDelegation() {
         $principal = 'principals/users/user2';
         $sharee = new \Sabre\DAV\Xml\Element\Sharee([

@@ -226,6 +226,9 @@ $server->addPlugin(new ESN\CardDAV\InlinePhotoPlugin(
     \ESN\Utils\Env::getString('TRUSTED_ATTACH_URL_BASE')
 ));
 
+// Runs the card write guards above on COPY and MOVE into an address book
+$server->addPlugin(new ESN\CardDAV\CopyMoveGuardPlugin());
+
 // vCard export plugin
 $vcfPlugin = new Sabre\CardDAV\VCFExportPlugin();
 $server->addPlugin($vcfPlugin);

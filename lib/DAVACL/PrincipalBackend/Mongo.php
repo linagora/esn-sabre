@@ -76,7 +76,13 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
         list($type, $id) = $parsed;
 
-        $obj = $this->collectionMap[$type]->findOne([ '_id' => new \MongoDB\BSON\ObjectId($id) ]);
+        try {
+            $objectId = new \MongoDB\BSON\ObjectId($id);
+        } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
+            return null;
+        }
+
+        $obj = $this->collectionMap[$type]->findOne([ '_id' => $objectId ]);
         if (!$obj) {
             return null;
         }

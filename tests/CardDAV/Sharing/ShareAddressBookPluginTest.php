@@ -97,6 +97,12 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
 
     function testShareAddressBookWithPrincipalCollectionHrefResponds400() {
         $response = $this->shareBook1With('principals/users////', SPlugin::ACCESS_READ);
+        $this->assertEquals(400, $response->status);
+        $this->assertStringContainsString('dav:href must be a mailto: URI or a principal', $response->getBodyAsString());
+    }
+
+    function testShareAddressBookWithMalformedPrincipalIdHrefResponds400() {
+        $response = $this->shareBook1With('principals/users/}2', SPlugin::ACCESS_READ);
 
         $this->assertEquals(400, $response->status);
         $this->assertStringContainsString('dav:href must be a mailto: URI or a principal', $response->getBodyAsString());

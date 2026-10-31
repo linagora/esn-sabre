@@ -92,4 +92,23 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
 
         $this->assertEquals(207, $response->getStatus());
     }
+
+    /**
+     * XMLReader accepts U+FEFF inside an element name but XMLWriter refuses it.
+     * Sabre echoes unknown requested properties in the multistatus, so writing
+     * that name used to throw a ValueError (500).
+     */
+    function testPropfindWithBomInPropertyNameShouldAnswerBadRequest() {
+        $body = "<D:propfind xmlns:D=\"DAV:\"><D:prop><D:a\u{FEFF}b/></D:prop></D:propfind>";
+        $response = $this->request('PROPFIND', $body, ['Depth' => '0']);
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testProppatchWithBomInPropertyNameShouldAnswerBadRequest() {
+        $body = "<D:propertyupdate xmlns:D=\"DAV:\"><D:set><D:prop><D:a\u{FEFF}b>x</D:a\u{FEFF}b></D:prop></D:set></D:propertyupdate>";
+        $response = $this->request('PROPPATCH', $body);
+
+        $this->assertEquals(400, $response->getStatus());
+    }
 }

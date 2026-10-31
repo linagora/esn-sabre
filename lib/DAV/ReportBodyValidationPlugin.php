@@ -32,6 +32,13 @@ use \Sabre\Xml\ParseException;
  *     silent failure defeats. We instead pre-check that the body is a
  *     well-formed XML document with a plain `XMLReader::read()` sweep (which
  *     does surface the libxml error) and answer 400 before handing it to Sabre.
+ *
+ *  3. libxml's reader and writer disagree on what a valid element name is:
+ *     `XMLReader` accepts names that `XMLWriter` refuses (e.g. one holding
+ *     U+FEFF). Sabre echoes every requested property it cannot find back in
+ *     the multistatus, so such a name made `XMLWriter` throw a `ValueError`
+ *     (500) while the response was written. The same sweep rejects with 400 a
+ *     body holding an element name that `XMLWriter` would not write.
  */
 #[\AllowDynamicProperties]
 class ReportBodyValidationPlugin extends ServerPlugin {
@@ -85,9 +92,22 @@ class ReportBodyValidationPlugin extends ServerPlugin {
     }
 
     /**
+     * Reports whether XMLWriter, which Sabre uses to write the response, would
+     * accept this element name. Its name check is stricter than XMLReader's.
+     */
+    private function isWritableElementName(\XMLWriter $writer, string $name): bool {
+        try {
+            return false !== @$writer->startElement($name);
+        } catch (\ValueError $e) {
+            return false;
+        }
+    }
+
+    /**
      * Reads the whole document with XMLReader and reports whether libxml saw a
      * fatal error. Unlike XMLReader::next() (used by Sabre's deserialiser), a
      * read() sweep surfaces a mismatched end tag instead of stalling on it.
+     * Element names that XMLWriter could not write back also fail the check.
      *
      * Entities are not expanded (no LIBXML_NOENT) and the network is disabled
      * (LIBXML_NONET), so a hostile body cannot expand or fetch anything here.
@@ -104,9 +124,14 @@ class ReportBodyValidationPlugin extends ServerPlugin {
             return false;
         }
 
+        $writer = new \XMLWriter();
+        $writer->openMemory();
+
         $wellFormed = true;
-        while (false !== @$reader->read()) {
-            // keep reading until the end of the document
+        while ($wellFormed && false !== @$reader->read()) {
+            if (\XMLReader::ELEMENT === $reader->nodeType) {
+                $wellFormed = $this->isWritableElementName($writer, $reader->localName);
+            }
         }
         if (libxml_get_errors()) {
             $wellFormed = false;

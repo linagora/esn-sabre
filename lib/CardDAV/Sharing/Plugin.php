@@ -2,6 +2,7 @@
 
 namespace ESN\CardDAV\Sharing;
 
+use ESN\DAV\Sharing\ShareeHrefValidator;
 use Sabre\DAV\Exception\BadRequest;
 use Sabre\DAV\Exception\Forbidden;
 use Sabre\DAV\INode;
@@ -222,13 +223,15 @@ class Plugin extends \ESN\JSON\BasePlugin {
             throw new BadRequest('dav:sharee must be an array');
         }
 
-        return array_map(function($sharee) {
+        $hrefValidator = new ShareeHrefValidator($this->server);
+
+        return array_map(function($sharee) use ($hrefValidator) {
             if (!is_object($sharee)) {
                 throw new BadRequest('Each dav:sharee must be an object');
             }
 
             return new \Sabre\DAV\Xml\Element\Sharee([
-                'href' => $this->validateShareeHref(Utils::getJsonValue($sharee, 'dav:href')),
+                'href' => $hrefValidator->validate(Utils::getJsonValue($sharee, 'dav:href')),
                 'access' => $this->validateShareAccess(Utils::getJsonValue($sharee, 'dav:share-access', \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS)),
                 'properties' => []
             ]);
@@ -249,39 +252,6 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return $access;
-    }
-
-    private function validateShareeHref($href) {
-        if (!is_string($href) || $href === '') {
-            throw new BadRequest('dav:href must be a non-empty string');
-        }
-
-        if (stripos($href, 'mailto:') === 0) {
-            if (!filter_var(substr($href, 7), FILTER_VALIDATE_EMAIL)) {
-                throw new BadRequest('dav:href is not a valid mailto: URI');
-            }
-
-            return $href;
-        }
-
-        if (!$this->isExistingPrincipal($href)) {
-            throw new BadRequest('dav:href must be a mailto: URI or a principal');
-        }
-
-        return $href;
-    }
-
-    private function isExistingPrincipal($href) {
-        $path = ltrim($href, '/');
-
-        if (str_starts_with($path, 'principals/') && $this->server->tree->nodeExists($path)) {
-            return true;
-        }
-
-        $principal = null;
-        $this->server->emit('getPrincipalByUri', [$href, &$principal]);
-
-        return !is_null($principal);
     }
 
     private function assertNoSelfDelegation(ISharedAddressBook $node, array $sharees) {

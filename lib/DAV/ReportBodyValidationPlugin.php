@@ -3,10 +3,12 @@
 namespace ESN\DAV;
 
 use \Sabre\DAV\Exception\BadRequest;
+use \Sabre\DAV\Exception\ReportNotSupported;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use \Sabre\HTTP\RequestInterface;
 use \Sabre\HTTP\ResponseInterface;
+use \Sabre\VObject\InvalidDataException;
 use \Sabre\Xml\ParseException;
 
 /**
@@ -15,9 +17,15 @@ use \Sabre\Xml\ParseException;
  *
  * Two distinct problems are handled here, both before Sabre's core handler runs:
  *
- *  1. Sabre's core REPORT handler lets XML parse errors of the request body
- *     escape as 500, while PROPFIND/PROPPATCH already map them to 400. We run
- *     the core REPORT handler ourselves and report a parse error as 400.
+ *  1. Sabre's core REPORT handler lets deserialisation errors of the request
+ *     body escape as 500, while PROPFIND/PROPPATCH already map them to 400.
+ *     Besides XML parse errors, the CalDAV filter deserialisers throw on a
+ *     malformed `time-range` date (InvalidDataException) and read the required
+ *     `name` attribute of `comp-filter`/`prop-filter`/`param-filter` unchecked
+ *     (a warning, turned into ErrorException by esn.php's error handler). We
+ *     handle REPORT ourselves, like Sabre's core handler does, and report a
+ *     body deserialisation error as 400. Errors raised while running the
+ *     report itself are left untouched.
  *
  *  2. A malformed body can make Sabre's deserialiser spin forever instead of
  *     raising a parse error. `Sabre\Xml\Deserializer\keyValue()` (used for
@@ -54,10 +62,24 @@ class ReportBodyValidationPlugin extends ServerPlugin {
     function httpReport(RequestInterface $request, ResponseInterface $response) {
         $this->assertWellFormedBody($request, $response);
 
+        $result = $this->parseReportBody($request, $rootElementName);
+
+        if ($this->server->emit('report', [$rootElementName, $result, $request->getPath()])) {
+            // No plugin handled the report
+            throw new ReportNotSupported();
+        }
+
+        // Interrupt the event chain: the REPORT has been handled
+        return false;
+    }
+
+    private function parseReportBody(RequestInterface $request, &$rootElementName) {
         try {
-            return $this->server->getPlugin('core')->httpReport($request, $response);
+            return $this->server->xml->parse($request->getBody(), $request->getUrl(), $rootElementName);
         } catch (ParseException $e) {
             throw new BadRequest('The REPORT request body is not a valid XML document: ' . $e->getMessage());
+        } catch (InvalidDataException | \ErrorException $e) {
+            throw new BadRequest('The REPORT request body is invalid: ' . $e->getMessage());
         }
     }
 

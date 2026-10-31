@@ -513,6 +513,28 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals([], $result);
     }
 
+    function testFindByUriResourceAddressMustMatchItsDomain() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertNull($backend->findByUri('mailto:' . self::RESOURCE_ID, 'principals/resources'));
+        $this->assertNull($backend->findByUri('mailto:' . self::RESOURCE_ID . '@external.example', 'principals/resources'));
+        $this->assertSame('principals/resources/' . self::RESOURCE_ID,
+            $backend->findByUri('mailto:' . self::RESOURCE_ID . '@example.com', 'principals/resources'));
+    }
+
+    function testFindByUriUserAddressIgnoresAsciiCaseOnly() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertSame('principals/users/' . self::USER_ID,
+            $backend->findByUri('mailto:USER@Example.COM', 'principals/users'));
+        $this->assertSame('principals/users/' . self::USER_WITH_NO_LASTNAME,
+            $backend->findByUri('mailto:usernolast@example.com', 'principals/users'));
+        // U+017F LATIN SMALL LETTER LONG S folds to 's' in Unicode
+        $this->assertNull($backend->findByUri("mailto:u\u{017F}er@example.com", 'principals/users'));
+        $this->assertNull($backend->findByUri("mailto:admin@example.com\n", 'principals/users'));
+        $this->assertNull($backend->findByUri('mailto:user@example.co', 'principals/users'));
+    }
+
     function testUpdatePrincipal() {
         $this->expectException(\Sabre\DAV\Exception\MethodNotAllowed::class);
         $backend = new Mongo(self::$esndb, self::$tenant);

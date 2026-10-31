@@ -348,7 +348,8 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
     }
 
     function testAfterPropFindWithANonStringSubscriptionDisplayName() {
-        $this->carddavBackend->createAddressBook('principals/users/54b64eadf6d7d8e41d263e0e', 'sourceBook', ['{DAV:}displayname' => 'Source']);
+        $sourceBookId = $this->carddavBackend->createAddressBook('principals/users/54b64eadf6d7d8e41d263e0e', 'sourceBook', ['{DAV:}displayname' => 'Source']);
+        $this->carddavBackend->setPublishStatus(['id' => $sourceBookId], '{DAV:}read');
         $this->carddavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0f', 'arrayName', [
             '{DAV:}displayname' => ['{http://example.com/ns}name' => 'n'],
             '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/54b64eadf6d7d8e41d263e0e/sourceBook', false)

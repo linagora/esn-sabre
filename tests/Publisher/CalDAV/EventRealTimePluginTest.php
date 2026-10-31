@@ -313,6 +313,66 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($data['event'], 'event');
     }
 
+    function testInviteeWithoutInstanceIsNotNotifiedWithAnotherCalendarPath() {
+        $plugin = $this->pluginWithCalendarsForUser([
+            ['principals/users/owner', [['id' => ['cal-id', 'i0'], 'uri' => 'cal']]],
+            ['principals/users/inv1', []],
+            ['principals/users/inv2', [['id' => ['cal-id', 'i2'], 'uri' => 'cal-inv2']]],
+        ]);
+
+        $this->notifyInvites($plugin, [
+            new \Sabre\DAV\Xml\Element\Sharee(['principal' => 'principals/users/owner', 'access' => 1, 'inviteStatus' => 2]),
+            new \Sabre\DAV\Xml\Element\Sharee(['principal' => 'principals/users/inv1', 'access' => 2, 'inviteStatus' => 2]),
+            new \Sabre\DAV\Xml\Element\Sharee(['principal' => 'principals/users/inv2', 'access' => 2, 'inviteStatus' => 2]),
+        ]);
+
+        $this->assertEquals(
+            ['/calendars/owner/cal/e.ics', '/calendars/inv2/cal-inv2/e.ics'],
+            $this->eventPaths($plugin)
+        );
+    }
+
+    function testFirstInviteeWithoutInstanceGetsNoMessage() {
+        $plugin = $this->pluginWithCalendarsForUser([
+            ['principals/users/inv1', []],
+            ['principals/users/inv2', [['id' => ['cal-id', 'i2'], 'uri' => 'cal-inv2']]],
+        ]);
+
+        $this->notifyInvites($plugin, [
+            new \Sabre\DAV\Xml\Element\Sharee(['principal' => 'principals/users/inv1', 'access' => 2, 'inviteStatus' => 2]),
+            new \Sabre\DAV\Xml\Element\Sharee(['principal' => 'principals/users/inv2', 'access' => 2, 'inviteStatus' => 2]),
+        ]);
+
+        $this->assertEquals(['/calendars/inv2/cal-inv2/e.ics'], $this->eventPaths($plugin));
+    }
+
+    private function pluginWithCalendarsForUser(array $calendarsForUser) {
+        $backend = $this->createMock(\Sabre\CalDAV\Backend\BackendInterface::class);
+        $backend->method('getCalendarsForUser')->willReturnMap($calendarsForUser);
+
+        $server = new \Sabre\DAV\Server([]);
+        $server->tree = $this->getMockBuilder('\Sabre\DAV\Tree')->disableOriginalConstructor()->getMock();
+        $server->tree->method('getNodeForPath')->willReturn(new \Sabre\DAV\SimpleCollection('cal'));
+
+        $plugin = new EventRealTimePlugin(new ClientMock(), $backend);
+        $plugin->initialize($server);
+
+        return $plugin;
+    }
+
+    private function notifyInvites(EventRealTimePlugin $plugin, array $invites) {
+        $event = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nDTSTART:20160209T113000Z\r\nSUMMARY:test\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $dataMessage = ['event' => \Sabre\VObject\Reader::read($event)];
+        $options = ['calendarid' => 'cal-id', 'objectUri' => 'e.ics', 'action' => 'CREATED'];
+
+        (new \ReflectionMethod(EventRealTimePlugin::class, 'notifyInvites'))
+            ->invoke($plugin, $invites, $dataMessage, $options);
+    }
+
+    private function eventPaths(EventRealTimePlugin $plugin) {
+        return array_map(fn($message) => $message['data']['eventPath'], $plugin->getMessages());
+    }
+
 }
 
 class ClientMock implements \ESN\Publisher\Publisher {

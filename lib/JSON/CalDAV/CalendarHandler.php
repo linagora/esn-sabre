@@ -2,6 +2,7 @@
 
 namespace ESN\JSON\CalDAV;
 
+use ESN\DAV\Sharing\ShareeHrefValidator;
 use ESN\Utils\Utils;
 use \Sabre\DAV\Exception\Forbidden;
 use \Sabre\VObject,
@@ -452,10 +453,11 @@ class CalendarHandler {
 
     public function updateSharees($path, $jsonData) {
         $sharingPlugin = $this->server->getPlugin('sharing');
+        $hrefValidator = new ShareeHrefValidator($this->server);
 
         $sharees = array_merge(
-            $this->buildShareesToSet($jsonData->share->set ?? []),
-            $this->buildShareesToRemove($jsonData->share->remove ?? [])
+            $this->buildShareesToSet($jsonData->share->set ?? [], $hrefValidator),
+            $this->buildShareesToRemove($jsonData->share->remove ?? [], $hrefValidator)
         );
 
         $sharingPlugin->shareResource($path, $sharees);
@@ -466,7 +468,7 @@ class CalendarHandler {
         return [200, null];
     }
 
-    private function buildShareesToSet($shareesToSet): array {
+    private function buildShareesToSet($shareesToSet, ShareeHrefValidator $hrefValidator): array {
         $sharees = [];
 
         foreach ($shareesToSet as $sharee) {
@@ -483,7 +485,7 @@ class CalendarHandler {
             }
 
             $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([
-                'href'       => $sharee->{'dav:href'},
+                'href'       => $hrefValidator->validate($sharee->{'dav:href'} ?? null),
                 'properties' => $properties,
                 'access'     => $access,
                 'comment'    => isset($sharee->summary) ? $sharee->summary : null
@@ -510,12 +512,12 @@ class CalendarHandler {
         return null;
     }
 
-    private function buildShareesToRemove($shareesToRemove): array {
+    private function buildShareesToRemove($shareesToRemove, ShareeHrefValidator $hrefValidator): array {
         $sharees = [];
 
         foreach ($shareesToRemove as $sharee) {
             $sharees[] = new \Sabre\DAV\Xml\Element\Sharee([
-                'href'   => $sharee->{'dav:href'},
+                'href'   => $hrefValidator->validate($sharee->{'dav:href'} ?? null),
                 'access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS
             ]);
         }

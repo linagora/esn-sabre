@@ -2,6 +2,7 @@
 
 namespace ESN\JSON;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\DAV\ServerPlugin;
 use Sabre\VObject\Document;
 use Sabre\VObject\ITip\Message;
@@ -2022,6 +2023,62 @@ END:VCALENDAR
         $this->assertCount(count($before), $after);
         $this->assertEquals('principals/users/54b64eadf6d7d8e41d263e0f', $after[0]->principal);
         $this->assertEquals(\Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER, $after[0]->access);
+    }
+
+    #[DataProvider('invalidShareeHrefs')]
+    function testCalendarUpdateShareesRejectsInvalidHrefToSet($href) {
+        $this->assertInvalidShareeHrefIsRejected([
+            'share' => ['set' => [['dav:href' => $href, 'dav:read-write' => true]]]
+        ]);
+    }
+
+    #[DataProvider('invalidShareeHrefs')]
+    function testCalendarUpdateShareesRejectsInvalidHrefToRemove($href) {
+        $this->assertInvalidShareeHrefIsRejected([
+            'share' => ['remove' => [['dav:href' => $href]]]
+        ]);
+    }
+
+    function testCalendarUpdateShareesRejectsMissingHref() {
+        $this->assertInvalidShareeHrefIsRejected([
+            'share' => ['set' => [['dav:read-write' => true]]]
+        ]);
+    }
+
+    static function invalidShareeHrefs() {
+        return [[''], ['ma'], ['mailto:'], ['mailto:not-an-email'], ['principals/users/}2'], [42]];
+    }
+
+    function testCalendarUpdateShareesAcceptsExistingPrincipalHref() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+        $request->setBody(json_encode([
+            'share' => ['set' => [['dav:href' => 'principals/users/54b64eadf6d7d8e41d263e0e', 'dav:read' => true]]]
+        ]));
+
+        $response = $this->request($request);
+
+        $this->assertEquals(200, $response->status);
+    }
+
+    private function assertInvalidShareeHrefIsRejected($body) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+        $before = $this->caldavBackend->getInvites($this->cal['id']);
+
+        $request->setBody(json_encode($body));
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertEquals($before, $this->caldavBackend->getInvites($this->cal['id']));
     }
 
     function testCalendarUpdateInviteStatus() {

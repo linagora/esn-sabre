@@ -18,6 +18,11 @@ use \Sabre\VObject,
  */
 class CalendarHandler {
     use ValidatesResourceIds;
+    use ValidatesPropertyTypes;
+
+    private const WRITABLE_JSON_PROPERTIES = ['dav:name', 'caldav:description', 'apple:color', 'apple:order'];
+
+    private const SHAREE_JSON_PROPERTIES = ['common-name', 'summary'];
 
     private const CALENDAR_JSON_PROPERTIES = [
         '{DAV:}displayname' => 'dav:name',
@@ -43,7 +48,7 @@ class CalendarHandler {
     public function createCalendar($homePath, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
-        if (!$this->isValidResourceId($jsonData->id ?? null) || $this->hasXmlIllegalText($jsonData)) {
+        if (!$this->isValidResourceId($jsonData->id ?? null) || $this->hasInvalidPropertyValue($jsonData)) {
             return [400, null];
         }
 
@@ -71,7 +76,7 @@ class CalendarHandler {
         // List of read-only properties that cannot be modified
         $readonlyProps = ['dav:getetag', 'dav:getctag', 'calendarserver:ctag'];
 
-        if ($this->hasXmlIllegalText($jsonData)) {
+        if ($this->hasInvalidPropertyValue($jsonData)) {
             return [400, null];
         }
 
@@ -90,6 +95,11 @@ class CalendarHandler {
         $result = $this->server->updateProperties($nodePath, $davProps);
 
         return [$this->statusCodeFromUpdateResult($result), null];
+    }
+
+    private function hasInvalidPropertyValue($jsonData): bool {
+        return $this->hasIllTypedProperty($jsonData, self::WRITABLE_JSON_PROPERTIES)
+            || $this->hasXmlIllegalText($jsonData);
     }
 
     private function hasXmlIllegalText($jsonData): bool {
@@ -451,10 +461,16 @@ class CalendarHandler {
     }
 
     public function updateSharees($path, $jsonData) {
+        $shareesToSet = $jsonData->share->set ?? [];
+
+        if ($this->hasIllTypedSharee($shareesToSet)) {
+            return [400, null];
+        }
+
         $sharingPlugin = $this->server->getPlugin('sharing');
 
         $sharees = array_merge(
-            $this->buildShareesToSet($jsonData->share->set ?? []),
+            $this->buildShareesToSet($shareesToSet),
             $this->buildShareesToRemove($jsonData->share->remove ?? [])
         );
 
@@ -464,6 +480,11 @@ class CalendarHandler {
         $this->server->httpResponse->setHeader('X-Sabre-Status', 'everything-went-well');
 
         return [200, null];
+    }
+
+    private function hasIllTypedSharee($shareesToSet): bool {
+        return is_array($shareesToSet) && !empty(array_filter($shareesToSet, fn($sharee) =>
+            $this->hasIllTypedProperty($sharee, self::SHAREE_JSON_PROPERTIES)));
     }
 
     private function buildShareesToSet($shareesToSet): array {

@@ -194,6 +194,75 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals(403, $response->status);
     }
 
+    function testXmlProppatchSetDisplaynameOnContactsAddressBookIsRefused() {
+        $this->createDefaultAddressBook('contacts');
+
+        $response = $this->xmlProppatch('contacts',
+            '<d:set><d:prop><d:displayname>Renamed</d:displayname></d:prop></d:set>');
+
+        $this->assertEquals(207, $response->status);
+        $this->assertStringContainsString('403 Forbidden', $response->getBodyAsString());
+        $this->assertEquals('contacts', $this->getAddressBookByUri('contacts')['{DAV:}displayname']);
+    }
+
+    function testXmlProppatchSetDescriptionOnCollectedAddressBookIsRefused() {
+        $this->createDefaultAddressBook('collected');
+
+        $response = $this->xmlProppatch('collected',
+            '<d:set><d:prop><card:addressbook-description>Changed</card:addressbook-description></d:prop></d:set>');
+
+        $this->assertEquals(207, $response->status);
+        $this->assertStringContainsString('403 Forbidden', $response->getBodyAsString());
+        $this->assertEquals('collected description',
+            $this->getAddressBookByUri('collected')['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+    }
+
+    function testXmlProppatchRemoveDisplaynameOnCollectedAddressBookIsRefused() {
+        $this->createDefaultAddressBook('collected');
+
+        $response = $this->xmlProppatch('collected',
+            '<d:remove><d:prop><d:displayname/></d:prop></d:remove>');
+
+        $this->assertEquals(207, $response->status);
+        $this->assertStringContainsString('403 Forbidden', $response->getBodyAsString());
+        $this->assertEquals('collected', $this->getAddressBookByUri('collected')['{DAV:}displayname']);
+    }
+
+    function testXmlProppatchSetDisplaynameOnOtherAddressBookIsAllowed() {
+        $response = $this->xmlProppatch('book1',
+            '<d:set><d:prop><d:displayname>Renamed</d:displayname></d:prop></d:set>');
+
+        $this->assertEquals(207, $response->status);
+        $this->assertStringContainsString('200 OK', $response->getBodyAsString());
+        $this->assertEquals('Renamed', $this->getAddressBookByUri('book1')['{DAV:}displayname']);
+    }
+
+    private function createDefaultAddressBook(string $uri) {
+        $this->carddavBackend->createAddressBook($this->carddavAddressBook['principaluri'], $uri, [
+            '{DAV:}displayname' => $uri,
+            '{urn:ietf:params:xml:ns:carddav}addressbook-description' => $uri . ' description'
+        ]);
+    }
+
+    private function xmlProppatch(string $addressBookUri, string $update) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'PROPPATCH',
+            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/' . $addressBookUri,
+        ]);
+        $request->setBody('<?xml version="1.0"?>'
+            . '<d:propertyupdate xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav">'
+            . $update . '</d:propertyupdate>');
+
+        return $this->request($request);
+    }
+
+    private function getAddressBookByUri(string $uri): array {
+        $addressBooks = $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']);
+
+        return array_values(array_filter($addressBooks, fn($addressBook) => $addressBook['uri'] === $uri))[0];
+    }
+
     function testProppatchAddressBook() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',

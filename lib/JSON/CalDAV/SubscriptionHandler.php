@@ -16,6 +16,9 @@ use \Sabre\DAV;
  */
 class SubscriptionHandler {
     use ValidatesResourceIds;
+    use ValidatesPropertyTypes;
+
+    private const WRITABLE_JSON_PROPERTIES = ['dav:name', 'apple:color', 'apple:order'];
 
     protected $server;
     protected $currentUser;
@@ -28,7 +31,7 @@ class SubscriptionHandler {
     public function createSubscription($homePath, $jsonData) {
         $issetdef = $this->propertyOrDefault($jsonData);
 
-        if (!$this->isValidResourceId($jsonData->id ?? null)) {
+        if (!$this->isValidResourceId($jsonData->id ?? null) || $this->hasIllTypedProperty($jsonData, self::WRITABLE_JSON_PROPERTIES)) {
             return [400, null];
         }
 
@@ -83,6 +86,10 @@ class SubscriptionHandler {
     }
 
     public function changeSubscriptionProperties($nodePath, $jsonData) {
+        if ($this->hasIllTypedProperty($jsonData, self::WRITABLE_JSON_PROPERTIES)) {
+            return [400, null];
+        }
+
         $returncode = 204;
         $davProps = [];
         $propnameMap = [

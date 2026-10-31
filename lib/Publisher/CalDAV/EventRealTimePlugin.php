@@ -284,25 +284,35 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     private function notifyInvites($invites, $dataMessage, $options) {
-        $calendarUri = null;
-        $eventCalendar = null;
-
         foreach($invites as $user) {
             if($user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
                 continue;
             }
 
             $inviteeCalendar = $this->findInviteeCalendar($user->principal, $options['calendarid']);
-            if ($inviteeCalendar !== null) {
-                list($calendarUri, $eventCalendar) = $inviteeCalendar;
+            // An invitee without an instance of the calendar has no path to be notified on
+            if ($inviteeCalendar === null) {
+                continue;
             }
 
-            $dataMessage['event'] = Utils::hidePrivateEventInfoForUser($dataMessage['event'], $eventCalendar, $user->principal);
-
-            $dataMessage['eventPath'] = Utils::objectPathFromUri($user->principal,  $calendarUri, $options['objectUri']);
-
-            $this->createMessage($this->EVENT_TOPICS['EVENT_'.$options['action']], $dataMessage);
+            $this->createMessage(
+                $this->EVENT_TOPICS['EVENT_'.$options['action']],
+                $this->buildInviteeMessage($dataMessage, $user->principal, $inviteeCalendar, $options['objectUri'])
+            );
         }
+    }
+
+    /**
+     * Each invitee gets its own copy of the original event, sanitised for that
+     * invitee only, so that sanitising never leaks from one invitee to the next.
+     */
+    private function buildInviteeMessage($dataMessage, $principal, array $inviteeCalendar, $objectUri): array {
+        list($calendarUri, $eventCalendar) = $inviteeCalendar;
+
+        $dataMessage['event'] = Utils::hidePrivateEventInfoForUser($dataMessage['event'], $eventCalendar, $principal);
+        $dataMessage['eventPath'] = Utils::objectPathFromUri($principal, $calendarUri, $objectUri);
+
+        return $dataMessage;
     }
 
     /**

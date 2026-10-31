@@ -24,13 +24,20 @@ class SubscriptionSource {
 
         $parts = explode('/', trim($source, '/'));
 
-        if (count($parts) !== 3 || $parts[0] !== self::PREFIX
-            || array_intersect($parts, ['', '.', '..'])
-            || preg_match('/[?#]/', $parts[1] . $parts[2])) {
-            return null;
-        }
+        return self::isCalendarPath($parts) ? [$parts[1], $parts[2]] : null;
+    }
 
-        return [$parts[1], $parts[2]];
+    private static function isCalendarPath(array $parts) {
+        return self::hasCalendarShape($parts) && self::hasPlainSegments($parts);
+    }
+
+    private static function hasCalendarShape(array $parts) {
+        return count($parts) === 3 && $parts[0] === self::PREFIX;
+    }
+
+    private static function hasPlainSegments(array $parts) {
+        return !array_intersect($parts, ['', '.', '..'])
+            && !preg_match('/[?#]/', implode('', $parts));
     }
 
     /**

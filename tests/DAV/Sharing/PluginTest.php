@@ -55,6 +55,25 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->sharePlugin->shareResource($path, $sharees);
     }
 
+    function testShareResourceRejectsShareeWithNonTextualHref() {
+        $this->expectException(\Sabre\DAV\Exception\BadRequest::class);
+
+        // <D:href>mai<CS:publish-calendar/>lto:...</D:href> deserialises to an array.
+        $sharees = [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'       => ['mai', ['name' => '{http://calendarserver.org/ns/}publish-calendar'], 'lto:johndoe@example.org'],
+                'properties' => [],
+                'access'     => Plugin::ACCESS_READ,
+                'comment'    => ''
+            ])
+        ];
+
+        $this->aclMock->expects($this->never())
+            ->method('checkPrivileges');
+
+        $this->sharePlugin->shareResource('/calendars/54b64eadf6d7d8e41d263e0f/calendar1', $sharees);
+    }
+
     function testTechnicalTokenCanShareTeamCalendarWithoutOwnerAcl() {
         $path = '/calendars/' . self::TEAM_CALENDAR_ID . '/' . self::TEAM_CALENDAR_ID;
         $principalUri = 'principals/team-calendars/' . self::TEAM_CALENDAR_ID;

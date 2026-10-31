@@ -33,6 +33,13 @@ class Plugin extends \Sabre\DAV\Sharing\Plugin {
         if(!$domainId)
             throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
 
+        // An href holding child elements deserialises to an array.
+        foreach ($sharees as $sharee) {
+            if (!is_string($sharee->href)) {
+                throw new \Sabre\DAV\Exception\BadRequest('Every sharee requires a textual href');
+            }
+        }
+
         $node = $this->server->tree->getNodeForPath($path);
 
         if ($this->esnDb !== null) {

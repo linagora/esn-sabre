@@ -478,16 +478,20 @@ class CalendarHandler {
         }
 
         foreach ($sharees as $sharee) {
-            if (!is_object($sharee)) {
-                throw new DAV\Exception\BadRequest("Each share.$member entry must be an object");
-            }
-            $href = $sharee->{'dav:href'} ?? null;
-            if (!is_string($href) || $href === '') {
-                throw new DAV\Exception\BadRequest("share.$member dav:href must be a non-empty string");
-            }
+            $this->validateShareeEntry($sharee, $member);
         }
 
         return $sharees;
+    }
+
+    private function validateShareeEntry($sharee, string $member): void {
+        if (!is_object($sharee)) {
+            throw new DAV\Exception\BadRequest("Each share.$member entry must be an object");
+        }
+        $href = $sharee->{'dav:href'} ?? null;
+        if (!is_string($href) || $href === '') {
+            throw new DAV\Exception\BadRequest("share.$member dav:href must be a non-empty string");
+        }
     }
 
     private function buildShareesToSet($shareesToSet): array {

@@ -165,13 +165,37 @@ class AMQPSchedulePlugin extends Plugin {
 
     private function mergeReplyOccurrences(string $pendingReply, ITip\Message $iTipMessage): string {
         // Each broker REPLY already contains all VTIMEZONEs from the same source calendar.
+        // A later REPLY for an occurrence already pending replaces it: the latest answer wins,
+        // and the organizer never receives two VEVENTs for one instant.
         $reply = Reader::read($pendingReply);
         foreach ($iTipMessage->message->select('VEVENT') as $event) {
+            $occurrence = $this->occurrenceKey($event);
+            array_map(
+                fn($pending) => $reply->remove($pending),
+                array_filter($reply->select('VEVENT'), fn($pending) => $this->occurrenceKey($pending) === $occurrence)
+            );
             $reply->add(clone $event);
         }
         $result = $reply->serialize();
         $reply->destroy();
         return $result;
+    }
+
+    /**
+     * Identifies the occurrence a VEVENT answers for: 'master' without RECURRENCE-ID,
+     * otherwise its instant as a UTC timestamp, so that a floating and a UTC
+     * RECURRENCE-ID for the same instant designate the same occurrence.
+     */
+    private function occurrenceKey(\Sabre\VObject\Component $event): string {
+        $recurrenceId = $event->{'RECURRENCE-ID'};
+        if (!$recurrenceId) {
+            return 'master';
+        }
+        try {
+            return (string)$recurrenceId->getDateTime(new \DateTimeZone('UTC'))->getTimestamp();
+        } catch (\Throwable $e) {
+            return (string)$recurrenceId;
+        }
     }
 
     private function assertCanAccessItipRequestPath(RequestInterface $request): void {

@@ -35,6 +35,15 @@ class Utils {
         return false;
     }
 
+    /**
+     * The forms a DAV path may be stored in: as is, with a leading slash, a trailing slash, or both.
+     */
+    static function slashVariants(string $path): array {
+        $path = trim($path, '/');
+
+        return [ $path, '/' . $path, $path . '/', '/' . $path . '/' ];
+    }
+
     static function calendarPathFromUri($principal, $calendarUri) {
         $uriExploded = explode('/', $principal);
 

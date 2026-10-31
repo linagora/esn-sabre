@@ -48,6 +48,13 @@ class SubscriptionHandler {
             return [404, null];
         }
 
+        // Same rule as an XML MKCOL (Subscriptions\Plugin): only calendars/<home>/<uri> designates a calendar, other
+        // stored forms are neither resolved by the subscription nor deleted when the source is unpublished.
+        if (!preg_match('|^calendars/[^/]+/[^/]+$|', $sourcePath)
+            || !$this->server->tree->getNodeForPath($sourcePath) instanceof \Sabre\CalDAV\Calendar) {
+            return [400, null];
+        }
+
         // Check if user has read access to the source calendar
         // This will reject subscriptions to private calendars if the user doesn't have explicit access
         $aclPlugin = $this->server->getPlugin('acl');

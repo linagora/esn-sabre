@@ -113,6 +113,29 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
         ];
     }
 
+    #[DataProvider('sourcesThatAreNotAddressBooks')]
+    function testCreateSubscriptionAddressBookRequiresAnAddressBookSource($href) {
+        $this->carddavBackend->setPublishStatus($this->carddavAddressBook, '{DAV:}read');
+
+        $response = $this->makeRequest('POST', '/addressbooks/' . $this->userTestId2 . '.json', [
+            'id' => 'sub1',
+            'dav:name' => 'user1',
+            'openpaas:source' => ['_links' => ['self' => ['href' => $href]]]
+        ]);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount(0, $this->carddavBackend->getSubscriptionsForUser('principals/users/' . $this->userTestId2));
+    }
+
+    static function sourcesThatAreNotAddressBooks() {
+        $home = '/addressbooks/54b64eadf6d7d8e41d263e0f';
+
+        return [
+            'card' => [$home . '/book1/card1.json'],
+            'address book home' => [$home . '.json']
+        ];
+    }
+
     #[DataProvider('invalidSubscriptionSources')]
     function testCreateSubscriptionAddressBookRejectsInvalidSource($source) {
         $response = $this->makeRequest('POST', '/addressbooks/' . $this->userTestId2 . '.json', [

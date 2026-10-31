@@ -1266,6 +1266,28 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         $this->assertEquals('', $backend->getCalendarPublicRight($newId));
     }
 
+    function testUnpublishingDeletesSubscriptionsWhateverTheSlashesOfTheirSource() {
+        $backend = $this->getBackend();
+        $calendarInfo = ['principaluri' => 'principals/users/userID', 'uri' => 'published'];
+        $calendarId = $backend->createCalendar($calendarInfo['principaluri'], $calendarInfo['uri'], []);
+        $backend->saveCalendarPublicRight($calendarId, '{DAV:}read', $calendarInfo);
+        $sources = ['calendars/userID/published', '/calendars/userID/published', 'calendars/userID/published/', '/calendars/userID/published/'];
+        foreach ($sources as $index => $source) {
+            $backend->createSubscription('principals/users/subscriber', 'sub' . $index, [
+                '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href($source, false)
+            ]);
+        }
+        $backend->createSubscription('principals/users/subscriber', 'other', [
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('calendars/userID/published2', false)
+        ]);
+        $this->assertCount(4, $backend->getSubscribers('calendars/userID/published'));
+
+        $backend->saveCalendarPublicRight($calendarId, null, $calendarInfo);
+
+        $remaining = $backend->getSubscriptionsForUser('principals/users/subscriber');
+        $this->assertEquals(['other'], array_column($remaining, 'uri'));
+    }
+
     function testSetCalendarPublicRightWithWrongAttribute() {
         $backend = $this->getBackend();
         try {

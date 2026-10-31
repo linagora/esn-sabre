@@ -1426,6 +1426,35 @@ END:VCALENDAR
         $this->assertEquals('99', $cal['{http://apple.com/ns/ical/}calendar-order']);
     }
 
+    #[\PHPUnit\Framework\Attributes\DataProvider('subscriptionSourcesThatAreNotCalendars')]
+    function testCreateSubscriptionRequiresACalendarSource($href) {
+        $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'sourceEvent.ics',
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:sourceEvent\r\nDTSTART:20250101T100000Z\r\nDTEND:20250101T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
+        ));
+        $request->setBody(json_encode([
+            'id' => 'ID',
+            'dav:name' => 'SUB NAME',
+            'calendarserver:source' => [ 'href' => $href ]
+        ]));
+
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount(1, $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']));
+    }
+
+    static function subscriptionSourcesThatAreNotCalendars() {
+        return [
+            'event' => ['/calendars/54b64eadf6d7d8e41d263e0e/publicCal1/sourceEvent.ics.json'],
+            'calendar home' => ['/calendars/54b64eadf6d7d8e41d263e0e.json']
+        ];
+    }
+
     function testCreateCalendarMissingId() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',

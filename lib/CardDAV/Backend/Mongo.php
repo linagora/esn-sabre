@@ -7,6 +7,7 @@ use ESN\DAV\Sharing\Plugin as SPlugin;
 use ESN\DAV\SortOrder;
 use ESN\CardDAV\ContactFilters;
 use ESN\CardDAV\ContactSort;
+use ESN\Utils\Utils;
 
 #[\AllowDynamicProperties]
 class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
@@ -335,8 +336,14 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $collection = $this->db->selectCollection($this->addressBooksTableName);
         $found = [];
         // Served by the { principaluri, uri } index
-        foreach ($collection->find([ '$or' => array_values($or) ], [ 'projection' => self::MINIMAL_ADDRESSBOOK_FIELDS ]) as $row) {
-            $found[] = [ 'id' => (string)$row['_id'], 'principaluri' => $row['principaluri'], 'uri' => $row['uri'] ];
+        $projection = self::MINIMAL_ADDRESSBOOK_FIELDS + [ 'public_right' => 1 ];
+        foreach ($collection->find([ '$or' => array_values($or) ], [ 'projection' => $projection ]) as $row) {
+            $found[] = [
+                'id' => (string)$row['_id'],
+                'principaluri' => $row['principaluri'],
+                'uri' => $row['uri'],
+                'public_right' => $row['public_right'] ?? null
+            ];
         }
 
         return $found;
@@ -800,9 +807,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         }
     }
 
+    /**
+     * Subscriptions to the address book at addressbooks/<home>/<uri>, also when their source was stored with a
+     * leading or trailing slash, which they are resolved the same with.
+     */
     function getSubscriptionsBySource($source) {
         $collection = $this->db->selectCollection($this->addressBookSubscriptionsTableName);
-        $query = [ 'source' => $source ];
+        $query = [ 'source' => [ '$in' => Utils::slashVariants($source) ] ];
 
         $res = $collection->find($query, [ 'projection' => self::MINIMAL_ADDRESSBOOK_FIELDS ]);
 

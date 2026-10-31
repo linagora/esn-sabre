@@ -190,7 +190,9 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
             $addressBooks[] = [
                 'principaluri' => 'principals/users/' . $parts[1],
                 'uri' => $parts[2],
-                'path' => $this->homePath($subscription['uri'])
+                'path' => $this->homePath($subscription['uri']),
+                // Unpublishing deletes the subscriptions, this also leaves out the ones it missed
+                'published' => true
             ];
         }
 
@@ -239,20 +241,23 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
 
     /**
      * Paths of address books known by principaluri + uri, keyed by id. When several resolve to the same address
-     * book the first one wins; those that no longer exist (deleted source) are left out.
+     * book the first one wins; those that no longer exist (deleted source), or are no longer published when they
+     * must be ('published' => true), are left out.
      */
     private function resolveAddressBookPaths(array $addressBooks): array {
-        $ids = [];
-        foreach ($this->carddavBackend->getAddressBooksByPrincipalAndUri($addressBooks) as $found) {
-            $ids[$found['principaluri'] . '/' . $found['uri']] = $found['id'];
+        $found = [];
+        foreach ($this->carddavBackend->getAddressBooksByPrincipalAndUri($addressBooks) as $row) {
+            $found[$row['principaluri'] . '/' . $row['uri']] = $row;
         }
 
         $paths = [];
         foreach ($addressBooks as $addressBook) {
-            $id = $ids[$addressBook['principaluri'] . '/' . $addressBook['uri']] ?? null;
-            if ($id !== null) {
-                $paths[$id] ??= $addressBook['path'];
+            $row = $found[$addressBook['principaluri'] . '/' . $addressBook['uri']] ?? null;
+            if ($row === null || (($addressBook['published'] ?? false) && empty($row['public_right']))) {
+                continue;
             }
+
+            $paths[$row['id']] ??= $addressBook['path'];
         }
 
         return $paths;

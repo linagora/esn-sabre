@@ -2767,4 +2767,54 @@ END:VCALENDAR
 
         $this->assertEquals(400, $response->status);
     }
+
+    public static function illTypedManagementBodies(): array {
+        $calendar = '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json';
+        $subscription = '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json';
+        $home = '/calendars/54b64eadf6d7d8e41d263e0f.json';
+
+        return [
+            'share.remove entry without href' => ['POST', $calendar, '{"share":{"remove":[{}]}}'],
+            'share.set entry without href' => ['POST', $calendar, '{"share":{"set":[{"dav:read":true}]}}'],
+            'share.set entry with non-string href' => ['POST', $calendar, '{"share":{"set":[{"dav:href":{},"dav:read":true}]}}'],
+            'share.set entry not an object' => ['POST', $calendar, '{"share":{"set":["mailto:a@b.c"]}}'],
+            'share.set not an array' => ['POST', $calendar, '{"share":{"set":"x"}}'],
+            'share.remove not an array' => ['POST', $calendar, '{"share":{"remove":"x"}}'],
+            'share not an object' => ['POST', $calendar, '{"share":"x"}'],
+            'calendar POST body not an object' => ['POST', $calendar, '[]'],
+            'calendar PROPPATCH null body' => ['PROPPATCH', $calendar, 'null'],
+            'calendar PROPPATCH non-JSON body' => ['PROPPATCH', $calendar, 'not json'],
+            'subscription PROPPATCH null body' => ['PROPPATCH', $subscription, 'null'],
+            'PROPFIND without prop' => ['PROPFIND', $calendar, '{}'],
+            'PROPFIND with string prop' => ['PROPFIND', $calendar, '{"prop":"acl"}'],
+            'PROPFIND with non-string prop entries' => ['PROPFIND', $calendar, '{"prop":[{}]}'],
+            'PROPFIND null body' => ['PROPFIND', $calendar, 'null'],
+            'home POST with object id' => ['POST', $home, '{"id":{}}'],
+            'home POST with array id' => ['POST', $home, '{"id":["a"]}'],
+            'home POST body not an object' => ['POST', $home, '"x"'],
+            'subscription creation with object id' => ['POST', $home, '{"id":{},"calendarserver:source":{"href":"/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json"}}'],
+            'subscription creation with non-string source href' => ['POST', $home, '{"id":"sub2","calendarserver:source":{"href":{}}}'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('illTypedManagementBodies')]
+    function testIllTypedManagementBodyIsBadRequest($method, $uri, $body) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => $method,
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => $uri,
+        ));
+        $request->setBody($body);
+
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+    }
+
+    function testCreateCalendarWithIntegerIdIsStillAccepted() {
+        $response = $this->makeRequest('POST', '/calendars/54b64eadf6d7d8e41d263e0f.json', ['id' => 42, 'dav:name' => 'Numeric']);
+
+        $this->assertEquals(201, $response->status);
+    }
 }

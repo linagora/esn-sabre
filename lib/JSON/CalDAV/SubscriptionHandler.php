@@ -33,7 +33,7 @@ class SubscriptionHandler {
 
         // Validate calendarserver:source exists and has a valid href
         $source = $issetdef('calendarserver:source');
-        if (!$source || !is_object($source) || !isset($source->href) || empty($source->href)) {
+        if (!$source || !is_object($source) || !isset($source->href) || !is_string($source->href) || $source->href === '') {
             return [400, null];
         }
 

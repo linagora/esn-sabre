@@ -8,6 +8,7 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
     private function prepareServer() {
         $server = new \Sabre\DAV\Server([]);
         $server->sapi = new \Sabre\HTTP\SapiMock();
+        $server->xml->elementMap['{urn:ietf:params:xml:ns:caldav}calendar-query'] = \Sabre\CalDAV\Xml\Request\CalendarQueryReport::class;
         $server->addPlugin(new ReportBodyValidationPlugin());
 
         return $server;
@@ -91,5 +92,53 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $response = $this->request('PROPFIND', '', ['Depth' => '0']);
 
         $this->assertEquals(207, $response->getStatus());
+    }
+
+    private function calendarQuery($compFilterAttributes, $timeRange) {
+        return '<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
+            . '<D:prop><D:getetag/></D:prop><C:filter><C:comp-filter ' . $compFilterAttributes . '>'
+            . '<C:comp-filter name="VEVENT">' . $timeRange . '</C:comp-filter>'
+            . '</C:comp-filter></C:filter></C:calendar-query>';
+    }
+
+    /**
+     * Runs the request with PHP errors mapped to ErrorException, as esn.php does.
+     */
+    private function requestWithErrorsAsExceptions($method, $body, array $headers = []) {
+        set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+            throw new \ErrorException($errstr, 0, $errno, $errfile, $errline);
+        });
+        try {
+            return $this->request($method, $body, $headers);
+        } finally {
+            restore_error_handler();
+        }
+    }
+
+    function testInvalidTimeRangeDateShouldAnswerBadRequest() {
+        $body = $this->calendarQuery('name="VCALENDAR"', '<C:time-range start="203501010T00Z"/>');
+
+        $response = $this->request('REPORT', $body, ['Depth' => '1']);
+
+        $this->assertEquals(400, $response->getStatus());
+        $this->assertStringContainsString('Sabre\DAV\Exception\BadRequest', $response->getBodyAsString());
+    }
+
+    function testCompFilterWithoutNameShouldAnswerBadRequest() {
+        $body = $this->calendarQuery('nme="VCALENDAR"', '<C:time-range start="20350101T000000Z"/>');
+
+        $response = $this->requestWithErrorsAsExceptions('REPORT', $body, ['Depth' => '1']);
+
+        $this->assertEquals(400, $response->getStatus());
+        $this->assertStringContainsString('Sabre\DAV\Exception\BadRequest', $response->getBodyAsString());
+    }
+
+    function testValidCalendarQueryShouldStillReachReportHandlers() {
+        $body = $this->calendarQuery('name="VCALENDAR"', '<C:time-range start="20350101T000000Z"/>');
+
+        $response = $this->request('REPORT', $body, ['Depth' => '1']);
+
+        $this->assertEquals(415, $response->getStatus());
+        $this->assertStringContainsString('ReportNotSupported', $response->getBodyAsString());
     }
 }

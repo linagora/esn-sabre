@@ -25,13 +25,21 @@ class ShareeHrefValidator {
         }
 
         if (stripos($href, self::MAILTO_PREFIX) === 0) {
-            if (!filter_var(substr($href, strlen(self::MAILTO_PREFIX)), FILTER_VALIDATE_EMAIL)) {
-                throw new BadRequest('dav:href is not a valid mailto: URI');
-            }
-
-            return $href;
+            return $this->validateMailto($href);
         }
 
+        return $this->validatePrincipal($href);
+    }
+
+    private function validateMailto(string $href): string {
+        if (!filter_var(substr($href, strlen(self::MAILTO_PREFIX)), FILTER_VALIDATE_EMAIL)) {
+            throw new BadRequest('dav:href is not a valid mailto: URI');
+        }
+
+        return $href;
+    }
+
+    private function validatePrincipal(string $href): string {
         if (!$this->isExistingPrincipal($href)) {
             throw new BadRequest('dav:href must be a mailto: URI or a principal');
         }

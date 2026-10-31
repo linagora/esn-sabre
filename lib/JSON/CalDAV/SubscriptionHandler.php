@@ -2,7 +2,8 @@
 
 namespace ESN\JSON\CalDAV;
 
-use ESN\DAV\SubscriptionSource;
+use ESN\CalDAV\Subscriptions\SubscriptionSource;
+use ESN\DAV\SubscriptionSource as SubscriptionSourceHref;
 use \Sabre\DAV;
 
 /**
@@ -38,7 +39,7 @@ class SubscriptionHandler {
             return [400, null];
         }
 
-        $sourcePath = SubscriptionSource::pathOf($this->server, $source->href);
+        $sourcePath = SubscriptionSourceHref::pathOf($this->server, $source->href);
 
         if (substr($sourcePath, -5) == '.json') {
             $sourcePath = substr($sourcePath, 0, -5);
@@ -114,23 +115,10 @@ class SubscriptionHandler {
         $subprops = $subscription->getProperties($propertiesList);
 
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
-            $sourceHref = $subprops['{http://calendarserver.org/ns/}source']->getHref();
+            // Same parser as the subscription node, so this reads the calendar it reads
+            $sourcePath = SubscriptionSource::toPath($subprops['{http://calendarserver.org/ns/}source']->getHref());
 
-            // Skip if source href is null or empty
-            if ($sourceHref === null || $sourceHref === '') {
-                return [404, null];
-            }
-
-            // Normalize href: extract path and trim leading slashes
-            $path = parse_url($sourceHref, PHP_URL_PATH);
-            $sourcePath = ltrim($path ?: $sourceHref, '/');
-
-            // Skip if source path is empty after normalization
-            if ($sourcePath === '') {
-                return [404, null];
-            }
-
-            if (!$this->server->tree->nodeExists($sourcePath)) {
+            if ($sourcePath === null || !$this->server->tree->nodeExists($sourcePath)) {
                 return [404, null];
             }
 

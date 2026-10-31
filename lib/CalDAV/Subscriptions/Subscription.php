@@ -92,27 +92,15 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
             return $this->sourceCalendarInfo ?: null;
         }
 
-        $source = $this->subscriptionInfo['source'] ?? null;
-        if (!$source) {
+        // Only an exact calendars/{principalId}/{calendarUri} path: anything else could
+        // resolve to another calendar than the one checked on write.
+        $parsedSource = SubscriptionSource::parse($this->subscriptionInfo['source'] ?? null);
+        if ($parsedSource === null) {
             $this->sourceCalendarInfo = false;
             return null;
         }
 
-        // Parse the source URL to extract principalUri and calendar URI
-        // Format: calendars/{principalId}/{calendarUri}
-        $sourcePath = trim($source, '/');
-        $parts = explode('/', $sourcePath);
-
-        // Only an exact calendars/{principalId}/{calendarUri} path: extra, empty or dot
-        // segments would make this resolve to another calendar than the one checked on write.
-        if (count($parts) !== 3 || $parts[0] !== 'calendars'
-            || array_intersect($parts, ['', '.', '..'])) {
-            $this->sourceCalendarInfo = false;
-            return null;
-        }
-
-        $principalId = $parts[1];
-        $calendarUri = $parts[2];
+        [$principalId, $calendarUri] = $parsedSource;
 
         $calendars = $this->caldavBackend->getCalendarsForUser($this->resolveSourcePrincipal($principalId));
         foreach ($calendars as $calendar) {

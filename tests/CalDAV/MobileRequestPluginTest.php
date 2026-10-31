@@ -39,7 +39,7 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
             'REQUEST_METHOD'    => 'POST',
             'HTTP_CONTENT_TYPE' => 'application/json',
             'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json',
         ));
 
         $sharees = [
@@ -54,7 +54,9 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         ];
 
         $delegationRequest->setBody(json_encode($sharees));
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0e');
         $response = $this->request($delegationRequest);
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0f');
 
         $this->assertEquals(200, $response->status);
 

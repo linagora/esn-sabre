@@ -2,6 +2,7 @@
 
 namespace ESN\JSON\CalDAV;
 
+use ESN\DAV\SubscriptionSource;
 use \Sabre\DAV;
 
 /**
@@ -37,15 +38,23 @@ class SubscriptionHandler {
             return [400, null];
         }
 
-        $sourcePath = $this->server->calculateUri($source->href);
+        $sourcePath = SubscriptionSource::pathOf($this->server, $source->href);
 
         if (substr($sourcePath, -5) == '.json') {
             $sourcePath = substr($sourcePath, 0, -5);
         }
 
+        if (!preg_match('|^calendars/[^/]+/[^/]+$|', $sourcePath)) {
+            return [400, null];
+        }
+
         // Check if source calendar exists
         if (!$this->server->tree->nodeExists($sourcePath)) {
             return [404, null];
+        }
+
+        if (!$this->server->tree->getNodeForPath($sourcePath) instanceof \Sabre\CalDAV\ICalendar) {
+            return [400, null];
         }
 
         // Check if user has read access to the source calendar

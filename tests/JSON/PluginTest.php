@@ -1426,6 +1426,35 @@ END:VCALENDAR
         $this->assertEquals('99', $cal['{http://apple.com/ns/ical/}calendar-order']);
     }
 
+    #[\PHPUnit\Framework\Attributes\DataProvider('unusableSubscriptionSources')]
+    function testCreateSubscriptionWithUnusableSourceIsBadRequest($href) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
+        ));
+        $request->setBody(json_encode([
+            'id' => 'sub1',
+            'dav:name' => 'S',
+            'calendarserver:source' => ['href' => $href]
+        ]));
+
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount(1, $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']));
+    }
+
+    static function unusableSubscriptionSources() {
+        return [
+            'url without path' => ['http://example.org'],
+            'unparsable url' => ['?://'],
+            'calendar home' => ['/calendars/54b64eadf6d7d8e41d263e0f'],
+            'address book' => ['/addressbooks/54b64eadf6d7d8e41d263e0f/contacts']
+        ];
+    }
+
     function testCreateCalendarMissingId() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',

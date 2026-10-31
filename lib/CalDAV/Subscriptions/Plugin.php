@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV\Subscriptions;
 
+use ESN\DAV\SubscriptionSource;
 use Sabre\CalDAV\Calendar;
 use Sabre\CalDAV\CalendarHome;
 use Sabre\CalDAV\Plugin as CalDAVPlugin;
@@ -113,11 +114,11 @@ class Plugin extends \Sabre\CalDAV\Subscriptions\Plugin {
      * @return DAV\Xml\Property\Href the canonical calendars/<home>/<uri> path that was checked
      */
     private function readableSource($source) {
-        if (!$source instanceof DAV\Xml\Property\Href || !$source->getHref()) {
+        if (!$source instanceof DAV\Xml\Property\Href) {
             throw new DAV\Exception\BadRequest('A subscription requires a source href');
         }
 
-        $sourcePath = $this->server->calculateUri($source->getHref());
+        $sourcePath = SubscriptionSource::pathOf($this->server, $source->getHref());
         if (!preg_match('|^calendars/[^/]+/[^/]+$|', $sourcePath)
             || !$this->server->tree->nodeExists($sourcePath)
             || !$this->server->tree->getNodeForPath($sourcePath) instanceof Calendar) {

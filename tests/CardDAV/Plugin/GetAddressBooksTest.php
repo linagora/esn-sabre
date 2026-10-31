@@ -199,6 +199,7 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
     function testGetSubscribedAddressBooks() {
         $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant($this->userTestId2, SERVER_MOCK_DOMAIN_ID));
 
+        $this->carddavBackend->setPublishStatus($this->carddavAddressBook, '{DAV:}read');
         $this->carddavBackend->createSubscription(
             'principals/users/'. $this->userTestId2,
             'user2Subscription1',
@@ -240,6 +241,7 @@ class GetAddressBooksTest extends \ESN\CardDAV\PluginTestBase {
     function testGetSubscribedAddressBooksReturnNumberOfContactsAsNull() {
         $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant($this->userTestId2, SERVER_MOCK_DOMAIN_ID));
 
+        $this->carddavBackend->setPublishStatus($this->carddavAddressBook, '{DAV:}read');
         $this->carddavBackend->createSubscription(
             'principals/users/'. $this->userTestId2,
             'user2Subscription1',

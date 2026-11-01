@@ -1495,6 +1495,7 @@ END:VCALENDAR
     }
 
     function testDeleteCalendarsOfHome() {
+        $this->authenticateAsTechnicalUser();
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',
             'HTTP_ACCEPT'       => 'application/json',
@@ -1519,6 +1520,58 @@ END:VCALENDAR
         $this->assertEquals(403, $response->status);
         $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
         $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
+    }
+
+    function testDeleteOwnCalendarHomeIsForbidden() {
+        $this->caldavBackend->createCalendar($this->cal['principaluri'], \ESN\CalDAV\Backend\Esn::EVENTS_URI, [
+            '{DAV:}displayname' => 'Calendar',
+        ]);
+
+        $response = $this->makeRequest('DELETE', '/calendars/54b64eadf6d7d8e41d263e0f', null);
+
+        $this->assertEquals(403, $response->status);
+        $this->assertContains(\ESN\CalDAV\Backend\Esn::EVENTS_URI, $this->calendarUrisOfUser1());
+    }
+
+    function testMoveOntoCalendarHomeIsForbidden() {
+        $calendarCount = count($this->calendarUrisOfUser1());
+
+        $response = $this->request(\Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'   => 'MOVE',
+            'REQUEST_URI'      => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/event1.ics',
+            'HTTP_DESTINATION' => '/calendars/54b64eadf6d7d8e41d263e0f',
+            'HTTP_OVERWRITE'   => 'T',
+        ]));
+
+        $this->assertEquals(403, $response->status);
+        $this->assertCount($calendarCount, $this->calendarUrisOfUser1());
+    }
+
+    function testCopyOntoCalendarHomeIsForbidden() {
+        $calendarCount = count($this->calendarUrisOfUser1());
+
+        $response = $this->request(\Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'   => 'COPY',
+            'REQUEST_URI'      => '/calendars/54b64eadf6d7d8e41d263e0e/newcal',
+            'HTTP_DESTINATION' => '/calendars/./54b64eadf6d7d8e41d263e0f',
+        ]));
+
+        $this->assertEquals(403, $response->status);
+        $this->assertCount($calendarCount, $this->calendarUrisOfUser1());
+    }
+
+    private function calendarUrisOfUser1() {
+        return array_column($this->caldavBackend->getCalendarsForUser($this->cal['principaluri']), 'uri');
+    }
+
+    private function authenticateAsTechnicalUser() {
+        // As in esn.php: the technical user holds every privilege. It has no node
+        // in the principal tree of the tests, so its (empty) membership is seeded.
+        $aclPlugin = $this->server->getPlugin('acl');
+        $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
+        (new \ReflectionProperty($aclPlugin, 'principalMembershipCache'))
+            ->setValue($aclPlugin, [PRINCIPALS_TECHNICAL_USER => []]);
+        $this->authBackend->setAuthTenant(new AuthTenant('technicalUser', SERVER_MOCK_DOMAIN_ID, TenantType::Technical));
     }
 
     function testPatchSubscription() {

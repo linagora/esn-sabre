@@ -76,6 +76,36 @@ class SubscriptionTest extends \ESN\DAV\ServerMock {
         $this->assertNull($this->storedSource('newsub'));
     }
 
+    #[\PHPUnit\Framework\Attributes\DataProvider('hrefsWithoutServerPath')]
+    function testMkcolSubscriptionShouldRejectASourceWithoutServerPath($source) {
+        $response = $this->mkcolSubscription('newsub', $source);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertNull($this->storedSource('newsub'));
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('hrefsWithoutServerPath')]
+    function testProppatchSubscriptionSourceShouldRejectASourceWithoutServerPath($source) {
+        $response = $this->proppatchSubscriptionSource($source);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertEquals($this->publicCalPath(), $this->storedSource('subscription1'));
+    }
+
+    static function hrefsWithoutServerPath() {
+        return [
+            'url without path' => ['http://example.org'],
+            'scheme only' => ['V://']
+        ];
+    }
+
+    function testMkcolSubscriptionShouldRejectAnAddressBookSource() {
+        $response = $this->mkcolSubscription('newsub', 'addressbooks/' . $this->user2Id() . '/contacts');
+
+        $this->assertEquals(400, $response->status);
+        $this->assertNull($this->storedSource('newsub'));
+    }
+
     function testProppatchSubscriptionSourceShouldStoreTheCheckedPathRatherThanDotSegments() {
         $source = 'calendars/' . $this->user2Id() . '/' . $this->calUser2['uri'] . '/../' . $this->publicCal['uri'];
 

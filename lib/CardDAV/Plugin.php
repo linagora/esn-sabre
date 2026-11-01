@@ -9,6 +9,7 @@ use \ESN\Utils\Utils as Utils;
 use \ESN\Utils\TenantType;
 use \ESN\Utils\AuthTenant;
 use ESN\DAV\SortOrder;
+use ESN\DAV\SubscriptionSource;
 
 #[\AllowDynamicProperties]
 class Plugin extends \ESN\JSON\BasePlugin {
@@ -474,12 +475,16 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         $sourcePath = $this->qualifySourcePath(
-            $this->server->calculateUri($this->subscriptionSourceHref($issetdef('openpaas:source')))
+            SubscriptionSource::pathOf($this->server, $this->subscriptionSourceHref($issetdef('openpaas:source')))
         );
 
         // Check if source addressbook exists
         if (!$this->server->tree->nodeExists($sourcePath)) {
             return [404, null];
+        }
+
+        if (!$this->server->tree->getNodeForPath($sourcePath) instanceof \Sabre\CardDAV\IAddressBook) {
+            return [400, null];
         }
 
         $privilege = $this->resolveSourcePrivileges($sourcePath);

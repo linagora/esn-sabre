@@ -61,14 +61,7 @@ class PrivateEventPlugin extends ServerPlugin {
             return;
         }
 
-        // Get the raw calendar data
-        $calendarData = $node->get();
-        if (is_resource($calendarData)) {
-            $calendarData = stream_get_contents($calendarData);
-        }
-
-        // Sanitize the data
-        $sanitizedData = $this->sanitizeCalendarData($calendarData, $calendar, $currentUser);
+        $sanitizedData = $this->sanitizeStoredCalendarData($node, $calendar, $currentUser);
 
         // Set response headers (similar to CorePlugin::httpGet)
         $response->setHeader('Content-Type', 'text/calendar; charset=utf-8');
@@ -93,6 +86,11 @@ class PrivateEventPlugin extends ServerPlugin {
             return;
         }
 
+        $this->sanitizeCalendarDataProperty($propFind, $calendar, $currentUser);
+        $this->sanitizeContentLengthProperty($propFind, $node, $calendar, $currentUser);
+    }
+
+    protected function sanitizeCalendarDataProperty(PropFind $propFind, $calendar, $currentUser) {
         $calendarDataProp = '{' . self::NS_CALDAV . '}calendar-data';
         $calendarData = $propFind->get($calendarDataProp);
         if ($calendarData === null) {
@@ -103,6 +101,29 @@ class PrivateEventPlugin extends ServerPlugin {
         if ($sanitizedData !== $calendarData) {
             $propFind->set($calendarDataProp, $sanitizedData);
         }
+    }
+
+    /**
+     * CorePlugin reports the size of the stored object: report the size of the sanitized
+     * object instead, as GET does, so that the length of the hidden fields does not leak.
+     */
+    protected function sanitizeContentLengthProperty(PropFind $propFind, INode $node, $calendar, $currentUser) {
+        $contentLengthProp = '{DAV:}getcontentlength';
+        if ($propFind->get($contentLengthProp) === null) {
+            return;
+        }
+
+        $sanitizedData = $this->sanitizeStoredCalendarData($node, $calendar, $currentUser);
+        $propFind->set($contentLengthProp, strlen($sanitizedData));
+    }
+
+    protected function sanitizeStoredCalendarData(INode $node, $calendar, $currentUser) {
+        $calendarData = $node->get();
+        if (is_resource($calendarData)) {
+            $calendarData = stream_get_contents($calendarData);
+        }
+
+        return $this->sanitizeCalendarData($calendarData, $calendar, $currentUser);
     }
 
     /**

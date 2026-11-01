@@ -754,6 +754,71 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals(403, $response->status);
     }
 
+    #[DataProvider('domainMembersPathVariants')]
+    function testCreateCardInDomainMembersAsAdminThroughPathVariantShouldFail(string $prefix) {
+        $this->createDomainMembersAddressBookAdministeredByUser1();
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/vcard',
+            'REQUEST_URI'       => '/addressbooks/' . SERVER_MOCK_DOMAIN_ID . $prefix . 'domain-members/test.vcf',
+        ]);
+        $request->setBody("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Test User\r\nEND:VCARD\r\n");
+        $response = $this->request($request);
+
+        $this->assertDomainMembersGuardRefused($response);
+    }
+
+    #[DataProvider('domainMembersPathVariants')]
+    function testDeleteCardInDomainMembersAsAdminThroughPathVariantShouldFail(string $prefix) {
+        $addressBookId = $this->createDomainMembersAddressBookAdministeredByUser1();
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'DELETE',
+            'REQUEST_URI'       => '/addressbooks/' . SERVER_MOCK_DOMAIN_ID . $prefix . 'domain-members/domain-membersCard1',
+        ]);
+        $response = $this->request($request);
+
+        $this->assertDomainMembersGuardRefused($response);
+        $this->assertNotNull($this->carddavBackend->getCard($addressBookId, 'domain-membersCard1'));
+    }
+
+    #[DataProvider('domainMembersPathVariants')]
+    function testDeleteDomainMembersAsAdminThroughPathVariantShouldFail(string $prefix) {
+        $this->createDomainMembersAddressBookAdministeredByUser1();
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'DELETE',
+            'REQUEST_URI'       => '/addressbooks/' . SERVER_MOCK_DOMAIN_ID . $prefix . 'domain-members',
+        ]);
+        $response = $this->request($request);
+
+        $this->assertDomainMembersGuardRefused($response);
+        $this->assertTrue($this->carddavBackend->addressBookExists('principals/domains/' . SERVER_MOCK_DOMAIN_ID, 'domain-members'));
+    }
+
+    private function createDomainMembersAddressBookAdministeredByUser1() {
+        $this->esndb->domains->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId(SERVER_MOCK_DOMAIN_ID)],
+            ['$set' => ['administrators' => [['user_id' => new \MongoDB\BSON\ObjectId($this->userTestId1)]]]]
+        );
+        $this->authBackend->setAuthTenant(new AuthTenant($this->userTestId1, SERVER_MOCK_DOMAIN_ID));
+
+        return $this->createAddressBook('principals/domains/' . SERVER_MOCK_DOMAIN_ID, 'domain-members');
+    }
+
+    private function assertDomainMembersGuardRefused($response) {
+        $this->assertEquals(403, $response->status);
+        $this->assertStringContainsString('Only technical users can modify domain-members addressbook', $response->getBodyAsString());
+    }
+
+    static function domainMembersPathVariants() {
+        return [
+            'encoded slash' => ['/%2F'],
+            'repeated slashes' => ['///'],
+        ];
+    }
+
     function testCreateCardInDomainMembersAsTechnicalUserShouldSucceed() {
         $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
         $this->authBackend->setAuthTenant(new AuthTenant('54b64eadf6d7d8e41d263e0f', $DOMAIN_ID, TenantType::Technical));

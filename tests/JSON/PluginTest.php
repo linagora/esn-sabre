@@ -652,6 +652,56 @@ END:VCALENDAR
         $this->assertCount(1, $jsonResponse->_embedded->{'dav:item'});
     }
 
+    function testTechnicalUserGetDefaultCalendarResolvesHomeOfPath() {
+        $this->authBackend->setPrincipal('principals/technicalUser');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0c/events.json',
+        ));
+
+        $request->setBody(json_encode($this->oldTimeRangeData));
+        $response = $this->request($request);
+
+        $this->assertEquals(200, $response->status);
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $this->assertCount(1, $jsonResponse->_embedded->{'dav:item'});
+    }
+
+    function testTechnicalUserPutIntoEventsCalendarIsNotA500() {
+        $this->caldavBackend->createCalendar('principals/users/54b64eadf6d7d8e41d263e0f',
+            \ESN\CalDAV\Backend\Esn::EVENTS_URI, ['{DAV:}displayname' => 'Calendar']);
+        $this->authBackend->setPrincipal('principals/technicalUser');
+
+        $response = $this->putNewEvent('/calendars/54b64eadf6d7d8e41d263e0f/events/new.ics');
+
+        $this->assertEquals(201, $response->status);
+        $this->assertNotNull($this->server->tree->getNodeForPath('calendars/54b64eadf6d7d8e41d263e0f/events/new.ics'));
+    }
+
+    function testPutObjectWhoseNameContainsEventsIsNotRewritten() {
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0f');
+
+        $response = $this->putNewEvent('/calendars/54b64eadf6d7d8e41d263e0f/calendar1/events-1.ics');
+
+        $this->assertEquals(201, $response->status);
+        $this->assertNotNull($this->server->tree->getNodeForPath('calendars/54b64eadf6d7d8e41d263e0f/calendar1/events-1.ics'));
+    }
+
+    private function putNewEvent($uri) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'text/calendar',
+            'REQUEST_URI'       => $uri,
+        ]);
+        $request->setBody("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:new-1\r\n"
+            . "DTSTAMP:20261001T000000Z\r\nDTSTART:20261110T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        return $this->request($request);
+    }
+
     function testFreebusyReport() {
         $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0c');
 

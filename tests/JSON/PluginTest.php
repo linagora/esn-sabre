@@ -22,6 +22,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $aclPlugin = new \Sabre\DAVACL\Plugin();
         $aclPlugin->principalCollectionSet = ['principals/users'];
+        $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
         $this->server->addPlugin($aclPlugin);
 
         $plugin = new Plugin('json');

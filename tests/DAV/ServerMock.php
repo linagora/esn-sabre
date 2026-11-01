@@ -360,6 +360,7 @@ END:VCALENDAR'
 
         $this->tree[] = new \Sabre\DAV\SimpleCollection('principals', [
           new \Sabre\CalDAV\Principal\Collection($this->principalBackend, 'principals/users'),
+          new \Sabre\CalDAV\Principal\Collection($this->principalBackend, PRINCIPALS_TECHNICAL_USER),
           new \Sabre\CalDAV\Principal\Collection($this->principalBackend, 'principals/domains')
         ]);
         $this->tree[] = new \ESN\CardDAV\AddressBookRoot(

@@ -991,6 +991,28 @@ END:VCALENDAR
         $this->_testCalendarList();
     }
 
+    function testCalendarListSurvivesSharedCalendarOfDeletedOwner() {
+        $gone = 'principals/users/54b64eadf6d7d8e41d26e099';
+        $id = $this->caldavBackend->createCalendar($gone, 'gonecal', ['{DAV:}displayname' => 'Gone']);
+        $this->caldavBackend->updateInvites($id, [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'         => 'mailto:user1@example.org',
+                'principal'    => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+            ]),
+        ]);
+
+        $response = $this->request(\Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD' => 'GET',
+            'HTTP_ACCEPT'    => 'application/json',
+            'REQUEST_URI'    => '/calendars/54b64eadf6d7d8e41d263e0f.json?sharedDelegationStatus=accepted',
+        ]));
+
+        $this->assertEquals(200, $response->status);
+        $this->assertStringNotContainsString('54b64eadf6d7d8e41d26e099', $response->getBodyAsString());
+    }
+
     function testCalendarListWithFreeBusy() {
         $requestUri = '/calendars/54b64eadf6d7d8e41d263e0f.json?withFreeBusy=true';
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(

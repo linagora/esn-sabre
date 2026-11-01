@@ -291,6 +291,20 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
 
     }
 
+    /**
+     * The PRIVATE / CONFIDENTIAL objects of this calendar with their data, or null when the backend
+     * cannot select them.
+     *
+     * @return iterable|null
+     */
+    function getPrivateCalendarObjects() {
+        if (!method_exists($this->caldavBackend, 'getPrivateCalendarObjects')) {
+            return null;
+        }
+
+        return $this->caldavBackend->getPrivateCalendarObjects($this->calendarInfo['id']);
+    }
+
     function getSubscribers() {
         $principalUriExploded = explode('/', $this->calendarInfo['principaluri']);
         $source = 'calendars/' . $principalUriExploded[2] . '/' . $this->calendarInfo['uri'];

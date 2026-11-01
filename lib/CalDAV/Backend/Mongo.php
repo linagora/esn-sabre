@@ -207,6 +207,11 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return $this->calendarObjectService->calendarQuery($calendarId, $filters);
     }
 
+    function getPrivateCalendarObjects($calendarId) {
+        $this->_assertIsArray($calendarId);
+        return $this->calendarObjectService->getPrivateCalendarObjects($calendarId);
+    }
+
     function calendarQueryWithAllData($calendarId, array $filters) {
         $this->_assertIsArray($calendarId);
         return $this->calendarObjectService->calendarQueryWithAllData($calendarId, $filters);

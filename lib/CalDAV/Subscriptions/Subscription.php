@@ -151,6 +151,25 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
     }
 
     /**
+     * The PRIVATE / CONFIDENTIAL objects of the source calendar with their data, or null when the
+     * backend cannot select them.
+     *
+     * @return iterable|null
+     */
+    function getPrivateCalendarObjects() {
+        if (!method_exists($this->caldavBackend, 'getPrivateCalendarObjects')) {
+            return null;
+        }
+
+        $sourceCalendarInfo = $this->getSourceCalendarInfo();
+        if (!$sourceCalendarInfo) {
+            return [];
+        }
+
+        return $this->caldavBackend->getPrivateCalendarObjects($sourceCalendarInfo['id']);
+    }
+
+    /**
      * Returns the sync token of the source calendar.
      *
      * @return string|null

@@ -430,9 +430,13 @@ class CalendarObjectHandler {
         // Post-filtering: Remove events outside the time range
         $vevents = $vObject->select('VEVENT');
         foreach ($vevents as $vevent) {
+            // A VEVENT without a usable DTSTART cannot be positioned in time: leave it untouched
+            if (!$this->isDateTimeProperty($vevent->DTSTART)) {
+                continue;
+            }
             $eventStart = $vevent->DTSTART->getDateTime();
 
-            if (isset($vevent->DTEND)) {
+            if ($this->isDateTimeProperty($vevent->DTEND)) {
                 $eventEnd = $vevent->DTEND->getDateTime();
             } elseif (isset($vevent->DURATION)) {
                 $eventEnd = clone $eventStart;
@@ -485,7 +489,7 @@ class CalendarObjectHandler {
     private function normalizeEventsWithoutMaster($vObject) {
         // Convert dates to UTC to match expand() behavior
         // IMPORTANT: Must be done BEFORE removing VTIMEZONE, as conversion needs timezone info
-        foreach ($vObject->VEVENT as $vevent) {
+        foreach ($vObject->select('VEVENT') as $vevent) {
             $this->convertDateTimeToUTC($vevent, 'DTSTART');
             $this->convertDateTimeToUTC($vevent, 'DTEND');
         }
@@ -633,7 +637,7 @@ class CalendarObjectHandler {
      * @param string $propertyName The property name (DTSTART or DTEND)
      */
     private function convertDateTimeToUTC($vevent, $propertyName) {
-        if (isset($vevent->$propertyName) && $vevent->$propertyName->hasTime()) {
+        if ($this->isDateTimeProperty($vevent->$propertyName) && $vevent->$propertyName->hasTime()) {
             $dt = $vevent->$propertyName->getDateTime();
             // DateTimeImmutable::setTimezone() returns a new object — must reassign.
             $dt = $dt->setTimezone(new \DateTimeZone('UTC'));
@@ -643,5 +647,9 @@ class CalendarObjectHandler {
             $vevent->$propertyName->setValue($dt->format('Ymd\THis\Z'));
             unset($vevent->$propertyName['TZID']);
         }
+    }
+
+    private function isDateTimeProperty($property) {
+        return $property instanceof VObject\Property\ICalendar\DateTime;
     }
 }

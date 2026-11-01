@@ -2644,6 +2644,66 @@ END:VCALENDAR
         $this->assertCount(0, $vevents);
     }
 
+    function testExpandEventWithoutVeventShouldNotFail() {
+        // Issue #607: an object whose expansion yields no VEVENT and which has no VEVENT at all
+        // (VTODO only) must not raise "foreach() argument must be of type array|object, null given"
+        $ics = 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTODO
+UID:todo-only
+DTSTAMP:20150101T000000Z
+SUMMARY:Todo only
+END:VTODO
+END:VCALENDAR
+';
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'todo-only.ics', $ics);
+
+        $response = $this->expandEventRequest('todo-only.ics', '20350101T000000Z', '20351201T000000Z');
+
+        $this->assertEquals(200, $response->status);
+        $this->assertCount(0, $this->vEventsOfExpandResponse($response));
+    }
+
+    function testRemoveEventsOutsideTimeRangeShouldKeepEventWithoutDtstart() {
+        // Issue #607: a VEVENT without DTSTART must not be dereferenced during post-filtering.
+        // Such an object can neither be stored nor expanded, hence the post-filter is exercised directly.
+        $vObject = \Sabre\VObject\Reader::read('BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:no-dtstart
+DTSTAMP:20150101T000000Z
+SUMMARY:No dtstart
+END:VEVENT
+END:VCALENDAR
+');
+        $handler = new CalDAV\CalendarObjectHandler($this->server, null);
+        $removeEventsOutsideTimeRange = new \ReflectionMethod($handler, 'removeEventsOutsideTimeRange');
+
+        $removeEventsOutsideTimeRange->invoke($handler, $vObject,
+            new \DateTime('2035-01-01T00:00:00Z'), new \DateTime('2035-12-01T00:00:00Z'));
+
+        $this->assertCount(1, $vObject->select('VEVENT'));
+    }
+
+    private function expandEventRequest($eventUri, $start, $end) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/' . $eventUri,
+        ));
+        $request->setBody(json_encode(['match' => ['start' => $start, 'end' => $end]]));
+
+        return $this->request($request);
+    }
+
+    private function vEventsOfExpandResponse($response) {
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $vcalendar = \Sabre\VObject\Reader::readJson(json_encode($jsonResponse->data));
+
+        return $vcalendar->select('VEVENT');
+    }
+
     private function addressBookSyncTokenRequest($syncToken) {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

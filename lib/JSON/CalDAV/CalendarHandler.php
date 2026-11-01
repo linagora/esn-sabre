@@ -605,19 +605,39 @@ class CalendarHandler {
         }
     }
 
-    public function isOldDefaultCalendarUriNotFound($url) {
-        return strpos($url, \ESN\CalDAV\Backend\Esn::EVENTS_URI) && !$this->server->tree->nodeExists($url);
-    }
+    /**
+     * Matches the legacy default calendar `calendars/<home>/events`, alone or
+     * followed by an object name. Captures the home path and the home id.
+     */
+    private const OLD_DEFAULT_CALENDAR_PATH = '#^(calendars/([^/]+))/' . \ESN\CalDAV\Backend\Esn::EVENTS_URI . '(/|$)#';
 
-    public function getDefaultCalendarUri($user, $path) {
-        list(,,$userId) = explode('/', $user);
-
-        $eventUriPos = strpos($path, \ESN\CalDAV\Backend\Esn::EVENTS_URI);
-        if ($eventUriPos === false) {
-            throw new DAV\Exception\NotFound('Unable to determine calendar home path');
+    public function isOldDefaultCalendarUriNotFound($path) {
+        if (!preg_match(self::OLD_DEFAULT_CALENDAR_PATH, $path, $matches)) {
+            return false;
         }
 
-        $homePath = substr($path, 0, $eventUriPos);
+        return !$this->server->tree->nodeExists($matches[1] . '/' . \ESN\CalDAV\Backend\Esn::EVENTS_URI);
+    }
+
+    /**
+     * Replaces only the legacy `events` calendar segment of the URL: object
+     * names or query strings containing "events" are left untouched.
+     */
+    public function replaceOldDefaultCalendarUri($url, $defaultCalendarUri) {
+        return preg_replace(
+            '#(/calendars/[^/?]+/)' . \ESN\CalDAV\Backend\Esn::EVENTS_URI . '(?=[/?]|$)#',
+            '${1}' . $defaultCalendarUri,
+            $url,
+            1
+        );
+    }
+
+    public function getDefaultCalendarUri($path) {
+        if (!preg_match(self::OLD_DEFAULT_CALENDAR_PATH, $path, $matches)) {
+            throw new DAV\Exception\NotFound('Unable to determine calendar home path');
+        }
+        list(, $homePath, $userId) = $matches;
+
         $node = $this->server->tree->getNodeForPath($homePath);
 
         $existingDefaultCalendarUri = $this->findExistingDefaultCalendarUri($node, $userId);
@@ -627,7 +647,8 @@ class CalendarHandler {
 
         // No default calendar found - create it
         // This handles the case where a user has delegated calendars but no personal default calendar yet (issue #206)
-        return $this->createDefaultCalendar($node, $user, $userId);
+        // The calendar belongs to the owner of the home, not to the (possibly technical or delegate) actor.
+        return $this->createDefaultCalendar($node, $node->getOwner(), $userId);
     }
 
     private function findExistingDefaultCalendarUri($node, $userId): ?string {

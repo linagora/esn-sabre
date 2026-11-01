@@ -197,9 +197,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $calendarHandler = $this->getCalendarHandler();
         if ($calendarHandler->isOldDefaultCalendarUriNotFound($request->getPath())) {
-            $defaultCalendarUri = $calendarHandler->getDefaultCalendarUri($this->currentUser, $request->getPath());
-            $url = str_replace(\ESN\CalDAV\Backend\Esn::EVENTS_URI, $defaultCalendarUri, $request->getUrl());
-            $request->setUrl($url);
+            $defaultCalendarUri = $calendarHandler->getDefaultCalendarUri($request->getPath());
+            $request->setUrl($calendarHandler->replaceOldDefaultCalendarUri($request->getUrl(), $defaultCalendarUri));
         }
 
         return true;

@@ -111,6 +111,11 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
      * @return void
      */
     function updateInvites(array $sharees) {
+        // Every sharing route (JSON, XML share-resource, ...) ends here: refuse on the node, not on the request path
+        if ($this->getName() === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI) {
+            throw new \Sabre\DAV\Exception\MethodNotAllowed('Cannot update public rights or delegations for domain addressbook');
+        }
+
         foreach ($sharees as $sharee) {
             if (in_array($sharee->principal, $this->addressBookInfo['administrators'])) {
                 throw new \Sabre\DAV\Exception\MethodNotAllowed('Can not delegate for group administrators');

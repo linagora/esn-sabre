@@ -17,6 +17,13 @@ class CalendarQueryReportTest extends \ESN\DAV\ServerMock {
 
     const CALDAV_NS = 'urn:ietf:params:xml:ns:caldav';
 
+    function setUp(): void {
+        parent::setUp();
+
+        // Mirrors esn.php: calendar-data of hidden private events is sanitized
+        $this->server->addPlugin(new PrivateEventPlugin());
+    }
+
     private function reportRequest($uri, $body, $depth = '1', $contentType = 'application/xml') {
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'REQUEST_METHOD'    => 'REPORT',
@@ -313,6 +320,143 @@ class CalendarQueryReportTest extends \ESN\DAV\ServerMock {
         $this->assertEquals(207, $response->status);
 
         return $this->parseMultiStatus($response->getBodyAsString());
+    }
+
+    private function createHiddenPrivateEvent($calendarId, $uri, array $extraLines = []) {
+        $this->caldavBackend->createCalendarObject($calendarId, $uri, implode("\r\n", array_merge([
+            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN',
+            'BEGIN:VEVENT', 'UID:' . $uri, 'DTSTAMP:20260101T000000Z',
+            'DTSTART:20260101T090000Z', 'DTEND:20260101T100000Z',
+            'CLASS:PRIVATE', 'SUMMARY:Doctor', 'LOCATION:Hospital',
+            'ATTENDEE;CN=Alice:mailto:alice@example.com'
+        ], $extraLines, ['END:VEVENT', 'END:VCALENDAR', ''])));
+    }
+
+    private function vEventQuery($vEventFilter) {
+        return '<?xml version="1.0"?><c:calendar-query xmlns:d="DAV:" xmlns:c="' . self::CALDAV_NS . '">'
+            . '<d:prop><d:getetag/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">'
+            . $vEventFilter
+            . '</c:comp-filter></c:comp-filter></c:filter></c:calendar-query>';
+    }
+
+    private function locationQuery($needle) {
+        return $this->vEventQuery('<c:prop-filter name="LOCATION"><c:text-match>' . $needle . '</c:text-match></c:prop-filter>');
+    }
+
+    private function reportHrefs($uri, $body, $depth = '1') {
+        $response = $this->reportRequest($uri, $body, $depth);
+        $this->assertEquals(207, $response->status);
+
+        return array_keys($this->parseMultiStatus($response->getBodyAsString()));
+    }
+
+    function testFilterOnHiddenFieldDoesNotMatchPrivateEventForNonOwner() {
+        $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics');
+        $calendar = '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1';
+        $href = $calendar . '/secret.ics';
+
+        $this->assertNotContains($href, $this->reportHrefs($calendar, $this->locationQuery('Hospital')));
+        $this->assertNotContains($href, $this->reportHrefs($calendar, $this->locationQuery('Office')));
+    }
+
+    function testFilterOnHiddenFieldDoesNotMatchPrivateEventThroughSubscription() {
+        $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics');
+        $subscription = '/calendars/54b64eadf6d7d8e41d263e0f/subscription1';
+
+        $this->assertNotContains($subscription . '/secret.ics', $this->reportHrefs($subscription, $this->locationQuery('Hospital')));
+    }
+
+    function testParamFilterOnHiddenAttendeeDoesNotMatchPrivateEventForNonOwner() {
+        $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics');
+        $calendar = '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1';
+
+        $hrefs = $this->reportHrefs($calendar, $this->vEventQuery(
+            '<c:prop-filter name="ATTENDEE"><c:param-filter name="CN"><c:text-match>Alice</c:text-match></c:param-filter></c:prop-filter>'
+        ));
+
+        $this->assertNotContains($calendar . '/secret.ics', $hrefs);
+    }
+
+    function testHiddenAlarmDoesNotMatchPrivateEventForNonOwner() {
+        $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics', [
+            'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Reminder', 'TRIGGER:-PT15M', 'END:VALARM'
+        ]);
+        $calendar = '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1';
+
+        $hrefs = $this->reportHrefs($calendar, $this->vEventQuery('<c:comp-filter name="VALARM"/>'));
+
+        $this->assertNotContains($calendar . '/secret.ics', $hrefs);
+    }
+
+    function testIsNotDefinedOnHiddenFieldMatchesPrivateEventForNonOwner() {
+        $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics', ['DESCRIPTION:Room 101']);
+        $calendar = '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1';
+
+        $hrefs = $this->reportHrefs($calendar, $this->vEventQuery(
+            '<c:prop-filter name="DESCRIPTION"><c:is-not-defined/></c:prop-filter>'
+        ));
+
+        // The sanitized event has no DESCRIPTION, whatever the stored one holds
+        $this->assertContains($calendar . '/secret.ics', $hrefs);
+    }
+
+    function testFilterMatchesPlaceholderSummaryOfPrivateEventForNonOwner() {
+        $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics');
+        $calendar = '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1';
+
+        $busy = $this->reportHrefs($calendar, $this->vEventQuery(
+            '<c:prop-filter name="SUMMARY"><c:text-match>Busy</c:text-match></c:prop-filter>'
+        ));
+        $doctor = $this->reportHrefs($calendar, $this->vEventQuery(
+            '<c:prop-filter name="SUMMARY"><c:text-match>Doctor</c:text-match></c:prop-filter>'
+        ));
+
+        $this->assertContains($calendar . '/secret.ics', $busy);
+        $this->assertNotContains($calendar . '/secret.ics', $doctor);
+    }
+
+    function testFilterOnVisibleFieldStillMatchesPrivateEventForNonOwner() {
+        $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics');
+        $calendar = '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1';
+
+        $hrefs = $this->reportHrefs($calendar, $this->vEventQuery(
+            '<c:time-range start="20260101T000000Z" end="20260102T000000Z"/>'
+        ));
+
+        $this->assertContains($calendar . '/secret.ics', $hrefs);
+    }
+
+    function testFilterOnHiddenFieldStillMatchesPrivateEventForOwner() {
+        $this->createHiddenPrivateEvent($this->cal['id'], 'secret.ics');
+        $calendar = '/calendars/54b64eadf6d7d8e41d263e0f/calendar1';
+
+        $this->assertContains($calendar . '/secret.ics', $this->reportHrefs($calendar, $this->locationQuery('Hospital')));
+        $this->assertNotContains($calendar . '/secret.ics', $this->reportHrefs($calendar, $this->locationQuery('Office')));
+    }
+
+    function testMicrosoftDepthZeroDoesNotMatchHiddenFieldOfPrivateEvent() {
+        $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics');
+        $calendar = '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1';
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'HTTP_DEPTH'        => '0',
+            'HTTP_USER_AGENT'   => 'MSFT-WIN-3/10.0',
+            'REQUEST_URI'       => $calendar,
+        ]);
+        $request->setBody($this->locationQuery('Hospital'));
+        $response = $this->request($request);
+
+        $this->assertEquals(207, $response->status);
+        $this->assertArrayNotHasKey($calendar . '/secret.ics', $this->parseMultiStatus($response->getBodyAsString()));
+    }
+
+    function testDepthZeroOnPrivateObjectDoesNotMatchHiddenField() {
+        $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics');
+        $href = '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1/secret.ics';
+
+        $this->assertNotContains($href, $this->reportHrefs($href, $this->locationQuery('Hospital'), '0'));
     }
 
     function testDepthZeroOnCalendarIsRejected() {

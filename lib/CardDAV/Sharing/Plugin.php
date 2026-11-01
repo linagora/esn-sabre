@@ -328,6 +328,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     private function handleGroupAddressBook($path, $node, $data) {
+        if (!($node instanceof \ESN\CardDAV\Group\GroupAddressBook)) {
+            throw new \Sabre\DAV\Exception\MethodNotAllowed('Members rights can only be set on group address books');
+        }
+
         $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
 
         // Check if this is a domain-members addressbook

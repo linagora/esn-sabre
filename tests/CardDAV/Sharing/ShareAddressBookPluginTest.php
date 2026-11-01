@@ -364,4 +364,15 @@ class ShareAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertEquals(403, $response->status);
         $this->assertStringContainsString('User did not have the required privileges ({DAV:}share) for path', $response->getBodyAsString());
     }
+
+    function testGroupAddressBookRightsOnUserAddressBookResponds405() {
+        $response = $this->makeRequest(
+            'POST',
+            '/addressbooks/' . $this->userTestId1 . '/book1.json',
+            ['dav:group-addressbook' => ['privileges' => ['{DAV:}read']]]
+        );
+
+        $this->assertEquals(405, $response->status);
+        $this->assertStringContainsString('Members rights can only be set on group address books', $response->getBodyAsString());
+    }
 }

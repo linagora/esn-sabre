@@ -472,6 +472,100 @@ END:VCALENDAR
         // The dates should be in UTC format (ending with Z)
         $this->assertStringEndsWith('Z', (string)$vevent->DTSTART, 'DTSTART should end with Z (UTC format)');
         $this->assertStringEndsWith('Z', (string)$vevent->DTEND, 'DTEND should end with Z (UTC format)');
+
+        // RECURRENCE-ID must have the same UTC shape as the expand() output
+        $this->assertFalse(isset($vevent->{'RECURRENCE-ID'}['TZID']), 'RECURRENCE-ID should not have TZID parameter');
+        $this->assertEquals('20150228T090000Z', (string)$vevent->{'RECURRENCE-ID'});
+    }
+
+    function testTimeRangeQueryShouldNotReturnRecurringEventWhoseOnlyOccurrenceInRangeWasMovedOut() {
+        // Issue #631: weekly master whose occurrence in the range was moved to the next week
+        $calendarId = $this->getCalendar1Id();
+
+        $ics = 'BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VTIMEZONE
+TZID:Europe/Paris
+BEGIN:STANDARD
+DTSTART:19701025T030000
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:19700329T020000
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:moved-out-occurrence
+DTSTART;TZID=Europe/Paris:20261030T140000
+DTEND;TZID=Europe/Paris:20261030T150000
+RRULE:FREQ=WEEKLY;BYDAY=FR
+SUMMARY:Weekly
+DTSTAMP:20261020T083253Z
+END:VEVENT
+BEGIN:VEVENT
+UID:moved-out-occurrence
+RECURRENCE-ID;TZID=Europe/Paris:20261030T140000
+DTSTART;TZID=Europe/Paris:20261102T140000
+DTEND;TZID=Europe/Paris:20261102T150000
+SUMMARY:Weekly moved
+DTSTAMP:20261020T083253Z
+END:VEVENT
+END:VCALENDAR
+';
+        $this->caldavBackend->createCalendarObject($calendarId, 'moved-out.ics', $ics);
+
+        $items = $this->timeRangeReportOnCalendar1('20261026T000000Z', '20261101T000000Z');
+
+        $this->assertNull($this->findItemByUri($items, 'moved-out.ics'), 'moved-out.ics has no occurrence in range');
+
+        $nextWeekItem = $this->findItemByUri(
+            $this->timeRangeReportOnCalendar1('20261102T000000Z', '20261108T000000Z'),
+            'moved-out.ics'
+        );
+        $this->assertNotNull($nextWeekItem, 'moved-out.ics should be returned for the following week');
+
+        $vevents = \Sabre\VObject\Reader::readJson($nextWeekItem->{'data'})->select('VEVENT');
+        $this->assertCount(2, $vevents);
+        $this->assertEquals('20261030T130000Z', (string)$vevents[0]->{'RECURRENCE-ID'});
+        $this->assertEquals('20261102T130000Z', (string)$vevents[0]->DTSTART);
+    }
+
+    private function getCalendar1Id() {
+        $calendars = $this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0f');
+        $calendar1 = array_values(array_filter($calendars, function ($calendar) {
+            return $calendar['uri'] === 'calendar1';
+        }));
+
+        return $calendar1[0]['id'];
+    }
+
+    private function timeRangeReportOnCalendar1($start, $end) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+        $request->setBody(json_encode([
+            'match' => [ 'start' => $start, 'end' => $end ],
+            'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
+        ]));
+
+        return json_decode($this->request($request)->getBodyAsString())->_embedded->{'dav:item'};
+    }
+
+    private function findItemByUri($items, $uri) {
+        $matching = array_values(array_filter($items, function ($item) use ($uri) {
+            return strpos($item->{'_links'}->{'self'}->{'href'}, $uri) !== false;
+        }));
+
+        return $matching[0] ?? null;
     }
 
     function testTimeRangeQueryShouldFindEventWithCustomTimezoneAtItsUtcTime() {

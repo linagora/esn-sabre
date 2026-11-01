@@ -462,28 +462,50 @@ class CalendarObjectHandler {
      */
     private function expandAndNormalizeVObject($vObject, $start, $end) {
         // If we have start and end date, we're getting an expanded list of occurrences between these dates
-        if ($start && $end) {
-            $expandedObject = $vObject->expand($start, $end);
+        if (!$start || !$end) {
+            return $vObject;
+        }
 
-            // Sabre's VObject doesn't return the RECURRENCE-ID in the first
-            // occurrence, we'll need to do this ourselves. We take advantage
-            // of the fact that the object getter for VEVENT will always return
-            // the first one.
-            $vevent = $expandedObject->VEVENT;
+        // When an event has only RECURRENCE-ID exceptions without a master event (RRULE),
+        // the expand() method returns an empty VCALENDAR with no VEVENT.
+        // This happens when a user is invited to only one occurrence of a recurring event.
+        // In this case, we use the original unexpanded object and normalize it.
+        if (!$this->hasMasterEvent($vObject)) {
+            $this->normalizeEventsWithoutMaster($vObject);
 
-            // When an event has only RECURRENCE-ID exceptions without a master event (RRULE),
-            // the expand() method returns an empty VCALENDAR with no VEVENT.
-            // This happens when a user is invited to only one occurrence of a recurring event.
-            // In this case, we use the original unexpanded object and normalize it.
-            if (!is_object($vevent)) {
-                $this->normalizeEventsWithoutMaster($vObject);
-            } else {
-                $vObject = $expandedObject;
-                $this->addRecurrenceIdToFirstOccurrence($vevent);
+            return $vObject;
+        }
+
+        // When a master exists, the expansion is authoritative: it may be empty when
+        // no occurrence falls in the range (e.g. the only one was moved out by an override).
+        $expandedObject = $vObject->expand($start, $end);
+
+        // Sabre's VObject doesn't return the RECURRENCE-ID in the first
+        // occurrence, we'll need to do this ourselves. We take advantage
+        // of the fact that the object getter for VEVENT will always return
+        // the first one.
+        $vevent = $expandedObject->VEVENT;
+        if (is_object($vevent)) {
+            $this->addRecurrenceIdToFirstOccurrence($vevent);
+        }
+
+        return $expandedObject;
+    }
+
+    private function hasMasterEvent($vObject) {
+        foreach ($vObject->select('VEVENT') as $vevent) {
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                return true;
             }
         }
 
-        return $vObject;
+        return false;
+    }
+
+    private function hasNoOccurrenceInRange($vObject, $hadMasterEvent, $timeRange) {
+        [$start, $end] = $timeRange;
+
+        return $start && $end && $hadMasterEvent && !isset($vObject->VEVENT);
     }
 
     private function normalizeEventsWithoutMaster($vObject) {
@@ -492,6 +514,7 @@ class CalendarObjectHandler {
         foreach ($vObject->select('VEVENT') as $vevent) {
             $this->convertDateTimeToUTC($vevent, 'DTSTART');
             $this->convertDateTimeToUTC($vevent, 'DTEND');
+            $this->convertDateTimeToUTC($vevent, 'RECURRENCE-ID');
         }
 
         // Remove VTIMEZONE to match expand() behavior
@@ -523,6 +546,9 @@ class CalendarObjectHandler {
             try {
                 $vObject = VObject\Reader::read($objProps[200][$props[0]]);
                 $vObject = $this->normalizeCalendarObject($vObject, $parentNode, $timeRange);
+                if ($vObject === null) {
+                    continue;
+                }
                 $objProps[200][$props[0]] = $vObject->jsonSerialize();
                 $vObject->destroy();
 
@@ -559,6 +585,9 @@ class CalendarObjectHandler {
                 // Use pre-parsed VObject if available (from requirePostFilter), otherwise parse now
                 $vObject = $calendarObject['vObject'] ?? VObject\Reader::read($calendarObject['calendardata']);
                 $vObject = $this->normalizeCalendarObject($vObject, $parentNode, $timeRange);
+                if ($vObject === null) {
+                    continue;
+                }
 
                 // Build the property list in the same format as getPropertiesForMultiplePaths would return
                 $objProps = [
@@ -593,9 +622,19 @@ class CalendarObjectHandler {
         return $syncToken;
     }
 
+    /**
+     * @return VObject\Component\VCalendar|null null when a recurring master has no occurrence in the time range
+     */
     private function normalizeCalendarObject($vObject, $parentNode, $timeRange) {
         [$start, $end] = $timeRange;
+        $hadMasterEvent = $this->hasMasterEvent($vObject);
         $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
+
+        if ($this->hasNoOccurrenceInRange($vObject, $hadMasterEvent, $timeRange)) {
+            $vObject->destroy();
+
+            return null;
+        }
 
         return Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
     }

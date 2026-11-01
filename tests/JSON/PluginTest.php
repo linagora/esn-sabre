@@ -2499,6 +2499,46 @@ END:VCALENDAR
         $this->assertTrue(is_array($items));
     }
 
+    private function subscriptionSyncTokenRequest($syncToken) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json',
+        ));
+        $request->setBody(json_encode(['sync-token' => $syncToken]));
+
+        return $this->request($request);
+    }
+
+    function testSyncTokenOnSubscriptionListsSourceCalendarObjects() {
+        $response = $this->subscriptionSyncTokenRequest('');
+
+        $this->assertEquals(207, $response->status);
+
+        $jsonResponse = json_decode($response->getBodyAsString());
+        $items = $jsonResponse->_embedded->{'dav:item'};
+        $this->assertCount(1, $items);
+        $this->assertEquals(200, $items[0]->status);
+        $this->assertEquals('/calendars/54b64eadf6d7d8e41d263e0f/subscription1/privateRecurEvent.ics', $items[0]->_links->self->href);
+        $this->assertStringContainsString('http://sabre.io/ns/sync/', $jsonResponse->{'sync-token'});
+    }
+
+    function testSyncTokenOnSubscriptionReturnsSourceCalendarChanges() {
+        $syncToken = json_decode($this->subscriptionSyncTokenRequest('')->getBodyAsString())->{'sync-token'};
+
+        $this->caldavBackend->deleteCalendarObject($this->publicCal['id'], 'privateRecurEvent.ics');
+
+        $response = $this->subscriptionSyncTokenRequest($syncToken);
+
+        $this->assertEquals(207, $response->status);
+
+        $items = json_decode($response->getBodyAsString())->_embedded->{'dav:item'};
+        $this->assertCount(1, $items);
+        $this->assertEquals(404, $items[0]->status);
+        $this->assertEquals('/calendars/54b64eadf6d7d8e41d263e0f/subscription1/privateRecurEvent.ics', $items[0]->_links->self->href);
+    }
+
     function testExpandEventWithTimeRange() {
         // Test expanding a single event with time-range
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(

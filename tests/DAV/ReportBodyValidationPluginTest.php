@@ -6,9 +6,29 @@ namespace ESN\DAV;
 class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
 
     private function prepareServer() {
-        $server = new \Sabre\DAV\Server([]);
+        // A root the authenticated user may change the ACL of, so that ACL
+        // requests reach the body parsing.
+        $root = new class('root') extends \Sabre\DAV\SimpleCollection implements \Sabre\DAVACL\IACL {
+            use \Sabre\DAVACL\ACLTrait;
+
+            function getACL() {
+                return [['principal' => '{DAV:}authenticated', 'privilege' => '{DAV:}all', 'protected' => true]];
+            }
+        };
+        $server = new \Sabre\DAV\Server($root);
         $server->sapi = new \Sabre\HTTP\SapiMock();
         $server->xml->elementMap['{urn:ietf:params:xml:ns:caldav}calendar-query'] = \Sabre\CalDAV\Xml\Request\CalendarQueryReport::class;
+        $server->addPlugin(new \Sabre\DAV\Auth\Plugin(new class implements \Sabre\DAV\Auth\Backend\BackendInterface {
+            function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
+                return [true, 'principals/user1'];
+            }
+
+            function challenge(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
+            }
+        }));
+        $server->addPlugin(new \Sabre\DAVACL\Plugin());
+        $server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
+        $server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
         $server->addPlugin(new ReportBodyValidationPlugin());
 
         return $server;
@@ -154,10 +174,66 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(400, $response->getStatus());
     }
 
+    function testAclWithWrongRootShouldAnswerBadRequest() {
+        $response = $this->request('ACL', '<D:propfind xmlns:D="DAV:"/>');
+
+        $this->assertEquals(400, $response->getStatus());
+        $this->assertStringContainsString('Sabre\DAV\Exception\BadRequest', $response->getBodyAsString());
+    }
+
+    function testAclWithUndeclaredPrefixShouldAnswerBadRequest() {
+        $response = $this->request('ACL', '<D:acl xmlns:D="DAV:"><X:ace/></D:acl>');
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
     function testProppatchWithBomInPropertyNameShouldAnswerBadRequest() {
         $body = "<D:propertyupdate xmlns:D=\"DAV:\"><D:set><D:prop><D:a\u{FEFF}b>x</D:a\u{FEFF}b></D:prop></D:set></D:propertyupdate>";
         $response = $this->request('PROPPATCH', $body);
 
         $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testAclWithNonUtf8BodyShouldAnswerBadRequest() {
+        $response = $this->request('ACL', "<?xml version=\"1.0\" encoding=\"UTF-8\"?><D:acl xmlns:D=\"DAV:\">\xff\xfe</D:acl>");
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testEmptyAclBodyShouldAnswerBadRequest() {
+        $response = $this->request('ACL', '');
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testEmptyXmlPostShouldAnswerBadRequest() {
+        $response = $this->request('POST', '');
+
+        $this->assertEquals(400, $response->getStatus());
+        $this->assertStringContainsString('Sabre\DAV\Exception\BadRequest', $response->getBodyAsString());
+    }
+
+    function testXmlPostWithUndeclaredPrefixShouldAnswerBadRequest() {
+        $response = $this->request('POST', '<CS:share xmlns:D="DAV:"><D:set/></CS:share>');
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testTruncatedXmlPostShouldAnswerBadRequest() {
+        $response = $this->request('POST', '<D:share-resource xmlns:D="DAV:"');
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
+    function testWellFormedUnknownXmlPostShouldStillReachOtherHandlers() {
+        $response = $this->request('POST', '<?xml version="1.0"?><D:unknown xmlns:D="DAV:"/>');
+
+        $this->assertEquals(501, $response->getStatus());
+    }
+
+    function testNonXmlPostShouldNotBeValidated() {
+        $response = $this->request('POST', '{not xml', ['Content-Type' => 'application/json']);
+
+        $this->assertEquals(501, $response->getStatus());
     }
 }

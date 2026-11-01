@@ -2067,6 +2067,64 @@ END:VCALENDAR
         $this->assertEquals(400, $response->status);
     }
 
+    public static function illTypedCalendarPropertyCases(): array {
+        return [
+            'array name' => ['dav:name', []],
+            'object description' => ['caldav:description', new \stdClass()],
+            'float color' => ['apple:color', 1.5],
+            'boolean color' => ['apple:color', true],
+            'object order' => ['apple:order', new \stdClass()],
+            'non numeric order' => ['apple:order', 'first'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('illTypedCalendarPropertyCases')]
+    function testPatchCalendarRejectsIllTypedProperty($jsonProp, $value) {
+        $calendarsBefore = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+
+        $response = $this->makeRequest('PROPPATCH', '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json', [ $jsonProp => $value ]);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertEquals($calendarsBefore, $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']));
+    }
+
+    function testPatchCalendarAcceptsIntegerOrder() {
+        $response = $this->makeRequest('PROPPATCH', '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json', [ 'apple:order' => 3 ]);
+
+        $this->assertEquals(204, $response->status);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('illTypedCalendarPropertyCases')]
+    function testCreateCalendarRejectsIllTypedProperty($jsonProp, $value) {
+        $response = $this->makeRequest('POST', '/calendars/54b64eadf6d7d8e41d263e0f.json', [ 'id' => 'ID', $jsonProp => $value ]);
+
+        $this->assertEquals(400, $response->status);
+        $calendars = $this->caldavBackend->getCalendarsForUser($this->cal['principaluri']);
+        $this->assertCount(count($this->user1Calendars['ownedCalendars']), $calendars);
+    }
+
+    function testPatchSubscriptionRejectsIllTypedColor() {
+        $subscriptionsBefore = $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']);
+
+        $response = $this->makeRequest('PROPPATCH', '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json', [ 'apple:color' => new \stdClass() ]);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertEquals($subscriptionsBefore, $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']));
+    }
+
+    function testCreateSubscriptionRejectsIllTypedName() {
+        $response = $this->makeRequest('POST', '/calendars/54b64eadf6d7d8e41d263e0f.json', [
+            'id' => 'ID',
+            'dav:name' => [],
+            'calendarserver:source' => [
+                'href' => '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json'
+            ]
+        ]);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount(1, $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']));
+    }
+
     function testPatchCalendarReadonlyProp() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPPATCH',
@@ -2260,6 +2318,33 @@ END:VCALENDAR
         $this->assertEquals($sharees[1]->access, 3);
         $this->assertEquals($sharees[2]->href, 'mailto:johndoe2@example.org');
         $this->assertEquals($sharees[2]->access, 2);
+    }
+
+    public static function illTypedShareeCases(): array {
+        return [
+            'boolean common-name' => ['common-name', true],
+            'object summary' => ['summary', new \stdClass()],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('illTypedShareeCases')]
+    function testCalendarUpdateShareesRejectsIllTypedProperty($jsonProp, $value) {
+        $inviteCountBefore = count($this->caldavBackend->getInvites($this->cal['id']));
+
+        $response = $this->makeRequest('POST', '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json', [
+            'share' => [
+                'set' => [
+                    [
+                        'dav:href'       => 'mailto:johndoe@example.org',
+                        'dav:read-write' => true,
+                        $jsonProp        => $value
+                    ]
+                ]
+            ]
+        ]);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount($inviteCountBefore, $this->caldavBackend->getInvites($this->cal['id']));
     }
 
     function testCalendarUpdateShareesToOwnerReturnsBadRequest() {

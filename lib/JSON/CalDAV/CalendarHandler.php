@@ -330,7 +330,10 @@ class CalendarHandler {
     }
 
     private function findOwnerCalendarUri(string $ownerId, $calendarid): ?string {
-        $ownerHome = $this->server->tree->getNodeForPath('/calendars/' . $ownerId);
+        $ownerHome = $this->findOwnerHome($ownerId);
+        if ($ownerHome === null) {
+            return null;
+        }
 
         foreach ($ownerHome->getChildren() as $ownerCalendar) {
             if ($ownerCalendar instanceof \ESN\CalDAV\SharedCalendar && $ownerCalendar->getCalendarId() == $calendarid) {
@@ -339,6 +342,18 @@ class CalendarHandler {
         }
 
         return null;
+    }
+
+    /**
+     * The share owner home can be unreachable: the owner was deleted, or moved
+     * to another domain. Such a dangling share must not break the listing.
+     */
+    private function findOwnerHome(string $ownerId) {
+        try {
+            return $this->server->tree->getNodeForPath('/calendars/' . $ownerId);
+        } catch (DAV\Exception\NotFound | Forbidden $e) {
+            return null;
+        }
     }
 
     private function mapDavProperties(array &$json, $props, array $propertyMap): void {

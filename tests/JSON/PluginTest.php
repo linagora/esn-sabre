@@ -22,6 +22,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $aclPlugin = new \Sabre\DAVACL\Plugin();
         $aclPlugin->principalCollectionSet = ['principals/users'];
+        $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
         $this->server->addPlugin($aclPlugin);
 
         $plugin = new Plugin('json');
@@ -1030,7 +1031,7 @@ END:VCALENDAR
         $this->assertEquals(403, $response->status);
     }
 
-    function testGETAddressBookHomesWithTechnicalUser() {
+    private function authenticateAsTechnicalUserOfUsersDomain() {
         $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
         $this->esndb->users->updateMany(
             [],
@@ -1041,6 +1042,10 @@ END:VCALENDAR
             [ '$set' => [ 'domain' => new \MongoDB\BSON\ObjectId($DOMAIN_ID) ] ]
         );
         $this->authBackend->setAuthTenant(new AuthTenant('technicalUser', $DOMAIN_ID, TenantType::Technical));
+    }
+
+    function testGETAddressBookHomesWithTechnicalUser() {
+        $this->authenticateAsTechnicalUserOfUsersDomain();
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
@@ -1933,8 +1938,8 @@ END:VCALENDAR
         $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
     }
 
-    function testDeleteCalendarAsTechnicalUserIsNotA500() {
-        $this->authBackend->setPrincipal('principals/technicalUser');
+    function testDeleteCalendarOfUserAsTechnicalUser() {
+        $this->authenticateAsTechnicalUserOfUsersDomain();
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',
@@ -1943,7 +1948,7 @@ END:VCALENDAR
         ));
         $response = $this->request($request);
 
-        $this->assertLessThan(500, $response->status);
+        $this->assertEquals(204, $response->status);
     }
 
     function testDeleteMainCalendarOfUserAsTechnicalUserIsForbidden() {
@@ -1951,7 +1956,7 @@ END:VCALENDAR
         $this->caldavBackend->createCalendar('principals/users/54b64eadf6d7d8e41d263e0f', $mainCalendarUri, array(
             '{DAV:}displayname' => 'Main',
         ));
-        $this->authBackend->setPrincipal('principals/technicalUser');
+        $this->authenticateAsTechnicalUserOfUsersDomain();
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',

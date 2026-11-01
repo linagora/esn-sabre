@@ -452,9 +452,9 @@ class CalendarHandler {
         }
 
         if (isset($subprops['{http://calendarserver.org/ns/}source'])) {
-            $source = $this->subscriptionSourceToJson($subprops['{http://calendarserver.org/ns/}source']->getHref());
+            $source = $this->subscriptionSourceToJson($subprops['{http://calendarserver.org/ns/}source']->getHref(), $withRights);
 
-            // Skip the whole subscription when its source is invalid or gone
+            // Skip the whole subscription when its source is invalid, gone, or no longer readable
             if ($source === null) {
                 return null;
             }
@@ -471,13 +471,14 @@ class CalendarHandler {
         return $json;
     }
 
-    private function subscriptionSourceToJson($sourceHref): ?array {
+    private function subscriptionSourceToJson($sourceHref, $withRights): ?array {
         // Same parser as the subscription node, so the listed source is the calendar it reads
         $sourcePath = SubscriptionSource::toPath($sourceHref);
 
         $sourceNode = $sourcePath === null ? null : $this->findSourceNode($sourcePath);
 
-        return $sourceNode === null ? null : $this->calendarToJson($sourcePath, $sourceNode, true);
+        // Only expose the source details and rights that the subscriber may read.
+        return $sourceNode === null ? null : $this->calendarToJsonForCurrentUser($sourcePath, $sourceNode, $withRights);
     }
 
     /**

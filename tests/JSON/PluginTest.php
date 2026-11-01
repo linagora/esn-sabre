@@ -1269,6 +1269,73 @@ END:VCALENDAR
         $this->assertArrayHasKey('acl', $calendar);
     }
 
+    private function subscribeUser1To($uri, $sourceHref) {
+        return $this->caldavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0f', $uri, [
+            '{DAV:}displayname' => 'Legacy subscription',
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href($sourceHref)
+        ]);
+    }
+
+    function testSubscriptionSourceIsRenderedWithoutRightsUnlessAsked() {
+        $calendars = $this->listedCalendarsByHref('/calendars/54b64eadf6d7d8e41d263e0f.json');
+        $source = $calendars['/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json']['calendarserver:source'];
+
+        $this->assertSame('Calendar', $source['dav:name']);
+        $this->assertArrayNotHasKey('invite', $source);
+        $this->assertArrayNotHasKey('acl', $source);
+
+        $calendars = $this->listedCalendarsByHref('/calendars/54b64eadf6d7d8e41d263e0f.json?withRights=true');
+        $this->assertArrayHasKey('acl', $calendars['/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json']['calendarserver:source']);
+    }
+
+    function testSubscriptionSourceTheSubscriberCanNoLongerReadIsReducedToItsLink() {
+        // calendar2 has no public right: user1 may only read its free/busy
+        $this->subscribeUser1To('legacy', '/calendars/54b64eadf6d7d8e41d263e0e/calendar2');
+
+        foreach (['', '?withRights=true', '?withFreeBusy=true&withRights=true'] as $query) {
+            $calendars = $this->listedCalendarsByHref('/calendars/54b64eadf6d7d8e41d263e0f.json' . $query);
+
+            $this->assertSame(
+                ['_links' => ['self' => ['href' => '/calendars/54b64eadf6d7d8e41d263e0e/calendar2.json']]],
+                $calendars['/calendars/54b64eadf6d7d8e41d263e0f/legacy.json']['calendarserver:source'],
+                $query
+            );
+        }
+
+        $response = $this->request(\Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD' => 'GET',
+            'HTTP_ACCEPT'    => 'application/json',
+            'REQUEST_URI'    => '/calendars/54b64eadf6d7d8e41d263e0f/legacy.json?withRights=true',
+        ]));
+        $this->assertEquals(200, $response->status);
+        $source = json_decode($response->getBodyAsString(), true)['calendarserver:source'];
+        $this->assertArrayNotHasKey('invite', $source);
+        $this->assertArrayNotHasKey('acl', $source);
+        $this->assertArrayNotHasKey('dav:name', $source);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('legacySubscriptionSources')]
+    function testRemovingThePublicRightDeletesSubscriptionsWithALegacySource($sourceHref) {
+        $this->subscribeUser1To('legacy', $sourceHref);
+
+        $this->caldavBackend->saveCalendarPublicRight($this->publicCal['id'], '', [
+            'principaluri' => $this->publicCal['principaluri'],
+            'uri' => $this->publicCal['uri']
+        ]);
+
+        $remaining = array_column($this->caldavBackend->getSubscriptionsForUser('principals/users/54b64eadf6d7d8e41d263e0f'), 'uri');
+        $this->assertNotContains('legacy', $remaining);
+        $this->assertNotContains('subscription1', $remaining);
+    }
+
+    public static function legacySubscriptionSources(): array {
+        return [
+            'leading slash' => ['/calendars/54b64eadf6d7d8e41d263e0e/publicCal1'],
+            'trailing slash' => ['calendars/54b64eadf6d7d8e41d263e0e/publicCal1/'],
+            'both' => ['/calendars/54b64eadf6d7d8e41d263e0e/publicCal1/'],
+        ];
+    }
+
     function testCalendarListWithRights() {
         $calendars = $this->_testCalendarList('true');
         $this->assertNotNull($calendars[1]->{'dav:name'});

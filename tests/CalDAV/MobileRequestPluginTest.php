@@ -176,4 +176,34 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $this->assertContains('DeletedSource', $displayNames);
         $this->assertContains('Subscription - johndoe@example.org', $displayNames);
     }
+
+    function testPropfindOnHomeWithSubscriptionSourceIsRewrittenWithoutError() {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPFIND',
+            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'HTTP_USER_AGENT'   => 'DAVx5/4.3',
+            'HTTP_DEPTH'        => '1',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/',
+        ));
+        $request->setBody('<d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/">'
+            . '<d:prop><d:resourcetype/><d:displayname/><cs:source/></d:prop></d:propfind>');
+
+        $response = $this->request($request);
+
+        $this->assertEquals(207, $response->status);
+
+        $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
+        $subscriptionProps = array_values(array_filter(
+            array_map(function($xmlResponse) {
+                return $xmlResponse->getResponseProperties()[200] ?? [];
+            }, $propFindXml->getResponses()),
+            function($props) {
+                return isset($props['{http://calendarserver.org/ns/}source']);
+            }
+        ));
+
+        $this->assertCount(1, $subscriptionProps);
+        $this->assertEquals('/calendars/54b64eadf6d7d8e41d263e0e/publicCal1', $subscriptionProps[0]['{http://calendarserver.org/ns/}source']->getHref());
+        $this->assertStringStartsWith('Subscription - ', $subscriptionProps[0]['{DAV:}displayname']);
+    }
 }

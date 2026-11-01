@@ -1148,7 +1148,9 @@ END:VCALENDAR
         ];
 
         $delegationRequest->setBody(json_encode($sharees));
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0e');
         $response = $this->request($delegationRequest);
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0f');
 
         $this->assertEquals(200, $response->status);
 
@@ -1737,7 +1739,9 @@ END:VCALENDAR
         ];
 
         $delegationRequest->setBody(json_encode($sharees));
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0e');
         $response = $this->request($delegationRequest);
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0f');
 
         $this->assertEquals(200, $response->status);
 
@@ -2289,6 +2293,51 @@ END:VCALENDAR
         $response = $this->request($request);
 
         $this->assertEquals($response->status, 412);
+    }
+
+    public static function unsupportedPublicRights(): array {
+        return [
+            'share' => ['{DAV:}share'],
+            'all' => ['{DAV:}all'],
+            'write-acl' => ['{DAV:}write-acl'],
+            'unbind' => ['{DAV:}unbind'],
+            'write-properties' => ['{DAV:}write-properties'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('unsupportedPublicRights')]
+    function testACLRejectsPrivilegesThatAreNotPublicRights($privilege) {
+        $response = $this->changePublicRight($privilege);
+
+        $this->assertEquals(412, $response->status);
+    }
+
+    public static function supportedPublicRights(): array {
+        return [
+            'private' => [''],
+            'free-busy' => ['{urn:ietf:params:xml:ns:caldav}read-free-busy'],
+            'read' => ['{DAV:}read'],
+            'write' => ['{DAV:}write'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('supportedPublicRights')]
+    function testACLAcceptsPublicRights($privilege) {
+        $response = $this->changePublicRight($privilege);
+
+        $this->assertEquals(200, $response->status);
+    }
+
+    private function changePublicRight($privilege) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'ACL',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+        $request->setBody(json_encode(['public_right' => $privilege]));
+
+        return $this->request($request);
     }
 
     function testACLShouldReturn200WithModifiedPrivileges() {

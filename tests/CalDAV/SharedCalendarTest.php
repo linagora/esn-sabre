@@ -617,6 +617,28 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $this->assertFalse($sharedCalendarESN->isPublic());
     }
 
+    public static function storedUnsupportedPublicRights(): array {
+        return [
+            'share' => ['{DAV:}share'],
+            'all' => ['{DAV:}all'],
+            'write-acl' => ['{DAV:}write-acl'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('storedUnsupportedPublicRights')]
+    function testStoredUnsupportedPublicRightIsNotGrantedToAuthenticatedUsers($privilege) {
+        $backend = $this->getBackend();
+
+        $calendarESN = new \ESN\CalDAV\CalendarHome($backend, ['uri' => 'principals/user/' . $this->calendarId]);
+        $sharedCalendarESN =  $calendarESN->getChild($this->calendarId);
+        $aclOrig = $sharedCalendarESN->getACL();
+
+        $sharedCalendarESN->savePublicRight($privilege);
+
+        $this->assertFalse($sharedCalendarESN->isPublic());
+        $this->assertEquals($aclOrig, $sharedCalendarESN->getACL());
+    }
+
     function testGetSubscribers() {
         $props = [
             'id'                                        => 1,

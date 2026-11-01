@@ -592,7 +592,7 @@ class CalendarHandler {
 
         $publicRight = $this->decodePublicRightPayload($request);
 
-        $this->assertSupportedPublicRight($node, $publicRight);
+        $this->assertSupportedPublicRight($publicRight);
 
         $node->savePublicRight($publicRight);
 
@@ -624,11 +624,8 @@ class CalendarHandler {
         return $jsonData->public_right;
     }
 
-    private function assertSupportedPublicRight($node, $publicRight): void {
-        $supportedPrivileges = $this->server->getPlugin('acl')->getFlatPrivilegeSet($node);
-        $supportedPrivileges[""] = "Private";
-
-        if (!isset($supportedPrivileges[$publicRight])) {
+    private function assertSupportedPublicRight($publicRight): void {
+        if ($publicRight !== '' && !\ESN\CalDAV\SharedCalendar::isSupportedPublicRight($publicRight)) {
             throw new \Sabre\DAVACL\Exception\NotSupportedPrivilege('The privilege you specified (' . $publicRight . ') is not recognized by this server');
         }
     }

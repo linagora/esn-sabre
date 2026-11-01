@@ -269,6 +269,25 @@ class CalendarObjectService {
     }
 
     /**
+     * Returns the PRIVATE / CONFIDENTIAL objects of a calendar with their data, whatever their content:
+     * the callers evaluate a calendar-query on their sanitized form, which can match where the stored one
+     * does not.
+     *
+     * @param array $calendarId [calendarId, instanceId]
+     * @return \Generator Yields ['uri' => string, 'calendardata' => string]
+     */
+    public function getPrivateCalendarObjects($calendarId) {
+        $query = [
+            'calendarid' => $calendarId[0],
+            'classification' => ['$in' => ['PRIVATE', 'CONFIDENTIAL']]
+        ];
+
+        foreach ($this->calendarObjectDAO->findWithQuery($query, ['uri' => 1, 'calendardata' => 1]) as $row) {
+            yield ['uri' => $row['uri'], 'calendardata' => $row['calendardata']];
+        }
+    }
+
+    /**
      * Optimized version of calendarQuery that returns full object data (uri, calendardata, etag)
      * instead of just URIs. This avoids the need for a subsequent getPropertiesForMultiplePaths call.
      *

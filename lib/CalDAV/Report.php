@@ -45,13 +45,27 @@ class Report {
         $node = $this->server->tree->getNodeForPath($path);
         $depth = $this->server->getHTTPDepth(0);
 
-        if (!($node instanceof ICalendarObjectContainer) || $depth != 1) {
+        if (!($node instanceof ICalendarObjectContainer) || ($depth != 1 && !$this->isMicrosoftDepthZero($depth))) {
+            // A calendar object queried directly (Depth: 0) is matched by the stock implementation on
+            // its calendar-data property, which PrivateEventPlugin already sanitizes.
             $fallback();
 
             return;
         }
 
         $this->sendMultiStatus($this->buildCalendarQueryReportResult($report, $path, $node));
+    }
+
+    /**
+     * Microsoft clients send Depth: 0 when they mean Depth: 1, which the stock implementation accepts:
+     * served here too, so that it goes through the same matching.
+     *
+     * @param int $depth
+     * @return bool
+     */
+    private function isMicrosoftDepthZero($depth) {
+        return $depth == 0
+            && strpos((string) $this->server->httpRequest->getHeader('User-Agent'), 'MSFT-') === 0;
     }
 
     /**
@@ -93,7 +107,7 @@ class Report {
 
         $paths = array_map(function ($nodePath) use ($path) {
             return $path . '/' . $nodePath;
-        }, $node->calendarQuery($report->filters));
+        }, $this->calendarQuery($node, $report->filters));
 
         $result = [];
         foreach ($this->server->getPropertiesForMultiplePaths($paths, $report->properties) as $properties) {
@@ -101,6 +115,32 @@ class Report {
         }
 
         return $result;
+    }
+
+    /**
+     * The URIs of the objects matching the filters, as the current user reads them: PRIVATE /
+     * CONFIDENTIAL objects are matched on their sanitized form when the calendar hides them, so
+     * that the result does not depend on their hidden fields.
+     *
+     * @param ICalendarObjectContainer $node
+     * @param array $filters
+     * @return string[]
+     */
+    private function calendarQuery(ICalendarObjectContainer $node, array $filters) {
+        $matchedUris = $node->calendarQuery($filters);
+
+        $privateEventQuery = PrivateEventCalendarQuery::forCalendar($node, $this->getCurrentUserPrincipal());
+        if ($privateEventQuery === null) {
+            return $matchedUris;
+        }
+
+        return $privateEventQuery->filterUris($matchedUris, $filters);
+    }
+
+    private function getCurrentUserPrincipal() {
+        $authPlugin = $this->server->getPlugin('auth');
+
+        return $authPlugin ? $authPlugin->getCurrentPrincipal() : null;
     }
 
     /**

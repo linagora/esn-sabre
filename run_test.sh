@@ -31,9 +31,16 @@ RESOURCE_MONITOR_PID=""
 cd "$(dirname "${BASH_SOURCE[0]}")"
 JAVA_REPORT_DIR="$PWD/tests/report/java"
 
-# Images built by this script. They are named (not tagged per-run), so an image
-# left behind by a previous run is silently reused by --skip-build invocations.
-BUILT_IMAGES=(esn_sabre_test esn-sabre-ldap-test esn_sabre_nginx_test)
+# Images built by this script, tagged with TEST_IMAGE_TAG (default: latest). Runs
+# sharing a Docker daemon, like concurrent Jenkins builds, need distinct tags:
+# otherwise each one removes and rebuilds the images the others are testing.
+# An image left behind by a previous run with the same tag is silently reused by
+# --skip-build invocations.
+export TEST_IMAGE_TAG="${TEST_IMAGE_TAG:-latest}"
+LDAP_IMAGE="esn-sabre-ldap-test:$TEST_IMAGE_TAG"
+SABRE_IMAGE="esn_sabre_test:$TEST_IMAGE_TAG"
+NGINX_IMAGE="esn_sabre_nginx_test:$TEST_IMAGE_TAG"
+BUILT_IMAGES=("$LDAP_IMAGE" "$SABRE_IMAGE" "$NGINX_IMAGE")
 
 for arg in "$@"; do
   case $arg in
@@ -140,6 +147,8 @@ javatest() {
     clone_options+=(--branch "$INTEGRATION_TEST_BRANCH")
   fi
   git clone "${clone_options[@]}" "$INTEGRATION_TEST_REPO" it-tests
+  # pre-build.sh only treats the untagged name as a local image (built without --pull).
+  docker tag "$SABRE_IMAGE" esn_sabre_test
   (cd it-tests && bash pre-build.sh esn_sabre_test)
 
   # As in integration-tests commit e920d102, each JVM gets its own compilation,
@@ -192,10 +201,10 @@ if [ "$SKIP_BUILD" = false ]; then
   docker image rm -f "${BUILT_IMAGES[@]}" >/dev/null 2>&1 || true
 
   # Refresh base images and APT layers so patch updates are included in every build.
-  docker build --pull --no-cache -t esn-sabre-ldap-test -f Dockerfile.ldap . || exit 1
-  docker build --pull --no-cache -t esn_sabre_test -f Dockerfile.test . || exit 1
+  docker build --pull --no-cache -t "$LDAP_IMAGE" -f Dockerfile.ldap . || exit 1
+  docker build --pull --no-cache -t "$SABRE_IMAGE" -f Dockerfile.test . || exit 1
   # The production image: the nginx rate limit test runs against it.
-  docker build --pull --no-cache -t esn_sabre_nginx_test -f Dockerfile . || exit 1
+  docker build --pull --no-cache -t "$NGINX_IMAGE" -f Dockerfile . || exit 1
 else
   for image in "${BUILT_IMAGES[@]}"; do
     if [ -z "$(docker images -q "$image" 2>/dev/null)" ]; then
@@ -218,7 +227,7 @@ fi
 
 # Nginx rate limit tests, against the production image
 if [ "$SKIP_NGINX" = false ]; then
-  bash tests/nginx/rate_limit_test.sh esn_sabre_nginx_test || exit 1
+  bash tests/nginx/rate_limit_test.sh "$NGINX_IMAGE" || exit 1
 else
   echo "Skipping nginx rate limit tests"
 fi

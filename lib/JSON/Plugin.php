@@ -212,6 +212,10 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             return $this->checkModificationsRights($path, $node);
         }
 
+        if ($node instanceof \Sabre\CalDAV\CalendarHome) {
+            return $this->checkCalendarHomeDeletion();
+        }
+
         if ($node instanceof \Sabre\CalDAV\Calendar) {
             $mainCalendarId = explode('/', $this->currentUser);
 
@@ -219,6 +223,25 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 throw new DAV\Exception\Forbidden('Forbidden: You can not delete your main calendar');
             }
         }
+    }
+
+    /**
+     * Deleting a calendar home deletes all its calendars, the main one included,
+     * which its owner is not allowed to delete. Cleaning a home is thus an
+     * administrative operation, reserved to technical users. A home is never a
+     * valid COPY / MOVE destination either: Sabre would delete it before even
+     * resolving the source.
+     */
+    private function checkCalendarHomeDeletion() {
+        if ($this->server->httpRequest->getMethod() !== 'DELETE') {
+            throw new Forbidden('Forbidden: A calendar home can not be overwritten');
+        }
+
+        if ($this->authTenant?->tenantType !== TenantType::Technical) {
+            throw new Forbidden('Forbidden: Only technical users can delete a calendar home');
+        }
+
+        return true;
     }
 
     function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {

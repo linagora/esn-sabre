@@ -4,15 +4,18 @@ namespace ESN\CalDAV;
 
 use ESN\DAV\Sharing\Plugin as SharingPlugin;
 use ESN\Utils\Utils;
+use Sabre\CalDAV\ICalendarObject;
 use Sabre\DAV\Exception\Forbidden;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
 use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 use Sabre\VObject\Component\VCalendar;
+use Sabre\VObject\Reader;
 
 /**
- * Validates organizer authorization on team-calendar writes through calendarObjectChange.
+ * Validates organizer authorization on team-calendar writes: PUT through calendarObjectChange, COPY and
+ * MOVE through beforeCopy / beforeMove.
  *
  * Authorization to send messages as the organizer is enforced by the scheduling plugin.
  */
@@ -23,6 +26,8 @@ class OrganizerValidationPlugin extends ServerPlugin {
     function initialize(Server $server) {
         $this->server = $server;
         $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], Plugin::PRIORITY_BEFORE_SCHEDULING - 10);
+        $server->on('beforeCopy', [$this, 'validateCopiedObjectOrganizer'], 40);
+        $server->on('beforeMove', [$this, 'validateCopiedObjectOrganizer'], 40);
     }
 
     function getPluginName() {
@@ -50,6 +55,32 @@ class OrganizerValidationPlugin extends ServerPlugin {
         }
 
         $this->validateCalendarOrganizer($vCal, $calendarPath);
+    }
+
+    /**
+     * Sabre stores the object of a COPY, or of a MOVE across calendars, without
+     * emitting calendarObjectChange: the source object is checked here instead.
+     */
+    function validateCopiedObjectOrganizer($sourcePath, $destinationPath) {
+        list($destinationCalendarPath,) = \Sabre\Uri\split($destinationPath);
+        if (!$destinationCalendarPath || !$this->isTeamCalendarPath($destinationCalendarPath)) {
+            return;
+        }
+
+        $source = $this->server->tree->getNodeForPath($sourcePath);
+        if (!$source instanceof ICalendarObject) {
+            return;
+        }
+
+        $data = $source->get();
+        $calendar = Reader::read(is_resource($data) ? stream_get_contents($data) : $data);
+        try {
+            if ($calendar instanceof VCalendar) {
+                $this->validateCalendarOrganizer($calendar, $destinationCalendarPath);
+            }
+        } finally {
+            $calendar->destroy();
+        }
     }
 
     private function validateCalendarOrganizer(VCalendar $calendar, $calendarPath): void {

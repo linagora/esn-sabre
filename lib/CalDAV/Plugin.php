@@ -48,7 +48,9 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $server->on('calendarObjectChange', [$this, 'validateCalendarObjectBeforeScheduling'], self::PRIORITY_BEFORE_SCHEDULING);
         $server->on('calendarObjectChange', [$this, 'captureWrittenObject'], self::PRIORITY_CAPTURE_WRITTEN_OBJECT);
         $server->on('propFind', [$this, 'propFindSharedCalendar'], 151);
+        $server->on('calendarObjectChange', [$this, 'validateUniqueUidInTeamCalendar'], self::PRIORITY_BEFORE_SCHEDULING);
         $server->on('beforeMove', [$this, 'validateBeforeMoveToTeamCalendar'], 40);
+        $server->on('beforeCopy', [$this, 'validateBeforeCopyToTeamCalendar'], 40);
         $server->on('beforeUnbind', [$this, 'checkCalendarHomeUnbindPrivilege']);
     }
 
@@ -66,28 +68,74 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
     }
 
+    /**
+     * A MOVE within one Team Calendar keeps the object it moves: only a MOVE
+     * from another calendar can bring a second object with the same UID.
+     */
     function validateBeforeMoveToTeamCalendar($sourcePath, $destinationPath) {
+        $this->validateCopiedObjectUidInTeamCalendar($sourcePath, $destinationPath, false);
+    }
+
+    /**
+     * A COPY leaves its source in place: even within one Team Calendar, it
+     * would store a second object with the same UID.
+     */
+    function validateBeforeCopyToTeamCalendar($sourcePath, $destinationPath) {
+        $this->validateCopiedObjectUidInTeamCalendar($sourcePath, $destinationPath, true);
+    }
+
+    /**
+     * Sabre does not emit calendarObjectChange for a COPY or a MOVE: they are
+     * checked by validateBeforeMoveToTeamCalendar() / validateBeforeCopyToTeamCalendar().
+     */
+    function validateUniqueUidInTeamCalendar(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
+        if (!$isNew || $request->getMethod() === 'ITIP') return;
+
+        $calendar = $this->teamCalendarAt($calendarPath);
+        if ($calendar) {
+            $this->assertUidNotInTeamCalendar($vCal, $calendar);
+        }
+    }
+
+    private function validateCopiedObjectUidInTeamCalendar($sourcePath, $destinationPath, bool $sameCalendarConflicts) {
         list($sourceCalendarPath,) = \Sabre\Uri\split($sourcePath);
         list($destinationCalendarPath,) = \Sabre\Uri\split($destinationPath);
         if (!$sourceCalendarPath || !$destinationCalendarPath) return;
 
+        $destinationCalendar = $this->teamCalendarAt($destinationCalendarPath);
+        if (!$destinationCalendar) return;
+
         $sourceCalendar = $this->server->tree->getNodeForPath($sourceCalendarPath);
-        $destinationCalendar = $this->server->tree->getNodeForPath($destinationCalendarPath);
-        if (!$sourceCalendar instanceof SharedCalendar || !$destinationCalendar instanceof SharedCalendar
-            || !Utils::isUserPrincipal($sourceCalendar->getOwner())
-            || !Utils::isTeamCalendarFromPrincipal($destinationCalendar->getOwner())) return;
+        if (!$sameCalendarConflicts && $sourceCalendar instanceof SharedCalendar
+            && $sourceCalendar->getCalendarId() === $destinationCalendar->getCalendarId()) return;
 
         $source = $this->server->tree->getNodeForPath($sourcePath);
         if (!$source instanceof \Sabre\CalDAV\ICalendarObject || $source instanceof \Sabre\CalDAV\Schedule\ISchedulingObject) return;
         $data = $source->get();
         $calendar = \Sabre\VObject\Reader::read(is_resource($data) ? stream_get_contents($data) : $data);
         try {
-            if (isset($calendar->VEVENT->UID) && $destinationCalendar->getBackend()->hasCalendarObjectWithUid(
-                $destinationCalendar->getCalendarId(), (string) $calendar->VEVENT->UID)) {
-                throw new \Sabre\DAV\Exception\Forbidden('The destination Team Calendar already contains an event with this UID.');
-            }
+            $this->assertUidNotInTeamCalendar($calendar, $destinationCalendar);
         } finally {
             $calendar->destroy();
+        }
+    }
+
+    private function teamCalendarAt($calendarPath): ?SharedCalendar {
+        try {
+            $calendar = $this->server->tree->getNodeForPath($calendarPath);
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            return null;
+        }
+
+        return $calendar instanceof SharedCalendar && Utils::isTeamCalendarFromPrincipal($calendar->getOwner())
+            ? $calendar
+            : null;
+    }
+
+    private function assertUidNotInTeamCalendar(VCalendar $calendar, SharedCalendar $teamCalendar) {
+        if (isset($calendar->VEVENT->UID) && $teamCalendar->getBackend()->hasCalendarObjectWithUid(
+            $teamCalendar->getCalendarId(), (string) $calendar->VEVENT->UID)) {
+            throw new \Sabre\DAV\Exception\Forbidden('The destination Team Calendar already contains an event with this UID.');
         }
     }
 

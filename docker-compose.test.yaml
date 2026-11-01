@@ -35,7 +35,7 @@ services:
       - esn-sabre-test-net
 
   esn_ldap:
-    image: esn-sabre-ldap-test
+    image: esn-sabre-ldap-test:${TEST_IMAGE_TAG:-latest}
     hostname: esn_ldap
     environment:
       - LDAP_PORT_NUMBER=389
@@ -47,7 +47,7 @@ services:
       - esn-sabre-test-net
 
   esn_test:
-    image: esn_sabre_test
+    image: esn_sabre_test:${TEST_IMAGE_TAG:-latest}
     hostname: esn_sabre_test
     environment:
       - LDAP_ADMIN_DN=cn=admin,dc=linagora.com,dc=lng

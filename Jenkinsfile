@@ -14,6 +14,11 @@ pipeline {
     stages {
       stage('Build Test Images') {
           steps {
+              script {
+                  /* Builds of other branches share this Docker daemon: tag the test
+                     images per build, so that they neither replace nor remove ours. */
+                  env.TEST_IMAGE_TAG = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}".replaceAll('[^A-Za-z0-9_.-]', '-')
+              }
               sh 'bash run_test.sh --skip-java --skip-php --skip-nginx'
           }
       }
@@ -137,7 +142,7 @@ pipeline {
             /* Drop the test images and the layers they pinned, on success as well
                as on failure: a surviving esn_sabre_test would be reused by the
                next build's --skip-build stages instead of the one it just built. */
-            sh 'docker image rm -f esn_sabre_test esn-sabre-ldap-test || true'
+            sh 'docker image rm -f "esn_sabre_test:$TEST_IMAGE_TAG" "esn-sabre-ldap-test:$TEST_IMAGE_TAG" "esn_sabre_nginx_test:$TEST_IMAGE_TAG" || true'
             sh 'docker image prune -f || true'
             deleteDir() /* clean up our workspace */
         }

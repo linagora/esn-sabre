@@ -438,11 +438,21 @@ class CalendarHandler {
         // Same parser as the subscription node, so the listed source is the calendar it reads
         $sourcePath = SubscriptionSource::toPath($sourceHref);
 
-        if ($sourcePath === null || !$this->server->tree->nodeExists($sourcePath)) {
+        $sourceNode = $sourcePath === null ? null : $this->findSourceNode($sourcePath);
+
+        return $sourceNode === null ? null : $this->calendarToJson($sourcePath, $sourceNode, true);
+    }
+
+    /**
+     * Returns the node of a subscription source, or null when it is gone or
+     * out of reach of the current user (e.g. its owner moved to another domain).
+     */
+    private function findSourceNode(string $sourcePath) {
+        try {
+            return $this->server->tree->getNodeForPath($sourcePath);
+        } catch (\Sabre\DAV\Exception\NotFound | \Sabre\DAV\Exception\Forbidden $e) {
             return null;
         }
-
-        return $this->calendarToJson($sourcePath, $this->server->tree->getNodeForPath($sourcePath), true);
     }
 
     public function getSubscriptionInformation($nodePath, $node, $withRights) {

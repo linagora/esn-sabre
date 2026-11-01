@@ -233,7 +233,7 @@ class CalendarObjectHandler {
      * }
      *
      * @param string $nodePath Path to the calendar resource (e.g., "/calendars/userId/calendarId")
-     * @param \Sabre\CalDAV\ICalendarObjectContainer $node Calendar node instance (Calendar or SharedCalendar)
+     * @param \Sabre\CalDAV\ICalendarObjectContainer $node Calendar node instance (Calendar, SharedCalendar or Subscription)
      * @param object $jsonData JSON request data containing the 'sync-token' property
      * @return array Tuple of [int $statusCode, array|null $responseBody]
      *               - [207, array] on success with multistatus response
@@ -247,17 +247,7 @@ class CalendarObjectHandler {
             return [400, null];
         }
 
-        // Get calendar backend
-        $backend = method_exists($node, 'getBackend') ? $node->getBackend() : $node->getCalDAVBackend();
-
-        $calendarId = $this->getCalendarId($node, $backend);
-        if ($calendarId === null) {
-            return [400, null];
-        }
-
-        // Get changes from backend
-        // syncLevel 1 = include calendar object changes (added, modified, deleted)
-        $changes = $backend->getChangesForCalendar($calendarId, $syncToken, 1);
+        $changes = $this->getChangesForNode($node, $syncToken);
 
         // If null is returned, the sync token is invalid
         if ($changes === null) {
@@ -281,6 +271,27 @@ class CalendarObjectHandler {
         ];
 
         return [207, $result];
+    }
+
+    /**
+     * Returns the changes of the calendar objects of $node since $syncToken, or null when unavailable.
+     *
+     * syncLevel 1 = include calendar object changes (added, modified, deleted)
+     */
+    private function getChangesForNode($node, $syncToken) {
+        // A subscription exposes the changes of its source calendar
+        if ($node instanceof \ESN\CalDAV\Subscriptions\Subscription) {
+            return $node->getChanges($syncToken, 1);
+        }
+
+        $backend = method_exists($node, 'getBackend') ? $node->getBackend() : $node->getCalDAVBackend();
+
+        $calendarId = $this->getCalendarId($node, $backend);
+        if ($calendarId === null) {
+            return null;
+        }
+
+        return $backend->getChangesForCalendar($calendarId, $syncToken, 1);
     }
 
     private function getSyncTokenFromRequest($jsonData) {

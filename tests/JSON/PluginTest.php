@@ -1933,6 +1933,36 @@ END:VCALENDAR
         $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
     }
 
+    function testDeleteCalendarAsTechnicalUserIsNotA500() {
+        $this->authBackend->setPrincipal('principals/technicalUser');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/' . $this->cal['uri'] . '.json',
+        ));
+        $response = $this->request($request);
+
+        $this->assertLessThan(500, $response->status);
+    }
+
+    function testDeleteMainCalendarOfUserAsTechnicalUserIsForbidden() {
+        $mainCalendarUri = '54b64eadf6d7d8e41d263e0f';
+        $this->caldavBackend->createCalendar('principals/users/54b64eadf6d7d8e41d263e0f', $mainCalendarUri, array(
+            '{DAV:}displayname' => 'Main',
+        ));
+        $this->authBackend->setPrincipal('principals/technicalUser');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/' . $mainCalendarUri . '.json',
+        ));
+        $response = $this->request($request);
+
+        $this->assertEquals(403, $response->status);
+    }
+
     function testDeleteWrongCollection() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'DELETE',

@@ -3,6 +3,7 @@
 namespace ESN\CardDAV\Sharing;
 
 use ESN\DAV\Sharing\Plugin as SPlugin;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 require_once ESN_TEST_BASE. '/CardDAV/PluginTestBase.php';
 
@@ -119,5 +120,50 @@ class ShareGroupAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
         );
 
         $this->assertEquals(204, $response->status);
+    }
+
+    #[DataProvider('domainMembersRequestsThroughPathVariants')]
+    function testUpdatingDomainMembersRightsThroughPathVariantRespond405(string $prefix, array $body) {
+        $this->carddavBackend->createAddressBook('principals/domains/' . self::DOMAIN_ID, 'domain-members', []);
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant(self::ADMINISTRATOR_ID_1, self::DOMAIN_ID));
+
+        $response = $this->makeRequest(
+            'POST',
+            '/addressbooks/' . self::DOMAIN_ID . $prefix . 'domain-members.json',
+            $body
+        );
+
+        $this->assertEquals(405, $response->status);
+        $this->assertStringContainsString('Cannot update public rights or delegations for domain addressbook', $response->getBodyAsString());
+    }
+
+    static function domainMembersRequestsThroughPathVariants() {
+        $bodies = [
+            'share' => [
+                'dav:share-resource' => [
+                    'dav:sharee' => [
+                        [
+                            'dav:href' => 'mailto:admin2@lng.com',
+                            'dav:share-access' => SPlugin::ACCESS_READWRITE
+                        ]
+                    ]
+                ]
+            ],
+            'publish' => [ 'dav:publish-addressbook' => [ 'privilege' => '{DAV:}read' ] ],
+            'members right' => [ 'dav:group-addressbook' => [ 'privileges' => [ '{DAV:}read', '{DAV:}write' ] ] ]
+        ];
+        $prefixes = [
+            'plain path' => '/',
+            'encoded slash' => '/%2F',
+            'repeated slashes' => '///'
+        ];
+
+        return array_merge(...array_map(
+            fn($prefixName) => array_combine(
+                array_map(fn($bodyName) => $bodyName . ' through ' . $prefixName, array_keys($bodies)),
+                array_map(fn($body) => [ $prefixes[$prefixName], $body ], array_values($bodies))
+            ),
+            array_keys($prefixes)
+        ));
     }
 }

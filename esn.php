@@ -303,6 +303,8 @@ $server->addPlugin(new ESN\DAV\XHttpMethodOverridePlugin());
 
 $server->addPlugin(new ESN\DAV\ReportBodyValidationPlugin());
 
+$server->addPlugin(new ESN\DAV\XmlBodyDeserializationPlugin());
+
 // Logger request plugin
 if (SABRE_ENV === SABRE_ENV_DEV) {
     $requestLoggerPlugin = new  ESN\Log\RequestLoggerPlugin();

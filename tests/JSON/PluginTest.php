@@ -1702,6 +1702,36 @@ END:VCALENDAR
         $this->assertCount($allCalendarsAfterSubscription - 1, $allCalendarsAfterRemoveSource);
     }
 
+    function testCalendarHomeShouldLeaveOutASubscriptionWhoseSourceOwnerMovedToAnotherDomain() {
+        $this->moveSubscriptionSourceOwnerToAnotherDomain();
+
+        $response = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f.json?sharedPublicSubscription=true&withRights=true', null);
+
+        $this->assertEquals(200, $response->status);
+        $this->assertNotContains('/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json', $this->listedCalendarHrefs($response));
+    }
+
+    function testGetSubscriptionWhoseSourceOwnerMovedToAnotherDomainShouldReturn404() {
+        $this->moveSubscriptionSourceOwnerToAnotherDomain();
+
+        $response = $this->makeRequest('GET', '/calendars/54b64eadf6d7d8e41d263e0f/subscription1.json?withRights=true', null);
+
+        $this->assertEquals(404, $response->status);
+    }
+
+    private function moveSubscriptionSourceOwnerToAnotherDomain() {
+        $this->esndb->users->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0e')],
+            ['$set' => ['domains' => [['domain_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e7b')]]]]
+        );
+    }
+
+    private function listedCalendarHrefs($response) {
+        $calendars = json_decode($response->getBodyAsString())->{'_embedded'}->{'dav:calendar'};
+
+        return array_map(fn($calendar) => $calendar->{'_links'}->self->href, $calendars);
+    }
+
     function testDeleteMainCalendar() {
         $defaultUri = \ESN\CalDAV\Backend\Esn::EVENTS_URI;
 

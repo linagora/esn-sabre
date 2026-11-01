@@ -114,7 +114,13 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
         $principalId = $parts[1];
         $calendarUri = $parts[2];
 
-        $calendars = $this->caldavBackend->getCalendarsForUser($this->resolveSourcePrincipal($principalId));
+        $sourcePrincipal = $this->resolveSourcePrincipal($principalId);
+        if ($sourcePrincipal === null) {
+            $this->sourceCalendarInfo = false;
+            return null;
+        }
+
+        $calendars = $this->caldavBackend->getCalendarsForUser($sourcePrincipal);
         foreach ($calendars as $calendar) {
             if ($calendar['uri'] === $calendarUri) {
                 $this->sourceCalendarInfo = $calendar;
@@ -127,24 +133,33 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
     }
 
     /**
-     * Returns the principal owning the source calendar home: a resource, a team calendar, or else a user.
+     * Returns the principal owning the source calendar home: a resource, a team calendar, or a user.
+     *
+     * Returns null when that principal is gone or out of the current user's domain, as the calendar
+     * root then refuses to serve its home: the subscription must not expose its events either.
      *
      * @param string $principalId
-     * @return string
+     * @return string|null
      */
     private function resolveSourcePrincipal($principalId) {
         $principalBackend = method_exists($this->caldavBackend, 'getPrincipalBackend')
             ? $this->caldavBackend->getPrincipalBackend()
             : null;
-        if ($principalBackend) {
-            foreach (['principals/resources/', 'principals/team-calendars/'] as $principalPrefix) {
+        if (!$principalBackend) {
+            return 'principals/users/' . $principalId;
+        }
+
+        try {
+            foreach (['principals/resources/', 'principals/team-calendars/', 'principals/users/'] as $principalPrefix) {
                 if ($principalBackend->getPrincipalByPath($principalPrefix . $principalId)) {
                     return $principalPrefix . $principalId;
                 }
             }
+        } catch (\Sabre\DAV\Exception\Forbidden | \MongoDB\Driver\Exception\InvalidArgumentException $e) {
+            // Cross-domain principal, or an id that is not an ObjectId
         }
 
-        return 'principals/users/' . $principalId;
+        return null;
     }
 
     /**

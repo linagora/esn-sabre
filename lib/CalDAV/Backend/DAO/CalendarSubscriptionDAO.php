@@ -43,8 +43,11 @@ class CalendarSubscriptionDAO extends BaseDAO {
         return $this->deleteOne(['_id' => new \MongoDB\BSON\ObjectId($subscriptionId)]);
     }
 
+    /**
+     * @param string|string[] $source a stored source, or any of several
+     */
     public function findSubscribersBySource($source, array $projection = []) {
-        $query = ['source' => $source];
+        $query = ['source' => is_array($source) ? ['$in' => array_values($source)] : $source];
         $options = empty($projection) ? [] : ['projection' => $projection];
         return $this->find($query, $options);
     }

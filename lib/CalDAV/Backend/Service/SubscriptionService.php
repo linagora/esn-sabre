@@ -3,6 +3,7 @@
 namespace ESN\CalDAV\Backend\Service;
 
 use ESN\CalDAV\Backend\DAO\CalendarSubscriptionDAO;
+use ESN\CalDAV\Subscriptions\SubscriptionSource;
 use Sabre\Event\EventEmitter;
 
 /**
@@ -155,7 +156,7 @@ class SubscriptionService {
      */
     public function getSubscribers($source) {
         $projection = ['_id' => 1, 'principaluri' => 1, 'uri' => 1];
-        $res = $this->calendarSubscriptionDAO->findSubscribersBySource($source, $projection);
+        $res = $this->calendarSubscriptionDAO->findSubscribersBySource(SubscriptionSource::storedForms($source), $projection);
 
         $result = [];
         foreach ($res as $row) {

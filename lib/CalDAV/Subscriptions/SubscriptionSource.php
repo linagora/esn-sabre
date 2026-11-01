@@ -51,6 +51,17 @@ class SubscriptionSource {
     }
 
     /**
+     * @param string $path the canonical source path of a calendar
+     * @return string[] every stored source that parse() resolves to this calendar: subscriptions
+     *         written before sources were canonicalised can hold leading or trailing slashes
+     */
+    static function storedForms($path) {
+        $path = trim($path, '/');
+
+        return [$path, '/' . $path, $path . '/', '/' . $path . '/'];
+    }
+
+    /**
      * @param string $home
      * @param string $calendarUri
      * @return string the canonical source path of a calendar

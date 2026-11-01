@@ -120,4 +120,88 @@ class ShareGroupAddressBookPluginTest extends \ESN\CardDAV\PluginTestBase {
 
         $this->assertEquals(204, $response->status);
     }
+
+    function testXmlShareResourceOnDomainMembersIsRefused() {
+        $domainMembersId = $this->givenDomainMembersAddressBookAndMember();
+
+        $response = $this->makeXmlShareResourceRequest('/addressbooks/' . self::DOMAIN_ID . '/domain-members');
+
+        $this->assertEquals(405, $response->status);
+        $this->assertStringContainsString('Cannot update public rights or delegations for domain addressbook', $response->getBodyAsString());
+        $this->assertEmpty($this->carddavBackend->getInvites($domainMembersId));
+    }
+
+    function testXmlShareResourceOnDotSegmentDomainMembersPathIsRefused() {
+        $domainMembersId = $this->givenDomainMembersAddressBookAndMember();
+
+        $response = $this->makeXmlShareResourceRequest('/addressbooks/' . self::DOMAIN_ID . '/./domain-members');
+
+        $this->assertEquals(405, $response->status);
+        $this->assertEmpty($this->carddavBackend->getInvites($domainMembersId));
+    }
+
+    function testJsonShareResourceOnDomainMembersIsRefused() {
+        $domainMembersId = $this->givenDomainMembersAddressBookAndMember();
+
+        $response = $this->makeRequest(
+            'POST',
+            '/addressbooks/' . self::DOMAIN_ID . '/domain-members.json',
+            [
+                'dav:share-resource' => [
+                    'dav:sharee' => [
+                        [
+                            'dav:href' => 'mailto:member@lng.com',
+                            'dav:share-access' => SPlugin::ACCESS_READWRITE
+                        ]
+                    ]
+                ]
+            ]
+        );
+
+        $this->assertEquals(405, $response->status);
+        $this->assertEmpty($this->carddavBackend->getInvites($domainMembersId));
+    }
+
+    function testXmlShareResourceOnGroupAddressBookIsAccepted() {
+        $this->givenDomainMembersAddressBookAndMember();
+
+        $response = $this->makeXmlShareResourceRequest('/addressbooks/' . self::DOMAIN_ID . '/gab');
+
+        $this->assertEquals(200, $response->status);
+        $this->assertCount(1, $this->carddavBackend->getInvites($this->gabId));
+    }
+
+    private function givenDomainMembersAddressBookAndMember() {
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e9e'),
+            'firstname' => 'member',
+            'lastname' => 'member',
+            'accounts' => [
+                [
+                    'type' => 'email',
+                    'emails' => [
+                      'member@lng.com'
+                    ]
+                ]
+            ],
+            'domains' => [ [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ] ]
+        ]);
+
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant(self::ADMINISTRATOR_ID_1, self::DOMAIN_ID));
+
+        return $this->carddavBackend->createAddressBook('principals/domains/' . self::DOMAIN_ID, 'domain-members', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
+    }
+
+    private function makeXmlShareResourceRequest($uri) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/davsharing+xml; charset=utf-8',
+            'REQUEST_URI'       => $uri,
+        ]);
+        $request->setBody('<?xml version="1.0" encoding="utf-8"?><D:share-resource xmlns:D="DAV:"><D:sharee>'
+            . '<D:href>mailto:member@lng.com</D:href><D:share-access><D:read-write/></D:share-access>'
+            . '</D:sharee></D:share-resource>');
+
+        return $this->request($request);
+    }
 }

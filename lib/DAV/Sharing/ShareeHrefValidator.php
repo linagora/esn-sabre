@@ -4,6 +4,7 @@ namespace ESN\DAV\Sharing;
 
 use Sabre\DAV\Exception\BadRequest;
 use Sabre\DAV\Server;
+use Sabre\DAVACL\IPrincipal;
 
 /**
  * Validates the dav:href of a sharee received through the JSON sharing APIs:
@@ -48,9 +49,9 @@ class ShareeHrefValidator {
     }
 
     private function isExistingPrincipal(string $href): bool {
-        $path = ltrim($href, '/');
+        $path = preg_replace('#/+#', '/', trim($href, '/'));
 
-        if (str_starts_with($path, 'principals/') && $this->server->tree->nodeExists($path)) {
+        if (str_starts_with($path, 'principals/') && $this->isPrincipalNode($path)) {
             return true;
         }
 
@@ -58,5 +59,10 @@ class ShareeHrefValidator {
         $this->server->emit('getPrincipalByUri', [$href, &$principal]);
 
         return !is_null($principal);
+    }
+
+    private function isPrincipalNode(string $path): bool {
+        return $this->server->tree->nodeExists($path) &&
+            $this->server->tree->getNodeForPath($path) instanceof IPrincipal;
     }
 }

@@ -54,7 +54,8 @@ class Plugin extends \Sabre\DAV\Sharing\Plugin {
                 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                     continue;
                 }
-                $emailDomain = explode('@', $email)[1];
+                // Domain names are stored lower-case.
+                $emailDomain = strtolower(explode('@', $email)[1]);
                 $domain = $this->esnDb->domains->findOne(
                     ['_id' => new \MongoDB\BSON\ObjectId($domainId), 'name' => $emailDomain],
                     ['projection' => ['_id' => 1]]

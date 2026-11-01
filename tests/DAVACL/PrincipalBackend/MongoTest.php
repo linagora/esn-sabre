@@ -551,6 +551,12 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(self::USER_ID, $backend->getAuthTenantByEmail('user@example.com')->userId);
     }
 
+    function testGetAuthTenantByEmailIgnoresCase() {
+        $backend  = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertEquals(self::USER_ID, $backend->getAuthTenantByEmail('User@Example.COM')->userId);
+    }
+
     function testGetAuthTenantWhenUserDoesNotExist() {
         $backend  = new Mongo(self::$esndb, self::$tenant);
 
@@ -568,6 +574,14 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $resourceEmail = self::RESOURCE_ID . '@example.com';
 
         $result = $backend->getAuthTenantByResourceEmail($resourceEmail);
+
+        $this->assertEquals(self::RESOURCE_ID, (string)$result->userId);
+    }
+
+    function testGetAuthTenantByResourceEmailIgnoresDomainCase() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $result = $backend->getAuthTenantByResourceEmail(self::RESOURCE_ID . '@Example.COM');
 
         $this->assertEquals(self::RESOURCE_ID, (string)$result->userId);
     }

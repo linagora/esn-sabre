@@ -22,6 +22,7 @@ class PluginTest extends \ESN\DAV\ServerMock {
 
         $aclPlugin = new \Sabre\DAVACL\Plugin();
         $aclPlugin->principalCollectionSet = ['principals/users'];
+        $aclPlugin->adminPrincipals[] = PRINCIPALS_TECHNICAL_USER;
         $this->server->addPlugin($aclPlugin);
 
         $plugin = new Plugin('json');
@@ -1030,7 +1031,7 @@ END:VCALENDAR
         $this->assertEquals(403, $response->status);
     }
 
-    function testGETAddressBookHomesWithTechnicalUser() {
+    private function authenticateAsTechnicalUserOfUsersDomain() {
         $DOMAIN_ID = '54b64eadf6d7d8e41d263e7e';
         $this->esndb->users->updateMany(
             [],
@@ -1041,6 +1042,10 @@ END:VCALENDAR
             [ '$set' => [ 'domain' => new \MongoDB\BSON\ObjectId($DOMAIN_ID) ] ]
         );
         $this->authBackend->setAuthTenant(new AuthTenant('technicalUser', $DOMAIN_ID, TenantType::Technical));
+    }
+
+    function testGETAddressBookHomesWithTechnicalUser() {
+        $this->authenticateAsTechnicalUserOfUsersDomain();
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',
@@ -1931,6 +1936,36 @@ END:VCALENDAR
 
         $calendars = $this->caldavBackend->getCalendarsForUser($mainCalDavCalendar['principaluri']);
         $this->assertCount(count($this->user1Calendars['ownedCalendars']) + count($this->user1Calendars['otherCalendars']), $calendars);
+    }
+
+    function testDeleteCalendarOfUserAsTechnicalUser() {
+        $this->authenticateAsTechnicalUserOfUsersDomain();
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/' . $this->cal['uri'] . '.json',
+        ));
+        $response = $this->request($request);
+
+        $this->assertEquals(204, $response->status);
+    }
+
+    function testDeleteMainCalendarOfUserAsTechnicalUserIsForbidden() {
+        $mainCalendarUri = '54b64eadf6d7d8e41d263e0f';
+        $this->caldavBackend->createCalendar('principals/users/54b64eadf6d7d8e41d263e0f', $mainCalendarUri, array(
+            '{DAV:}displayname' => 'Main',
+        ));
+        $this->authenticateAsTechnicalUserOfUsersDomain();
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'DELETE',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/' . $mainCalendarUri . '.json',
+        ));
+        $response = $this->request($request);
+
+        $this->assertEquals(403, $response->status);
     }
 
     function testDeleteWrongCollection() {

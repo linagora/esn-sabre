@@ -216,12 +216,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             return $this->checkCalendarHomeDeletion();
         }
 
-        if ($node instanceof \Sabre\CalDAV\Calendar) {
-            $mainCalendarId = explode('/', $this->currentUser);
-
-            if ($node->getName() === \ESN\CalDAV\Backend\Esn::EVENTS_URI || $node->getName() === $mainCalendarId[2]) {
-                throw new DAV\Exception\Forbidden('Forbidden: You can not delete your main calendar');
-            }
+        if ($node instanceof \Sabre\CalDAV\Calendar && $this->isMainCalendarOfHome($path, $node)) {
+            throw new DAV\Exception\Forbidden('Forbidden: You can not delete your main calendar');
         }
     }
 
@@ -242,6 +238,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
 
         return true;
+    }
+
+    // The main calendar is the one of the home owner, not of the actor: the
+    // technical user or a delegate may delete calendars of another home.
+    private function isMainCalendarOfHome($path, \Sabre\CalDAV\Calendar $node) {
+        list($homePath) = \Sabre\Uri\split($path);
+        list(, $homeId) = \Sabre\Uri\split($homePath);
+
+        return $node->getName() === \ESN\CalDAV\Backend\Esn::EVENTS_URI || $node->getName() === $homeId;
     }
 
     function beforeWriteContent($path, \Sabre\DAV\IFile $node, &$data, &$modified) {

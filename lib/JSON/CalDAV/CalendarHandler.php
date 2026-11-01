@@ -2,6 +2,7 @@
 
 namespace ESN\JSON\CalDAV;
 
+use ESN\CalDAV\Subscriptions\SubscriptionSource;
 use ESN\Utils\Utils;
 use \Sabre\DAV\Exception\Forbidden;
 use \Sabre\VObject,
@@ -424,35 +425,14 @@ class CalendarHandler {
     }
 
     private function subscriptionSourceToJson($sourceHref): ?array {
-        $sourcePath = $this->normalizeSourcePath($sourceHref);
+        // Same parser as the subscription node, so the listed source is the calendar it reads
+        $sourcePath = SubscriptionSource::toPath($sourceHref);
 
         if ($sourcePath === null || !$this->server->tree->nodeExists($sourcePath)) {
             return null;
         }
 
         return $this->calendarToJson($sourcePath, $this->server->tree->getNodeForPath($sourcePath), true);
-    }
-
-    /**
-     * Extracts and normalizes the path component of a subscription source
-     * href. Returns null when the href is empty, malformed, or normalizes to
-     * an empty path.
-     */
-    private function normalizeSourcePath($sourceHref): ?string {
-        if ($sourceHref === null || $sourceHref === '') {
-            return null;
-        }
-
-        // parse_url can return null (component absent) or false (malformed URL)
-        $path = parse_url($sourceHref, PHP_URL_PATH);
-        if (!is_string($path) || $path === '') {
-            return null;
-        }
-
-        // Remove leading slashes, collapse multiple slashes, remove trailing slashes
-        $sourcePath = rtrim(preg_replace('#/+#', '/', ltrim($path, '/')), '/');
-
-        return $sourcePath === '' ? null : $sourcePath;
     }
 
     public function getSubscriptionInformation($nodePath, $node, $withRights) {

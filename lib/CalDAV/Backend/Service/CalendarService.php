@@ -6,6 +6,7 @@ use ESN\CalDAV\Backend\DAO\CalendarDAO;
 use ESN\CalDAV\Backend\DAO\CalendarInstanceDAO;
 use ESN\CalDAV\Backend\DAO\CalendarObjectDAO;
 use ESN\CalDAV\Backend\DAO\CalendarChangeDAO;
+use ESN\CalDAV\Subscriptions\SubscriptionSource;
 use Sabre\Event\EventEmitter;
 
 /**
@@ -311,7 +312,7 @@ class CalendarService {
      */
     public function deleteSubscribers($principaluri, $uri, $getSubscribersCallback, $deleteSubscriptionCallback) {
         $principalUriExploded = explode('/', $principaluri);
-        $source = 'calendars/' . $principalUriExploded[2] . '/' . $uri;
+        $source = SubscriptionSource::path($principalUriExploded[2], $uri);
 
         $subscriptions = $getSubscribersCallback($source);
         foreach($subscriptions as $subscription) {

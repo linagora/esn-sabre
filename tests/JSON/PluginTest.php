@@ -1389,6 +1389,40 @@ END:VCALENDAR
         }
     }
 
+    /**
+     * A subscription whose stored source the subscription node does not read must not be
+     * listed with a source calendar. Regression test for issue #677
+     */
+    function testCalendarListSkipsSubscriptionsWhoseSourceTheNodeDoesNotRead() {
+        $unreadSources = [
+            'absolute URL' => 'http://localhost/calendars/54b64eadf6d7d8e41d263e0e/calendar2',
+            'query' => 'calendars/54b64eadf6d7d8e41d263e0e/calendar2?x=1',
+            'fragment' => 'calendars/54b64eadf6d7d8e41d263e0e/calendar2#f',
+            'double slash' => 'calendars//54b64eadf6d7d8e41d263e0e/calendar2',
+        ];
+        foreach ($unreadSources as $form => $source) {
+            $this->caldavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0f', 'sub-' . md5($form), [
+                '{DAV:}displayname' => 'Unread source: ' . $form,
+                '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href($source),
+            ]);
+        }
+
+        $response = $this->request(\Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'GET',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json?withRights=true',
+        )));
+
+        $this->assertEquals(200, $response->status);
+        $listedNames = array_map(
+            fn($calendar) => $calendar->{'dav:name'} ?? '',
+            json_decode($response->getBodyAsString())->{'_embedded'}->{'dav:calendar'}
+        );
+        foreach (array_keys($unreadSources) as $form) {
+            $this->assertNotContains('Unread source: ' . $form, $listedNames);
+        }
+    }
+
     function testGetCalendarConfiguration() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',

@@ -84,9 +84,14 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         if (!$user)
             throw new AuthException('decodeResponse(): no user found');
 
+        if (!is_object($user))
+            throw new AuthException('decodeResponse(): no user found');
+        if (!isset($user->_id) || !is_string($user->_id))
+            throw new AuthException('decodeResponse(): invalid user id');
+
         $type = $user->user_type ?? 'user';
         $domainId =  $user->domainId ?? null;
-        if(!$domainId)
+        if(!$domainId || !is_string($domainId))
             throw new AuthException('decodeResponse(): unknown domainId');
         $tenant = new AuthTenant($user->_id, $domainId, $type == $this->technicalUserType ? TenantType::Technical : TenantType::User);
 
@@ -95,15 +100,15 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     private function validateResponseIdentity($user, $tenant) {
         if (isset($user->domain)) {
-            if (!filter_var($user->domain, FILTER_VALIDATE_DOMAIN)) {
-                error_log("decodeResponse: invalid domain '$user->domain' for user '$user->_id'");
+            if (!is_string($user->domain) || !filter_var($user->domain, FILTER_VALIDATE_DOMAIN)) {
+                error_log("decodeResponse: invalid domain " . json_encode($user->domain) . " for user '$user->_id'");
                 throw new AuthException('decodeResponse(): invalid domain');
             }
             return $tenant;
         }
         if (isset($user->email)) {
-            if (!filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
-                error_log("decodeResponse: invalid email '$user->email' for user '$user->_id'");
+            if (!is_string($user->email) || !filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
+                error_log("decodeResponse: invalid email " . json_encode($user->email) . " for user '$user->_id'");
                 throw new AuthException('decodeResponse(): no user found');
             }
             return $tenant;
@@ -288,7 +293,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         if ($entries['count'] > 1) {
             error_log("More than one entry for $user");
         }
-        if (!$entries[0]['mail']) {
+        if (empty($entries[0]['mail'][0]) || !is_string($entries[0]['mail'][0])) {
             error_log("$user has no mail attribute");
             throw new  AuthException("$user has no mail attribute");
         }
@@ -467,14 +472,17 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 return [false, $e->getMessage()];
             // clear exception message returned to user
             return [false, "Authentification failure"];
-        } catch(\Exception $e) {
+        } catch(\Throwable $e) {
             $msg = $e->getMessage();
             $this->server->getLogger()->error(
                 'An unexpected error happened when check',
                 ['error' => $msg]
             );
-            return [false, $msg];
-        } 
+            if($this->debug)
+                return [false, $msg];
+            // never leak internal error texts to the client
+            return [false, "Authentification failure"];
+        }
     }
 
     private function authenticateRequest(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): AuthTenant {
@@ -510,7 +518,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             $tenant = $this->resolveJWTAuthTenant($token);
         } catch(AuthException $e) {
             throw $e;
-        } catch(\Exception $e) {
+        } catch(\Throwable $e) {
             // something wrong happened during decoding the JWT
             // things like unsupported algorithm, expired token...
             $this->server->getLogger()->error(
@@ -547,8 +555,8 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     private function getJWTEmail($user) {
         // The user identifier carried by ESN tokens is an email in the sub field.
-        if (!isset($user->sub))
-            throw new \UnexpectedValueException("checkJWT: '$user->sub' is not valid");
+        if (!isset($user->sub) || !is_string($user->sub))
+            throw new \UnexpectedValueException("checkJWT: sub claim is missing or not a string");
         $email = $user->sub;
         if(!filter_var($email, FILTER_VALIDATE_EMAIL))
             throw new \UnexpectedValueException("checkJWT: email '$email' is not a valid mail");

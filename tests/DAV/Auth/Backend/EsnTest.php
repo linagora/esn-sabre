@@ -6,6 +6,7 @@ $GLOBALS['__ldap_bind_behavior'] = 'default';
 $GLOBALS['__ldap_mock_enabled'] = false;
 $GLOBALS['__ldap_mock_email'] = 'johndoe@linagora.com';
 $GLOBALS['__ldap_mock_entries_empty'] = false;
+$GLOBALS['__ldap_mock_entry_without_mail'] = false;
 $GLOBALS['__ldap_mock_search_fails'] = false;
 $GLOBALS['__ldap_errno'] = 49;
 $GLOBALS['__ldap_bind_calls'] = 0;
@@ -56,6 +57,9 @@ function ldap_get_entries($conn, $result) {
     if ($GLOBALS['__ldap_mock_enabled']) {
         if ($GLOBALS['__ldap_mock_entries_empty']) {
             return [ 'count' => 0 ];
+        }
+        if ($GLOBALS['__ldap_mock_entry_without_mail']) {
+            return [ 'count' => 1, 0 => [ 'uid' => ['alice', 'count' => 1], 'count' => 1 ] ];
         }
         return [
             'count' => 1,
@@ -515,8 +519,113 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $GLOBALS['__ldap_mock_enabled'] = false;
         $GLOBALS['__ldap_bind_behavior'] = 'default';
         $GLOBALS['__ldap_mock_search_fails'] = false;
+        $GLOBALS['__ldap_mock_entry_without_mail'] = false;
         $GLOBALS['__ldap_errno'] = 49;
         $GLOBALS['__ldap_bind_calls'] = 0;
+    }
+
+    private function mockIntrospectionAnswer(EsnMock $esnauth, string $body) {
+        $client = $esnauth->getClient();
+        $client->on('curlExec', function(&$return) use ($body) {
+            $return = $body;
+        });
+        $client->on('curlStuff', function(&$return) {
+            $return = [ [ 'http_code' => 200, 'header_size' => 0 ], 0, '' ];
+        });
+    }
+
+    private function checkWithTechnicalToken(EsnMock $esnauth): array {
+        $request = new \Sabre\HTTP\Request('GET', '/', ['TwakeCalendarToken' => '1']);
+        return $esnauth->check($request, new \Sabre\HTTP\Response());
+    }
+
+    private function checkWithBasicAuth(EsnMock $esnauth): array {
+        $request = new \Sabre\HTTP\Request('GET', '/', [
+            'Authorization' => 'Basic ' . base64_encode('alice:secret'),
+        ]);
+        return $esnauth->check($request, new \Sabre\HTTP\Response());
+    }
+
+    function testIntrospectionAnswerWithNullIdIsAnAuthFailure() {
+        $esnauth = new EsnMock('http://localhost:8080/', false);
+        $this->mockIntrospectionAnswer($esnauth, '{"_id":null,"domainId":"dd"}');
+
+        $this->assertSame([false, 'Authentification failure'], $this->checkWithTechnicalToken($esnauth));
+        $this->assertNull($esnauth->getCurrentPrincipal());
+    }
+
+    function testIntrospectionAnswerWithoutIdIsAnAuthFailure() {
+        $esnauth = new EsnMock('http://localhost:8080/', false);
+        $this->mockIntrospectionAnswer($esnauth, '{"domainId":"dd","email":"a@b.com"}');
+
+        $this->assertSame([false, 'Authentification failure'], $this->checkWithTechnicalToken($esnauth));
+    }
+
+    function testIntrospectionAnswerWithNonStringDomainIdIsAnAuthFailure() {
+        $esnauth = new EsnMock('http://localhost:8080/', false);
+        $this->mockIntrospectionAnswer($esnauth, '{"_id":"id","domainId":{"a":1},"email":"a@b.com"}');
+
+        $this->assertSame([false, 'Authentification failure'], $this->checkWithTechnicalToken($esnauth));
+    }
+
+    function testIntrospectionAnswerWithObjectDomainIsAnAuthFailure() {
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $this->mockIntrospectionAnswer($esnauth, '{"_id":"id","domainId":"dd","domain":{"a":1}}');
+
+        $this->assertSame([false, 'decodeResponse(): invalid domain'], $this->checkWithTechnicalToken($esnauth));
+    }
+
+    function testIntrospectionAnswerWithObjectEmailIsAnAuthFailure() {
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $this->mockIntrospectionAnswer($esnauth, '{"_id":"id","domainId":"dd","email":["a@b.com"]}');
+
+        $this->assertSame([false, 'decodeResponse(): no user found'], $this->checkWithTechnicalToken($esnauth));
+    }
+
+    function testIntrospectionAnswerWhichIsNotAnObjectIsAnAuthFailure() {
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $this->mockIntrospectionAnswer($esnauth, '"just a string"');
+
+        $this->assertSame([false, 'decodeResponse(): no user found'], $this->checkWithTechnicalToken($esnauth));
+    }
+
+    function testLdapEntryWithoutMailIsAnAuthFailure() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        $GLOBALS['__ldap_mock_entry_without_mail'] = true;
+
+        try {
+            $esnauth = new EsnMock('http://localhost:8080/', false);
+
+            $this->assertSame([false, 'Authentification failure'], $this->checkWithBasicAuth($esnauth));
+        } finally {
+            $this->resetLdapMock();
+        }
+    }
+
+    function testInternalErrorTextIsNotReturnedInNonDebugMode() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+
+        try {
+            $esnauth = new EsnMock('http://localhost:8080/', false);
+            $esnauth->setPrincipalBackend(new FailingPrincipalBackend());
+
+            $this->assertSame([false, 'Authentification failure'], $this->checkWithBasicAuth($esnauth));
+        } finally {
+            $this->resetLdapMock();
+        }
+    }
+
+    function testInternalErrorTextIsReturnedInDebugMode() {
+        $GLOBALS['__ldap_mock_enabled'] = true;
+
+        try {
+            $esnauth = new EsnMock('http://localhost:8080/');
+            $esnauth->setPrincipalBackend(new FailingPrincipalBackend());
+
+            $this->assertSame([false, FailingPrincipalBackend::MESSAGE], $this->checkWithBasicAuth($esnauth));
+        } finally {
+            $this->resetLdapMock();
+        }
     }
 
     function testAuthenticateEmptyPasswordIsRejectedWithoutBinding() {
@@ -880,8 +989,16 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
 
 }
 
+class FailingPrincipalBackend {
+    const MESSAGE = 'internal detail that must not leak';
+
+    function getAuthTenantByEmail($email) {
+        throw new \Error(self::MESSAGE);
+    }
+}
+
 class EsnMock extends Esn {
-    function __construct($apiroot) {
+    function __construct($apiroot, bool $debug = true) {
         $mcesn = new \MongoDB\Client(ESN_MONGO_ESNURI);
         $this->esndb = $mcesn->{ESN_MONGO_ESNDB};
         $this->esndb->drop();
@@ -894,7 +1011,7 @@ class EsnMock extends Esn {
         $this->server->addPlugin($loggerPlugin);
 
         require_once ESN_TEST_VENDOR . '/sabre/http/tests/HTTP/ClientTest.php';
-        parent::__construct($apiroot, "Realm", $this->principalBackend, $this->server, true);
+        parent::__construct($apiroot, "Realm", $this->principalBackend, $this->server, $debug);
         $this->httpClient = new \Sabre\HTTP\ClientMock();
     }
 
@@ -908,6 +1025,10 @@ class EsnMock extends Esn {
 
     function getDb() {
         return $this->esndb;
+    }
+
+    function setPrincipalBackend($principalBackend) {
+        $this->principalBackend = $principalBackend;
     }
 
     protected function getAdminCredential(): ?array {

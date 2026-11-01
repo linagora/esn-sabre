@@ -70,9 +70,12 @@ class AddressbookRootTest extends \PHPUnit\Framework\TestCase {
 
         $domain = $this->root->getChild(self::DOMAIN_ID);
         $this->checkDomain($domain);
+    }
 
-        $invalid = $this->root->getChild('not_a_mongo_id');
-        $this->assertNull($invalid);
+    function testGetChildWithInvalidMongoIdThrowsNotFound() {
+        $this->expectException(\Sabre\DAV\Exception\NotFound::class);
+
+        $this->root->getChild('not_a_mongo_id');
     }
 
     function checkUser($user) {

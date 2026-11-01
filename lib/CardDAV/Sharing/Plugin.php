@@ -272,9 +272,9 @@ class Plugin extends \ESN\JSON\BasePlugin {
     }
 
     private function isExistingPrincipal($href) {
-        $path = ltrim($href, '/');
+        $path = preg_replace('#/+#', '/', trim($href, '/'));
 
-        if (str_starts_with($path, 'principals/') && $this->server->tree->nodeExists($path)) {
+        if (str_starts_with($path, 'principals/') && $this->isPrincipalNode($path)) {
             return true;
         }
 
@@ -282,6 +282,11 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $this->server->emit('getPrincipalByUri', [$href, &$principal]);
 
         return !is_null($principal);
+    }
+
+    private function isPrincipalNode($path) {
+        return $this->server->tree->nodeExists($path) &&
+            $this->server->tree->getNodeForPath($path) instanceof \Sabre\DAVACL\IPrincipal;
     }
 
     private function assertNoSelfDelegation(ISharedAddressBook $node, array $sharees) {

@@ -104,6 +104,44 @@ class SubscriptionTest extends \ESN\DAV\ServerMock {
         $this->assertEquals([], $this->server->tree->getNodeForPath(self::SUBSCRIPTION_PATH)->getChildren());
     }
 
+    function testSubscriptionShouldServeTheEventsOfASourceInTheDomainOfTheCurrentUser() {
+        $children = $this->subscriptionResolvedThroughThePrincipalBackend()->getChildren();
+
+        $this->assertEquals(['privateRecurEvent.ics'], array_map(fn($child) => $child->getName(), $children));
+    }
+
+    function testSubscriptionShouldNotServeTheEventsOfASourceWhoseOwnerMovedToAnotherDomain() {
+        $this->esndb->users->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($this->user2Id())],
+            ['$set' => ['domains' => [['domain_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e7b')]]]]
+        );
+
+        $subscription = $this->subscriptionResolvedThroughThePrincipalBackend();
+
+        $this->assertEquals([], $subscription->getChildren());
+        $this->assertFalse($subscription->childExists('privateRecurEvent.ics'));
+    }
+
+    function testSubscriptionShouldNotServeTheEventsOfASourceWhoseOwnerIsGone() {
+        $this->esndb->users->deleteOne(['_id' => new \MongoDB\BSON\ObjectId($this->user2Id())]);
+
+        $subscription = $this->subscriptionResolvedThroughThePrincipalBackend();
+
+        $this->assertEquals([], $subscription->getChildren());
+        $this->assertFalse($subscription->childExists('privateRecurEvent.ics'));
+    }
+
+    private function subscriptionResolvedThroughThePrincipalBackend() {
+        $this->principalBackend->setAuthTenant(new \ESN\Utils\AuthTenant('54b64eadf6d7d8e41d263e0f', SERVER_MOCK_DOMAIN_ID));
+        $backend = new \ESN\CalDAV\Backend\Esn($this->sabredb, $this->principalBackend);
+        $subscriptionInfo = current(array_filter(
+            $backend->getSubscriptionsForUser('principals/users/54b64eadf6d7d8e41d263e0f'),
+            fn($subscription) => $subscription['uri'] === 'subscription1'
+        ));
+
+        return new Subscription($backend, $subscriptionInfo);
+    }
+
     private function user2Id() {
         return explode('/', $this->publicCal['principaluri'])[2];
     }

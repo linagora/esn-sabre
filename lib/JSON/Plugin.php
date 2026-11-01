@@ -513,23 +513,23 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $includePersonal = isset($queryParams['personal']) ? $queryParams['personal'] === 'true' : !$filter;
         $includeSharedPublicSubscription = isset($queryParams['sharedPublicSubscription']) ? $queryParams['sharedPublicSubscription'] === 'true' : !$filter;
-        $sharedDelegationStatus = null;
-
-        $includeShared = isset($queryParams['sharedDelegationStatus']) || !$filter;
-
-        if (isset($queryParams['sharedDelegationStatus'])) {
-            switch ($queryParams['sharedDelegationStatus']) {
-                case "accepted":
-                    $sharedDelegationStatus = \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED;
-                    break;
-                case "noresponse":
-                    $sharedDelegationStatus = \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE;
-            }
-        } else {
-            $includeShared = false;
-        }
+        $includeShared = isset($queryParams['sharedDelegationStatus']);
+        $sharedDelegationStatus = $includeShared ? $this->parseSharedDelegationStatus($queryParams['sharedDelegationStatus']) : null;
 
         return compact('includePersonal', 'includeSharedPublicSubscription', 'includeShared', 'sharedDelegationStatus');
+    }
+
+    private function parseSharedDelegationStatus($value) {
+        $statuses = [
+            'accepted' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+            'noresponse' => \Sabre\DAV\Sharing\Plugin::INVITE_NORESPONSE,
+        ];
+
+        if (!is_string($value) || !isset($statuses[$value])) {
+            throw new DAV\Exception\BadRequest('Unknown sharedDelegationStatus');
+        }
+
+        return $statuses[$value];
     }
 
     function proppatch($request, $response) {

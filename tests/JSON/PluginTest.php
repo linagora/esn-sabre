@@ -1173,6 +1173,29 @@ END:VCALENDAR
         $this->assertEquals($calendars[0]->{'calendarserver:delegatedsource'}, '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1.json');
     }
 
+    public static function invalidSharedDelegationStatuses(): array {
+        return [
+            'unknown value' => ['sharedDelegationStatus=junk'],
+            'declined value' => ['sharedDelegationStatus=declined'],
+            'empty value' => ['sharedDelegationStatus='],
+            'non-string value' => ['sharedDelegationStatus[]=accepted'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('invalidSharedDelegationStatuses')]
+    function testCalendarListRejectsInvalidSharedDelegationStatus($query) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD' => 'GET',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT' => 'application/json',
+            'REQUEST_URI' => '/calendars/54b64eadf6d7d8e41d263e0f.json?personal=false&sharedPublicSubscription=false&' . $query,
+        ]);
+
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+    }
+
     /**
      * Test that listing calendars with a subscription that has an empty source href
      * does not crash with TypeError (null passed to getNodeForPath).

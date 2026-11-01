@@ -33,6 +33,8 @@ class CalendarHandler {
         '{http://apple.com/ns/ical/}calendar-order' => 'apple:order'
     ];
 
+    private const READ_FREE_BUSY = '{urn:ietf:params:xml:ns:caldav}read-free-busy';
+
     private const SUBSCRIPTION_JSON_PROPERTIES = [
         '{http://apple.com/ns/ical/}calendar-color' => 'apple:color',
         '{http://apple.com/ns/ical/}calendar-order' => 'apple:order'
@@ -167,7 +169,7 @@ class CalendarHandler {
 
     public function listAllCalendarsWithReadRight($nodePath, $node, $withRights, $calendarTypeOptions, $withFreeBusy) {
         $listingContext = [
-            'right' => $withFreeBusy ? '{urn:ietf:params:xml:ns:caldav}read-free-busy' : '{DAV:}read',
+            'right' => $withFreeBusy ? self::READ_FREE_BUSY : '{DAV:}read',
             'withRights' => $withRights,
             'typeOptions' => $calendarTypeOptions
         ];
@@ -190,7 +192,10 @@ class CalendarHandler {
      */
     private function calendarChildToJson($calendar, string $calendarPath, array $listingContext): ?array {
         if ($this->shouldIncludeCalendar($calendar, $calendarPath, $listingContext['right'], $listingContext['typeOptions'])) {
-            return $this->calendarToJson($calendarPath, $calendar, $listingContext['withRights']);
+            // Selected on {DAV:}read: already known to be readable
+            return $listingContext['right'] === '{DAV:}read'
+                ? $this->calendarToJson($calendarPath, $calendar, $listingContext['withRights'])
+                : $this->calendarToJsonForCurrentUser($calendarPath, $calendar, $listingContext['withRights']);
         }
 
         if ($this->shouldIncludeSubscription($calendar, $calendarPath, $listingContext['right'], $listingContext['typeOptions'])) {
@@ -250,8 +255,14 @@ class CalendarHandler {
 
         $items = [];
         foreach ($calendars as $calendar) {
-            if ($this->isPublicPersonalCalendar($calendar)) {
-                $items[] = $this->calendarToJson($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
+            if (!$this->isPublicPersonalCalendar($calendar)) {
+                continue;
+            }
+
+            // A public right can be read-free-busy only
+            $item = $this->calendarToJsonForCurrentUser($nodePath . '/' . $calendar->getName(), $calendar, $withRights);
+            if ($item !== null) {
+                $items[] = $item;
             }
         }
 
@@ -266,6 +277,32 @@ class CalendarHandler {
 
     public function getCalendarInformation($nodePath, $node, $withRights) {
         return [200, $this->calendarToJson($nodePath, $node, $withRights)];
+    }
+
+    /**
+     * Renders a calendar with what the current user may read of it through PROPFIND: in full when
+     * they have {DAV:}read on it, reduced to its link when they may only read its free/busy (the
+     * free-busy query needs the link, its name, description, sharees and ACL are not theirs to read),
+     * and not at all otherwise.
+     */
+    private function calendarToJsonForCurrentUser(string $nodePath, $calendar, $withRights): ?array {
+        if ($this->hasRightOn($nodePath, '{DAV:}read')) {
+            return $this->calendarToJson($nodePath, $calendar, $withRights);
+        }
+
+        if ($this->hasRightOn($nodePath, self::READ_FREE_BUSY)) {
+            return $this->freeBusyCalendarToJson($nodePath);
+        }
+
+        return null;
+    }
+
+    private function freeBusyCalendarToJson(string $nodePath): array {
+        return [
+            '_links' => [
+                'self' => [ 'href' => $this->server->getBaseUri() . $nodePath . '.json' ],
+            ]
+        ];
     }
 
     public function calendarToJson($nodePath, $calendar, $withRights = null) {

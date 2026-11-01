@@ -11,9 +11,9 @@ use Sabre\HTTP\Response;
 use Sabre\VObject\Reader;
 
 /**
- * COPY, MOVE and PUT into a Team Calendar enforce the same rules: the UID must
- * not already be used in the Team Calendar, and the ORGANIZER must be a
- * write-enabled member of it.
+ * COPY, MOVE and PUT into a Team Calendar refuse a UID already used in the
+ * Team Calendar. COPY and PUT also require the ORGANIZER to be a write-enabled
+ * member of it; a MOVE may file an invitation from another organizer.
  */
 class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
     const TEAM_CALENDAR_ID = 'team-physical';
@@ -101,10 +101,8 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
         $this->server->emit('beforeCopy', ['personal/by-reader.ics', 'team/new.ics']);
     }
 
-    function testMoveOfAMeetingOrganizedByAReadOnlyMemberIntoATeamCalendarIsRefused() {
-        $this->expectForbidden('The ORGANIZER must be a write-enabled team calendar member.');
-
-        $this->server->emit('beforeMove', ['personal/by-reader.ics', 'team/new.ics']);
+    function testMoveOfAnInvitationFromAnotherOrganizerIntoATeamCalendarIsAccepted() {
+        $this->assertTrue($this->server->emit('beforeMove', ['personal/by-reader.ics', 'team/new.ics']));
     }
 
     function testCopyOfAMeetingOrganizedByAWriteEnabledMemberIntoATeamCalendarIsAccepted() {

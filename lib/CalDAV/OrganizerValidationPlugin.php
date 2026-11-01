@@ -14,8 +14,11 @@ use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Reader;
 
 /**
- * Validates organizer authorization on team-calendar writes: PUT through calendarObjectChange, COPY and
- * MOVE through beforeCopy / beforeMove.
+ * Validates organizer authorization on team-calendar writes: PUT through calendarObjectChange, COPY
+ * through beforeCopy.
+ *
+ * A MOVE is left out: an attendee may file an invitation from another organizer in a team calendar,
+ * where it keeps receiving that organizer's updates.
  *
  * Authorization to send messages as the organizer is enforced by the scheduling plugin.
  */
@@ -27,7 +30,6 @@ class OrganizerValidationPlugin extends ServerPlugin {
         $this->server = $server;
         $server->on('calendarObjectChange', [$this, 'calendarObjectChange'], Plugin::PRIORITY_BEFORE_SCHEDULING - 10);
         $server->on('beforeCopy', [$this, 'validateCopiedObjectOrganizer'], 40);
-        $server->on('beforeMove', [$this, 'validateCopiedObjectOrganizer'], 40);
     }
 
     function getPluginName() {
@@ -58,8 +60,8 @@ class OrganizerValidationPlugin extends ServerPlugin {
     }
 
     /**
-     * Sabre stores the object of a COPY, or of a MOVE across calendars, without
-     * emitting calendarObjectChange: the source object is checked here instead.
+     * Sabre stores the object of a COPY without emitting calendarObjectChange:
+     * the source object is checked here instead.
      */
     function validateCopiedObjectOrganizer($sourcePath, $destinationPath) {
         list($destinationCalendarPath,) = \Sabre\Uri\split($destinationPath);

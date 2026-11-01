@@ -32,6 +32,10 @@ class PrivateEventPlugin extends ServerPlugin {
         $server->on('propFind', [$this, 'propFind'], 500);
         // Priority 90 = runs before CorePlugin (100) to intercept GET on private events
         $server->on('method:GET', [$this, 'httpGet'], 90);
+        // COPY and MOVE store the source object as is: they must not carry a hidden private event
+        // where its details are no longer hidden
+        $server->on('beforeCopy', [$this, 'beforeCopyOrMove'], 30);
+        $server->on('beforeMove', [$this, 'beforeCopyOrMove'], 30);
     }
 
     function getPluginName() {
@@ -84,6 +88,38 @@ class PrivateEventPlugin extends ServerPlugin {
 
         // Return false to stop further processing (prevent CorePlugin from sending unsanitized data)
         return false;
+    }
+
+    /**
+     * Refuses to COPY or MOVE a PRIVATE / CONFIDENTIAL object out of a calendar that hides its details
+     * from the current user: Tree::copyNode() stores the stored data, not the sanitized one, so the
+     * destination (for instance a calendar of the current user) would disclose it.
+     *
+     * Within the same collection the object stays hidden: such a COPY or MOVE is left alone.
+     *
+     * @param string $sourcePath
+     * @param string $destinationPath
+     * @return void
+     * @throws \Sabre\DAV\Exception\Forbidden
+     */
+    function beforeCopyOrMove($sourcePath, $destinationPath) {
+        if (self::parentPath($sourcePath) === self::parentPath($destinationPath)) {
+            return;
+        }
+
+        try {
+            $node = $this->server->tree->getNodeForPath($sourcePath);
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            return;
+        }
+
+        if ($this->findCalendarHidingPrivateEvents($node, $sourcePath, $this->getCurrentUser())) {
+            throw new \Sabre\DAV\Exception\Forbidden('A private event you can not read in full can not be copied or moved out of its calendar');
+        }
+    }
+
+    private static function parentPath($path) {
+        return \Sabre\Uri\split(trim($path, '/'))[0];
     }
 
     function propFind(PropFind $propFind, INode $node) {

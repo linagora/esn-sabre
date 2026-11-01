@@ -125,4 +125,53 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $this->assertSame(207, $response->getStatus());
         $this->assertSame($body, $response->getBodyAsString());
     }
+
+    function testAfterPropFindWithUnresolvableSubscriptionSource() {
+        $this->caldavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0f', 'unresolvable', [
+            '{DAV:}displayname' => 'Unresolvable',
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('http://example.org')
+        ]);
+        $this->caldavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0f', 'outOfBase', [
+            '{DAV:}displayname' => 'OutOfBase',
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('foo:/plain')
+        ]);
+        $this->caldavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0f', 'deletedSource', [
+            '{DAV:}displayname' => 'DeletedSource',
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('calendars/54b64eadf6d7d8e41d263e0e/missing')
+        ]);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'PROPFIND',
+            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'HTTP_ACCEPT'       => 'application/xml',
+            'HTTP_USER_AGENT'   => 'DAVdroid/1.10.1.1-ose (2/13/18; dav4android; okhttp3) Android/8.1.0',
+            'HTTP_DEPTH'        => '1',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/',
+        ));
+
+        $request->setBody('<?xml version="1.0" encoding="utf-8" ?>
+            <D:propfind xmlns:D="DAV:" xmlns:CS="http://calendarserver.org/ns/">
+                <D:prop>
+                    <D:displayname/>
+                    <D:resourcetype/>
+                    <CS:source/>
+                </D:prop>
+            </D:propfind>'
+        );
+
+        $response = $this->request($request);
+
+        $this->assertEquals(207, $response->status);
+
+        $propFindXml = $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString());
+        $displayNames = array_map(
+            fn($xmlResponse) => $xmlResponse->getResponseProperties()[200]['{DAV:}displayname'] ?? null,
+            $propFindXml->getResponses()
+        );
+
+        $this->assertContains('Unresolvable', $displayNames);
+        $this->assertContains('OutOfBase', $displayNames);
+        $this->assertContains('DeletedSource', $displayNames);
+        $this->assertContains('Subscription - johndoe@example.org', $displayNames);
+    }
 }

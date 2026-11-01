@@ -111,7 +111,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
 
                 // Check if this is a domain-members addressbook
-                $this->checkDomainMembersAddressBook($path);
+                $this->checkDomainMembersAddressBook($node);
 
                 $sharees = $this->jsonToSharees(Utils::getJsonValue($data, 'dav:sharee', []));
                 $this->assertNoSelfDelegation($node, $sharees);
@@ -146,7 +146,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
 
                 // Check if this is a domain-members addressbook
-                $this->checkDomainMembersAddressBook($path);
+                $this->checkDomainMembersAddressBook($node);
 
                 $privilege = Utils::getJsonValue($data, 'privilege', false);
 
@@ -164,7 +164,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
                 $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
 
                 // Check if this is a domain-members addressbook
-                $this->checkDomainMembersAddressBook($path);
+                $this->checkDomainMembersAddressBook($node);
 
                 $node->setPublishStatus(false);
 
@@ -331,7 +331,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}share');
 
         // Check if this is a domain-members addressbook
-        $this->checkDomainMembersAddressBook($path);
+        $this->checkDomainMembersAddressBook($node);
 
         $supportMembersRights = [
             '{DAV:}read',
@@ -365,26 +365,13 @@ class Plugin extends \ESN\JSON\BasePlugin {
         return $this->send(204, null);
     }
 
-    private function checkDomainMembersAddressBook($path) {
-        // Get the node to check its properties
-        $node = $this->server->tree->getNodeForPath($path);
-
-        // Check if this is a Group Address Book (domain addressbook)
-        if ($node instanceof \ESN\CardDAV\Group\GroupAddressBook) {
-            // Get the addressbook URI to distinguish between different types
-            // Extract addressbook URI from path (format: addressbooks/{domainId}/{addressbookUri}.json or addressbooks/{domainId}/{addressbookUri})
-            $pathParts = explode('/', trim($path, '/'));
-            if (count($pathParts) >= 3) {
-                $addressbookUri = $pathParts[2];
-                // Remove .json extension if present
-                $addressbookUri = preg_replace('/\.json$/', '', $addressbookUri);
-
-                // Block delegation/public rights for domain-members and dab (Domain Address Book)
-                // but allow for gab (Group Address Book) and other group addressbooks
-                if ($addressbookUri === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI) {
-                    throw new \Sabre\DAV\Exception\MethodNotAllowed('Cannot update public rights or delegations for domain addressbook');
-                }
-            }
+    private function checkDomainMembersAddressBook($node) {
+        // Block delegation/public rights for the domain-members Group Address Book,
+        // but allow for gab (Group Address Book) and other group addressbooks.
+        // Decide on the resolved node, whatever the spelling of the request path.
+        if ($node instanceof \ESN\CardDAV\Group\GroupAddressBook
+            && $node->getName() === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI) {
+            throw new \Sabre\DAV\Exception\MethodNotAllowed('Cannot update public rights or delegations for domain addressbook');
         }
     }
 

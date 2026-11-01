@@ -114,7 +114,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
     private function isDomainMembersPath($path): bool {
         // Path format: addressbooks/{domainId}/domain-members/{card.vcf}
-        $pathParts = explode('/', trim($path, '/'));
+        // Empty segments ('//', or a decoded '%2F') are skipped, as the tree does when resolving the node
+        $pathParts = array_values(array_filter(explode('/', $path), 'strlen'));
 
         return count($pathParts) >= 3
             && $pathParts[0] === 'addressbooks'

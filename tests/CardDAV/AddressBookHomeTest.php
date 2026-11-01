@@ -42,6 +42,18 @@ class AddressBookHomeTest extends \PHPUnit\Framework\TestCase {
         $this->books = new AddressBookHome($this->carddavBackend, $this->principal);
     }
 
+    function testCreateExtendedCollectionWithoutAddressBookTypeThrowsInvalidResourceType() {
+        $this->expectException(\Sabre\DAV\Exception\InvalidResourceType::class);
+        $this->books->createExtendedCollection('newbook', new \Sabre\DAV\MkCol(['{DAV:}collection'], []));
+    }
+
+    function testCreateExtendedCollectionWithUnknownResourceTypeThrowsInvalidResourceType() {
+        $this->expectException(\Sabre\DAV\Exception\InvalidResourceType::class);
+        $this->books->createExtendedCollection('newbook', new \Sabre\DAV\MkCol(
+            ['{DAV:}collection', '{urn:ietf:params:xml:ns:caldav}calendar'], []
+        ));
+    }
+
     function testGetChildren() {
         $this->carddavBackend->createAddressBook($this->domainPrincipal, 'GAB', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
 

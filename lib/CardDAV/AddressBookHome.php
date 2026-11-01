@@ -3,6 +3,7 @@
 namespace ESN\CardDAV;
 
 use ESN\DAV\SortOrder;
+use Sabre\DAV;
 use Sabre\DAV\MkCol;
 use ESN\Utils\Utils;
 

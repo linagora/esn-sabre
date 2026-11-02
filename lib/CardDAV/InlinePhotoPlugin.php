@@ -157,7 +157,14 @@ class InlinePhotoPlugin extends ServerPlugin {
         }
 
         foreach ($toRemove as $photo) {
-            $vcard->remove($photo);
+            try {
+                $vcard->remove($photo);
+            } catch (\InvalidArgumentException $e) {
+                // Component::remove() looks the property up by name, which misses a name
+                // still holding a dot after the group split ("..PHOTO"): such a name is
+                // invalid anyway, refuse the card rather than store the photo.
+                throw new \Sabre\DAV\Exception\BadRequest('Invalid PHOTO property name: ' . $photo->name);
+            }
             $filtered = true;
         }
     }

@@ -140,8 +140,12 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
                 else if($responseProps[200]['{DAV:}displayname'] === 'My contacts') {
                     $addressBookDisplayName = 'Contacts - ' . $userDisplayName;
                 }
-                else {
+                else if (is_string($responseProps[200]['{DAV:}displayname'])) {
                     $addressBookDisplayName = $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName;
+                }
+                else {
+                    // A display name with child elements is parsed as an array: name it as if it had none
+                    $addressBookDisplayName = "Carnet d'addresse - " . $userDisplayName;
                 }
             }
             else if($addressbookType === 'dab') {

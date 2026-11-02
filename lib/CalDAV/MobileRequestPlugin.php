@@ -110,8 +110,11 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
 
         $userDisplayName = XmlText::stripIllegalCharacters($userPrincipal->getDisplayName() ? $userPrincipal->getDisplayName() : current($userPrincipal->getProperties(['{http://sabredav.org/ns}email-address'])));
 
-        return isset($responseProps[200]['{DAV:}displayname']) ?
-                        $responseProps[200]['{DAV:}displayname'] . " - " . $userDisplayName :
+        // A display name with child elements is parsed as an array: name it as if it had none
+        $displayName = $responseProps[200]['{DAV:}displayname'] ?? null;
+
+        return is_string($displayName) ?
+                        $displayName . " - " . $userDisplayName :
                         "Agenda - " . $userDisplayName;
     }
 }

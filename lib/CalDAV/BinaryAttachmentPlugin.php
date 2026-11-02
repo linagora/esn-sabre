@@ -181,6 +181,33 @@ class BinaryAttachmentPlugin extends ServerPlugin {
     }
 
     private function uploadAttachments(VCalendar $calendar, RequestInterface $request): bool {
+        // Validate the full set before creating any files.
+        $pending = $this->collectAttachmentsToUpload($calendar);
+
+        // Forward only the authenticated user's credential; side-service resolves the uploader itself.
+        $authorization = $request->getHeader('Authorization') ?? '';
+        if ($pending && !preg_match('/^(Basic|Bearer) [^\\s]+$/', $authorization)) {
+            throw new \Sabre\DAV\Exception\Forbidden('Attachment upload requires Basic or Bearer user authentication.');
+        }
+
+        // Mutate the calendar only after every upload succeeds.
+        $replacements = [];
+        foreach ($pending as [$component, $attachment, $filename, $type, $content]) {
+            $uri = $this->uploader->upload($authorization, $filename, $type, $content);
+            if ($this->trustedUrlBase !== null && !$this->trustedUrlBase->accepts($uri)) {
+                throw new \Sabre\DAV\Exception\ServiceUnavailable('Uploaded attachment URL is not trusted by this server.');
+            }
+            $replacements[] = [$component, $attachment, $filename, $type, $uri];
+        }
+
+        foreach ($replacements as [$component, $attachment, $filename, $type, $uri]) {
+            $component->remove($attachment);
+            $component->add('ATTACH', $uri, ['VALUE' => 'URI', 'FMTTYPE' => $type, 'X-FILENAME' => $filename]);
+        }
+        return count($pending) > 0;
+    }
+
+    private function collectAttachmentsToUpload(VCalendar $calendar): array {
         $pending = [];
         $total = 0;
         foreach ($this->components($calendar) as $component) {
@@ -208,25 +235,8 @@ class BinaryAttachmentPlugin extends ServerPlugin {
                 $pending[] = [$component, $attachment, $filename, $type, $content];
             }
         }
-        // Forward only the authenticated user's credential; side-service resolves the uploader itself.
-        $authorization = $request->getHeader('Authorization') ?? '';
-        if ($pending && !preg_match('/^(Basic|Bearer) [^\\s]+$/', $authorization)) {
-            throw new \Sabre\DAV\Exception\Forbidden('Attachment upload requires Basic or Bearer user authentication.');
-        }
-        // Validate the full set before creating any files; mutate only after every upload succeeds.
-        $replacements = [];
-        foreach ($pending as [$component, $attachment, $filename, $type, $content]) {
-            $uri = $this->uploader->upload($authorization, $filename, $type, $content);
-            if ($this->trustedUrlBase !== null && !$this->trustedUrlBase->accepts($uri)) {
-                throw new \Sabre\DAV\Exception\ServiceUnavailable('Uploaded attachment URL is not trusted by this server.');
-            }
-            $replacements[] = [$component, $attachment, $filename, $type, $uri];
-        }
-        foreach ($replacements as [$component, $attachment, $filename, $type, $uri]) {
-            $component->remove($attachment);
-            $component->add('ATTACH', $uri, ['VALUE' => 'URI', 'FMTTYPE' => $type, 'X-FILENAME' => $filename]);
-        }
-        return count($pending) > 0;
+
+        return $pending;
     }
 
     private function components(VObject\Component $component): \Generator {

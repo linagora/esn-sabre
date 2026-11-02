@@ -5,6 +5,7 @@ namespace ESN\CalDAV;
 use Sabre\DAV\Exception\ServiceUnavailable;
 use Sabre\HTTP\Client;
 use Sabre\HTTP\Request;
+use Sabre\HTTP\ResponseInterface;
 
 class AttachmentUploadClient {
     private Client $client;
@@ -49,27 +50,31 @@ class AttachmentUploadClient {
                 $content
             ));
 
-            if ($response->getStatus() !== 201) {
-                throw new \RuntimeException('Attachment service returned HTTP ' . $response->getStatus());
-            }
-
-            $result = json_decode($response->getBodyAsString(), true, 32, JSON_THROW_ON_ERROR);
-            $uri = $result['uri'] ?? '';
-
-            if (
-                !is_string($uri)
-                || !in_array(parse_url($uri, PHP_URL_SCHEME), ['https', 'http'], true)
-                || !parse_url($uri, PHP_URL_HOST)
-                || parse_url($uri, PHP_URL_USER)
-                || preg_match('/[\x00-\x20\x7f]/', $uri)
-            ) {
-                throw new \RuntimeException('Attachment service returned invalid metadata');
-            }
-
-            return $uri;
+            return $this->parseUploadResponse($response);
         } catch (\Throwable $error) {
             // Do not expose response bodies, credentials or public share codes in DAV errors.
             throw new ServiceUnavailable('Attachment upload failed. Please retry saving the event.');
         }
+    }
+
+    private function parseUploadResponse(ResponseInterface $response): string {
+        if ($response->getStatus() !== 201) {
+            throw new \RuntimeException('Attachment service returned HTTP ' . $response->getStatus());
+        }
+
+        $result = json_decode($response->getBodyAsString(), true, 32, JSON_THROW_ON_ERROR);
+        $uri = $result['uri'] ?? '';
+
+        if (
+            !is_string($uri)
+            || !in_array(parse_url($uri, PHP_URL_SCHEME), ['https', 'http'], true)
+            || !parse_url($uri, PHP_URL_HOST)
+            || parse_url($uri, PHP_URL_USER)
+            || preg_match('/[\x00-\x20\x7f]/', $uri)
+        ) {
+            throw new \RuntimeException('Attachment service returned invalid metadata');
+        }
+
+        return $uri;
     }
 }

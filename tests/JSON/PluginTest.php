@@ -1243,6 +1243,59 @@ END:VCALENDAR
         return $calendars;
     }
 
+    private function shareCalendarUser2WithInviteStatus(string $principal, int $inviteStatus): string {
+        $this->caldavBackend->updateInvites($this->calUser2['id'], [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'         => 'mailto:sharee@example.org',
+                'principal'    => $principal,
+                'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+            ]),
+        ]);
+
+        foreach ($this->caldavBackend->getCalendarsForUser($principal) as $calendar) {
+            if ($calendar['id'][0] == $this->calUser2['id'][0] && $calendar['principaluri'] === $principal) {
+                // Sharing always accepts on behalf of the sharee, who answers later on.
+                $this->caldavBackend->saveCalendarInviteStatus($calendar['id'], $inviteStatus);
+
+                return $calendar['uri'];
+            }
+        }
+        $this->fail('No instance of the shared calendar for ' . $principal);
+    }
+
+    private function calendarJsonAs(string $principal, string $calendarUri): array {
+        $this->authBackend->setPrincipal($principal);
+        $response = $this->request(\Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD' => 'GET',
+            'HTTP_ACCEPT'    => 'application/json',
+            'REQUEST_URI'    => '/calendars/' . basename($principal) . '/' . $calendarUri . '.json',
+        ]));
+        $this->assertEquals(200, $response->status);
+
+        return json_decode($response->getBodyAsString(), true);
+    }
+
+    function testCalendarJsonGivesTheDelegatedSourceOfAnAcceptedShare() {
+        $sharee = 'principals/users/54b64eadf6d7d8e41d263e0f';
+        $instanceUri = $this->shareCalendarUser2WithInviteStatus($sharee, \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED);
+
+        $this->assertSame(
+            '/calendars/54b64eadf6d7d8e41d263e0e/calendar2.json',
+            $this->calendarJsonAs($sharee, $instanceUri)['calendarserver:delegatedsource'] ?? null
+        );
+    }
+
+    function testCalendarJsonDoesNotGiveTheDelegatedSourceOfADeclinedShare() {
+        // A declined sharee keeps its instance, but has no read access on the source calendar.
+        $sharee = 'principals/users/54b64eadf6d7d8e41d263e0f';
+        $instanceUri = $this->shareCalendarUser2WithInviteStatus($sharee, \Sabre\DAV\Sharing\Plugin::INVITE_DECLINED);
+
+        $calendar = $this->calendarJsonAs($sharee, $instanceUri);
+
+        $this->assertFalse($this->server->getPlugin('acl')->checkPrivileges('calendars/54b64eadf6d7d8e41d263e0e/calendar2', '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false));
+        $this->assertArrayNotHasKey('calendarserver:delegatedsource', $calendar);
+    }
+
     function testCalendarListWithFreeBusyOnlyGivesTheLinkOfCalendarsTheUserCanNotRead() {
         $calendars = $this->listedCalendarsByHref('/calendars/54b64eadf6d7d8e41d263e0e.json?withFreeBusy=true&withRights=true');
 

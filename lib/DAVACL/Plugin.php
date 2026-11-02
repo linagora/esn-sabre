@@ -140,7 +140,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
 
         if ($body) {
-            $this->server->httpResponse->setBody(json_encode($body));
+            $this->server->httpResponse->setBody(\ESN\Utils\Utils::jsonEncode($body));
         }
 
         $this->server->httpResponse->setStatus($code);

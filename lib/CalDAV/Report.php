@@ -171,7 +171,7 @@ class Report {
         }
 
         $properties[200][$calendarDataProp] = $needsJson
-            ? json_encode($vObject->jsonSerialize())
+            ? \ESN\Utils\Utils::jsonEncode($vObject->jsonSerialize())
             : $vObject->serialize();
 
         // Destroy circular references so PHP will garbage collect the object.

@@ -129,7 +129,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                     'data' => $result
                 ];
 
-                $json_encode = json_encode($body);
+                $json_encode = \ESN\Utils\Utils::jsonEncode($body);
 
                 $response->removeHeader('Content-Type');
                 $response->setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -679,7 +679,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
             if ($setContentType) {
                 $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
             }
-            $this->server->httpResponse->setBody(json_encode($body));
+            $this->server->httpResponse->setBody(\ESN\Utils\Utils::jsonEncode($body));
         }
         $this->server->httpResponse->setStatus($code);
         return false;

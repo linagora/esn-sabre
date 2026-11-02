@@ -49,12 +49,15 @@ class VideoConferenceDecorator {
     private static function deriveConference(VEvent $vevent): bool {
         $videoConferenceUri = trim((string) $vevent->{self::$VIDEOCONFERENCE_PROPERTY});
 
-        // Conferences of a previous link have to go, otherwise clients would offer to join
-        // a room which is no longer the one of the event.
-        $modified = self::removeOutdatedVideoConferences($vevent, $videoConferenceUri);
+        // A matching conference also occurs after deriving the OpenPaaS link from an
+        // external invitation. Keep its alternative rooms, including on later writes.
+        if ($videoConferenceUri !== '' && self::hasConferenceFor($vevent, $videoConferenceUri)) {
+            return false;
+        }
 
-        // An empty link means the video conference was removed from the event.
-        if ($videoConferenceUri === '' || self::hasConferenceFor($vevent, $videoConferenceUri)) {
+        // A changed or cleared OpenPaaS link replaces the previous video rooms.
+        $modified = self::removeOutdatedVideoConferences($vevent, $videoConferenceUri);
+        if ($videoConferenceUri === '') {
             return $modified;
         }
 

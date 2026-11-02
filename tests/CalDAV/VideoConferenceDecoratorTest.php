@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\Reader;
 
@@ -178,18 +179,19 @@ ICS
         $this->assertSame(self::VIDEO_CONFERENCE_URL, (string) reset($conferences));
     }
 
-    function testShouldRemoveOutdatedConferencesEvenWhenTheCurrentLinkIsAlreadyPresent() {
+    function testShouldKeepAlternativeConferencesWhenTheCurrentLinkIsAlreadyPresent() {
         $vCal = $this->readEvent([
             'X-OPENPAAS-VIDEOCONFERENCE;VALUE=UNKNOWN:' . self::VIDEO_CONFERENCE_URL,
-            'CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Join video call:https://meet.example.com/old-room',
+            'CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Join video call:https://meet.example.com/alternative-room',
             'CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Join video call:' . self::VIDEO_CONFERENCE_URL
         ]);
 
-        $this->assertTrue(VideoConferenceDecorator::decorate($vCal));
+        $before = $vCal->serialize();
+        $this->assertFalse(VideoConferenceDecorator::decorate($vCal));
 
         $conferences = $vCal->VEVENT->select('CONFERENCE');
-        $this->assertCount(1, $conferences);
-        $this->assertSame(self::VIDEO_CONFERENCE_URL, (string) reset($conferences));
+        $this->assertCount(2, $conferences);
+        $this->assertSame($before, $vCal->serialize());
     }
 
     function testShouldRemoveTheConferenceWhenTheVideoConferenceLinkIsCleared() {
@@ -307,5 +309,48 @@ ICS
         ]);
 
         return Reader::read(implode("\r\n", $lines));
+    }
+
+    function testShouldReachTheFixedPointInOnePassWithSeveralVideoConferences() {
+        $vCal = $this->readEvent([
+            'CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO:https://visio.example.com/room-a',
+            'CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO:https://visio.example.com/room-b'
+        ]);
+
+        $this->assertTrue(VideoConferenceDecorator::decorate($vCal));
+        $decorated = $vCal->serialize();
+        $this->assertCount(2, $vCal->VEVENT->select('CONFERENCE'));
+
+        // Check the persisted form too: object-local state cannot preserve these links.
+        $vCal = Reader::read($decorated);
+        $this->assertFalse(VideoConferenceDecorator::decorate($vCal));
+        $this->assertSame($decorated, $vCal->serialize());
+        $this->assertSame('https://visio.example.com/room-a', (string) $vCal->VEVENT->{'X-OPENPAAS-VIDEOCONFERENCE'});
+        $this->assertSame([
+            'https://visio.example.com/room-a',
+            'https://visio.example.com/room-b'
+        ], array_values(array_map(fn($conference) => (string) $conference, $vCal->VEVENT->select('CONFERENCE'))));
+    }
+
+    static function updatedVideoLinks(): array {
+        return [
+            'changed' => [self::VIDEO_CONFERENCE_URL, [self::VIDEO_CONFERENCE_URL]],
+            'cleared' => ['', []]
+        ];
+    }
+
+    #[DataProvider('updatedVideoLinks')]
+    function testShouldUpdateAllVideoRoomsWhenTheDerivedLinkChanges(string $newLink, array $expectedUris) {
+        $vCal = $this->readEvent([
+            'CONFERENCE;VALUE=URI;FEATURE=VIDEO:https://visio.example.com/room-a',
+            'CONFERENCE;VALUE=URI;FEATURE=VIDEO:https://visio.example.com/room-b'
+        ]);
+        VideoConferenceDecorator::decorate($vCal);
+        $vCal = Reader::read($vCal->serialize());
+        $vCal->VEVENT->{'X-OPENPAAS-VIDEOCONFERENCE'} = $newLink;
+
+        $this->assertTrue(VideoConferenceDecorator::decorate($vCal));
+        $this->assertSame($expectedUris, array_values(array_map(fn($conference) => (string) $conference, $vCal->VEVENT->select('CONFERENCE'))));
+        $this->assertFalse(VideoConferenceDecorator::decorate($vCal));
     }
 }

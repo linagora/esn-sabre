@@ -1,5 +1,6 @@
 <?php
 namespace ESN\Publisher\CalDAV;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\DAV\ServerPlugin;
 
 require_once ESN_TEST_BASE . '/CalDAV/MockUtils.php';
@@ -71,7 +72,7 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
             '_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0e'),
             'type' => 'calendar',
             'name' => 'cal resource',
-            "domain" => ''
+            'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
         ]);
 
         $this->ical = join("\r\n", [
@@ -284,6 +285,47 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
         // Verify that schedule returns without processing
         $this->assertTrue(true); // Explicit assertion to avoid risky test warning
+    }
+
+    #[DataProvider('resourceReplyAttendees')]
+    function testResourceReplyIsReadLeniently(string $vevent, array $expectedTopics) {
+        $this->prepare();
+
+        $plugin = $this->getMockBuilder(EventRealTimePluginMock::class)
+            ->onlyMethods(['createMessage'])
+            ->setConstructorArgs([$this->server, $this->caldavBackend])
+            ->getMock();
+        $publishedTopics = [];
+        $plugin->method('createMessage')->willReturnCallback(function($topic) use (&$publishedTopics) {
+            $publishedTopics[] = $topic;
+        });
+
+        $message = new \Sabre\VObject\ITip\Message();
+        $message->method = 'REPLY';
+        $message->uid = 'daab17fe-fac4-4946-9105-0f2cdb30f5ab';
+        $message->sender = 'mailto:room@example.com';
+        $message->recipient = 'mailto:robertocarlos@realmadrid.com';
+        $message->message = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\n$vevent\r\nEND:VCALENDAR\r\n");
+
+        $notifyResourceReplyStatus = new \ReflectionMethod(EventRealTimePlugin::class, 'notifyResourceReplyStatus');
+        $notified = $notifyResourceReplyStatus->invoke($plugin, $message, $this->calUser2['principaluri']);
+
+        $this->assertTrue($notified);
+        $this->assertSame($expectedTopics, $publishedTopics);
+    }
+
+    static function resourceReplyAttendees(): array {
+        $vevent = fn(string $attendee) => "BEGIN:VEVENT\r\nUID:daab17fe-fac4-4946-9105-0f2cdb30f5ab\r\nDTSTAMP:20260101T090000Z\r\n"
+            . "ORGANIZER:mailto:robertocarlos@realmadrid.com\r\n$attendee\r\nEND:VEVENT";
+
+        return [
+            'no PARTSTAT' => [$vevent('ATTENDEE:mailto:room@example.com'), []],
+            'lower-case PARTSTAT' => [$vevent('ATTENDEE;PARTSTAT=accepted:mailto:room@example.com'), ['resource:calendar:event:accepted']],
+            'upper-case address' => [$vevent('ATTENDEE;PARTSTAT=Declined:MAILTO:ROOM@EXAMPLE.COM'), ['resource:calendar:event:declined']],
+            'another attendee' => [$vevent('ATTENDEE;PARTSTAT=ACCEPTED:mailto:bob@example.com'), []],
+            'no ATTENDEE' => [$vevent('SUMMARY:no attendee'), []],
+            'no VEVENT' => ['PRODID:no vevent', []],
+        ];
     }
 
     function testBuildData() {

@@ -125,29 +125,45 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $oldICalendarData = $loaded['calendarData'];
         $currentObject = $loaded['calendarObject'];
 
-        if ($currentObject) {
-            $this->normalizeIncomingReplyMessage($iTipMessage, $currentObject);
-        }
+        $this->normalizeIncomingReplyMessage($iTipMessage, $currentObject);
         $this->ensureOrganizerValarmUidsForRequest($iTipMessage);
 
         $previousRevision = $this->snapshotPreviousRevision($iTipMessage, $currentObject);
 
         $broker = new ITip\Broker();
-        $newObject = $broker->processMessage($iTipMessage, $currentObject);
+        try {
+            $newObject = $broker->processMessage($iTipMessage, $currentObject);
 
-        $this->createInboxItemIfSignificant($inboxPath, $newFileName, $iTipMessage);
+            $this->createInboxItemIfSignificant($inboxPath, $newFileName, $iTipMessage);
 
-        if (!$newObject) {
-            $iTipMessage->scheduleStatus = '5.0;iTip message was not processed by the server, likely because we didn\'t understand it.';
+            if (!$newObject) {
+                $iTipMessage->scheduleStatus = '5.0;iTip message was not processed by the server, likely because we didn\'t understand it.';
+                return;
+            }
+
+            if (!$objectNode) {
+                $this->deliverToNewObject($iTipMessage, $calendarPath, $newFileName, $newObject);
+            } else {
+                $this->deliverToExistingObject($iTipMessage, $objectNode, $previousRevision ?? $oldICalendarData, $newObject);
+            }
+        } catch (ITip\ITipException | \Sabre\VObject\InvalidDataException $e) {
+            $this->refuseUnprocessableDelivery($iTipMessage, $e);
             return;
         }
-
-        if (!$objectNode) {
-            $this->deliverToNewObject($iTipMessage, $calendarPath, $newFileName, $newObject);
-        } else {
-            $this->deliverToExistingObject($iTipMessage, $objectNode, $previousRevision ?? $oldICalendarData, $newObject);
-        }
         $iTipMessage->scheduleStatus = '1.2;Message delivered locally';
+    }
+
+    /**
+     * The broker refuses the message or the recipient's copy (several organizers,
+     * invalid data...): the delivery fails like any message it does not process,
+     * instead of answering 500.
+     */
+    private function refuseUnprocessableDelivery(ITip\Message $iTipMessage, \Throwable $e): void {
+        $this->logger->warning('iTip message could not be delivered locally', [
+            'recipient' => $iTipMessage->recipient,
+            'exception' => get_class($e) . ': ' . $e->getMessage()
+        ]);
+        $iTipMessage->scheduleStatus = '5.0;iTip message was not processed by the server: ' . $e->getMessage();
     }
 
     /**
@@ -299,8 +315,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         return $calendarAddress === '' ? null : (strpos($calendarAddress, ':') === false ? 'mailto:' . $calendarAddress : $calendarAddress);
     }
 
-    private function normalizeIncomingReplyMessage(ITip\Message $iTipMessage, VCalendar $currentObject): void {
-        if ($iTipMessage->method === 'REPLY') {
+    private function normalizeIncomingReplyMessage(ITip\Message $iTipMessage, ?VCalendar $currentObject): void {
+        if ($iTipMessage->method === 'REPLY' && $currentObject !== null) {
             $this->normalizeReplyRecurrenceId($iTipMessage, $currentObject);
         }
     }

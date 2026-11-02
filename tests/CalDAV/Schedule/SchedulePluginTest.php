@@ -537,6 +537,62 @@ ICS
         $method->invoke($this->plugin, $message, $organizerCalendar);
     }
 
+    function testShouldFailITipReplyOntoACopyTheBrokerRefusesInsteadOfThrowing() {
+        // The stored copy names another ORGANIZER on its override: the broker throws
+        // SameOrganizerForAllComponentsException while propagating the REPLY (#705).
+        $storedCopy = $this->initializePluginForPersonalDelivery('event-team', <<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-team
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+RRULE:FREQ=DAILY;COUNT=3
+SUMMARY:Team meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+BEGIN:VEVENT
+UID:event-team
+RECURRENCE-ID:20351006T090000Z
+DTSTART:20351006T090000Z
+DTEND:20351006T100000Z
+SUMMARY:Team meeting
+ORGANIZER:mailto:someone-else@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+
+ICS
+        );
+        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
+        $message->sender = 'mailto:alice@example.org';
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REPLY
+BEGIN:VEVENT
+UID:event-team
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SEQUENCE:0
+ORGANIZER:mailto:bob@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+
+ICS
+        );
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('5.0;', $message->scheduleStatus);
+        $this->assertStringContainsString('Every instance of the event must have the same organizer', $message->scheduleStatus);
+        $this->assertSame(0, $storedCopy->putCount);
+    }
+
     function testShouldSkipAttendeeSchedulingValidationWhenTeamCalendarActorCanWriteEvent() {
         $this->initializePluginWithTeamCalendar(
             'team-calendar-1',
@@ -1736,6 +1792,30 @@ ICS
 
     private function initializePluginForTeamCalendarDelivery(array $teamCalendarPrivileges): WritableCalendarObjectTestDouble {
         $teamEvent = new WritableCalendarObjectTestDouble('event.ics', $this->newCalendarObject('event-team', 'bob@example.org'));
+        $this->initializePluginForDelivery([
+            new CalendarHomeTestDouble('bob', [
+                new WritableCollectionTestDouble('inbox'),
+                new WritableCollectionTestDouble('default')
+            ]),
+            new TeamCalendarHomeTestDouble('team-calendar-1', ['event-team' => 'event.ics'], [$teamEvent])
+        ], ['calendars/team-calendar-1/event.ics' => $teamCalendarPrivileges]);
+
+        return $teamEvent;
+    }
+
+    private function initializePluginForPersonalDelivery(string $uid, string $storedCalendarData): WritableCalendarObjectTestDouble {
+        $storedCopy = new WritableCalendarObjectTestDouble('event.ics', $storedCalendarData);
+        $this->initializePluginForDelivery([
+            new TeamCalendarHomeTestDouble('bob', [$uid => 'default/event.ics'], [
+                new WritableCollectionTestDouble('inbox'),
+                new WritableCollectionTestDouble('default', [$storedCopy])
+            ])
+        ]);
+
+        return $storedCopy;
+    }
+
+    private function initializePluginForDelivery(array $calendarHomes, array $privileges = []): void {
         $server = new Server([
             new SimpleCollection('principals', [
                 new SimpleCollection('users', [
@@ -1746,21 +1826,13 @@ ICS
                     ])
                 ])
             ]),
-            new SimpleCollection('calendars', [
-                new CalendarHomeTestDouble('bob', [
-                    new WritableCollectionTestDouble('inbox'),
-                    new WritableCollectionTestDouble('default')
-                ]),
-                new TeamCalendarHomeTestDouble('team-calendar-1', ['event-team' => 'event.ics'], [$teamEvent])
-            ])
+            new SimpleCollection('calendars', $calendarHomes)
         ]);
         $server->httpRequest = new Request('ITIP', '/itip');
-        $server->addPlugin(new TeamCalendarAclPluginTestDouble(['calendars/team-calendar-1/event.ics' => $teamCalendarPrivileges], ['mailto:bob@example.org' => 'principals/users/bob']));
+        $server->addPlugin(new TeamCalendarAclPluginTestDouble($privileges, ['mailto:bob@example.org' => 'principals/users/bob']));
 
         $this->plugin = new Plugin();
         $this->plugin->initialize($server);
-
-        return $teamEvent;
     }
 
     private function newReplyMessage(string $uid, string $recipient): Message {

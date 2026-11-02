@@ -328,6 +328,27 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         ];
     }
 
+    function testItipWithAnUnsupportedMethodPublishesNothing() {
+        $this->prepare();
+
+        $plugin = $this->getMockBuilder(EventRealTimePluginMock::class)
+            ->onlyMethods(['createMessage'])
+            ->setConstructorArgs([$this->server,  $this->caldavBackend])
+            ->getMock();
+
+        $plugin->expects($this->never())
+            ->method('createMessage');
+
+        $message = new \Sabre\VObject\ITip\Message();
+        $message->method = 'ADD';
+        $message->uid = 'daab17fe-fac4-4946-9105-0f2cdb30f5ab';
+        $message->recipient = 'mailto:54b64eadf6d7d8e41d263e0e@example.com';
+        $message->sender = 'mailto:robertocarlos@realmadrid.com';
+        $message->message = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:daab17fe-fac4-4946-9105-0f2cdb30f5ab\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $plugin->itip($message);
+    }
+
     function testBuildData() {
         $plugin = $this->getPlugin();
         $data = $plugin->buildData([

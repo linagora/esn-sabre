@@ -67,6 +67,10 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
                 if (!self::appliesTo($kind, $scenario)) {
                     continue;
                 }
+                if ($scenario === ReshapeScenario::RecurrenceIdAsFloating) {
+                    // A floating RECURRENCE-ID only matches the zoned one in the master's time zone, see below.
+                    continue;
+                }
                 $changes = self::attendeeLocalChangesOf();
                 if ($scenario->comparesGeneratedInstance()) {
                     // Generated occurrences are compared by value, so equivalent spellings are fine.
@@ -245,6 +249,66 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         } finally {
             Settings::$maxRecurrences = $previousLimit;
         }
+    }
+
+    function testAttendeeCannotRewriteAnOverrideRecurrenceIdAsFloating() {
+        $this->assertRefused(
+            self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE)),
+            self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE, ['RECURRENCE-ID' => self::floatingRecurrenceIdLine(self::OCCURRENCE)])),
+            'DTSTART'
+        );
+    }
+
+    function testAttendeeCannotBringBackAMovedOccurrenceByMakingTheOverrideRecurrenceIdFloating() {
+        // Expanded in UTC, the floating RECURRENCE-ID no longer replaces the 09:00 Paris occurrence,
+        // which shows up again next to the override the organizer moved to 11:00.
+        $moved = ['DTSTART' => 'DTSTART;TZID=Europe/Paris:' . self::OCCURRENCE . 'T110000', 'DTEND' => 'DTEND;TZID=Europe/Paris:' . self::OCCURRENCE . 'T120000'];
+
+        $this->assertRefused(
+            self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE, $moved)),
+            self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE, ['RECURRENCE-ID' => self::floatingRecurrenceIdLine(self::OCCURRENCE)] + $moved)),
+            'DTSTART'
+        );
+    }
+
+    function testAttendeeCannotOverrideAZonedOccurrenceWithAFloatingRecurrenceId() {
+        $this->assertRefused(
+            self::calendar(self::master(SeriesKind::Timed)),
+            self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE, ['RECURRENCE-ID' => self::floatingRecurrenceIdLine(self::OCCURRENCE)])),
+            'DTSTART'
+        );
+    }
+
+    function testAttendeeCanAnswerAnOccurrenceOfAFloatingSeries() {
+        $floating = fn(string $day) => ['DTSTART' => 'DTSTART:' . $day . 'T090000', 'DTEND' => 'DTEND:' . $day . 'T100000'];
+        $master = self::master(SeriesKind::Timed, $floating(self::SERIES_START));
+
+        $this->assertAllowed(
+            self::calendar($master),
+            self::calendar($master, self::override(SeriesKind::Timed, self::OCCURRENCE, [
+                'RECURRENCE-ID' => self::floatingRecurrenceIdLine(self::OCCURRENCE),
+                'ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org',
+            ] + $floating(self::OCCURRENCE)))
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotGiveAnOverrideATextOrganizer(SeriesKind $kind) {
+        $this->assertRefused(
+            self::calendar(self::master($kind)),
+            self::calendar(self::master($kind), self::override($kind, self::OCCURRENCE, ['ORGANIZER' => 'ORGANIZER;VALUE=TEXT:org@example.org'])),
+            'ORGANIZER'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCanAnswerAnOccurrenceOfASeriesWithATextOrganizer(SeriesKind $kind) {
+        $organizer = ['ORGANIZER' => 'ORGANIZER;VALUE=TEXT:org@example.org'];
+
+        $this->assertAllowed(
+            self::calendar(self::master($kind, $organizer)),
+            self::calendar(self::master($kind, $organizer), self::override($kind, self::OCCURRENCE, $organizer + ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org']))
+        );
     }
 
     #[DataProvider('seriesKinds')]
@@ -435,6 +499,10 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         return $kind === SeriesKind::Timed
             ? 'RECURRENCE-ID;TZID=Europe/Paris:' . $day . 'T090000'
             : 'RECURRENCE-ID;VALUE=DATE:' . $day;
+    }
+
+    private static function floatingRecurrenceIdLine(string $day): string {
+        return 'RECURRENCE-ID:' . $day . 'T090000';
     }
 
     private static function exdateLine(SeriesKind $kind, string $day): string {

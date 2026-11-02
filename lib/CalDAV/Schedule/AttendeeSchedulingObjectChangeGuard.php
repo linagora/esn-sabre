@@ -28,6 +28,7 @@ class AttendeeSchedulingObjectChangeGuard {
         $newMaster = self::findMaster($newObject);
         // Floating RECURRENCE-IDs are resolved like EventIterator does, so equivalent forms share a key.
         $timeZone = self::referenceTimeZone($oldMaster ?? $newMaster);
+        $masterIsFloating = self::isFloatingStart($oldMaster ?? $newMaster);
 
         $oldEvents = self::indexEvents($oldObject, $timeZone);
         $newEvents = self::indexEvents($newObject, $timeZone);
@@ -45,15 +46,50 @@ class AttendeeSchedulingObjectChangeGuard {
 
             if ($oldEvent && $newEvent) {
                 self::assertSameExplicitEvent($oldEvent, $newEvent, $forbiddenProperties);
-                continue;
+            } else {
+                self::assertSameInstance(
+                    self::instanceAt($oldEvent, $oldGeneratedInstances, $key, $timeZone),
+                    self::instanceAt($newEvent, $newGeneratedInstances, $key, $timeZone),
+                    $forbiddenProperties
+                );
             }
 
-            self::assertSameInstance(
-                self::instanceAt($oldEvent, $oldGeneratedInstances, $key, $timeZone),
-                self::instanceAt($newEvent, $newGeneratedInstances, $key, $timeZone),
-                $forbiddenProperties
-            );
+            self::assertSameRecurrenceIdForm($oldEvent, $newEvent, $masterIsFloating);
         }
+    }
+
+    /**
+     * The key only matches a floating RECURRENCE-ID with a zoned one because it is
+     * resolved in the master's time zone. Readers resolving it elsewhere (expansion
+     * in UTC, clients in other zones) see another instant, and so an override that
+     * no longer replaces the organizer's one. A RECURRENCE-ID must therefore keep
+     * the organizer's form: an override may only be floating when the organizer's
+     * one, or else the master's DTSTART, is.
+     *
+     * @throws ForbiddenAttendeeSchedulingObjectChange
+     */
+    private static function assertSameRecurrenceIdForm($oldEvent, $newEvent, ?bool $masterIsFloating): void {
+        if (!$newEvent) {
+            return;
+        }
+
+        $expected = $oldEvent ? self::isFloatingRecurrenceId($oldEvent) : $masterIsFloating;
+        $actual = self::isFloatingRecurrenceId($newEvent);
+        if ($expected !== null && $actual !== null && $expected !== $actual) {
+            throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
+        }
+    }
+
+    private static function isFloatingRecurrenceId($vevent): ?bool {
+        $recurrenceId = $vevent->{'RECURRENCE-ID'};
+
+        return $recurrenceId instanceof \Sabre\VObject\Property\ICalendar\DateTime ? $recurrenceId->isFloating() : null;
+    }
+
+    private static function isFloatingStart($master): ?bool {
+        $start = $master ? $master->DTSTART : null;
+
+        return $start instanceof \Sabre\VObject\Property\ICalendar\DateTime ? $start->isFloating() : null;
     }
 
     private static function assertSameMaster($oldMaster, $newMaster, array $forbiddenProperties): void {
@@ -227,11 +263,12 @@ class AttendeeSchedulingObjectChangeGuard {
     private static function explicitInstance($vevent, \DateTimeZone $timeZone): array {
         try {
             [$start, $end] = self::eventBounds($vevent, $timeZone);
+
+            return self::instanceFields($vevent, $start, $end->getTimestamp());
         } catch (\Throwable) {
+            // Fail closed: an instance we cannot evaluate cannot be proven unchanged.
             throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
         }
-
-        return self::instanceFields($vevent, $start, $end->getTimestamp());
     }
 
     /**
@@ -266,7 +303,10 @@ class AttendeeSchedulingObjectChangeGuard {
     private static function sortedValues($vevent, string $propertyName, bool $isAddress): array {
         $values = [];
         foreach ($vevent->select($propertyName) as $property) {
-            $values[] = $isAddress ? strtolower($property->getNormalizedValue()) : (string)$property->getValue();
+            // ORGANIZER;VALUE=TEXT is not a CalAddress and has no normalized form.
+            $values[] = $isAddress && $property instanceof \Sabre\VObject\Property\ICalendar\CalAddress
+                ? strtolower($property->getNormalizedValue())
+                : (string)$property->getValue();
         }
         sort($values);
 

@@ -19,7 +19,7 @@ class ITipPluginTest extends \PHPUnit\Framework\TestCase
 
     protected $iTipRequestData = [
         'method' => 'REPLY',
-        'uid' => 'recur',
+        'uid' => 'event1',
         'sequence' => '1',
         'sender' => 'a@linagora.com',
         'recipient' => 'b@linagora.com',
@@ -189,6 +189,42 @@ END:VCALENDAR'
     function testITipShouldReturn400IfMethodIsNotAScalar()
     {
         $this->iTipRequestData['method'] = ['COUNTER'];
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
+    function testITipShouldReturn400IfIcalCarriesAnotherUid()
+    {
+        $this->iTipRequestData['method'] = 'REQUEST';
+        $this->iTipRequestData['ical'] = str_replace('END:VCALENDAR',
+            "BEGIN:VEVENT\nUID:another-event\nDTSTART:30120305T090000Z\nDTSTAMP:30120313T142416Z\nEND:VEVENT\nEND:VCALENDAR",
+            $this->iTipRequestData['ical']);
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+        $this->assertNull($this->calDavPlugin->deliveredMessage);
+    }
+
+    function testITipShouldReturn400IfIcalUidDiffersFromPayloadUid()
+    {
+        $this->iTipRequestData['method'] = 'REQUEST';
+        $this->iTipRequestData['uid'] = 'other-uid@x.com';
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+        $this->assertNull($this->calDavPlugin->deliveredMessage);
+    }
+
+    function testITipShouldReturn400IfIcalEventHasNoUid()
+    {
+        $this->iTipRequestData['method'] = 'REQUEST';
+        $this->iTipRequestData['ical'] = str_replace("UID:event1\n", '', $this->iTipRequestData['ical']);
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+        $this->assertNull($this->calDavPlugin->deliveredMessage);
+    }
+
+    function testITipShouldReturn400IfIcalHasNoEvent()
+    {
+        $this->iTipRequestData['ical'] = "BEGIN:VCALENDAR\nVERSION:2.0\nEND:VCALENDAR";
 
         $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
     }

@@ -6,6 +6,7 @@ use ESN\Utils\VObjectCache;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\ITip;
 use Sabre\VObject\Reader;
+use Sabre\VObject\Recur\EventIterator;
 
 /**
  * Stateless helpers to inspect and compare iCalendar objects (VCALENDAR /
@@ -360,6 +361,27 @@ class CalendarObjectHelper {
         }
 
         return false;
+    }
+
+    /**
+     * Whether the master VEVENT's recurrence set (RRULE / RDATE minus EXDATE)
+     * has an occurrence starting at the given instant, overrides aside.
+     */
+    public static function masterGeneratesOccurrenceAt(VCalendar $calendarObject, int $timestamp): bool {
+        if (!self::hasMasterEvent($calendarObject)) {
+            return false;
+        }
+
+        try {
+            $iterator = new EventIterator([self::findMasterEvent($calendarObject)]);
+            while ($iterator->valid() && $iterator->getDtStart()->getTimestamp() < $timestamp) {
+                $iterator->next();
+            }
+
+            return $iterator->valid() && $iterator->getDtStart()->getTimestamp() === $timestamp;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public static function findExceptionByStartTimestamp(VCalendar $calendarObject, int $timestamp) {

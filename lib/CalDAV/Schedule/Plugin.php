@@ -18,6 +18,7 @@ use
     Sabre\HTTP\ResponseInterface,
     Sabre\VObject\Component\VCalendar,
     Sabre\VObject\ITip;
+use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Reader;
 
 // @codeCoverageIgnoreEnd
@@ -130,23 +131,27 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         $previousRevision = $this->snapshotPreviousRevision($iTipMessage, $currentObject);
 
-        $broker = new ITip\Broker();
         try {
-            $newObject = $broker->processMessage($iTipMessage, $currentObject);
+            $newObject = (new ITip\Broker())->processMessage($iTipMessage, $currentObject);
+        } catch (ITip\ITipException | InvalidDataException $e) {
+            $this->refuseUnprocessableDelivery($iTipMessage, $e);
+            return;
+        }
 
-            $this->createInboxItemIfSignificant($inboxPath, $newFileName, $iTipMessage);
+        $this->createInboxItemIfSignificant($inboxPath, $newFileName, $iTipMessage);
 
-            if (!$newObject) {
-                $iTipMessage->scheduleStatus = '5.0;iTip message was not processed by the server, likely because we didn\'t understand it.';
-                return;
-            }
+        if (!$newObject) {
+            $iTipMessage->scheduleStatus = '5.0;iTip message was not processed by the server, likely because we didn\'t understand it.';
+            return;
+        }
 
+        try {
             if (!$objectNode) {
                 $this->deliverToNewObject($iTipMessage, $calendarPath, $newFileName, $newObject);
             } else {
                 $this->deliverToExistingObject($iTipMessage, $objectNode, $previousRevision ?? $oldICalendarData, $newObject);
             }
-        } catch (ITip\ITipException | \Sabre\VObject\InvalidDataException $e) {
+        } catch (ITip\ITipException | InvalidDataException $e) {
             $this->refuseUnprocessableDelivery($iTipMessage, $e);
             return;
         }
@@ -448,17 +453,32 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      */
     private function deliverToExistingObject(ITip\Message $iTipMessage, $objectNode, $previousRevision, VCalendar $newObject): void {
         if ($iTipMessage->method === 'REPLY' && !$this->shouldSkipReplyPropagation($previousRevision)) {
+            $this->propagateReply($iTipMessage, $previousRevision, $newObject);
+        }
+        if ($iTipMessage->method === 'REQUEST') {
+            $this->preserveRecipientLocalProperties($previousRevision, $newObject);
+        }
+        $objectNode->put($this->serializeForDelivery($newObject));
+    }
+
+    /**
+     * Forwards the PARTSTAT a REPLY brought to the other attendees.
+     *
+     * The stored copy may hold data the broker refuses (an override with its own
+     * ORGANIZER, an unsupported RRULE part...). The REPLY itself is already
+     * merged, so such a copy only loses the propagation, not the answer.
+     */
+    private function propagateReply(ITip\Message $iTipMessage, $previousRevision, VCalendar $newObject): void {
+        try {
             $this->processICalendarChange(
                 $previousRevision,
                 $newObject,
                 [$iTipMessage->recipient],
                 [$iTipMessage->sender]
             );
+        } catch (ITip\ITipException | InvalidDataException $e) {
+            $this->logger->warning('REPLY could not be propagated to the other attendees', ['uid' => $iTipMessage->uid, 'reason' => $e->getMessage()]);
         }
-        if ($iTipMessage->method === 'REQUEST') {
-            $this->preserveRecipientLocalProperties($previousRevision, $newObject);
-        }
-        $objectNode->put($this->serializeForDelivery($newObject));
     }
 
     /**

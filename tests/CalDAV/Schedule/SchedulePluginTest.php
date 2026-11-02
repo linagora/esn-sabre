@@ -537,60 +537,50 @@ ICS
         $method->invoke($this->plugin, $message, $organizerCalendar);
     }
 
-    function testShouldFailITipReplyOntoACopyTheBrokerRefusesInsteadOfThrowing() {
-        // The stored copy names another ORGANIZER on its override: the broker throws
-        // SameOrganizerForAllComponentsException while propagating the REPLY (#705).
-        $storedCopy = $this->initializePluginForPersonalDelivery('event-team', <<<'ICS'
-BEGIN:VCALENDAR
+    function testShouldFailITipRequestWhoseRecurrenceIdCannotBeParsed() {
+        $storedCopy = $this->initializePluginWithStoredCopy($this->newRecurringCalendarObject('mailto:bob@example.org'));
+        $message = $this->newMessage('REQUEST', 'mailto:alice@example.org', 'BEGIN:VCALENDAR
 VERSION:2.0
+METHOD:REQUEST
 BEGIN:VEVENT
-UID:event-team
-DTSTART:20351005T090000Z
-DTEND:20351005T100000Z
-RRULE:FREQ=DAILY;COUNT=3
-SUMMARY:Team meeting
-ORGANIZER:mailto:bob@example.org
+UID:daily-2
+RECURRENCE-ID:ENCE:2
+DTSTAMP:20260202T080000Z
+DTSTART:20351006T110000Z
+DTEND:20351006T120000Z
+ORGANIZER:mailto:alice@example.org
 ATTENDEE:mailto:bob@example.org
-ATTENDEE:mailto:alice@example.org
-END:VEVENT
-BEGIN:VEVENT
-UID:event-team
-RECURRENCE-ID:20351006T090000Z
-DTSTART:20351006T090000Z
-DTEND:20351006T100000Z
-SUMMARY:Team meeting
-ORGANIZER:mailto:someone-else@example.org
-ATTENDEE:mailto:bob@example.org
-ATTENDEE:mailto:alice@example.org
 END:VEVENT
 END:VCALENDAR
+');
 
-ICS
-        );
-        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
-        $message->sender = 'mailto:alice@example.org';
-        $message->message = Reader::read(<<<'ICS'
-BEGIN:VCALENDAR
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('5.', $message->scheduleStatus);
+        $this->assertSame(0, $storedCopy->putCount);
+        $this->assertCount(0, $this->inbox->getChildren());
+    }
+
+    function testShouldStillMergeITipReplyWhenStoredCopyMixesOrganizers() {
+        $storedCopy = $this->initializePluginWithStoredCopy($this->newRecurringCalendarObject('mailto:someone-else@example.org'));
+        $message = $this->newMessage('REPLY', 'mailto:alice@example.org', 'BEGIN:VCALENDAR
 VERSION:2.0
 METHOD:REPLY
 BEGIN:VEVENT
-UID:event-team
+UID:daily-2
+DTSTAMP:20260202T080000Z
 DTSTART:20351005T090000Z
 DTEND:20351005T100000Z
-SEQUENCE:0
 ORGANIZER:mailto:bob@example.org
 ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org
 END:VEVENT
 END:VCALENDAR
-
-ICS
-        );
+');
 
         $this->plugin->scheduleLocalDelivery($message);
 
-        $this->assertStringStartsWith('5.0;', $message->scheduleStatus);
-        $this->assertStringContainsString('Every instance of the event must have the same organizer', $message->scheduleStatus);
-        $this->assertSame(0, $storedCopy->putCount);
+        $this->assertSame('1.2;Message delivered locally', $message->scheduleStatus);
+        $this->assertSame(1, $storedCopy->putCount);
     }
 
     function testShouldSkipAttendeeSchedulingValidationWhenTeamCalendarActorCanWriteEvent() {
@@ -1803,18 +1793,6 @@ ICS
         return $teamEvent;
     }
 
-    private function initializePluginForPersonalDelivery(string $uid, string $storedCalendarData): WritableCalendarObjectTestDouble {
-        $storedCopy = new WritableCalendarObjectTestDouble('event.ics', $storedCalendarData);
-        $this->initializePluginForDelivery([
-            new TeamCalendarHomeTestDouble('bob', [$uid => 'default/event.ics'], [
-                new WritableCollectionTestDouble('inbox'),
-                new WritableCollectionTestDouble('default', [$storedCopy])
-            ])
-        ]);
-
-        return $storedCopy;
-    }
-
     private function initializePluginForDelivery(array $calendarHomes, array $privileges = []): void {
         $server = new Server([
             new SimpleCollection('principals', [
@@ -1833,6 +1811,58 @@ ICS
 
         $this->plugin = new Plugin();
         $this->plugin->initialize($server);
+    }
+
+    private function initializePluginWithStoredCopy(string $calendarData): WritableCalendarObjectTestDouble {
+        $storedCopy = new WritableCalendarObjectTestDouble('event.ics', $calendarData);
+        $this->inbox = new WritableCollectionTestDouble('inbox');
+        $this->initializePluginForDelivery([
+            new TeamCalendarHomeTestDouble('bob', ['daily-2' => 'default/event.ics'], [
+                $this->inbox,
+                new WritableCollectionTestDouble('default', [$storedCopy])
+            ])
+        ]);
+
+        return $storedCopy;
+    }
+
+    private function newMessage(string $method, string $sender, string $ical): Message {
+        $message = new Message();
+        $message->component = 'VEVENT';
+        $message->method = $method;
+        $message->uid = 'daily-2';
+        $message->sender = $sender;
+        $message->recipient = 'mailto:bob@example.org';
+        $message->message = Reader::read($ical);
+
+        return $message;
+    }
+
+    private function newRecurringCalendarObject(string $overrideOrganizer): string {
+        return "BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:daily-2
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+RRULE:FREQ=DAILY;COUNT=5
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+BEGIN:VEVENT
+UID:daily-2
+RECURRENCE-ID:20351006T090000Z
+DTSTART:20351006T110000Z
+DTEND:20351006T120000Z
+ORGANIZER:$overrideOrganizer
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+ATTENDEE:mailto:cedric@example.org
+END:VEVENT
+END:VCALENDAR
+";
     }
 
     private function newReplyMessage(string $uid, string $recipient): Message {

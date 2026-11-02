@@ -740,4 +740,32 @@ ICS;
 
         Utils::jsonEncode(['value' => INF]);
     }
+
+    function testHidePrivateEventInfoForUserKeepsTheValueTypeOfAllowedProperties() {
+        $vcalendar = \Sabre\VObject\Reader::read(join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:private-event',
+            'DTSTAMP:20350101T000000Z',
+            'DTSTART:20350105T100000Z',
+            'RRULE;VALUE=PERIOD:weekly',
+            'SUMMARY:Secret Meeting',
+            'CLASS:PRIVATE',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]));
+        $node = new class('principals/users/owner') {
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { return $this->owner; }
+        };
+
+        $result = Utils::hidePrivateEventInfoForUser($vcalendar, $node, 'principals/users/other');
+        $reparsed = \Sabre\VObject\Reader::read($result->serialize());
+
+        $this->assertSame('Busy', (string) $reparsed->VEVENT->SUMMARY);
+        $this->assertSame('PERIOD', (string) $reparsed->VEVENT->RRULE['VALUE']);
+    }
 }

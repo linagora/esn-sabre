@@ -75,7 +75,7 @@ of `config.json`.
 | `PRINCIPAL_PRIVACY` | `true` | Restrict DAV principal discovery |
 | `TRUSTED_VIDEO_URL_BASE` | unset | Keep only video conference URLs at this base; unset leaves links untouched |
 | `TRUSTED_ATTACH_URL_BASE` | unset | Keep only calendar ATTACH and contact PHOTO URLs at this base; unset leaves links untouched |
-| `CALDAV_BINARY_ATTACHMENT_MODE` | `filter` | Inline binary attachment policy: `allow`, `reject` or `filter` |
+| `CALDAV_BINARY_ATTACHMENT_MODE` | `filter` | Inline binary attachment policy: `allow`, `reject`, `filter` or experimental `offload` |
 | `CARDDAV_INLINE_ATTACHMENT_MODE` | `filter` | Inline contact photo policy: `allow`, `reject` or `filter` |
 | `SABRE_ENFORCE_RFC_6638` | `true` | Reject attendee updates to organizer-controlled scheduling fields |
 | `SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING` | `true` | Recipient-aware scheduling for `ACTION:EMAIL` `VALARM` components |
@@ -138,6 +138,7 @@ Feature flag to control how inline binary attachments (`ATTACH;ENCODING=BASE64;V
    - `filter` : silently strip inline binary attachments from the stored object (default)
    - `reject` : reject any request carrying an inline binary attachment with `403 Forbidden`
    - `allow`  : store the object as-is, inline binary attachments included
+   - `offload` : upload inline attachments to TDrive and replace them with URLs before saving
 
    Inline binaries can significantly bloat calendar objects; the default `filter` keeps them out of storage while still accepting the request. Use `allow` to opt back into the historical behaviour, or `reject` to surface an explicit error to clients.
 

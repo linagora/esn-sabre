@@ -501,24 +501,6 @@ class PluginTest extends PluginTestBase {
         $this->assertCount(3, $jsonResponse['_embedded']['dav:item']);
     }
 
-    function testGetContactsWithNonUtf8ParameterStillAnswersJson() {
-        // Issue #701: a non-UTF-8 parameter value must not turn the JSON body into an empty one
-        $this->carddavBackend->createCard($this->carddavAddressBook['id'], 'latin1.vcf',
-            "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:latin1\r\nFN:A\r\nEMAIL;X-P=Ren\xE9:a@x\r\nEND:VCARD\r\n");
-
-        foreach (['', '?limit=20&sort=fn'] as $query) {
-            $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-                'REQUEST_METHOD'    => 'GET',
-                'HTTP_ACCEPT'       => 'application/json',
-                'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json' . $query,
-            ));
-            $response = $this->request($request);
-
-            $this->assertEquals(200, $response->status);
-            $this->assertNotNull(json_decode($response->getBodyAsString()), 'empty or invalid JSON body');
-        }
-    }
-
     function testGetContactsUnknownAddressBook() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',

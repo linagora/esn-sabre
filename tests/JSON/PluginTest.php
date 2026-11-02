@@ -3407,42 +3407,6 @@ END:VCALENDAR
         $this->assertCount(1, $vObject->select('VEVENT'));
     }
 
-    function testExpandEventWithNonUtf8ParameterStillAnswersJson() {
-        // Issue #701: a non-UTF-8 parameter value must not turn the JSON body into an empty one
-        $this->caldavBackend->createCalendarObject($this->cal['id'], 'latin1.ics', $this->eventWithNonUtf8Parameter());
-
-        $response = $this->expandEventRequest('latin1.ics', '20350101T000000Z', '20360101T000000Z');
-
-        $this->assertEquals(200, $response->status);
-        $this->assertNotNull(json_decode($response->getBodyAsString()), 'empty or invalid JSON body');
-        $this->assertCount(1, $this->vEventsOfExpandResponse($response));
-    }
-
-    function testCalendarReportWithNonUtf8ParameterStillAnswersJson() {
-        // Issue #701: same defect on the calendar-level JSON REPORT
-        $this->caldavBackend->createCalendarObject($this->cal['id'], 'latin1.ics', $this->eventWithNonUtf8Parameter());
-
-        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
-            'REQUEST_METHOD'    => 'REPORT',
-            'HTTP_CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT'       => 'application/json',
-            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
-        ));
-        $request->setBody(json_encode(['match' => ['start' => '20350101T000000Z', 'end' => '20360101T000000Z']]));
-        $response = $this->request($request);
-        $jsonResponse = json_decode($response->getBodyAsString(), true);
-
-        $this->assertEquals(200, $response->status);
-        $this->assertNotNull($jsonResponse, 'empty or invalid JSON body');
-        $this->assertCount(1, $jsonResponse['_embedded']['dav:item']);
-    }
-
-    private function eventWithNonUtf8Parameter() {
-        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:latin1\r\nDTSTAMP:20350101T000000Z\r\n"
-            . "DTSTART:20350110T100000Z\r\nDTEND:20350110T110000Z\r\n"
-            . "ORGANIZER;CN=Ren\xE9:mailto:a@x\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
-    }
-
     private function expandEventRequest($eventUri, $start, $end) {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

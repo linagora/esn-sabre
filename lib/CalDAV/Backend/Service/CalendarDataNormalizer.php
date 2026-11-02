@@ -115,7 +115,7 @@ class CalendarDataNormalizer {
             $start = $event->DTSTART->getDateTime()->getTimeStamp();
             // A negative DURATION, or an infinite rule starting after the
             // MAX_DATE fallback, must never yield a window ending before it starts.
-            $end = max($start, $this->calculateLastOccurrence($event, $vObject));
+            $end = max($start, $this->calculateLastOccurrence($event));
 
             $firstOccurence = $firstOccurence === null ? $start : min($firstOccurence, $start);
             $lastOccurence = $lastOccurence === null ? $end : max($lastOccurence, $end);
@@ -171,16 +171,15 @@ class CalendarDataNormalizer {
      * Calculate last occurrence timestamp for VEVENT
      *
      * @param VObject\Component $component
-     * @param VObject\Component\VCalendar $vObject
      * @return int Last occurrence timestamp
      */
-    private function calculateLastOccurrence($component, $vObject) {
+    private function calculateLastOccurrence($component) {
         // RDATE generates instances just like RRULE does: only the iterator sees them.
         if (!isset($component->RRULE) && !isset($component->RDATE)) {
             return $this->calculateSimpleEndDate($component);
         }
 
-        return $this->calculateRecurringEndDate($component, $vObject);
+        return $this->calculateRecurringEndDate($component);
     }
 
     /**
@@ -216,15 +215,19 @@ class CalendarDataNormalizer {
     /**
      * Calculate end date for recurring event
      *
+     * The event is expanded on its own, as the calendar-query post-filter
+     * does (VEvent::isInTimeRange): an override carrying its own RRULE or
+     * RDATE then contributes its own instances. Instances moved by an
+     * override are covered by that override's own entry.
+     *
      * @param VObject\Component $component
-     * @param VObject\Component\VCalendar $vObject
      * @return int End timestamp
      */
-    private function calculateRecurringEndDate($component, $vObject) {
+    private function calculateRecurringEndDate($component) {
         $maxDate = new \DateTime(self::MAX_DATE);
 
         try {
-            $it = new VObject\Recur\EventIterator($vObject, (string) $component->UID);
+            $it = new VObject\Recur\EventIterator($component);
 
             if ($it->isInfinite()) {
                 return $maxDate->getTimeStamp();

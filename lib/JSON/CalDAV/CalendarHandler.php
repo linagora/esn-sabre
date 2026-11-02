@@ -317,8 +317,8 @@ class CalendarHandler {
         ];
 
         $delegatedSourcePath = $this->resolveDelegatedSourcePath($calendar);
-        if ($delegatedSourcePath !== null) {
-            $json['calendarserver:delegatedsource'] = $baseUri . $delegatedSourcePath;
+        if ($delegatedSourcePath !== null && $this->mayReadDelegatedSource($delegatedSourcePath)) {
+            $json['calendarserver:delegatedsource'] = $baseUri . $delegatedSourcePath . '.json';
         }
 
         $this->mapDavProperties($json, $calprops, self::CALENDAR_JSON_PROPERTIES);
@@ -328,6 +328,18 @@ class CalendarHandler {
         }
 
         return $json;
+    }
+
+    /**
+     * The source is only named to whom may read it: a sharee who declined the share,
+     * for instance, keeps its instance but has no read access on the source.
+     */
+    private function mayReadDelegatedSource(string $sourcePath): bool {
+        try {
+            return $this->hasRightOn($sourcePath, '{DAV:}read');
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            return false;
+        }
     }
 
     /**
@@ -352,7 +364,7 @@ class CalendarHandler {
 
             $sourceCalendarUri = $this->findOwnerCalendarUri($sourceCalendarOwner, $calendar->getCalendarId());
             if ($sourceCalendarUri !== null) {
-                return 'calendars/' . $sourceCalendarOwner . '/' . $sourceCalendarUri . '.json';
+                return 'calendars/' . $sourceCalendarOwner . '/' . $sourceCalendarUri;
             }
         }
 

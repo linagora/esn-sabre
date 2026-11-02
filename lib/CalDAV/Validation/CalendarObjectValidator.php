@@ -9,7 +9,14 @@ use Sabre\VObject\Property;
 use Sabre\VObject\Property\ICalendar\DateTime as DateTimeProperty;
 
 class CalendarObjectValidator {
+    /**
+     * Frequencies the recurrence iterator steps through: SECONDLY and MINUTELY are not
+     * (linagora/sabre-vobject#31).
+     */
+    private const SUPPORTED_FREQUENCIES = ['HOURLY', 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'];
+
     function validate(VCalendar $vCalendar) {
+        $this->validateUids($vCalendar);
         $this->validateRRules($vCalendar);
         $this->validateRecurrenceIds($vCalendar);
         $this->validateExDates($vCalendar);
@@ -69,8 +76,26 @@ class CalendarObjectValidator {
         }
     }
 
+    /**
+     * RFC 5545 §3.6.1: UID is required. Overrides are tied to their master by UID, and
+     * an empty one cannot be expanded (VCalendar::expand throws).
+     */
+    private function validateUids(VCalendar $vCalendar): void
+    {
+        foreach ($this->vevents($vCalendar) as $vevent) {
+            if (!isset($vevent->UID) || trim((string) $vevent->UID) === '') {
+                $this->fail('VEVENT MUST have a non-empty UID property');
+            }
+        }
+    }
+
     private function validateRRule(array $parts, DateTimeProperty $dtStart): void
     {
+        $frequency = $parts['FREQ'] ?? null;
+        if (!is_string($frequency) || !in_array(strtoupper($frequency), self::SUPPORTED_FREQUENCIES, true)) {
+            $this->fail('RRULE FREQ must be one of ' . implode(', ', self::SUPPORTED_FREQUENCIES));
+        }
+
         if (isset($parts['COUNT']) && isset($parts['UNTIL'])) {
             $this->fail('COUNT and UNTIL MUST NOT both be present in the same RRULE');
         }

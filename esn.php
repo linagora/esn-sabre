@@ -202,10 +202,14 @@ $privateEventPlugin = new ESN\CalDAV\PrivateEventPlugin();
 $server->addPlugin($privateEventPlugin);
 
 // Inline binary attachment policy (ATTACH;VALUE=BINARY)
-// CALDAV_BINARY_ATTACHMENT_MODE = allow | reject | filter (default: filter)
+// CALDAV_BINARY_ATTACHMENT_MODE = allow | reject | filter | offload (default: filter)
+$attachmentMode = \ESN\Utils\Env::getString('CALDAV_BINARY_ATTACHMENT_MODE', ESN\CalDAV\BinaryAttachmentPlugin::MODE_FILTER);
 $binaryAttachmentPlugin = new ESN\CalDAV\BinaryAttachmentPlugin(
-    \ESN\Utils\Env::getString('CALDAV_BINARY_ATTACHMENT_MODE', ESN\CalDAV\BinaryAttachmentPlugin::MODE_FILTER),
-    \ESN\Utils\Env::getString('TRUSTED_ATTACH_URL_BASE')
+    $attachmentMode,
+    \ESN\Utils\Env::getString('TRUSTED_ATTACH_URL_BASE'),
+    strtolower($attachmentMode) === ESN\CalDAV\BinaryAttachmentPlugin::MODE_OFFLOAD
+        ? new ESN\CalDAV\AttachmentUploadClient(
+            rtrim($config['esn']['apiRoot'], '/') . '/api/attachments') : null
 );
 $server->addPlugin($binaryAttachmentPlugin);
 

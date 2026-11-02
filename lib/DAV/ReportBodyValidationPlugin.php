@@ -12,8 +12,9 @@ use \Sabre\VObject\InvalidDataException;
 use \Sabre\Xml\ParseException;
 
 /**
- * Guards the XML request body of the DAV methods whose body Sabre deserialises:
- * REPORT, PROPFIND, PROPPATCH, ACL and the XML POSTs of CalDAV sharing.
+ * Guards the XML request body of every DAV method whose body Sabre (or an ESN
+ * plugin) deserialises as XML, after ESN's JSON handlers have had a chance to
+ * handle shared methods. MKCOL and POST are checked early when sent as XML.
  *
  * Two distinct problems are handled here, both before Sabre's handler runs:
  *
@@ -55,6 +56,17 @@ class ReportBodyValidationPlugin extends ServerPlugin {
     // Right before Sabre's core, ACL and CalDAV sharing handlers (default priority 100).
     const PRIORITY = 99;
 
+    // Early validation for XML MKCOL/POST, before other plugins parse the body.
+    const BEFORE_METHOD_PRIORITY = 12;
+
+    // Run after JSON handlers (80), before Sabre's XML handlers (100).
+    // REPORT and ACL validate in their wrappers at the same priority.
+    const XML_BODY_METHODS = ['PROPFIND', 'PROPPATCH', 'LOCK'];
+
+    // Methods whose body is deserialised as XML only with an XML content type
+    // (MKCOL extended bodies, POST share-resource / CalDAV sharing).
+    const XML_CONTENT_TYPE_METHODS = ['MKCOL', 'POST'];
+
     protected $server;
 
     function getPluginName() {
@@ -63,11 +75,21 @@ class ReportBodyValidationPlugin extends ServerPlugin {
 
     function initialize(Server $server) {
         $this->server = $server;
+        $server->on('beforeMethod:*', [$this, 'beforeMethod'], self::BEFORE_METHOD_PRIORITY);
         $server->on('method:REPORT', [$this, 'httpReport'], self::PRIORITY);
-        $server->on('method:PROPFIND', [$this, 'assertWellFormedBody'], self::PRIORITY);
-        $server->on('method:PROPPATCH', [$this, 'assertWellFormedBody'], self::PRIORITY);
         $server->on('method:ACL', [$this, 'httpAcl'], self::PRIORITY);
         $server->on('method:POST', [$this, 'httpPost'], self::PRIORITY);
+        foreach (self::XML_BODY_METHODS as $method) {
+            $server->on('method:' . $method, [$this, 'assertWellFormedBody'], self::PRIORITY);
+        }
+    }
+
+    function beforeMethod(RequestInterface $request, ResponseInterface $response) {
+        $method = strtoupper($request->getMethod());
+
+        if (in_array($method, self::XML_CONTENT_TYPE_METHODS, true) && $this->hasXmlContentType($request)) {
+            $this->assertWellFormedBody($request, $response);
+        }
     }
 
     function httpReport(RequestInterface $request, ResponseInterface $response) {
@@ -168,10 +190,13 @@ class ReportBodyValidationPlugin extends ServerPlugin {
         }
     }
 
+    /**
+     * Sabre picks its XML handlers with loose substring checks on Content-Type
+     * (`application/xml`, `text/xml`, `application/davsharing+xml`), so match
+     * any content type mentioning xml rather than an exact list.
+     */
     private function hasXmlContentType(RequestInterface $request): bool {
-        $contentType = (string) $request->getHeader('Content-Type');
-
-        return str_contains($contentType, 'application/xml') || str_contains($contentType, 'text/xml');
+        return false !== stripos($request->getHeader('Content-Type') ?? '', 'xml');
     }
 
     /**

@@ -246,6 +246,53 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $plugin->itip($message);
     }
 
+    #[DataProvider('failedDeliveryStatuses')]
+    function testItipDoesNotPublishAfterAFailedLocalDelivery(string $status) {
+        $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
+            ->onlyMethods(['publishMessages'])
+            ->setConstructorArgs(['', new \ESN\CalDAV\CalDAVBackendMock()])
+            ->getMock();
+        $plugin->expects($this->never())->method('publishMessages');
+
+        $message = new \Sabre\VObject\ITip\Message();
+        $message->scheduleStatus = $status;
+
+        $plugin->itip($message);
+    }
+
+    static function failedDeliveryStatuses(): array {
+        return [
+            ['1.0'],
+            ['5.2;Could not find local inbox'],
+            ['5.2;Could not locate a calendar-home-set'],
+            ['5.2;Could not find a schedule-default-calendar-URL property'],
+            ["5.0;iTip message was not processed by the server, likely because we didn't understand it."],
+            ['5.0;Scheduling recipient lookup failed'],
+            ['5.0;Scheduling reply lookup failed'],
+            ['3.7;Could not find principal.'],
+            ['3.8;insufficient privileges: schedule-deliver-invite is required on the recipient schedule inbox.'],
+        ];
+    }
+
+    #[DataProvider('deliveredStatuses')]
+    function testSuccessfulLocalDeliveryIsNotTreatedAsPendingOrFailed(?string $status) {
+        $plugin = new EventRealTimePlugin('', new \ESN\CalDAV\CalDAVBackendMock());
+        $method = new \ReflectionMethod($plugin, 'hasPendingOrFailedScheduleStatus');
+        $method->setAccessible(true);
+
+        $message = new \Sabre\VObject\ITip\Message();
+        $message->scheduleStatus = $status;
+
+        $this->assertFalse($method->invoke($plugin, $message));
+    }
+
+    static function deliveredStatuses(): array {
+        return [
+            ['1.2;Message delivered locally'],
+            [null],
+        ];
+    }
+
     function testItipDelegateToScheduleAndPublishMessage() {
         $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
             ->onlyMethods(['schedule', 'publishMessages'])

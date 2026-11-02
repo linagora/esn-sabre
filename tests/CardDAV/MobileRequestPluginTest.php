@@ -346,4 +346,44 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $this->assertStringContainsString('Spaced', $body);
         $this->assertStringContainsString('My Contacts', $body);
     }
+
+    function testAfterPropFindWithANonStringSubscriptionDisplayName() {
+        $this->carddavBackend->createAddressBook('principals/users/54b64eadf6d7d8e41d263e0e', 'sourceBook', ['{DAV:}displayname' => 'Source']);
+        $this->carddavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0f', 'arrayName', [
+            '{DAV:}displayname' => ['{http://example.com/ns}name' => 'n'],
+            '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/54b64eadf6d7d8e41d263e0e/sourceBook', false)
+        ]);
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'PROPFIND',
+            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'HTTP_USER_AGENT'   => 'Thunderbird/115.0',
+            'HTTP_DEPTH'        => '1',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/',
+        ]);
+        $request->setBody('<d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:displayname/></d:prop></d:propfind>');
+
+        $response = $this->requestTurningWarningsIntoErrors($request);
+
+        $this->assertEquals(207, $response->status);
+        $displayNames = array_map(
+            fn($xmlResponse) => $xmlResponse->getResponseProperties()[200]['{DAV:}displayname'] ?? null,
+            $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString())->getResponses()
+        );
+        $this->assertContains("Carnet d'addresse - johndoe@example.org", $displayNames);
+        $this->assertContains('Book 1', $displayNames);
+    }
+
+    /**
+     * Mirrors the error handler esn.php installs, under which warnings fail the request
+     */
+    private function requestTurningWarningsIntoErrors($request) {
+        set_error_handler(function($errno, $errstr, $errfile, $errline) {
+            throw new \ErrorException($errstr, 0, $errno, $errfile, $errline);
+        });
+        try {
+            return $this->request($request);
+        } finally {
+            restore_error_handler();
+        }
+    }
 }

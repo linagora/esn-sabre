@@ -206,4 +206,44 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals('/calendars/54b64eadf6d7d8e41d263e0e/publicCal1', $subscriptionProps[0]['{http://calendarserver.org/ns/}source']->getHref());
         $this->assertStringStartsWith('Subscription - ', $subscriptionProps[0]['{DAV:}displayname']);
     }
+
+    function testAfterPropFindWithANonStringSubscriptionDisplayName() {
+        $this->caldavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0f', 'arrayName', [
+            '{DAV:}displayname' => ['{http://example.com/ns}name' => 'n'],
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('calendars/54b64eadf6d7d8e41d263e0e/publicCal1')
+        ]);
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'PROPFIND',
+            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'HTTP_USER_AGENT'   => 'Thunderbird/115.0',
+            'HTTP_DEPTH'        => '1',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/',
+        ]);
+        $request->setBody('<d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/">'
+            . '<d:prop><d:resourcetype/><d:displayname/><cs:source/></d:prop></d:propfind>');
+
+        $response = $this->requestTurningWarningsIntoErrors($request);
+
+        $this->assertEquals(207, $response->status);
+        $displayNames = array_map(
+            fn($xmlResponse) => $xmlResponse->getResponseProperties()[200]['{DAV:}displayname'] ?? null,
+            $this->server->xml->expect('{DAV:}multistatus', $response->getBodyAsString())->getResponses()
+        );
+        $this->assertContains('Agenda - johndoe@example.org', $displayNames);
+        $this->assertContains('Subscription - johndoe@example.org', $displayNames);
+    }
+
+    /**
+     * Mirrors the error handler esn.php installs, under which warnings fail the request
+     */
+    private function requestTurningWarningsIntoErrors($request) {
+        set_error_handler(function($errno, $errstr, $errfile, $errline) {
+            throw new \ErrorException($errstr, 0, $errno, $errfile, $errline);
+        });
+        try {
+            return $this->request($request);
+        } finally {
+            restore_error_handler();
+        }
+    }
 }

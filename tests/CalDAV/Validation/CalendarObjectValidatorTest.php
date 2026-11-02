@@ -656,4 +656,83 @@ class CalendarObjectValidatorTest extends TestCase {
     private function readCalendar(array $lines) {
         return Reader::read(implode("\r\n", $lines) . "\r\n");
     }
+
+    static function invalidUidProvider(): array {
+        return [
+            'empty' => ['UID:'],
+            'blank' => ['UID: '],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('invalidUidProvider')]
+    function testRecurringEventWithoutUsableUidIsRejected(string $uidLine) {
+        $this->assertValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            $uidLine,
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260515T090000Z',
+            'RRULE:FREQ=DAILY;COUNT=2',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['VEVENT MUST have a non-empty UID property']);
+    }
+
+    function testEventWithoutUidIsRejected() {
+        $this->assertValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260515T090000Z',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['VEVENT MUST have a non-empty UID property']);
+    }
+
+    static function unsupportedFrequencyProvider(): array {
+        return [
+            'unknown' => ['RRULE:FREQ=FOO'],
+            'multi-valued' => ['RRULE:FREQ=DAILY,WEEKLY'],
+            'missing' => ['RRULE:COUNT=2'],
+            'minutely' => ['RRULE:FREQ=MINUTELY;COUNT=2'],
+            'secondly' => ['RRULE:FREQ=SECONDLY;COUNT=2'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('unsupportedFrequencyProvider')]
+    function testRRuleWithUnsupportedFrequencyIsRejected(string $rruleLine) {
+        $this->assertValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260515T090000Z',
+            $rruleLine,
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['RRULE FREQ must be one of']);
+    }
+
+    function testRRuleWithLowerCaseFrequencyIsAccepted() {
+        $this->validator->validate($this->readCalendar([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260515T090000Z',
+            'RRULE:FREQ=weekly;COUNT=2',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]));
+
+        $this->addToAssertionCount(1);
+    }
 }

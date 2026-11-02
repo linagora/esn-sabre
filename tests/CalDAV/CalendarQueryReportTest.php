@@ -359,6 +359,46 @@ class CalendarQueryReportTest extends \ESN\DAV\ServerMock {
         $this->assertNotContains($href, $this->reportHrefs($calendar, $this->locationQuery('Office')));
     }
 
+    static function privateObjectFallbacks() {
+        return [
+            'calendar without indexed lookup' => [false, false],
+            'backend without indexed lookup' => [true, false],
+            'backend returning streams' => [true, true],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateObjectFallbacks')]
+    function testFallbackQueryMatchesOnlyTheVisibleFormOfPrivateEvents($hasLookup, $asStream) {
+        $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics');
+        $data = $this->caldavBackend->getCalendarObject($this->publicCal['id'], 'secret.ics')['calendardata'];
+        $child = $this->createStub(\Sabre\DAV\File::class);
+        $child->method('getName')->willReturn('secret.ics');
+        $child->method('get')->willReturnCallback(function () use ($data, $asStream) {
+            if (!$asStream) {
+                return $data;
+            }
+            $stream = fopen('php://memory', 'r+');
+            fwrite($stream, $data);
+            rewind($stream);
+
+            return $stream;
+        });
+        $calendar = $this->createStub($hasLookup ? SharedCalendar::class : \Sabre\CalDAV\Calendar::class);
+        $calendar->method('getOwner')->willReturn('principals/users/54b64eadf6d7d8e41d263e0e');
+        $calendar->method('getChildren')->willReturn([$child]);
+        if ($hasLookup) {
+            $calendar->method('getPrivateCalendarObjects')->willReturn(null);
+        }
+        $query = PrivateEventCalendarQuery::forCalendar($calendar, 'principals/users/54b64eadf6d7d8e41d263e0f');
+        $hiddenLocation = $this->server->xml->parse($this->locationQuery('Hospital'))->filters;
+        $visibleSummary = $this->server->xml->parse($this->vEventQuery(
+            '<c:prop-filter name="SUMMARY"><c:text-match>Busy</c:text-match></c:prop-filter>'
+        ))->filters;
+
+        $this->assertSame(['public.ics'], $query->filterUris([2 => 'secret.ics', 5 => 'public.ics'], $hiddenLocation));
+        $this->assertSame(['secret.ics'], $query->filterUris([], $visibleSummary));
+    }
+
     function testFilterOnHiddenFieldDoesNotMatchPrivateEventThroughSubscription() {
         $this->createHiddenPrivateEvent($this->publicCal['id'], 'secret.ics');
         $subscription = '/calendars/54b64eadf6d7d8e41d263e0f/subscription1';

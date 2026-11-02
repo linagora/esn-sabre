@@ -214,46 +214,52 @@ class InlinePhotoPluginTest extends TestCase {
     }
 
     /**
-     * Sabre repairs PHO@TO into PHOTO after the plugin ran: the plugin must
-     * treat it as the PHOTO it will be stored as.
+     * The jCard parser rejects invalid property names before photo filtering.
+     * Leave malformed input untouched for the CardDAV validation pipeline.
      */
     #[DataProvider('misnamedPhotoProvider')]
-    function testFilterStripsInlinePhotoUnderNameRepairedToPhoto($name) {
+    function testFilterLeavesMalformedJCardForValidation($name) {
         $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_FILTER);
         $data = self::jCardWithPhoto($name, 'data:image/png;base64,iVBORw0KGgo=');
+        $original = $data;
         $modified = false;
 
         $this->invokeProcess($plugin, $data, $modified);
 
-        $this->assertTrue($modified);
-        $repaired = VObject\Reader::read($data);
-        $repaired->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
-        $this->assertCount(0, $repaired->select('PHOTO'));
+        $this->assertFalse($modified);
+        $this->assertSame($original, $data);
+        $this->expectException(VObject\ParseException::class);
+        VObject\Reader::readJson($data);
     }
 
     #[DataProvider('misnamedPhotoProvider')]
-    function testRejectThrowsOnInlinePhotoUnderNameRepairedToPhoto($name) {
+    function testRejectLeavesMalformedJCardForValidation($name) {
         $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_REJECT);
         $data = self::jCardWithPhoto($name, 'data:image/png;base64,iVBORw0KGgo=');
+        $original = $data;
         $modified = false;
 
-        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
-
         $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertFalse($modified);
+        $this->assertSame($original, $data);
+        $this->expectException(VObject\ParseException::class);
+        VObject\Reader::readJson($data);
     }
 
     #[DataProvider('misnamedPhotoProvider')]
-    function testTrustedBaseFiltersUntrustedPhotoUnderNameRepairedToPhoto($name) {
+    function testTrustedBaseLeavesMalformedJCardForValidation($name) {
         $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_ALLOW, 'https://{fdqn}-drive.linagora.com');
         $data = self::jCardWithPhoto($name, 'https://evil.test/avatar.jpg');
+        $original = $data;
         $modified = false;
 
         $this->invokeProcess($plugin, $data, $modified);
 
-        $this->assertTrue($modified);
-        $repaired = VObject\Reader::read($data);
-        $repaired->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
-        $this->assertCount(0, $repaired->select('PHOTO'));
+        $this->assertFalse($modified);
+        $this->assertSame($original, $data);
+        $this->expectException(VObject\ParseException::class);
+        VObject\Reader::readJson($data);
     }
 
     function testRejectThrowsOnInlinePhotoFromStreamPayload() {

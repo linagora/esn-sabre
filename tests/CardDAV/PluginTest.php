@@ -23,6 +23,54 @@ class PluginTest extends PluginTestBase {
         //$this->server->addPlugin($plugin);
     }
 
+    static function malformedPhotoJCardProvider() {
+        foreach (['pho@to', 'pho to', 'phoéto'] as $name) {
+            foreach (['filter', 'reject', 'trusted-base'] as $policy) {
+                foreach ([false, true] as $existing) {
+                    yield $name . ' ' . $policy . ($existing ? ' update' : ' create') => [$name, $policy, $existing];
+                }
+            }
+        }
+    }
+
+    #[DataProvider('malformedPhotoJCardProvider')]
+    function testMalformedPhotoJCardShouldFailWithoutChangingStoredCard($name, $policy, $existing) {
+        $this->server->addPlugin($policy === 'trusted-base'
+            ? new InlinePhotoPlugin(InlinePhotoPlugin::MODE_ALLOW, 'https://{fdqn}-drive.linagora.com')
+            : new InlinePhotoPlugin($policy));
+        $uri = 'malformed-photo.vcf';
+        $original = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:malformed-photo\r\nFN:Original\r\nEND:VCARD\r\n";
+        if ($existing) {
+            $this->carddavBackend->createCard($this->user1Book1Id, $uri, $original);
+        }
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD' => 'PUT',
+            'HTTP_CONTENT_TYPE' => 'application/vcard+json',
+            'REQUEST_URI' => '/addressbooks/' . $this->userTestId1 . '/book1/' . $uri,
+        ]);
+        $request->setBody(json_encode([
+            'vcard',
+            [
+                ['version', new \stdClass(), 'text', '4.0'],
+                ['uid', new \stdClass(), 'text', 'malformed-photo'],
+                ['fn', new \stdClass(), 'text', 'Changed'],
+                [$name, new \stdClass(), 'uri', $policy === 'trusted-base'
+                    ? 'https://evil.test/avatar.jpg' : 'data:image/png;base64,iVBORw0KGgo='],
+            ]
+        ]));
+
+        $response = $this->request($request);
+
+        $this->assertEquals(415, $response->status);
+        $stored = $this->carddavBackend->getCard($this->user1Book1Id, $uri);
+        if ($existing) {
+            $this->assertSame($original, $stored['carddata']);
+        } else {
+            $this->assertFalse($stored);
+        }
+    }
+
     function testGETAddressBookHomesWithoutTechnicalUser() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'GET',

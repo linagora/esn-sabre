@@ -101,7 +101,10 @@ class PublicAgendaScheduleUtils {
 
         $recipients = [];
         foreach ($properties as $property) {
-            $recipient = $property->getNormalizedValue();
+            $recipient = CalendarObjectHelper::calendarAddress($property);
+            if ($recipient === null) {
+                continue;
+            }
             if ($excluded === null || self::canonicalizeCalendarAddress($recipient) !== $excluded) {
                 $recipients[] = $recipient;
             }

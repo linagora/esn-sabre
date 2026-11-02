@@ -1629,6 +1629,46 @@ ICS
         }
     }
 
+    function testRecipientHasDeclinedInMessageIgnoresAttendeeOfAnotherValueType() {
+        $message = new Message();
+        $message->method = 'REQUEST';
+        $message->recipient = 'mailto:alice@example.org';
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:e
+DTSTART:20351005T090000Z
+ORGANIZER:mailto:bob@example.org
+ATTENDEE;VALUE=DATE:20351005
+ATTENDEE;PARTSTAT=DECLINED:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->assertTrue($this->invokeRecipientHasDeclinedInMessage($message));
+    }
+
+    function testCountEventAttendeesIgnoresAttendeeOfAnotherValueType() {
+        $calendar = <<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:e
+DTSTART:20260302T090000Z
+ORGANIZER:mailto:bob@example.org
+ATTENDEE;VALUE=PERIOD:20260302T090000Z/PT1H
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $this->assertSame(2, $this->invokeCountEventAttendees($calendar));
+    }
+
     private function invokeRecipientHasDeclinedInMessage(Message $message): bool {
         $method = new \ReflectionMethod(Plugin::class, 'recipientHasDeclinedInMessage');
         $method->setAccessible(true);

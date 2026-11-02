@@ -155,6 +155,13 @@ class GetAllContactsRouteTest extends \ESN\CardDAV\PluginTestBase {
         $this->assertSame(self::CURSOR_CARD, ContactCursor::decode($cursor, $order));
     }
 
+    #[DataProvider('supportedOrders')]
+    function testRoundTripPreservesMissingSortValue(string $order) {
+        $card = ['fn_sort' => null, 'id' => self::CURSOR_CARD['id']];
+
+        $this->assertSame($card, ContactCursor::decode(ContactCursor::encode($card, $order), $order));
+    }
+
     function testDefaultOrderIsAscending() {
         $defaultCursor = ContactCursor::encode(self::CURSOR_CARD);
         $ascendingCursor = ContactCursor::encode(self::CURSOR_CARD, 'asc');
@@ -235,6 +242,7 @@ class GetAllContactsRouteTest extends \ESN\CardDAV\PluginTestBase {
         return [
             'missing keys' => [[]],
             'invalid name' => [array_replace($validKeys, ['fn_sort' => 1])],
+            'missing name' => [['_id' => self::CURSOR_CARD['id']]],
             'invalid id' => [array_replace($validKeys, ['_id' => 'not-an-id'])],
             'unsupported order' => [$validKeys + ['order' => 'invalid']],
             'null order' => [$validKeys + ['order' => null]],

@@ -38,7 +38,9 @@ final class ContactCursor
         $sortValue = $data[$field] ?? null;
         $id = $data['_id'] ?? null;
 
-        if (!is_string($sortValue) || !self::isObjectId($id)) {
+        // A null sort value is the position of a card without one, still bound to the sort field by its key.
+        $validSortValue = is_string($sortValue) || ($sortValue === null && array_key_exists($field, $data ?? []));
+        if (!$validSortValue || !self::isObjectId($id)) {
             throw new BadRequest('Invalid after cursor');
         }
 

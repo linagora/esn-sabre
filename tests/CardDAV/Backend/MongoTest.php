@@ -3,6 +3,10 @@
 namespace ESN\CardDAV\Backend;
 
 use \Sabre\DAV\Sharing\Plugin as SPlugin;
+use ESN\CardDAV\ContactCursor;
+use ESN\CardDAV\ContactSort;
+use ESN\CardDAV\ContactsPage;
+use ESN\DAV\SortOrder;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 require_once 'AbstractDatabaseTestBase.php';
@@ -415,5 +419,61 @@ class MongoTest extends AbstractDatabaseTestBase {
 
         $this->assertEquals(1, count($sharedAddressBooks));
         $this->assertEquals('principals/users/user2', $sharedAddressBooks[0]['principaluri']);
+    }
+
+    #[DataProvider('sortsAndOrders')]
+    function testKeysetWalkListsCardsWithoutSortFieldExactlyOnce(string $sort, string $order) {
+        $this->db->cards->deleteMany([]);
+        $this->insertSortCard('empty', $sort, '');
+        $this->insertSortCard('legacy1', $sort, null);
+        $this->insertSortCard('legacy2', $sort, null);
+        $this->insertSortCard('named', $sort, 'ss');
+
+        $uris = $this->walkContactPages($sort, $order);
+
+        $expected = ['legacy1', 'legacy2', 'empty', 'named'];
+        $this->assertSame($order === SortOrder::ASC ? $expected : array_reverse($expected), $uris);
+    }
+
+    static function sortsAndOrders() {
+        return [
+            'fn ascending' => [ContactSort::FN, SortOrder::ASC],
+            'fn descending' => [ContactSort::FN, SortOrder::DESC],
+            'email ascending' => [ContactSort::EMAIL, SortOrder::ASC],
+            'email descending' => [ContactSort::EMAIL, SortOrder::DESC]
+        ];
+    }
+
+    /**
+     * @param string|null $value sort value, null for a card stored without it (before the backfill or skipped by it)
+     */
+    private function insertSortCard(string $uri, string $sort, ?string $value): void {
+        $card = [
+            'addressbookid' => new \MongoDB\BSON\ObjectId($this->bookId),
+            'carddata' => $uri,
+            'uri' => $uri,
+            'lastmodified' => 0,
+            'etag' => '"' . md5($uri) . '"',
+            'size' => 5
+        ];
+        if ($value !== null) {
+            $card[ContactSort::FIELDS[$sort]] = $value;
+        }
+        $this->db->cards->insertOne($card);
+    }
+
+    private function walkContactPages(string $sort, string $order): array {
+        $backend = $this->getBackend();
+        $uris = [];
+        $after = null;
+        for ($page = 0; $page < 20; $page++) {
+            $result = ContactsPage::read($backend, [$this->bookId => 'addressbooks/user1/book1'], 1, $after, $order, $sort);
+            $uris = array_merge($uris, array_map(fn($item) => basename($item['path']), $result['items']));
+            if ($result['next'] === null) {
+                return $uris;
+            }
+            $after = ContactCursor::decode($result['next'], $order, $sort);
+        }
+        $this->fail('The listing does not end');
     }
 }

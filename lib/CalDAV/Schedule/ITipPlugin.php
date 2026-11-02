@@ -171,7 +171,8 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
             return null;
         }
 
-        return $document instanceof VObject\Component\VCalendar ? $document : null;
+        // The delivery only handles VEVENT messages (component = 'VEVENT').
+        return $document instanceof VObject\Component\VCalendar && $document->select('VEVENT') ? $document : null;
     }
 
     private function hasValidStarts(VObject\Component\VCalendar $vcalendar): bool

@@ -451,7 +451,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * previously declined the event and the event must not be re-created.
      */
     private function recipientHasDeclinedInMessage(ITip\Message $iTipMessage): bool {
-        foreach ($iTipMessage->message->VEVENT as $vevent) {
+        foreach ($iTipMessage->message->select('VEVENT') as $vevent) {
             if (isset($vevent->{'RECURRENCE-ID'})) {
                 continue; // skip overrides; check master only
             }
@@ -895,7 +895,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * so the broker can route the update correctly.
      */
     private function normalizeReplyRecurrenceId(ITip\Message $iTipMessage, VCalendar $organizerCalendar): void {
-        foreach ($iTipMessage->message->VEVENT as $replyVevent) {
+        foreach ($iTipMessage->message->select('VEVENT') as $replyVevent) {
             if (!isset($replyVevent->{'RECURRENCE-ID'})) {
                 continue;
             }

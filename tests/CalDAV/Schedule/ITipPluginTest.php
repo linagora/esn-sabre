@@ -172,6 +172,22 @@ END:VCALENDAR'
         $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
     }
 
+    function testITipShouldReturn400IfIcalHoldsNoVevent()
+    {
+        $this->iTipRequestData['ical'] = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REQUEST\r\nBEGIN:VTODO\r\n"
+            . "UID:task-1\r\nDTSTAMP:20260202T080000Z\r\nORGANIZER:mailto:a@linagora.com\r\n"
+            . "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:b@linagora.com\r\nEND:VTODO\r\nEND:VCALENDAR\r\n";
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
+    function testITipShouldReturn400IfIcalIsAnEmptyCalendar()
+    {
+        $this->iTipRequestData['ical'] = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REQUEST\r\nEND:VCALENDAR\r\n";
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
     function testITipShouldReturn400IfSenderIsNotAString()
     {
         $this->iTipRequestData['sender'] = ['a@linagora.com'];

@@ -277,6 +277,9 @@ class Utils {
         $clonedProperty->lineIndex = null;
         $clonedProperty->lineString = null;
 
+        // VALUE only names the value type, and without it the value is read again with the
+        // property's default type (RRULE;VALUE=PERIOD:weekly would no longer parse).
+        $allowedParameters[] = 'VALUE';
         foreach ($clonedProperty->parameters() as $parameter) {
             if (!in_array($parameter->name, $allowedParameters, true)) {
                 unset($clonedProperty[$parameter->name]);

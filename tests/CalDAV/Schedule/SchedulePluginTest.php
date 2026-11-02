@@ -3,6 +3,7 @@
 namespace ESN\CalDAV\Schedule;
 
 use ESN\CalDAV\Schedule\Exception\ForbiddenAttendeeSchedulingObjectChange;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\DAV\Server;
 use Sabre\DAV\SimpleCollection;
 use Sabre\DAV\SimpleFile;
@@ -472,6 +473,68 @@ ICS
 
         $this->assertSame('5.0;iTip message was not processed by the server, likely because we didn\'t understand it.', $message->scheduleStatus);
         $this->assertSame(0, $teamEvent->putCount);
+    }
+
+    #[DataProvider('invalidReplyRecurrenceIds')]
+    function testNormalizeReplyRecurrenceIdToleratesInvalidRecurrenceId(string $recurrenceIdLine) {
+        $message = $this->newDailyReplyMessage($recurrenceIdLine);
+
+        $this->invokeNormalizeReplyRecurrenceId($message, Reader::read($this->dailyOrganiserEvent('Daily')));
+
+        $this->assertSame($recurrenceIdLine, rtrim($message->message->VEVENT->{'RECURRENCE-ID'}->serialize()));
+    }
+
+    function testNormalizeReplyRecurrenceIdToleratesInvalidRecurrenceIdInStoredCopy() {
+        $organizerCalendar = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:daily-2\r\n"
+            . "DTSTART:20260302T090000Z\r\nDTEND:20260302T100000Z\r\nRRULE:FREQ=DAILY;COUNT=5\r\n"
+            . "ORGANIZER:mailto:org@x.com\r\nATTENDEE:mailto:att@x.com\r\nEND:VEVENT\r\n"
+            . "BEGIN:VEVENT\r\nUID:daily-2\r\nRECURRENCE-ID;VALUE=PERIOD:20260303T090000Z/PT1H\r\n"
+            . "DTSTART:20260303T093000Z\r\nDTEND:20260303T103000Z\r\n"
+            . "ORGANIZER:mailto:org@x.com\r\nATTENDEE:mailto:att@x.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $message = $this->newDailyReplyMessage('RECURRENCE-ID:20260303T093000Z');
+
+        $this->invokeNormalizeReplyRecurrenceId($message, $organizerCalendar);
+
+        $this->assertSame('RECURRENCE-ID:20260303T093000Z', rtrim($message->message->VEVENT->{'RECURRENCE-ID'}->serialize()));
+    }
+
+    #[DataProvider('invalidReplyRecurrenceIds')]
+    function testShouldRefuseITipReplyWithInvalidRecurrenceId(string $recurrenceIdLine) {
+        $teamEvent = $this->initializePluginForTeamCalendarDelivery(['{DAV:}read', '{DAV:}write']);
+        $message = $this->newReplyMessage('event-team', 'mailto:bob@example.org');
+        $message->sender = 'mailto:alice@example.org';
+        $message->message = Reader::read(str_replace("UID:event-team\n", "UID:event-team\n" . $recurrenceIdLine . "\n",
+            $this->newCalendarObject('event-team', 'bob@example.org')));
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertSame('5.3;Invalid RECURRENCE-ID in iTip message', $message->scheduleStatus);
+        $this->assertSame(0, $teamEvent->putCount);
+    }
+
+    static function invalidReplyRecurrenceIds(): array {
+        return [
+            ['RECURRENCE-ID:20260303T390000Z'],
+            ['RECURRENCE-ID:'],
+            ['RECURRENCE-ID;VALUE=PERIOD:20260303T090000Z/PT1H'],
+            ['RECURRENCE-ID;VALUE=TEXT:x'],
+        ];
+    }
+
+    private function newDailyReplyMessage(string $recurrenceIdLine): Message {
+        $message = new Message();
+        $message->method = 'REPLY';
+        $message->message = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\nUID:daily-2\r\n"
+            . $recurrenceIdLine . "\r\nDTSTART:20260303T090000Z\r\nORGANIZER:mailto:org@x.com\r\n"
+            . "ATTENDEE;PARTSTAT=DECLINED:mailto:att@x.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        return $message;
+    }
+
+    private function invokeNormalizeReplyRecurrenceId(Message $message, $organizerCalendar): void {
+        $method = new \ReflectionMethod(Plugin::class, 'normalizeReplyRecurrenceId');
+        $method->setAccessible(true);
+        $method->invoke($this->plugin, $message, $organizerCalendar);
     }
 
     function testShouldSkipAttendeeSchedulingValidationWhenTeamCalendarActorCanWriteEvent() {

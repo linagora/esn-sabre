@@ -354,7 +354,7 @@ class CalendarObjectHelper {
     public static function hasExceptionWithRecurrenceTimestamp(VCalendar $calendarObject, int $timestamp): bool {
         foreach ($calendarObject->VEVENT as $vevent) {
             if (isset($vevent->{'RECURRENCE-ID'}) &&
-                $vevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp() === $timestamp) {
+                self::dateTimeTimestamp($vevent->{'RECURRENCE-ID'}) === $timestamp) {
                 return true;
             }
         }
@@ -364,15 +364,45 @@ class CalendarObjectHelper {
 
     public static function findExceptionByStartTimestamp(VCalendar $calendarObject, int $timestamp) {
         foreach ($calendarObject->VEVENT as $vevent) {
-            if (!isset($vevent->{'RECURRENCE-ID'})) {
-                continue; // Skip master VEVENT.
+            if (self::dateTimeTimestamp($vevent->{'RECURRENCE-ID'}) === null) {
+                continue; // Skip master VEVENT, and overrides whose RECURRENCE-ID is not a date-time.
             }
-            if ($vevent->DTSTART->getDateTime()->getTimestamp() === $timestamp) {
+            if (self::dateTimeTimestamp($vevent->DTSTART) === $timestamp) {
                 return $vevent;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Whether every RECURRENCE-ID of the calendar's VEVENTs reads as a date-time.
+     */
+    public static function hasReadableRecurrenceIds(VCalendar $calendarObject): bool {
+        foreach ($calendarObject->select('VEVENT') as $vevent) {
+            if (isset($vevent->{'RECURRENCE-ID'}) && self::dateTimeTimestamp($vevent->{'RECURRENCE-ID'}) === null) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Timestamp of a date-time property, or null when the property is missing,
+     * is not a date-time (e.g. VALUE=PERIOD) or holds an empty or unparsable value.
+     */
+    public static function dateTimeTimestamp($property): ?int {
+        // An empty value is rejected up front: sabre's parser reads past its end (sabre-vobject#15).
+        if (!($property instanceof \Sabre\VObject\Property\ICalendar\DateTime) || (string)$property->getValue() === '') {
+            return null;
+        }
+
+        try {
+            return $property->getDateTime()->getTimestamp();
+        } catch (\Exception | \ValueError $e) {
+            return null;
+        }
     }
 
     /**

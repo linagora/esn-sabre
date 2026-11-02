@@ -117,6 +117,12 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
+        // The broker reads every RECURRENCE-ID as a date-time and would fail on any other value.
+        if (!CalendarObjectHelper::hasReadableRecurrenceIds($iTipMessage->message)) {
+            $iTipMessage->scheduleStatus = '5.3;Invalid RECURRENCE-ID in iTip message';
+            return;
+        }
+
         $newFileName = 'sabredav-' . \Sabre\DAV\UUIDUtil::getUUID() . '.ics';
 
         $loaded = $this->loadCalendarObjectForDelivery($homePath, $iTipMessage, $principalUri);
@@ -896,11 +902,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      */
     private function normalizeReplyRecurrenceId(ITip\Message $iTipMessage, VCalendar $organizerCalendar): void {
         foreach ($iTipMessage->message->select('VEVENT') as $replyVevent) {
-            if (!isset($replyVevent->{'RECURRENCE-ID'})) {
-                continue;
+            $replyRecurTs = CalendarObjectHelper::dateTimeTimestamp($replyVevent->{'RECURRENCE-ID'});
+            if ($replyRecurTs === null) {
+                continue; // No RECURRENCE-ID, or one that does not read as a date-time.
             }
-
-            $replyRecurTs = $replyVevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp();
 
             if (CalendarObjectHelper::hasExceptionWithRecurrenceTimestamp($organizerCalendar, $replyRecurTs)) {
                 continue; // Exact match — no correction needed.

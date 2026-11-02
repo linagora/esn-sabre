@@ -1591,6 +1591,44 @@ ICS
         $this->assertFalse($this->invokeRecipientHasDeclinedInMessage($message));
     }
 
+    function testRecipientHasDeclinedInMessageAcceptsMessageWithoutVevent() {
+        $message = new Message();
+        $message->method = 'REQUEST';
+        $message->recipient = 'mailto:alice@example.org';
+        $message->message = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:task-1\r\n"
+            . "ATTENDEE;PARTSTAT=DECLINED:mailto:alice@example.org\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+
+        $this->assertFalse($this->withWarningsAsErrors(fn() => $this->invokeRecipientHasDeclinedInMessage($message)));
+    }
+
+    function testNormalizeReplyRecurrenceIdAcceptsMessageWithoutVevent() {
+        $message = new Message();
+        $message->method = 'REPLY';
+        $message->message = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:task-1\r\n"
+            . "RECURRENCE-ID:20351006T090000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+        $organizerCalendar = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:event-1\r\n"
+            . "DTSTART:20351005T090000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $before = $message->message->serialize();
+
+        $method = new \ReflectionMethod(Plugin::class, 'normalizeReplyRecurrenceId');
+        $method->setAccessible(true);
+        $this->withWarningsAsErrors(fn() => $method->invoke($this->plugin, $message, $organizerCalendar));
+
+        $this->assertSame($before, $message->message->serialize());
+    }
+
+    // Mirrors esn.php, where any PHP warning becomes an ErrorException (500).
+    private function withWarningsAsErrors(callable $action) {
+        set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+            throw new \ErrorException($errstr, 0, $errno, $errfile, $errline);
+        });
+        try {
+            return $action();
+        } finally {
+            restore_error_handler();
+        }
+    }
+
     private function invokeRecipientHasDeclinedInMessage(Message $message): bool {
         $method = new \ReflectionMethod(Plugin::class, 'recipientHasDeclinedInMessage');
         $method->setAccessible(true);

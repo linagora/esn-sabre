@@ -255,8 +255,10 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
 
         try {
             $expandedVObject = $vObject->expand($start, $end, $timeZone);
-        } catch (VObject\InvalidDataException $e) {
-            // A recurring VEVENT without a UID cannot be expanded. Drop that one
+        } catch (VObject\InvalidDataException | VObject\Recur\MaxInstancesExceededException $e) {
+            // A recurring VEVENT without a UID cannot be expanded, nor can a
+            // series generating more than SABRE_MAX_RECURRENCES occurrences
+            // from its DTSTART up to the end of the window. Drop that one
             // calendar object rather than failing the whole bulk request.
             $this->server->getLogger()->error(
                 'Free/busy: ignoring ' . $calendar->getName() . '/' . $eventUri . ': ' . $e->getMessage()

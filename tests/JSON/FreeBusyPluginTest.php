@@ -427,6 +427,47 @@ END:VCALENDAR
         $this->assertEquals(400, $response->status);
     }
 
+    function testFreeBusyShouldSkipAnEventExceedingTheRecurrenceLimitInTheWindow() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'standup.ics',
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:daily-standup
+DTSTAMP:20261101T000000Z
+DTSTART:20261101T090000Z
+DTEND:20261101T091500Z
+RRULE:FREQ=DAILY
+END:VEVENT
+END:VCALENDAR
+');
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'meeting.ics',
+            'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:single-meeting
+DTSTAMP:20261101T000000Z
+DTSTART:20270101T100000Z
+DTEND:20270101T110000Z
+END:VEVENT
+END:VCALENDAR
+');
+
+        // 3653 daily occurrences up to the end of the window, over the default
+        // limit of 3500.
+        $jsonResponse = $this->requestFreeBusy([
+            'start' => '20261102T000000Z',
+            'end' => '20361102T000000Z',
+            'users' => [self::USER1_ID]
+        ]);
+
+        $busy = $jsonResponse->users[0]->calendars[0]->busy;
+        $this->assertContainsEquals(
+            (object) ['uid' => 'single-meeting', 'start' => '20270101T100000Z', 'end' => '20270101T110000Z'],
+            $busy
+        );
+        $this->assertEmpty(array_filter($busy, fn($period) => $period->uid === 'daily-standup'));
+    }
+
     function testFreeBusyShouldSkipUsersThatAreNotCalendarHomes() {
         [$code, $body] = $this->server->getPlugin('caldav-freebusy')->getBulkFreeBusy(json_decode(json_encode([
             'start' => '20120101T000000Z',

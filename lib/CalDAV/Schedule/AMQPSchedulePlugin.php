@@ -158,8 +158,8 @@ class AMQPSchedulePlugin extends Plugin {
             $this->pendingDeliveries[$key]['recipients'][] = $iTipMessage->recipient;
         }
 
-        // Exact '1.0' (no description text) — short-circuits EventRealTimePlugin.schedule()
-        // which checks scheduleStatus with a strict string comparison against the constant.
+        // '1.0' (no description text) — short-circuits EventRealTimePlugin.schedule()
+        // which treats the pending status code as a delivery that did not happen yet.
         $iTipMessage->scheduleStatus = '1.0';
     }
 

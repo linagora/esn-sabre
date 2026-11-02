@@ -18,6 +18,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     const SCHEDSTAT_SUCCESS_PENDING = '1.0';
     const SCHEDSTAT_FAIL_TEMPORARY  = '5.1';
     const SCHEDSTAT_FAIL_PERMANENT  = '5.2';
+    // RFC 5545 REQUEST-STATUS classes: 3.x (client error, e.g. refused delivery) and 5.x (scheduling error)
+    const SCHEDSTAT_FAILED_CLASSES  = ['3', '5'];
 
     protected $caldavBackend;
 
@@ -407,14 +409,11 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     private function hasPendingOrFailedScheduleStatus(\Sabre\VObject\ITip\Message $iTipMessage): bool {
-        switch($iTipMessage->scheduleStatus) {
-            case self::SCHEDSTAT_SUCCESS_PENDING:
-            case self::SCHEDSTAT_FAIL_TEMPORARY:
-            case self::SCHEDSTAT_FAIL_PERMANENT:
-                return true;
-        }
+        // Statuses set by local delivery carry a text after the code, e.g. "5.2;Could not find local inbox"
+        $statusCode = explode(';', (string) $iTipMessage->scheduleStatus)[0];
 
-        return false;
+        return $statusCode === self::SCHEDSTAT_SUCCESS_PENDING
+            || in_array(explode('.', $statusCode)[0], self::SCHEDSTAT_FAILED_CLASSES, true);
     }
 
     private function resolveRecipientPrincipalUri(\Sabre\VObject\ITip\Message $iTipMessage): ?string {

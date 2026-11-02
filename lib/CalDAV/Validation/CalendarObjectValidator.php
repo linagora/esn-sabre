@@ -22,19 +22,29 @@ class CalendarObjectValidator {
      */
     function validateEventDates(VCalendar $vCalendar) {
         foreach ($this->vevents($vCalendar) as $vevent) {
-            if (!isset($vevent->DTSTART) || !isset($vevent->DTEND)) {
-                continue;
-            }
+            // Type-check each date whenever present: scheduling reads DTSTART of
+            // events without DTEND too, and fails with an Error on a non date one.
+            $dtStart = $this->optionalDateTimeProperty($vevent, 'DTSTART');
+            $dtEnd = $this->optionalDateTimeProperty($vevent, 'DTEND');
 
-            $dtStart = $this->assertDateTimeProperty($vevent->DTSTART);
-            $dtEnd = $this->assertDateTimeProperty($vevent->DTEND);
-
-            // RFC 5545 §3.6.1 requires DTEND to be later than DTSTART; an equal
-            // DTEND is still accepted as clients use it for instantaneous events.
-            // Compare instants, as DTSTART and DTEND may use different timezones.
-            if ($dtEnd->getDateTime()->getTimestamp() < $dtStart->getDateTime()->getTimestamp()) {
-                $this->fail('DTEND must not be before DTSTART');
+            if ($dtStart && $dtEnd) {
+                $this->assertDtEndNotBeforeDtStart($dtStart, $dtEnd);
             }
+        }
+    }
+
+    private function optionalDateTimeProperty(Component $vevent, string $name): ?DateTimeProperty
+    {
+        return isset($vevent->$name) ? $this->assertDateTimeProperty($vevent->$name) : null;
+    }
+
+    private function assertDtEndNotBeforeDtStart(DateTimeProperty $dtStart, DateTimeProperty $dtEnd): void
+    {
+        // RFC 5545 §3.6.1 requires DTEND to be later than DTSTART; an equal
+        // DTEND is still accepted as clients use it for instantaneous events.
+        // Compare instants, as DTSTART and DTEND may use different timezones.
+        if ($dtEnd->getDateTime()->getTimestamp() < $dtStart->getDateTime()->getTimestamp()) {
+            $this->fail('DTEND must not be before DTSTART');
         }
     }
 

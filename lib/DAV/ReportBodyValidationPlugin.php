@@ -13,8 +13,8 @@ use \Sabre\Xml\ParseException;
 
 /**
  * Guards the XML request body of every DAV method whose body Sabre (or an ESN
- * plugin) deserialises as XML: REPORT, PROPFIND, PROPPATCH, ACL and LOCK
- * always, MKCOL and POST when sent with an XML content type.
+ * plugin) deserialises as XML, after ESN's JSON handlers have had a chance to
+ * handle shared methods. MKCOL and POST are checked early when sent as XML.
  *
  * Two distinct problems are handled here, both before Sabre's handler runs:
  *
@@ -56,12 +56,12 @@ class ReportBodyValidationPlugin extends ServerPlugin {
     // Right before Sabre's core, ACL and CalDAV sharing handlers (default priority 100).
     const PRIORITY = 99;
 
-    // After authentication (10), before the JSON (15), ACL (20) and
-    // calendar subscription (30) plugins, which may parse the body themselves.
+    // Early validation for XML MKCOL/POST, before other plugins parse the body.
     const BEFORE_METHOD_PRIORITY = 12;
 
-    // Methods whose body is always deserialised as XML when present.
-    const XML_BODY_METHODS = ['REPORT', 'PROPFIND', 'PROPPATCH', 'ACL', 'LOCK'];
+    // Run after JSON handlers (80), before Sabre's XML handlers (100).
+    // REPORT and ACL validate in their wrappers at the same priority.
+    const XML_BODY_METHODS = ['PROPFIND', 'PROPPATCH', 'LOCK'];
 
     // Methods whose body is deserialised as XML only with an XML content type
     // (MKCOL extended bodies, POST share-resource / CalDAV sharing).
@@ -79,18 +79,22 @@ class ReportBodyValidationPlugin extends ServerPlugin {
         $server->on('method:REPORT', [$this, 'httpReport'], self::PRIORITY);
         $server->on('method:ACL', [$this, 'httpAcl'], self::PRIORITY);
         $server->on('method:POST', [$this, 'httpPost'], self::PRIORITY);
+        foreach (self::XML_BODY_METHODS as $method) {
+            $server->on('method:' . $method, [$this, 'assertWellFormedBody'], self::PRIORITY);
+        }
     }
 
     function beforeMethod(RequestInterface $request, ResponseInterface $response) {
         $method = strtoupper($request->getMethod());
 
-        if (in_array($method, self::XML_BODY_METHODS, true)
-            || (in_array($method, self::XML_CONTENT_TYPE_METHODS, true) && $this->hasXmlContentType($request))) {
+        if (in_array($method, self::XML_CONTENT_TYPE_METHODS, true) && $this->hasXmlContentType($request)) {
             $this->assertWellFormedBody($request, $response);
         }
     }
 
     function httpReport(RequestInterface $request, ResponseInterface $response) {
+        $this->assertWellFormedBody($request, $response);
+
         $result = $this->parseReportBody($request, $rootElementName);
 
         if ($this->server->emit('report', [$rootElementName, $result, $request->getPath()])) {

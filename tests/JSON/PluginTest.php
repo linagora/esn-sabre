@@ -117,6 +117,40 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertCount(1, $jsonResponse->_embedded->{'dav:item'});
     }
 
+    #[\PHPUnit\Framework\Attributes\DataProvider('jsonMethodsWithXmlGuard')]
+    function testXmlGuardPreservesJsonRequests($method, $body, $status) {
+        $this->server->addPlugin(new \ESN\DAV\ReportBodyValidationPlugin());
+        $request = new \Sabre\HTTP\Request($method,
+            '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+            ['Content-Type' => 'application/json', 'Accept' => 'application/json'], $body);
+
+        $response = $this->request($request);
+
+        $this->assertEquals($status, $response->status, $response->getBodyAsString());
+        if ($method === 'REPORT') {
+            $items = json_decode($response->getBodyAsString(), true)['_embedded']['dav:item'];
+            $this->assertCount(1, $items);
+            $this->assertStringEndsWith('/event1.ics', $items[0]['_links']['self']['href']);
+        } elseif ($method === 'PROPFIND') {
+            $this->assertArrayHasKey('acl', json_decode($response->getBodyAsString(), true));
+        } elseif ($method === 'PROPPATCH') {
+            $calendars = $this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0f');
+            $calendar = array_values(array_filter($calendars, fn($calendar) => $calendar['uri'] === 'calendar1'))[0];
+            $this->assertSame('Renamed with JSON', $calendar['{DAV:}displayname']);
+        } else {
+            $this->assertSame('{DAV:}read', $this->caldavBackend->getCalendarPublicRight($this->cal['id']));
+        }
+    }
+
+    public static function jsonMethodsWithXmlGuard(): array {
+        return [
+            'REPORT' => ['REPORT', '{"match":{"start":"20120225T230000Z","end":"20130228T225959Z"}}', 200],
+            'PROPFIND' => ['PROPFIND', '{"prop":["acl"]}', 200],
+            'PROPPATCH' => ['PROPPATCH', '{"dav:name":"Renamed with JSON"}', 204],
+            'ACL' => ['ACL', '{"public_right":"{DAV:}read"}', 200],
+        ];
+    }
+
     function testTimeRangeQuerySerializesRegisteredCustomCalendarPropertiesWithConfiguredTypes() {
         $customEvent = 'BEGIN:VCALENDAR
 VERSION:2.0

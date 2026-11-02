@@ -145,11 +145,16 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return;
         }
 
+        $this->deliverNewRevision($iTipMessage, $objectNode, $calendarPath, $newFileName, $previousRevision ?? $oldICalendarData, $newObject);
+    }
+
+    private function deliverNewRevision(ITip\Message $iTipMessage, $objectNode, string $calendarPath, string $newFileName,
+        $previousRevision, VCalendar $newObject): void {
         try {
             if (!$objectNode) {
                 $this->deliverToNewObject($iTipMessage, $calendarPath, $newFileName, $newObject);
             } else {
-                $this->deliverToExistingObject($iTipMessage, $objectNode, $previousRevision ?? $oldICalendarData, $newObject);
+                $this->deliverToExistingObject($iTipMessage, $objectNode, $previousRevision, $newObject);
             }
         } catch (ITip\ITipException | InvalidDataException $e) {
             $this->refuseUnprocessableDelivery($iTipMessage, $e);

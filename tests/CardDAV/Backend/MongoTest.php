@@ -443,11 +443,10 @@ class MongoTest extends AbstractDatabaseTestBase {
     }
 
     private function walkContactPages(string $sort, string $order): array {
-        $backend = $this->getBackend();
         $uris = [];
         $after = null;
         for ($page = 0; $page < 20; $page++) {
-            $result = ContactsPage::read($backend, [$this->bookId => 'addressbooks/user1/book1'], 1, $after, $order, $sort);
+            $result = ContactsPage::read($this->backend,[$this->bookId => 'addressbooks/user1/book1'], 1, $after, $order, $sort);
             $uris = array_merge($uris, array_map(fn($item) => basename($item['path']), $result['items']));
             if ($result['next'] === null) {
                 return $uris;

@@ -74,12 +74,7 @@ class PrivateEventCalendarQuery {
     function filterUris(array $matchedUris, array $filters) {
         $privateObjects = $this->getPrivateObjects();
 
-        $result = [];
-        foreach ($matchedUris as $uri) {
-            if (!array_key_exists($uri, $privateObjects)) {
-                $result[] = $uri;
-            }
-        }
+        $result = array_values(array_filter($matchedUris, fn($uri) => !array_key_exists($uri, $privateObjects)));
         foreach ($privateObjects as $uri => $calendarData) {
             if ($this->matches($calendarData, $filters)) {
                 $result[] = $uri;
@@ -119,20 +114,26 @@ class PrivateEventCalendarQuery {
      * @return array calendar data of the PRIVATE / CONFIDENTIAL objects, indexed by URI
      */
     private function getPrivateObjects() {
-        $result = [];
+        $objects = method_exists($this->calendar, 'getPrivateCalendarObjects')
+            ? $this->calendar->getPrivateCalendarObjects() : null;
 
-        if (method_exists($this->calendar, 'getPrivateCalendarObjects')) {
-            $objects = $this->calendar->getPrivateCalendarObjects();
-            if ($objects !== null) {
-                foreach ($objects as $object) {
-                    $result[$object['uri']] = $object['calendardata'];
-                }
-
-                return $result;
-            }
+        if ($objects === null) {
+            return $this->getPrivateObjectsFromChildren();
         }
 
-        // Backends that cannot select on the classification: look at every object
+        $result = [];
+        foreach ($objects as $object) {
+            $result[$object['uri']] = $object['calendardata'];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Backends that cannot select on classification require a scan of every object.
+     */
+    private function getPrivateObjectsFromChildren() {
+        $result = [];
         foreach ($this->calendar->getChildren() as $child) {
             $calendarData = $child->get();
             if (is_resource($calendarData)) {

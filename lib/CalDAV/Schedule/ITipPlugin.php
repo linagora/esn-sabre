@@ -14,6 +14,9 @@ use ESN\DAV\Sharing\Plugin as SharingPlugin;
 
 class ITipPlugin extends \Sabre\DAV\ServerPlugin {
 
+    // Exact case: the iTIP broker and the realtime publisher compare the method as is
+    const SUPPORTED_METHODS = ['REQUEST', 'REPLY', 'CANCEL', 'COUNTER'];
+
     protected $server;
 
     function initialize(DAV\Server $server)
@@ -80,7 +83,7 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         $message->sender = $this->resolveSenderFromItipMessage($message, $issetdef('replyTo', $payload->sender));
         $message->recipient = 'mailto:' . $payload->recipient;
 
-        if (strtoupper((string)$message->method) === 'COUNTER') {
+        if ($message->method === 'COUNTER') {
             if (!$this->authenticatedCanActAsSender($message, true)) {
                 return $this->send(403, null);
             }
@@ -151,10 +154,11 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         }
 
         $requiredStrings = ['uid', 'sender', 'recipient', 'ical'];
-        $optionalScalars = ['method', 'sequence'];
+        $optionalScalars = ['sequence'];
 
         return array_reduce($requiredStrings, fn($valid, $key) => $valid && $this->isNonEmptyString($payload, $key), true)
             && (!isset($payload->replyTo) || $this->isNonEmptyString($payload, 'replyTo'))
+            && (!isset($payload->method) || in_array($payload->method, self::SUPPORTED_METHODS, true))
             && array_reduce($optionalScalars, fn($valid, $key) => $valid && (!isset($payload->{$key}) || is_scalar($payload->{$key})), true);
     }
 

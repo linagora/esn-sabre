@@ -209,6 +209,20 @@ END:VCALENDAR'
         $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
     }
 
+    function testITipShouldReturn400IfMethodIsNotAnITipMethodItHandles()
+    {
+        $this->iTipRequestData['method'] = 'ADD';
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
+    function testITipShouldReturn400IfMethodIsNotUpperCase()
+    {
+        $this->iTipRequestData['method'] = 'request';
+
+        $this->assertRawBodyIsRejected(json_encode($this->iTipRequestData));
+    }
+
     function testITipShouldReturn400IfIcalCarriesAnotherUid()
     {
         $this->iTipRequestData['method'] = 'REQUEST';

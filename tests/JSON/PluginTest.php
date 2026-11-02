@@ -1260,7 +1260,7 @@ END:VCALENDAR
     function testCalendarListWithFreeBusyGivesOnlyTheLinkOfAFreeBusySharedInstance() {
         $this->shareCalendarUser2With('principals/users/54b64eadf6d7d8e41d263e0f', \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY);
 
-        $calendars = $this->listedCalendarsByHref('/calendars/54b64eadf6d7d8e41d263e0f.json?withFreeBusy=true&withRights=true');
+        $calendars = $this->listedCalendarsByHref('/calendars/54b64eadf6d7d8e41d263e0f.json?withFreeBusy=true&withRights=true&sharedDelegationStatus=accepted');
 
         $ownCalendars = array_map(function ($calendar) {
             return '/calendars/54b64eadf6d7d8e41d263e0f/' . $calendar['uri'] . '.json';

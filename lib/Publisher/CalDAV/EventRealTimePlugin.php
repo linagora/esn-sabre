@@ -547,7 +547,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     private function findMasterVEvent($vcalendar) {
-        foreach ($vcalendar->VEVENT as $vevent) {
+        foreach ($vcalendar->select('VEVENT') as $vevent) {
             if (!isset($vevent->{'RECURRENCE-ID'})) {
                 return $vevent;
             }
@@ -562,7 +562,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
      * is not an attendee.
      */
     private function attendeePartstat($vevent, string $recipientUri): ?string {
-        foreach ($vevent->ATTENDEE as $attendee) {
+        foreach ($vevent->select('ATTENDEE') as $attendee) {
             if (strtolower($attendee->getValue()) === $recipientUri) {
                 return isset($attendee['PARTSTAT'])
                     ? strtoupper(trim($attendee['PARTSTAT']->getValue()))
@@ -631,28 +631,35 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             return false;
         }
 
-        $explodedSenderPrincipalUri = explode('/', $senderPrincipalUri);
-
-        foreach ($iTipMessage->message->VEVENT->ATTENDEE as $attendee) {
-            if ($attendee->getValue() !== $iTipMessage->sender) {
-                continue;
-            }
-
-            $topic = $this->resourceReplyTopic($attendee['PARTSTAT']->getValue());
-            if ($topic !== null) {
-                $this->createMessage($topic, [
-                    'resourceId' => $explodedSenderPrincipalUri[2],
-                    'eventId' => $iTipMessage->uid,
-                    'eventPath' => '/' . $eventPath,
-                    'ics' => $upToDateEventIcs
-                ]);
-            }
+        $topic = $this->resourceReplyTopic($this->resourceReplyPartstat($iTipMessage));
+        if ($topic !== null) {
+            $explodedSenderPrincipalUri = explode('/', $senderPrincipalUri);
+            $this->createMessage($topic, [
+                'resourceId' => $explodedSenderPrincipalUri[2],
+                'eventId' => $iTipMessage->uid,
+                'eventPath' => '/' . $eventPath,
+                'ics' => $upToDateEventIcs
+            ]);
         }
 
         return true;
     }
 
-    private function resourceReplyTopic(string $partstat): ?string {
+    /**
+     * Returns the uppercased PARTSTAT the resource answered in the first VEVENT
+     * of its REPLY, or null when the reply holds no VEVENT or the resource is
+     * not one of its attendees.
+     */
+    private function resourceReplyPartstat(\Sabre\VObject\ITip\Message $iTipMessage): ?string {
+        $vevents = $iTipMessage->message->select('VEVENT');
+        if (empty($vevents)) {
+            return null;
+        }
+
+        return $this->attendeePartstat(reset($vevents), strtolower($iTipMessage->sender));
+    }
+
+    private function resourceReplyTopic(?string $partstat): ?string {
         switch($partstat) {
             case 'ACCEPTED':
                 return $this->EVENT_TOPICS['RESOURCE_EVENT_ACCEPTED'];

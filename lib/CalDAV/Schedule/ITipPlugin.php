@@ -67,7 +67,7 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
         $issetdef = $this->propertyOrDefault($payload);
 
         $calendar = $this->parseCalendar($payload->ical);
-        if (!$calendar) {
+        if (!$calendar || !$this->carriesOnlyPayloadUid($calendar, $payload->uid)) {
             return $this->send(400, null);
         }
 
@@ -173,6 +173,16 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
 
         // The delivery only handles VEVENT messages (component = 'VEVENT').
         return $document instanceof VObject\Component\VCalendar && $document->select('VEVENT') ? $document : null;
+    }
+
+    // The stored copy is looked up by the payload uid, while the broker merges every component
+    // of the attachment into it: one with another UID, or none, would land in that resource,
+    // which a PUT of the same data would refuse.
+    private function carriesOnlyPayloadUid(VObject\Component\VCalendar $vcalendar, string $uid): bool
+    {
+        $components = array_filter($vcalendar->getComponents(), fn($component) => $component->name !== 'VTIMEZONE');
+        return $vcalendar->select('VEVENT')
+            && !array_filter($components, fn($component) => (string) $component->UID !== $uid);
     }
 
     private function hasValidStarts(VObject\Component\VCalendar $vcalendar): bool

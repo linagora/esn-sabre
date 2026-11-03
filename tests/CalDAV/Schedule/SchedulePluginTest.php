@@ -581,6 +581,52 @@ END:VCALENDAR
 
         $this->assertSame('1.2;Message delivered locally', $message->scheduleStatus);
         $this->assertSame(1, $storedCopy->putCount);
+        $this->assertSame('ACCEPTED', $this->attendeePartstat(Reader::read($storedCopy->putData)->VEVENT[0], 'mailto:alice@example.org'));
+    }
+
+    function testShouldNotCreateInboxItemWhenTheBrokerRefusesTheMerge() {
+        // The stored master holds an RRULE part the recurrence iterator does not
+        // support: merging a REPLY to a not yet overridden occurrence throws.
+        $storedCopy = $this->initializePluginWithStoredCopy('BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:daily-2
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+RRULE:FREQ=DAILY;COUNT=3;UNSUPPORTED=1
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+');
+        $message = $this->newMessage('REPLY', 'mailto:alice@example.org', 'BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REPLY
+BEGIN:VEVENT
+UID:daily-2
+RECURRENCE-ID:20351006T090000Z
+DTSTART:20351006T090000Z
+DTEND:20351006T100000Z
+SEQUENCE:0
+ORGANIZER:mailto:bob@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org
+END:VEVENT
+END:VCALENDAR
+');
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('5.0;', $message->scheduleStatus);
+        $this->assertSame(0, $storedCopy->putCount);
+        $this->assertCount(0, $this->inbox->getChildren());
+    }
+
+    private function attendeePartstat($vevent, string $attendeeAddress): ?string {
+        $attendees = array_filter(iterator_to_array($vevent->ATTENDEE),
+            fn($attendee) => $attendee->getValue() === $attendeeAddress);
+
+        return $attendees ? (string)reset($attendees)['PARTSTAT'] : null;
     }
 
     function testShouldSkipAttendeeSchedulingValidationWhenTeamCalendarActorCanWriteEvent() {
@@ -2004,9 +2050,11 @@ class TeamCalendarHomeTestDouble extends SimpleCollection {
 
 class WritableCalendarObjectTestDouble extends SimpleFile {
     public $putCount = 0;
+    public $putData;
 
     function put($data) {
         $this->putCount++;
+        $this->putData = $data;
     }
 }
 

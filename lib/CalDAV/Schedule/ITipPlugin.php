@@ -197,16 +197,7 @@ class ITipPlugin extends \Sabre\DAV\ServerPlugin {
 
     private function isParsableDateTime(VObject\Property $property): bool
     {
-        if (!($property instanceof VObject\Property\ICalendar\DateTime)) {
-            return false;
-        }
-
-        try {
-            $property->getDateTime();
-            return true;
-        } catch (\Exception | \ValueError $e) {
-            return false;
-        }
+        return CalendarObjectHelper::dateTimeTimestamp($property) !== null;
     }
 
     private function propertyOrDefault($jsonData)

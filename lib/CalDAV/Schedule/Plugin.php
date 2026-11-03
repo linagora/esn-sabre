@@ -113,7 +113,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
         list($homePath, $inboxPath, $calendarPath, $principalUri) = $deliveryPaths;
 
-        if (!$this->hasDeliveryPrivilege($aclPlugin, $inboxPath, $iTipMessage)) {
+        if (!$this->canDeliver($aclPlugin, $inboxPath, $iTipMessage)) {
             return;
         }
 
@@ -366,6 +366,23 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $result[$caldavNS . 'schedule-default-calendar-URL']->getHref(),
             $principalUri,
         ];
+    }
+
+    private function canDeliver($aclPlugin, string $inboxPath, ITip\Message $iTipMessage): bool {
+        return $this->hasDeliveryPrivilege($aclPlugin, $inboxPath, $iTipMessage)
+            && $this->hasReadableRecurrenceIds($iTipMessage);
+    }
+
+    /**
+     * The broker reads every RECURRENCE-ID as a date-time and would fail on any other value.
+     */
+    private function hasReadableRecurrenceIds(ITip\Message $iTipMessage): bool {
+        if (CalendarObjectHelper::hasReadableRecurrenceIds($iTipMessage->message)) {
+            return true;
+        }
+
+        $iTipMessage->scheduleStatus = '5.3;Invalid RECURRENCE-ID in iTip message';
+        return false;
     }
 
     private function hasDeliveryPrivilege($aclPlugin, string $inboxPath, ITip\Message $iTipMessage): bool {
@@ -896,11 +913,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      */
     private function normalizeReplyRecurrenceId(ITip\Message $iTipMessage, VCalendar $organizerCalendar): void {
         foreach ($iTipMessage->message->select('VEVENT') as $replyVevent) {
-            if (!isset($replyVevent->{'RECURRENCE-ID'})) {
-                continue;
+            $replyRecurTs = CalendarObjectHelper::dateTimeTimestamp($replyVevent->{'RECURRENCE-ID'});
+            if ($replyRecurTs === null) {
+                continue; // No RECURRENCE-ID, or one that does not read as a date-time.
             }
-
-            $replyRecurTs = $replyVevent->{'RECURRENCE-ID'}->getDateTime()->getTimestamp();
 
             if (CalendarObjectHelper::hasExceptionWithRecurrenceTimestamp($organizerCalendar, $replyRecurTs)) {
                 continue; // Exact match — no correction needed.

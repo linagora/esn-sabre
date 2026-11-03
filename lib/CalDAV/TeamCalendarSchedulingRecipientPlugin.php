@@ -126,7 +126,7 @@ class TeamCalendarSchedulingRecipientPlugin extends ServerPlugin {
         if (!$addresses) return false;
         $hasOrganizer = $isAttendee = false;
         foreach ($calendar->select('VEVENT') as $event) {
-            $organizer = isset($event->ORGANIZER) ? strtolower($event->ORGANIZER->getNormalizedValue()) : null;
+            $organizer = isset($event->ORGANIZER) ? strtolower((string)CalendarObjectHelper::calendarAddress($event->ORGANIZER)) : null;
             if ($organizer !== null && in_array($organizer, $addresses, true)) return false;
             $hasOrganizer = $hasOrganizer || $organizer !== null;
             $isAttendee = $isAttendee || CalendarObjectHelper::hasAttendeeInAddresses($event, $addresses);

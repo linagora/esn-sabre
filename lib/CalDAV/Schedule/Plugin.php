@@ -717,7 +717,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         foreach ($calendarObject->select('VEVENT') as $event) {
             if (isset($event->ORGANIZER)) {
                 $hasOrganizer = true;
-                if (in_array(strtolower($event->ORGANIZER->getNormalizedValue()), $normalizedAddresses, true)) {
+                if (in_array(strtolower((string)CalendarObjectHelper::calendarAddress($event->ORGANIZER)), $normalizedAddresses, true)) {
                     return false;
                 }
             }
@@ -1223,7 +1223,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $organizerAddresses = [];
         foreach ($vCal->select('VEVENT') as $vevent) {
             if (isset($vevent->ORGANIZER)) {
-                $organizerAddresses[] = $vevent->ORGANIZER->getNormalizedValue();
+                $organizerAddresses[] = (string)CalendarObjectHelper::calendarAddress($vevent->ORGANIZER);
             }
         }
 
@@ -1232,7 +1232,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             return null;
         }
 
-        return reset($organizerAddresses);
+        return reset($organizerAddresses) ?: null;
     }
 
     /**

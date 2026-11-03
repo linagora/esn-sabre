@@ -723,4 +723,21 @@ ICS;
         $this->assertTrue(isset($result->VEVENT->DESCRIPTION));
         $this->assertTrue(isset($result->VEVENT->LOCATION));
     }
+
+    function testJsonEncodeSubstitutesNonUtf8ParameterValues() {
+        // Issue #701: a non-UTF-8 parameter value must not turn the JSON body into an empty one
+        $vcalendar = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:latin1\r\n"
+            . "DTSTART:20350110T100000Z\r\nORGANIZER;CN=Ren\xE9:mailto:a@x\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $json = Utils::jsonEncode($vcalendar->jsonSerialize());
+
+        $organizer = json_decode($json, true)[2][0][1][2];
+        $this->assertSame("Ren\u{FFFD}", $organizer[1]['cn']);
+    }
+
+    function testJsonEncodeThrowsRatherThanAnsweringAnEmptyBody() {
+        $this->expectException(\JsonException::class);
+
+        Utils::jsonEncode(['value' => INF]);
+    }
 }

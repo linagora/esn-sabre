@@ -184,6 +184,15 @@ class Utils {
         return isset($jsonData->{$key}) ? $jsonData->{$key} : $default;
     }
 
+    /**
+     * Clients may store non-UTF-8 parameter values (Sabre only repairs property
+     * values), which json_encode() rejects by returning false: substitute them,
+     * and throw rather than silently answering an empty body.
+     */
+    static function jsonEncode($value) {
+        return json_encode($value, JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
+    }
+
     static function hidePrivateEventInfoForUser($vCalendar, $parentNode, $userPrincipal) {
         // Clone the entire VCalendar once to avoid multiple serializations
         $clonedCalendar = self::safeCloneVObject($vCalendar);

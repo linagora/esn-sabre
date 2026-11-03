@@ -58,7 +58,7 @@ class BasePlugin extends ServerPlugin {
             if ($setContentType) {
                 $this->server->httpResponse->setHeader('Content-Type','application/json; charset=utf-8');
             }
-            $this->server->httpResponse->setBody(json_encode($body));
+            $this->server->httpResponse->setBody(\ESN\Utils\Utils::jsonEncode($body));
         }
         $this->server->httpResponse->setStatus($code);
         return false;

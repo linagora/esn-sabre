@@ -181,7 +181,7 @@ class SingleQueryReport {
             $rendered = \ESN\Utils\Utils::hidePrivateEventInfoForUser($vObject, $this->node, $this->currentUser);
         }
 
-        $data = $this->needsJson ? json_encode($rendered->jsonSerialize()) : $rendered->serialize();
+        $data = $this->needsJson ? \ESN\Utils\Utils::jsonEncode($rendered->jsonSerialize()) : $rendered->serialize();
 
         if ($rendered !== $vObject) {
             $rendered->destroy();

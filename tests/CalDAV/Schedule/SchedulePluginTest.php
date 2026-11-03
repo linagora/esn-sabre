@@ -2068,7 +2068,7 @@ END:VCALENDAR
     }
 
     function testLocalDeliveryAppliesReplyToTheGeneratedOccurrenceAndNotToTheOverrideMovedOntoIt() {
-        $storedCopy = $this->initializePluginForPersonalDelivery('daily-2', "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
+        $storedCopy = $this->initializePluginWithStoredCopy("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
             . "BEGIN:VEVENT\r\nUID:daily-2\r\nDTSTART:20260302T090000Z\r\nDTEND:20260302T100000Z\r\n"
             . "RRULE:FREQ=DAILY;COUNT=5\r\nORGANIZER:mailto:bob@example.org\r\n"
             . "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:alice@example.org\r\nEND:VEVENT\r\n"

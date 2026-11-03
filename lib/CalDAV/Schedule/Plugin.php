@@ -925,7 +925,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * Heuristic fix: if the REPLY carries a RECURRENCE-ID that does not match any
      * exception in the organiser's calendar, but that value equals the DTSTART of
      * one of the organiser's exceptions, replace it with the canonical RECURRENCE-ID
-     * so the broker can route the update correctly.
+     * so the broker can route the update correctly. The value is kept when the
+     * master generates an occurrence at that instant: the REPLY then targets it.
      */
     private function normalizeReplyRecurrenceId(ITip\Message $iTipMessage, VCalendar $organizerCalendar): void {
         foreach ($iTipMessage->message->select('VEVENT') as $replyVevent) {
@@ -934,8 +935,9 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 continue; // No RECURRENCE-ID, or one that does not read as a date-time.
             }
 
-            if (CalendarObjectHelper::hasExceptionWithRecurrenceTimestamp($organizerCalendar, $replyRecurTs)) {
-                continue; // Exact match — no correction needed.
+            if (CalendarObjectHelper::hasExceptionWithRecurrenceTimestamp($organizerCalendar, $replyRecurTs)
+                || CalendarObjectHelper::masterGeneratesOccurrenceAt($organizerCalendar, $replyRecurTs)) {
+                continue; // Exact match on an override or a generated occurrence — no correction needed.
             }
 
             // No match by RECURRENCE-ID.  Try to find an exception whose DTSTART

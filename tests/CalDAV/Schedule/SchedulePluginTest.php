@@ -1860,6 +1860,59 @@ END:VEVENT
 END:VCALENDAR
 ";
     }
+
+    function testNormalizeReplyRecurrenceIdKeepsReplyForGeneratedOccurrence() {
+        $message = $this->newDailyReply('20260304T090000Z');
+
+        $this->normalizeReplyRecurrenceId($message, $this->newDailyWithOverrideMovedOntoNextOccurrence());
+
+        $this->assertSame('20260304T090000Z', (string) $message->message->VEVENT->{'RECURRENCE-ID'});
+    }
+
+    function testNormalizeReplyRecurrenceIdRemapsMovedTimeOfOverride() {
+        $message = $this->newDailyReply('20260303T093000Z');
+        $organizerCalendar = $this->newDailyWithOverrideMovedOntoNextOccurrence();
+        $organizerCalendar->VEVENT[1]->DTSTART = '20260303T093000Z';
+        $organizerCalendar->VEVENT[1]->DTEND = '20260303T103000Z';
+
+        $this->normalizeReplyRecurrenceId($message, $organizerCalendar);
+
+        $this->assertSame('20260303T090000Z', (string) $message->message->VEVENT->{'RECURRENCE-ID'});
+    }
+
+    function testNormalizeReplyRecurrenceIdRemapsWhenMasterExcludesTheInstant() {
+        $message = $this->newDailyReply('20260304T090000Z');
+        $organizerCalendar = $this->newDailyWithOverrideMovedOntoNextOccurrence();
+        $organizerCalendar->VEVENT[0]->add('EXDATE', '20260304T090000Z');
+
+        $this->normalizeReplyRecurrenceId($message, $organizerCalendar);
+
+        $this->assertSame('20260303T090000Z', (string) $message->message->VEVENT->{'RECURRENCE-ID'});
+    }
+
+    private function normalizeReplyRecurrenceId(Message $message, $organizerCalendar): void {
+        $normalize = new \ReflectionMethod(Plugin::class, 'normalizeReplyRecurrenceId');
+        $normalize->invoke($this->plugin, $message, $organizerCalendar);
+    }
+
+    private function newDailyWithOverrideMovedOntoNextOccurrence() {
+        return Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
+            . "BEGIN:VEVENT\r\nUID:daily-2\r\nDTSTART:20260302T090000Z\r\nDTEND:20260302T100000Z\r\n"
+            . "RRULE:FREQ=DAILY;COUNT=5\r\nORGANIZER:mailto:org@x.com\r\nATTENDEE:mailto:att@x.com\r\nEND:VEVENT\r\n"
+            . "BEGIN:VEVENT\r\nUID:daily-2\r\nRECURRENCE-ID:20260303T090000Z\r\nDTSTART:20260304T090000Z\r\n"
+            . "DTEND:20260304T100000Z\r\nORGANIZER:mailto:org@x.com\r\nATTENDEE:mailto:att@x.com\r\nEND:VEVENT\r\n"
+            . "END:VCALENDAR\r\n");
+    }
+
+    private function newDailyReply(string $recurrenceId): Message {
+        $message = new Message();
+        $message->method = 'REPLY';
+        $message->message = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\n"
+            . "UID:daily-2\r\nRECURRENCE-ID:$recurrenceId\r\nDTSTART:$recurrenceId\r\n"
+            . "ORGANIZER:mailto:org@x.com\r\nATTENDEE;PARTSTAT=DECLINED:mailto:att@x.com\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        return $message;
+    }
 }
 
 class TeamCalendarHomeTestDouble extends SimpleCollection {

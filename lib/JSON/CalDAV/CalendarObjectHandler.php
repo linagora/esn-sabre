@@ -2,6 +2,7 @@
 
 namespace ESN\JSON\CalDAV;
 
+use ESN\CalDAV\RecurrenceExpansionLimitExceeded;
 use ESN\Utils\Utils;
 use \Sabre\VObject,
     \Sabre\DAV;
@@ -394,6 +395,8 @@ class CalendarObjectHandler {
      * @return array Tuple of [int $statusCode, array|null $responseBody]
      *               - [200, array] on success with event data
      *               - [400, null] if time-range parameters are invalid
+     * @throws RecurrenceExpansionLimitExceeded (422) if the series generates too many
+     *         occurrences before the time range to be expanded
      */
     public function expandEvent($nodePath, $node, $jsonData) {
         // Parse time-range parameters
@@ -489,7 +492,7 @@ class CalendarObjectHandler {
 
         // When a master exists, the expansion is authoritative: it may be empty when
         // no occurrence falls in the range (e.g. the only one was moved out by an override).
-        $expandedObject = $vObject->expand($start, $end);
+        $expandedObject = $this->expand($vObject, $start, $end);
 
         // Sabre's VObject doesn't return the RECURRENCE-ID in the first
         // occurrence, we'll need to do this ourselves. We take advantage
@@ -501,6 +504,14 @@ class CalendarObjectHandler {
         }
 
         return $expandedObject;
+    }
+
+    private function expand($vObject, $start, $end) {
+        try {
+            return $vObject->expand($start, $end);
+        } catch (VObject\Recur\MaxInstancesExceededException $e) {
+            throw new RecurrenceExpansionLimitExceeded($e);
+        }
     }
 
     private function hasMasterEvent($vObject) {

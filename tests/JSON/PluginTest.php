@@ -3525,6 +3525,20 @@ END:VCALENDAR
         $this->assertCount(0, $this->vEventsOfExpandResponse($response));
     }
 
+    function testExpandEventOfLongRunningSeriesShouldAnswerUnprocessableContent() {
+        // Issue #699: more than 3500 daily occurrences between DTSTART and the window
+        // exceed the expansion limit, which must be answered explicitly instead of a 500
+        $ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:daily\r\nDTSTAMP:20250101T000000Z\r\n"
+             . "DTSTART:20250101T100000Z\r\nDTEND:20250101T110000Z\r\nRRULE:FREQ=DAILY\r\n"
+             . "END:VEVENT\r\nEND:VCALENDAR\r\n";
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'daily.ics', $ics);
+
+        $response = $this->expandEventRequest('daily.ics', '20350101T000000Z', '20350108T000000Z');
+
+        $this->assertEquals(422, $response->status);
+        $this->assertStringContainsString('too many occurrences', $response->getBodyAsString());
+    }
+
     function testRemoveEventsOutsideTimeRangeShouldKeepEventWithoutDtstart() {
         // Issue #607: a VEVENT without DTSTART must not be dereferenced during post-filtering.
         // Such an object can neither be stored nor expanded, hence the post-filter is exercised directly.

@@ -138,12 +138,24 @@ class CalendarDataNormalizerTest extends TestCase {
     public function testOverrideOwnRruleIsCoveredByLastOccurrence(): void {
         $d = $this->denormalize(
             "BEGIN:VEVENT\r\nUID:o\r\nDTSTAMP:20250101T000000Z\r\n"
-            . "DTSTART:20250101T100000Z\r\nDTEND:20250101T110000Z\r\nEND:VEVENT\r\n"
+            . "DTSTART:20250101T100000Z\r\nDTEND:20250101T110000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT\r\n"
             . "BEGIN:VEVENT\r\nUID:o\r\nDTSTAMP:20250101T000000Z\r\nRECURRENCE-ID:20250101T100000Z\r\n"
             . "DTSTART:20250105T140000Z\r\nDTEND:20250105T150000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT\r\n");
 
-        // the override's own second instance, 2025-01-06 14:00-15:00Z
-        $this->assertGreaterThanOrEqual(strtotime('20250106T150000Z'), $d['lastOccurence']);
+        // Compatibility with Sabre's post-filter, not a claim about RFC recurrence semantics.
+        $this->assertEquals(strtotime('20250101T100000Z'), $d['firstOccurence']);
+        $this->assertEquals(strtotime('20250106T150000Z'), $d['lastOccurence']);
+    }
+
+    public function testOverrideOwnRdateIsCoveredByLastOccurrence(): void {
+        $d = $this->denormalize(
+            "BEGIN:VEVENT\r\nUID:o\r\nDTSTAMP:20250101T000000Z\r\n"
+            . "DTSTART:20250101T100000Z\r\nDTEND:20250101T110000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT\r\n"
+            . "BEGIN:VEVENT\r\nUID:o\r\nDTSTAMP:20250101T000000Z\r\nRECURRENCE-ID:20250101T100000Z\r\n"
+            . "DTSTART:20250105T140000Z\r\nDTEND:20250105T150000Z\r\nRDATE:20250106T140000Z\r\nEND:VEVENT\r\n");
+
+        $this->assertEquals(strtotime('20250101T100000Z'), $d['firstOccurence']);
+        $this->assertEquals(strtotime('20250106T150000Z'), $d['lastOccurence']);
     }
 
     public function testInstanceMovedLaterByOverrideIsCoveredByLastOccurrence(): void {

@@ -626,6 +626,53 @@ END:VCALENDAR
         $this->assertSame('mailto:bob@example.org', $address);
     }
 
+    function testExtractSingleOrganizerAddressIgnoresOrganizerOfAnotherValueType() {
+        $this->initializePluginWithTeamCalendar(
+            'team-calendar-1',
+            'event-team',
+            $this->newCalendarObject('event-team', 'bob@example.org'),
+            ['{DAV:}write']
+        );
+
+        $address = $this->invokeExtractSingleOrganizerAddress(Reader::read(str_replace(
+            'ORGANIZER:mailto:bob@example.org',
+            'ORGANIZER;VALUE=DATE:20351005',
+            $this->newCalendarObject('event-team', 'bob@example.org')
+        )));
+
+        $this->assertNull($address);
+    }
+
+    function testShouldDeliverITipRequestWithAttendeeOfAnotherValueType() {
+        $this->initializePluginForTeamCalendarDelivery(['{DAV:}read', '{DAV:}write']);
+        $message = new Message();
+        $message->component = 'VEVENT';
+        $message->method = 'REQUEST';
+        $message->uid = 'meeting-1';
+        $message->sender = 'mailto:alice@example.org';
+        $message->recipient = 'mailto:bob@example.org';
+        $message->message = Reader::read(<<<'ICS'
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:meeting-1
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Meeting
+ORGANIZER:mailto:alice@example.org
+ATTENDEE;VALUE=DATE:20260302
+ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:bob@example.org
+END:VEVENT
+END:VCALENDAR
+ICS
+        );
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('1.2;', (string)$message->scheduleStatus);
+    }
+
     function testShouldDeduplicateMasterAttendeesByNormalizedValue() {
         $calendar = Reader::read(<<<'ICS'
 BEGIN:VCALENDAR

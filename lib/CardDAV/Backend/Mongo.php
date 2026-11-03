@@ -629,9 +629,15 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 $privilege = $privilege->getArrayCopy();
             }
 
+            // A display name with child elements is stored as a document: Sabre can only serialize it as an array
+            $displayName = $row['displayname'];
+            if ($displayName instanceof \MongoDB\Model\BSONDocument) {
+                $displayName = $displayName->getArrayCopy();
+            }
+
             $subscription = [
                 'id'           => (string)$row['_id'],
-                '{DAV:}displayname' => $row['displayname'],
+                '{DAV:}displayname' => $displayName,
                 'uri'          => $row['uri'],
                 'principaluri' => $row['principaluri'],
                 '{http://open-paas.org/contacts}subscription-type' => 'public',

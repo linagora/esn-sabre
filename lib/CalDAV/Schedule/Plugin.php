@@ -640,7 +640,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
                 $recipientAlarm = clone $alarm;
                 // Organizer aliases must not leak into an attendee's copied event.
                 foreach ($recipientAlarm->select('ATTENDEE') as $attendee) {
-                    if (strcasecmp($attendee->getNormalizedValue(), $message->recipient) !== 0) {
+                    if (strcasecmp((string)CalendarObjectHelper::calendarAddress($attendee), $message->recipient) !== 0) {
                         $recipientAlarm->remove($attendee);
                     }
                 }

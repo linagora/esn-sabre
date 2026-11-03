@@ -5,6 +5,7 @@ namespace ESN\CalDAV\Schedule;
 use ESN\Utils\VObjectCache;
 use Sabre\VObject\Component\VCalendar;
 use Sabre\VObject\ITip;
+use Sabre\VObject\Property\ICalendar\CalAddress;
 use Sabre\VObject\Reader;
 use Sabre\VObject\Recur\EventIterator;
 
@@ -124,6 +125,15 @@ class CalendarObjectHelper {
     }
 
     /**
+     * Normalized value of a calendar address property, or null when the
+     * property is not a calendar address (e.g. ATTENDEE;VALUE=DATE), so such
+     * properties can be ignored instead of breaking scheduling.
+     */
+    public static function calendarAddress($property): ?string {
+        return $property instanceof CalAddress ? $property->getNormalizedValue() : null;
+    }
+
+    /**
      * Exact (case-sensitive) attendee membership check, matching the broker's
      * recipient comparison semantics.
      */
@@ -133,7 +143,7 @@ class CalendarObjectHelper {
         }
 
         foreach ($vevent->ATTENDEE as $attendee) {
-            if ($attendee->getNormalizedValue() === $recipient) {
+            if (self::calendarAddress($attendee) === $recipient) {
                 return true;
             }
         }
@@ -153,7 +163,7 @@ class CalendarObjectHelper {
 
         $recipient = strtolower($recipient);
         foreach ($vevent->ATTENDEE as $attendee) {
-            if (strtolower($attendee->getNormalizedValue()) === $recipient) {
+            if (strtolower((string)self::calendarAddress($attendee)) === $recipient) {
                 return isset($attendee['PARTSTAT']) ? strtoupper((string)$attendee['PARTSTAT']) : 'NEEDS-ACTION';
             }
         }
@@ -168,8 +178,8 @@ class CalendarObjectHelper {
     public static function attendeePartStats($vevent): array {
         $map = [];
         if (isset($vevent->ATTENDEE)) {
-            foreach ($vevent->ATTENDEE as $attendee) {
-                $email = strtolower($attendee->getNormalizedValue());
+            foreach (self::calendarAddressAttendees($vevent->ATTENDEE) as $attendee) {
+                $email = strtolower(self::calendarAddress($attendee));
                 $map[$email] = $attendee['PARTSTAT'] ? strtoupper((string)$attendee['PARTSTAT']) : 'NEEDS-ACTION';
             }
         }
@@ -227,11 +237,22 @@ class CalendarObjectHelper {
 
     public static function countUniqueAttendees($attendees): int {
         $attendeeMap = [];
-        foreach ($attendees as $attendee) {
-            $attendeeMap[strtolower($attendee->getNormalizedValue())] = true;
+        foreach (self::calendarAddressAttendees($attendees) as $attendee) {
+            $attendeeMap[strtolower(self::calendarAddress($attendee))] = true;
         }
 
         return count($attendeeMap);
+    }
+
+    private static function calendarAddressAttendees($attendees): array {
+        $calendarAddressAttendees = [];
+        foreach ($attendees as $attendee) {
+            if ($attendee instanceof CalAddress) {
+                $calendarAddressAttendees[] = $attendee;
+            }
+        }
+
+        return $calendarAddressAttendees;
     }
 
     /**
@@ -344,7 +365,7 @@ class CalendarObjectHelper {
 
     public static function hasAttendeeInAddresses($event, array $normalizedAddresses): bool {
         foreach ($event->select('ATTENDEE') as $attendee) {
-            if (in_array(strtolower($attendee->getNormalizedValue()), $normalizedAddresses, true)) {
+            if (in_array(strtolower((string)self::calendarAddress($attendee)), $normalizedAddresses, true)) {
                 return true;
             }
         }
@@ -443,7 +464,7 @@ class CalendarObjectHelper {
      * SCHEDULE-STATUS parameter of the calendar object.
      */
     public static function updateScheduleStatus(VCalendar $newObject, ITip\Message $message): void {
-        if (isset($newObject->VEVENT->ORGANIZER) && ($newObject->VEVENT->ORGANIZER->getNormalizedValue() === $message->recipient)) {
+        if (isset($newObject->VEVENT->ORGANIZER) && (self::calendarAddress($newObject->VEVENT->ORGANIZER) === $message->recipient)) {
             self::reflectScheduleStatusOn($newObject->VEVENT->ORGANIZER, $message);
             return;
         }
@@ -453,7 +474,7 @@ class CalendarObjectHelper {
         }
 
         foreach ($newObject->VEVENT->ATTENDEE as $attendee) {
-            if ($attendee->getNormalizedValue() === $message->recipient) {
+            if (self::calendarAddress($attendee) === $message->recipient) {
                 self::reflectScheduleStatusOn($attendee, $message);
                 break;
             }

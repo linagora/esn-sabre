@@ -104,7 +104,7 @@ pipeline {
               HTTP_STATUS=\$(curl -s -o /tmp/gh_comment_response.json -w "%{http_code}" -X POST \\
                 -H "Authorization: token \${GITHUB_CREDENTIAL_PSW}" \\
                 -H "Content-Type: application/json" \\
-                -d "{\\"body\\": \\"Docker image published for this PR: linagora/esn-sabre-pr:\${CHANGE_ID}\\"}" \\
+                -d "{\\"body\\": \\"✅ Docker image published for this PR: \\`linagora/esn-sabre-pr:\${CHANGE_ID}\\`\\\\n\\\\n---\\\\n*Generated automatically*\\"}" \\
                 "https://api.github.com/repos/linagora/esn-sabre/issues/\${CHANGE_ID}/comments")
               if [ "\$HTTP_STATUS" -lt 200 ] || [ "\$HTTP_STATUS" -ge 300 ]; then
                 echo "WARNING: GitHub API comment failed with HTTP \$HTTP_STATUS"

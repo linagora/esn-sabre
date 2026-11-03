@@ -42,11 +42,7 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
         foreach(self::PRINCIPAL_SUPPORTED_SET as $principalType) {
             $uri = $principalType . '/' . $name;
 
-            try {
-                $principal = $this->principalBackend->getPrincipalByPath($uri);
-            } catch (\MongoDB\Driver\Exception\InvalidArgumentException $e) {
-                return null;
-            }
+            $principal = $this->principalBackend->getPrincipalByPath($uri);
 
             if ($principal) {
                 return $this->initializeChildInstance($principal);

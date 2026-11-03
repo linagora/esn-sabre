@@ -1960,6 +1960,51 @@ END:VCALENDAR
         $this->assertSame('20260303T090000Z', (string) $message->message->VEVENT->{'RECURRENCE-ID'});
     }
 
+    function testNormalizeReplyRecurrenceIdKeepsReplyWhenSeveralOverridesStartAtTheInstant() {
+        $message = $this->newDailyReply('20260306T090000Z');
+        $organizerCalendar = $this->newDailyWithOverrideMovedOntoNextOccurrence();
+        $organizerCalendar->VEVENT[0]->RRULE = 'FREQ=DAILY;COUNT=4';
+        $organizerCalendar->VEVENT[1]->DTSTART = '20260306T090000Z';
+        $organizerCalendar->VEVENT[1]->DTEND = '20260306T100000Z';
+        $organizerCalendar->add(clone $organizerCalendar->VEVENT[1]);
+        $organizerCalendar->VEVENT[2]->{'RECURRENCE-ID'} = '20260304T090000Z';
+
+        $this->normalizeReplyRecurrenceId($message, $organizerCalendar);
+
+        $this->assertSame('20260306T090000Z', (string) $message->message->VEVENT->{'RECURRENCE-ID'});
+    }
+
+    function testLocalDeliveryAppliesReplyToTheGeneratedOccurrenceAndNotToTheOverrideMovedOntoIt() {
+        $storedCopy = $this->initializePluginForPersonalDelivery('daily-2', "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
+            . "BEGIN:VEVENT\r\nUID:daily-2\r\nDTSTART:20260302T090000Z\r\nDTEND:20260302T100000Z\r\n"
+            . "RRULE:FREQ=DAILY;COUNT=5\r\nORGANIZER:mailto:bob@example.org\r\n"
+            . "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:alice@example.org\r\nEND:VEVENT\r\n"
+            . "BEGIN:VEVENT\r\nUID:daily-2\r\nRECURRENCE-ID:20260303T090000Z\r\nDTSTART:20260304T090000Z\r\n"
+            . "DTEND:20260304T100000Z\r\nORGANIZER:mailto:bob@example.org\r\n"
+            . "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:alice@example.org\r\nEND:VEVENT\r\n"
+            . "END:VCALENDAR\r\n");
+        $message = $this->newReplyMessage('daily-2', 'mailto:bob@example.org');
+        $message->sender = 'mailto:alice@example.org';
+        $message->message = Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\n"
+            . "UID:daily-2\r\nRECURRENCE-ID:20260304T090000Z\r\nDTSTART:20260304T090000Z\r\n"
+            . "ORGANIZER:mailto:bob@example.org\r\nATTENDEE;PARTSTAT=DECLINED:mailto:alice@example.org\r\n"
+            . "END:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('1.2;', $message->scheduleStatus);
+        $partstats = $this->alicePartstatByRecurrenceId(Reader::read($storedCopy->putData));
+        $this->assertSame('DECLINED', $partstats['20260304T090000Z']);
+        $this->assertSame('NEEDS-ACTION', $partstats['20260303T090000Z']);
+    }
+
+    private function alicePartstatByRecurrenceId($calendar): array {
+        return array_merge(...array_map(
+            fn($vevent) => [(string) $vevent->{'RECURRENCE-ID'} => (string) $vevent->ATTENDEE['PARTSTAT']],
+            array_filter($calendar->select('VEVENT'), fn($vevent) => isset($vevent->{'RECURRENCE-ID'}))
+        ));
+    }
+
     private function normalizeReplyRecurrenceId(Message $message, $organizerCalendar): void {
         $normalize = new \ReflectionMethod(Plugin::class, 'normalizeReplyRecurrenceId');
         $normalize->invoke($this->plugin, $message, $organizerCalendar);
@@ -2004,9 +2049,11 @@ class TeamCalendarHomeTestDouble extends SimpleCollection {
 
 class WritableCalendarObjectTestDouble extends SimpleFile {
     public $putCount = 0;
+    public $putData;
 
     function put($data) {
         $this->putCount++;
+        $this->putData = $data;
     }
 }
 

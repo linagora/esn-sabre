@@ -405,17 +405,18 @@ class CalendarObjectHelper {
         }
     }
 
-    public static function findExceptionByStartTimestamp(VCalendar $calendarObject, int $timestamp) {
-        foreach ($calendarObject->VEVENT as $vevent) {
-            if (self::dateTimeTimestamp($vevent->{'RECURRENCE-ID'}) === null) {
-                continue; // Skip master VEVENT, and overrides whose RECURRENCE-ID is not a date-time.
-            }
-            if (self::dateTimeTimestamp($vevent->DTSTART) === $timestamp) {
-                return $vevent;
-            }
-        }
+    /**
+     * The only override starting at the timestamp, or null when none or several do.
+     */
+    public static function findSingleExceptionByStartTimestamp(VCalendar $calendarObject, int $timestamp) {
+        $matchingExceptions = array_values(array_filter(
+            $calendarObject->select('VEVENT'),
+            // Skips the master VEVENT, and overrides whose RECURRENCE-ID is not a date-time.
+            fn($vevent) => self::dateTimeTimestamp($vevent->{'RECURRENCE-ID'}) !== null
+                && self::dateTimeTimestamp($vevent->DTSTART) === $timestamp
+        ));
 
-        return null;
+        return count($matchingExceptions) === 1 ? $matchingExceptions[0] : null;
     }
 
     /**

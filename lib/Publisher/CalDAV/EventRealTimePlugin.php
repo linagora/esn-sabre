@@ -341,13 +341,13 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             return true;
         }
 
+        if ($this->hasPendingOrFailedScheduleStatus($iTipMessage)) {
+            return false;
+        }
+
         // Nothing to publish for a method without a topic (e.g. ADD, REFRESH)
         if (!isset($this->EVENT_TOPICS['EVENT_'.$iTipMessage->method])) {
             return true;
-        }
-
-        if ($this->hasPendingOrFailedScheduleStatus($iTipMessage)) {
-            return false;
         }
 
         $recipientPrincipalUri = $this->resolveRecipientPrincipalUri($iTipMessage);

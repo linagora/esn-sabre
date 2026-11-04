@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# Default to linagora/master; override these to test a fork or another branch.
-INTEGRATION_TEST_REPO="${INTEGRATION_TEST_REPO:-https://github.com/linagora/twake-calendar-integration-tests.git}"
-INTEGRATION_TEST_BRANCH="${INTEGRATION_TEST_BRANCH:-test-sabre-732}"
+# Use the override recurrence regression tests for PR #698; both defaults remain overridable.
+INTEGRATION_TEST_REPO="${INTEGRATION_TEST_REPO:-https://github.com/vttranlina/twake-calendar-integration-tests.git}"
+INTEGRATION_TEST_BRANCH="${INTEGRATION_TEST_BRANCH:-test/override-recurrence-report}"
 
 # Usage: ./run_test.sh [--filter=TestClassName] [--skip-java] [--skip-php] [--skip-nginx] [--skip-build] [--java-sequential]
 # Examples:

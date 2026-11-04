@@ -319,13 +319,17 @@ class InlinePhotoPluginTest extends TestCase {
         $method->invokeArgs($plugin, $args);
     }
 
-    function testTrustedBaseRejectsAnUntrustedPhotoWithADottedNameInsteadOfFailing() {
-        // Component::remove() cannot find a property named ".PHOTO" (group "", name ".PHOTO").
+    function testTrustedBaseFiltersAnUntrustedPhotoWithADottedNameInsteadOfFailing() {
+        // "..PHOTO" is read as group "", name ".PHOTO", which the validation renames
+        // to PHOTO: the untrusted photo must be filtered like any other.
         $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_FILTER, 'https://{fdqn}-drive.linagora.com');
         $data = self::vcard('..PHOTO:https://evil.test/avatar.jpg');
         $modified = false;
 
-        $this->expectException(\Sabre\DAV\Exception\BadRequest::class);
         $this->invokeProcess($plugin, $data, $modified);
+
+        $this->assertTrue($modified);
+        $this->assertStringNotContainsString('evil.test', $data);
+        $this->assertStringNotContainsString('PHOTO', $data);
     }
 }

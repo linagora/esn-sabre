@@ -18,6 +18,8 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $server = new \Sabre\DAV\Server($root);
         $server->sapi = new \Sabre\HTTP\SapiMock();
         $server->xml->elementMap['{urn:ietf:params:xml:ns:caldav}calendar-query'] = \Sabre\CalDAV\Xml\Request\CalendarQueryReport::class;
+        $server->xml->elementMap['{urn:ietf:params:xml:ns:caldav}mkcalendar'] = \Sabre\CalDAV\Xml\Request\MkCalendar::class;
+        $server->xml->elementMap['{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set'] = \Sabre\CalDAV\Xml\Property\SupportedCalendarComponentSet::class;
         $server->addPlugin(new \Sabre\DAV\Auth\Plugin(new class implements \Sabre\DAV\Auth\Backend\BackendInterface {
             function check(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response) {
                 return [true, 'principals/user1'];
@@ -266,6 +268,19 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
 
         $this->assertEquals(415, $response->getStatus());
         $this->assertStringContainsString('ReportNotSupported', $response->getBodyAsString());
+    }
+
+    /**
+     * The supported-calendar-component-set deserialiser indexes the attributes
+     * of its children, so a text child makes it throw a TypeError.
+     */
+    function testReportBodyRaisingTypeErrorAnswersBadRequest() {
+        $response = $this->report('<C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
+            . '<D:set><D:prop><C:supported-calendar-component-set>x</C:supported-calendar-component-set>'
+            . '</D:prop></D:set></C:mkcalendar>');
+
+        $this->assertEquals(400, $response->getStatus());
+        $this->assertStringContainsString('Sabre\DAV\Exception\BadRequest', $response->getBodyAsString());
     }
 
     /**

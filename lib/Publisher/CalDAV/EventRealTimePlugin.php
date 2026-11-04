@@ -366,11 +366,19 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             return true;
         }
 
-        $delivery = $this->resolveEventDelivery($iTipMessage, $recipientPrincipalUri);
-        if ($delivery === null) {
+        try {
+            $delivery = $this->resolveEventDelivery($iTipMessage, $recipientPrincipalUri);
+            if ($delivery === null) {
+                return false;
+            }
+            list($eventPath, $upToDateEventIcs, $foundInCalendar) = $delivery;
+            list($calendarPath) = Uri\split($eventPath);
+            $calendar = $this->server->tree->getNodeForPath($calendarPath);
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            // Delivery already ran: a concurrently removed object must not turn
+            // its successful response into a 404 or produce a phantom event path.
             return false;
         }
-        list($eventPath, $upToDateEventIcs, $foundInCalendar) = $delivery;
 
         $dataMessage = [
             'eventPath' => '/' . $eventPath,
@@ -387,7 +395,6 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         );
 
         list(,, $calendarUri, $objectUri) = explode('/', $eventPath);
-        $calendar = $this->server->tree->getNodeForPath('/'. substr($eventPath,0,strrpos($eventPath,'/')));
 
         $options = [
             'action' => $iTipMessage->method,
@@ -458,9 +465,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     /**
-     * Locates the event in the recipient's calendar (it should exist now,
-     * created by the schedule plugin), falling back to the default calendar
-     * path when not found (e.g., CANCEL deleted it, or external REQUEST).
+     * Locates the stored event in the recipient's calendar after delivery.
+     * An iCalendar UID is not a filename: delivery may have generated one.
      *
      * @return array|null [$eventPath (relative), $upToDateEventIcs, $foundInCalendar],
      *                    or null when delivery cannot be resolved.
@@ -473,58 +479,21 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $foundInCalendar = ($eventPath !== null);
 
         if (!$eventPath) {
-            $defaultDelivery = $this->buildDefaultEventDelivery($iTipMessage, $recipientPrincipalUri);
-            if ($defaultDelivery === null) {
-                return null;
+            // POST /itip rejects mismatched UIDs, but other hook callers may
+            // still carry a different payload UID from the event that was stored.
+            $eventUid = isset($iTipMessage->message->VEVENT->UID) ? (string) $iTipMessage->message->VEVENT->UID : '';
+            if ($eventUid !== '' && $eventUid !== $iTipMessage->uid) {
+                list($eventPath, $upToDateEventIcs) = Utils::getEventObjectFromAnotherPrincipalHome($recipientPrincipalUri, $eventUid, $iTipMessage->method, $this->server);
             }
-            list($eventPath, $upToDateEventIcs) = $defaultDelivery;
+        }
+
+        if (!$eventPath) {
+            return null;
         }
 
         // Normalize to relative path — getEventObjectFromAnotherPrincipalHome() returns an
         // absolute path ('/calendars/...') but all downstream code assumes relative (no leading slash).
         return [ltrim($eventPath, '/'), $upToDateEventIcs, $foundInCalendar];
-    }
-
-    /**
-     * Constructs the event path in the recipient's default calendar and uses
-     * the iTip message itself as the event data.
-     *
-     * @return array|null [$eventPath, $eventIcs], or null when the recipient's
-     *                    calendar home cannot be resolved.
-     */
-    private function buildDefaultEventDelivery(\Sabre\VObject\ITip\Message $iTipMessage, string $recipientPrincipalUri): ?array {
-        $aclPlugin = $this->server->getPlugin('acl');
-        if (!$aclPlugin) {
-            return null;
-        }
-
-        $caldavNS = '{' . \Sabre\CalDAV\Schedule\Plugin::NS_CALDAV . '}';
-
-        // Get calendar properties
-        $this->server->removeListener('propFind', [$aclPlugin, 'propFind']);
-        $result = $this->server->getProperties(
-            $recipientPrincipalUri,
-            [
-                $caldavNS . 'calendar-home-set',
-                $caldavNS . 'schedule-default-calendar-URL',
-            ]
-        );
-        $this->server->on('propFind', [$aclPlugin, 'propFind'], 20);
-
-        if (!isset($result[$caldavNS . 'calendar-home-set']) ||
-            !isset($result[$caldavNS . 'schedule-default-calendar-URL'])) {
-            return null;
-        }
-
-        $homePath = $result[$caldavNS . 'calendar-home-set']->getHref();
-        $defaultCalendarPath = $result[$caldavNS . 'schedule-default-calendar-URL']->getHref();
-
-        // Extract calendar URI from the full path
-        // defaultCalendarPath is like: /calendars/54b64eadf6d7d8e41d263e0f/events
-        // Construct event path: calendars/homeId/calendarUri/uid.ics
-        $eventPath = 'calendars/' . basename($homePath) . '/' . basename($defaultCalendarPath) . '/' . $iTipMessage->uid . '.ics';
-
-        return [$eventPath, $iTipMessage->message->serialize()];
     }
 
     private function notifyAlarm(\Sabre\VObject\ITip\Message $iTipMessage, array $dataMessage): void {

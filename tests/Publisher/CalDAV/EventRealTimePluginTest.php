@@ -293,6 +293,121 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         ];
     }
 
+    #[DataProvider('deliveredEventUids')]
+    function testItipPublishesTheStoredObjectPath(string $method, string $payloadUid, string $eventUid, bool $resource = false) {
+        $this->prepare();
+        $ical = str_replace('daab17fe-fac4-4946-9105-0f2cdb30f5ab', $eventUid, $this->ical);
+        $calendar = $resource ? $this->calUser2 : $this->cal;
+        $this->caldavBackend->updateCalendarObject($calendar['id'], 'simple.ics', $ical);
+
+        $recipient = $resource ? 'mailto:54b64eadf6d7d8e41d263e0e@example.com' : 'mailto:robertocarlos@realmadrid.com';
+        $messages = $this->publishItip($method, $payloadUid, $ical, false, $recipient);
+
+        $this->assertNotEmpty($messages);
+        $this->assertContains('calendar:event:' . strtolower($method), array_column($messages, 'topic'));
+        if ($resource) {
+            $this->assertContains('resource:calendar:event:created', array_column($messages, 'topic'));
+        }
+        foreach ($messages as $message) {
+            $this->assertSame('/calendars/' . basename($calendar['principaluri']) . '/' . $calendar['uri'] . '/simple.ics', $message['data']['eventPath']);
+            $this->assertSame($ical, $message['data']['rawEvent'] ?? $message['data']['ics']);
+            if ($message['topic'] === 'resource:calendar:event:created') {
+                $this->assertSame('simple.ics', $message['data']['eventId']);
+            }
+        }
+    }
+
+    static function deliveredEventUids(): array {
+        $uid = 'daab17fe-fac4-4946-9105-0f2cdb30f5ab';
+        return [
+            'REQUEST with an unrelated filename' => ['REQUEST', $uid, $uid],
+            'REPLY with an unrelated filename' => ['REPLY', $uid, $uid],
+            'CANCEL with an unrelated filename' => ['CANCEL', $uid, $uid],
+            'UID containing slashes' => ['REQUEST', '../other/evt-1', '../other/evt-1'],
+            'payload UID containing slashes' => ['REQUEST', '../other/evt-1', $uid],
+            'payload UID with a leading slash' => ['REQUEST', '/x', $uid],
+            'payload UID with an encoded slash' => ['REQUEST', 'private%2F1', $uid],
+            'another payload UID' => ['REQUEST', 'other-uid', $uid],
+            'resource with another payload UID' => ['REQUEST', 'private%2F1', $uid, true],
+        ];
+    }
+
+    function testItipPublishesThePathCreatedByLocalDelivery() {
+        $this->prepare();
+        $uid = '../other/new-event';
+        $ical = str_replace('daab17fe-fac4-4946-9105-0f2cdb30f5ab', $uid, $this->ical);
+        $ical = str_replace('END:VEVENT', "ORGANIZER:mailto:org@external.example\r\nATTENDEE:mailto:robertocarlos@realmadrid.com\r\nEND:VEVENT", $ical);
+
+        $messages = $this->publishItip('REQUEST', $uid, $ical, true);
+
+        $this->assertNotEmpty($messages);
+        $paths = array_unique(array_column(array_column($messages, 'data'), 'eventPath'));
+        $this->assertCount(1, $paths);
+        $path = reset($paths);
+        $this->assertMatchesRegularExpression('#^/calendars/54b64eadf6d7d8e41d263e0f/[^/]+/sabredav-[^/]+\.ics$#', $path);
+        $stored = \Sabre\VObject\Reader::read($this->server->tree->getNodeForPath($path)->get());
+        $this->assertSame($uid, (string) $stored->VEVENT->UID);
+    }
+
+    function testItipDoesNotPublishWhenTheCalendarDisappearsAfterLookup() {
+        $this->prepare();
+        $tree = $this->server->tree;
+        $this->server->tree = $this->createMock(\Sabre\DAV\Tree::class);
+        $this->server->tree->expects($this->atLeastOnce())->method('getNodeForPath')->willReturnCallback(function($path) use ($tree) {
+            if ($path === 'calendars/54b64eadf6d7d8e41d263e0f/calendar1') {
+                throw new \Sabre\DAV\Exception\NotFound('Calendar removed after delivery');
+            }
+            return $tree->getNodeForPath($path);
+        });
+
+        $this->assertSame([], $this->publishItip('REQUEST', 'daab17fe-fac4-4946-9105-0f2cdb30f5ab', $this->ical));
+    }
+
+    #[DataProvider('deliveriesWithoutStoredObjects')]
+    function testItipWithoutAStoredObjectPublishesNothing(string $method, string $uid) {
+        $this->prepare();
+        $ical = str_replace('daab17fe-fac4-4946-9105-0f2cdb30f5ab', $uid, $this->ical);
+
+        $this->assertSame([], $this->publishItip($method, $uid, $ical));
+    }
+
+    static function deliveriesWithoutStoredObjects(): array {
+        return [
+            'REQUEST did not create an object' => ['REQUEST', 'missing'],
+            'REPLY to an unknown event' => ['REPLY', 'missing'],
+            'CANCEL of an unknown event' => ['CANCEL', 'missing'],
+            'missing UID containing slashes' => ['REQUEST', '../other/evt-1'],
+        ];
+    }
+
+    private function publishItip(string $method, string $uid, string $ical, bool $deliver = false, string $recipient = 'mailto:robertocarlos@realmadrid.com'): array {
+        $messages = [];
+        $client = $this->createStub(\ESN\Publisher\Publisher::class);
+        $client->method('publish')->willReturnCallback(function($topic, $payload) use (&$messages) {
+            $messages[] = ['topic' => $topic, 'data' => json_decode($payload, true, 512, JSON_THROW_ON_ERROR)];
+        });
+        $plugin = new EventRealTimePlugin($client, $this->caldavBackend);
+        $plugin->initialize($this->server);
+
+        $message = new \Sabre\VObject\ITip\Message();
+        $message->component = 'VEVENT';
+        $message->method = $method;
+        $message->uid = $uid;
+        $message->sender = 'mailto:org@external.example';
+        $message->recipient = $recipient;
+        $message->scheduleStatus = '1.2;Message delivered locally';
+        $message->significantChange = true;
+        $message->message = \Sabre\VObject\Reader::read($ical);
+
+        if ($deliver) {
+            $this->caldavSchedulePlugin->scheduleLocalDelivery($message);
+            $this->assertSame('1.2;Message delivered locally', $message->scheduleStatus);
+        }
+        $plugin->itip($message);
+
+        return $messages;
+    }
+
     function testItipDelegateToScheduleAndPublishMessage() {
         $plugin = $this->getMockBuilder(EventRealTimePlugin::class)
             ->onlyMethods(['schedule', 'publishMessages'])

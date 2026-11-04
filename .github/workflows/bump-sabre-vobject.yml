@@ -34,7 +34,7 @@ jobs:
   bump:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compare the pinned commit with the branch head
         id: compare
@@ -84,7 +84,7 @@ jobs:
 
       - name: Open or update the pull request
         if: steps.compare.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: ${{ env.PR_BRANCH }}
           base: master

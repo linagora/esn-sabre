@@ -1,0 +1,98 @@
+# Opens (or refreshes) a pull request whenever the linagora/sabre-vobject
+# branch pinned in composer.json moves.
+#
+# Triggers:
+#  - schedule: polls the branch head, no secret needed in sabre-vobject;
+#  - repository_dispatch (type "sabre-vobject-updated"): lets sabre-vobject
+#    notify us right after a push, if it is given a token for this repository;
+#  - workflow_dispatch: manual run.
+#
+# The pull request always lives on the same branch, so a newer sabre-vobject
+# commit updates the pending pull request instead of opening another one.
+name: Bump sabre/vobject
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  repository_dispatch:
+    types: [sabre-vobject-updated]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: bump-sabre-vobject
+  cancel-in-progress: false
+
+env:
+  VOBJECT_REPO: linagora/sabre-vobject
+  PR_BRANCH: bot/bump-sabre-vobject
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare the pinned commit with the branch head
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          constraint=$(jq -r '.require["sabre/vobject"]' composer.json)
+          # constraint looks like "dev-<branch>#<sha>"
+          if [[ ! "$constraint" =~ ^dev-(.+)#([0-9a-f]{40})$ ]]; then
+            echo "::error::sabre/vobject is not pinned as dev-<branch>#<sha>: $constraint"
+            exit 1
+          fi
+          branch=${BASH_REMATCH[1]}
+          current=${BASH_REMATCH[2]}
+          head=$(git ls-remote "https://github.com/$VOBJECT_REPO.git" "refs/heads/$branch" | cut -f1)
+          if [ -z "$head" ]; then
+            echo "::error::branch $branch not found in $VOBJECT_REPO"
+            exit 1
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          if [ "$head" = "$current" ]; then
+            echo "sabre/vobject is up to date ($current)"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+          sed -i "s/dev-$branch#$current/dev-$branch#$head/" composer.json
+
+          commits=$(gh api "repos/$VOBJECT_REPO/compare/$current...$head" \
+            --jq '.commits[] | "- " + .sha[0:7] + " " + (.commit.message | split("\n")[0])')
+          count=$(printf '%s\n' "$commits" | grep -c '^- ' || true)
+          {
+            echo "Bumps \`sabre/vobject\` to the head of \`$branch\` (\`$head\`)."
+            echo
+            echo "[Full diff](https://github.com/$VOBJECT_REPO/compare/$current...$head) — $count commit(s):"
+            echo
+            # stay well below the 65536 characters limit of a PR body
+            printf '%s\n' "$commits" | head -c 60000
+            echo
+            echo
+            echo "_Opened by the \`bump-sabre-vobject\` workflow._"
+          } > "$RUNNER_TEMP/pr-body.md"
+
+      - name: Open or update the pull request
+        if: steps.compare.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: ${{ env.PR_BRANCH }}
+          base: master
+          add-paths: composer.json
+          commit-message: |
+            chore(deps): bump sabre/vobject to ${{ steps.compare.outputs.head }}
+
+            https://github.com/${{ env.VOBJECT_REPO }}/compare/${{ steps.compare.outputs.current }}...${{ steps.compare.outputs.head }}
+          title: 'chore(deps): bump sabre/vobject to ${{ steps.compare.outputs.head }}'
+          body-path: ${{ runner.temp }}/pr-body.md
+          delete-branch: true

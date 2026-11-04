@@ -163,7 +163,7 @@ class ReportBodyValidationPlugin extends ServerPlugin {
             return;
         }
 
-        if (!$this->isWellFormedXml($body)) {
+        if (!self::isWellFormedXml($body)) {
             throw new BadRequest('The request body is not a well-formed XML document');
         }
     }
@@ -172,7 +172,7 @@ class ReportBodyValidationPlugin extends ServerPlugin {
      * Reports whether XMLWriter, which Sabre uses to write the response, would
      * accept this element name. Its name check is stricter than XMLReader's.
      */
-    private function isWritableElementName(\XMLWriter $writer, string $name): bool {
+    private static function isWritableElementName(\XMLWriter $writer, string $name): bool {
         try {
             return false !== @$writer->startElement($name);
         } catch (\ValueError $e) {
@@ -215,8 +215,11 @@ class ReportBodyValidationPlugin extends ServerPlugin {
      *
      * Entities are not expanded (no LIBXML_NOENT) and the network is disabled
      * (LIBXML_NONET), so a hostile body cannot expand or fetch anything here.
+     *
+     * Also used by XmlBodyDeserializationPlugin, which must not hand a
+     * malformed body to Sabre's deserialiser either.
      */
-    private function isWellFormedXml(string $body): bool {
+    static function isWellFormedXml(string $body): bool {
         $previous = libxml_use_internal_errors(true);
         libxml_clear_errors();
 
@@ -234,7 +237,7 @@ class ReportBodyValidationPlugin extends ServerPlugin {
         $wellFormed = true;
         while ($wellFormed && false !== @$reader->read()) {
             if (\XMLReader::ELEMENT === $reader->nodeType) {
-                $wellFormed = $this->isWritableElementName($writer, $reader->localName);
+                $wellFormed = self::isWritableElementName($writer, $reader->localName);
             }
         }
         if (libxml_get_errors()) {

@@ -32,6 +32,9 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
         $server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
         $server->addPlugin(new ReportBodyValidationPlugin());
+        // As esn.php does: it deserialises MKCOL/MKCALENDAR/ACL/POST bodies at
+        // priority 10, so it must not run on a body the guard would reject.
+        $server->addPlugin(new XmlBodyDeserializationPlugin());
 
         return $server;
     }
@@ -158,9 +161,12 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
     #[\PHPUnit\Framework\Attributes\DataProvider('xmlBodyMethods')]
     function testIllFormedBodyIsRejectedForEveryXmlMethod($method, $fixture, array $headers) {
         $body = file_get_contents(__DIR__ . '/fixtures/' . $fixture);
+        set_time_limit(5); // the loop would otherwise hang the suite
 
         $start = microtime(true);
         $response = $this->request($method, $body, $headers);
+
+        set_time_limit(0);
 
         $this->assertLessThan(2.0, microtime(true) - $start);
         $this->assertEquals(400, $response->getStatus());
@@ -168,7 +174,7 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
 
     static function xmlBodyMethods() {
         $methods = [];
-        foreach (['report-keyvalue-loop.xml', 'mkcol-prop-loop.xml'] as $fixture) {
+        foreach (['report-keyvalue-loop.xml', 'mkcol-prop-loop.xml', 'mkcol-set-prop-mismatched-loop.xml'] as $fixture) {
             $methods += [
                 "MKCOL $fixture" => ['MKCOL', $fixture, []],
                 "MKCOL text/xml $fixture" => ['MKCOL', $fixture, ['Content-Type' => 'text/xml; charset=utf-8']],

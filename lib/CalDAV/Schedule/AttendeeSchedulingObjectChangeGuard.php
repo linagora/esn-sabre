@@ -41,21 +41,38 @@ class AttendeeSchedulingObjectChangeGuard {
         // Cursors only move forward, so instances must be visited in chronological order.
         $instanceKeys = self::chronological(array_unique(array_merge(array_keys($oldEvents), array_keys($newEvents))));
         foreach ($instanceKeys as $key) {
-            $oldEvent = $oldEvents[$key] ?? null;
-            $newEvent = $newEvents[$key] ?? null;
+            $oldOverrides = $oldEvents[$key] ?? [];
 
-            if ($oldEvent && $newEvent) {
-                self::assertSameExplicitEvent($oldEvent, $newEvent, $forbiddenProperties);
-            } else {
-                self::assertSameInstance(
-                    self::instanceAt($oldEvent, $oldGeneratedInstances, $key, $timeZone),
-                    self::instanceAt($newEvent, $newGeneratedInstances, $key, $timeZone),
-                    $forbiddenProperties
-                );
+            // Several overrides may describe the same instance (the strict-mode
+            // validator refuses it, a default PUT does not), and readers apply
+            // one of them: each of them must leave the instance unchanged.
+            foreach ($newEvents[$key] ?? [null] as $position => $newEvent) {
+                $oldEvent = self::counterpart($oldOverrides, $position);
+
+                if ($oldEvent && $newEvent) {
+                    self::assertSameExplicitEvent($oldEvent, $newEvent, $forbiddenProperties);
+                } else {
+                    self::assertSameInstance(
+                        self::instanceAt($oldEvent, $oldGeneratedInstances, $key, $timeZone),
+                        self::instanceAt($newEvent, $newGeneratedInstances, $key, $timeZone),
+                        $forbiddenProperties
+                    );
+                }
+
+                self::assertSameRecurrenceIdForm($oldEvent, $newEvent, $masterIsFloating);
             }
-
-            self::assertSameRecurrenceIdForm($oldEvent, $newEvent, $masterIsFloating);
         }
+    }
+
+    /**
+     * The old override a new one at the same instance is compared with: the
+     * one at the same position, so that duplicates the organizer sent can be
+     * kept as they are, or else the first one, which is the one EventIterator
+     * applies. A new override can thus neither replace the instance readers
+     * saw nor slip an edited copy next to it.
+     */
+    private static function counterpart(array $oldOverrides, int $position) {
+        return $oldOverrides[$position] ?? $oldOverrides[0] ?? null;
     }
 
     /**
@@ -158,14 +175,16 @@ class AttendeeSchedulingObjectChangeGuard {
     }
 
     /**
-     * Overrides keyed by their RECURRENCE-ID instant ("at:<timestamp>"), or by
-     * their raw value ("raw:<value>") when it cannot be parsed.
+     * Overrides grouped by their RECURRENCE-ID instant ("at:<timestamp>"), or
+     * by their raw value ("raw:<value>") when it cannot be parsed, in document
+     * order. Duplicates are kept: dropping all but one would leave the others
+     * unchecked.
      */
     private static function indexEvents(VCalendar $calendarObject, \DateTimeZone $timeZone): array {
         $events = [];
         foreach ($calendarObject->select('VEVENT') as $vevent) {
             if (isset($vevent->{'RECURRENCE-ID'})) {
-                $events[self::recurrenceKey($vevent, $timeZone)] = $vevent;
+                $events[self::recurrenceKey($vevent, $timeZone)][] = $vevent;
             }
         }
 

@@ -340,6 +340,77 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         );
     }
 
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotChangeAnInstanceThroughADuplicateOverride(SeriesKind $kind) {
+        $this->assertRefused(
+            self::calendar(self::master($kind)),
+            self::calendar(
+                self::master($kind),
+                self::override($kind, self::OCCURRENCE, ['SUMMARY' => 'SUMMARY:Moved by attendee']),
+                self::override($kind, self::OCCURRENCE)
+            ),
+            'SUMMARY'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotChangeAnInstanceThroughADuplicateOverrideInAnotherForm(SeriesKind $kind) {
+        $this->assertRefused(
+            self::calendar(self::master($kind)),
+            self::calendar(
+                self::master($kind),
+                self::override($kind, self::OCCURRENCE, ['LOCATION' => 'LOCATION:mailto:mallory@example.org']),
+                self::override($kind, self::OCCURRENCE, ['RECURRENCE-ID' => $kind === SeriesKind::Timed
+                    ? 'RECURRENCE-ID:' . self::OCCURRENCE . 'T080000Z'
+                    : self::recurrenceIdLine($kind, self::OCCURRENCE)])
+            ),
+            'LOCATION'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotEditTheFirstOfTwoIdenticalOrganizerOverrides(SeriesKind $kind) {
+        $organizerOverride = self::override($kind, self::OCCURRENCE, ['SUMMARY' => 'SUMMARY:Moved by organizer']);
+
+        $this->assertRefused(
+            self::calendar(self::master($kind), $organizerOverride, $organizerOverride),
+            self::calendar(
+                self::master($kind),
+                self::override($kind, self::OCCURRENCE, ['SUMMARY' => 'SUMMARY:Daily']),
+                $organizerOverride
+            ),
+            'SUMMARY'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotDropTheOrganizerOverrideReadersApply(SeriesKind $kind) {
+        $this->assertRefused(
+            self::calendar(
+                self::master($kind),
+                self::override($kind, self::OCCURRENCE, ['SUMMARY' => 'SUMMARY:Moved by organizer']),
+                self::override($kind, self::OCCURRENCE, ['SUMMARY' => 'SUMMARY:Shadowed'])
+            ),
+            self::calendar(self::master($kind), self::override($kind, self::OCCURRENCE, ['SUMMARY' => 'SUMMARY:Shadowed'])),
+            'SUMMARY'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCanAnswerEveryDuplicateOverrideTheOrganizerSent(SeriesKind $kind) {
+        $organizerOverride = self::override($kind, self::OCCURRENCE, ['SUMMARY' => 'SUMMARY:Moved by organizer']);
+        $answer = ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org'];
+
+        $this->assertAllowed(
+            self::calendar(self::master($kind), $organizerOverride, $organizerOverride),
+            self::calendar(
+                self::master($kind),
+                self::applyChanges($organizerOverride, $answer),
+                self::applyChanges($organizerOverride, $answer)
+            )
+        );
+    }
+
     public static function seriesKinds(): iterable {
         foreach (SeriesKind::cases() as $kind) {
             yield $kind->value => [$kind];

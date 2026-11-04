@@ -256,8 +256,8 @@ class CalendarDataNormalizer {
      * Calculate end date for recurring event
      *
      * The event is expanded on its own, as the calendar-query post-filter
-     * does (VEvent::isInTimeRange): an override carrying its own RRULE or
-     * RDATE then contributes its own instances. Instances moved by an
+     * does (VEvent::isInTimeRange). An override is a single instance: the
+     * iterator ignores an RRULE or RDATE it carries. Instances moved by an
      * override are covered by that override's own entry.
      *
      * @param VObject\Component $component

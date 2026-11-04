@@ -377,7 +377,7 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         }
 
         foreach ($this->getInvites() as $sharee) {
-            if (!$this->isWriteEnabledAccess((int) $sharee->access) || !$sharee->principal) {
+            if (!$this->isWriteEnabledAccess((int) $sharee->access) || !$this->isReadEnabledShare($sharee)) {
                 continue;
             }
 

@@ -101,6 +101,37 @@ class VideoConferencePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertCount(0, $vCal->VEVENT->select('X-OPENPAAS-VIDEOCONFERENCE'));
     }
 
+    static function videoLinksWhoseNameSabreRepairs() {
+        return [
+            ['..CONFERENCE;VALUE=URI;FEATURE=VIDEO:https://evil.test/room'],
+            ['..X-OPENPAAS-VIDEOCONFERENCE:https://evil.test/room'],
+        ];
+    }
+
+    #[DataProvider('videoLinksWhoseNameSabreRepairs')]
+    function testConfiguredPluginFiltersAVideoLinkWhoseNameSabreRepaired(string $videoLink) {
+        $vCal = Reader::read($this->eventIcs($videoLink));
+        // what Sabre\CalDAV\Plugin::validateICalendar does before emitting calendarObjectChange
+        $vCal->validate(\Sabre\VObject\Node::PROFILE_CALDAV | \Sabre\VObject\Node::REPAIR);
+
+        $this->emitCalendarObjectChange($vCal, 'https://meet.linagora.com');
+
+        $stored = Reader::read($vCal->serialize());
+        $this->assertCount(0, $stored->VEVENT->select('CONFERENCE'));
+        $this->assertCount(0, $stored->VEVENT->select('X-OPENPAAS-VIDEOCONFERENCE'));
+    }
+
+    function testTrustedVideoConferenceWhoseNameSabreRepairedIsMirroredAsOpenPaasLink() {
+        $vCal = Reader::read($this->eventIcs('..CONFERENCE;VALUE=URI;FEATURE=VIDEO:https://meet.linagora.com/room'));
+        $vCal->validate(\Sabre\VObject\Node::PROFILE_CALDAV | \Sabre\VObject\Node::REPAIR);
+
+        $this->emitCalendarObjectChange($vCal, 'https://meet.linagora.com');
+
+        $stored = Reader::read($vCal->serialize());
+        $this->assertCount(1, $stored->VEVENT->select('CONFERENCE'));
+        $this->assertSame('https://meet.linagora.com/room', (string) $stored->VEVENT->{'X-OPENPAAS-VIDEOCONFERENCE'});
+    }
+
     private function emitCalendarObjectChange($vCal, ?string $trustedBase = null): bool {
         if ($trustedBase !== null) {
             $this->server = new \Sabre\DAV\Server([]);

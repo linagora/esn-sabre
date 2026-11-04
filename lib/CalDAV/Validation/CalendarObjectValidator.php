@@ -5,8 +5,10 @@ namespace ESN\CalDAV\Validation;
 use Sabre\DAV\Exception\BadRequest;
 use Sabre\VObject\Component;
 use Sabre\VObject\Component\VCalendar;
+use Sabre\VObject\InvalidDataException;
 use Sabre\VObject\Property;
 use Sabre\VObject\Property\ICalendar\DateTime as DateTimeProperty;
+use Sabre\VObject\Recur\RRuleIterator;
 
 class CalendarObjectValidator {
     /**
@@ -102,6 +104,22 @@ class CalendarObjectValidator {
 
         if (isset($parts['UNTIL'])) {
             $this->validateRRuleUntil($parts['UNTIL'], $dtStart);
+        }
+
+        $this->assertRRuleIterable($parts, $dtStart);
+    }
+
+    /**
+     * Parse the rule the way expansion does, so that every part the recurrence
+     * iterator refuses (COUNT=0, unknown part, out of range BY* value, ...) is
+     * rejected instead of stored as an event that cannot be expanded.
+     */
+    private function assertRRuleIterable(array $parts, DateTimeProperty $dtStart): void
+    {
+        try {
+            new RRuleIterator($parts, $dtStart->getDateTime());
+        } catch (InvalidDataException $e) {
+            $this->fail('Invalid RRULE: '.$e->getMessage());
         }
     }
 

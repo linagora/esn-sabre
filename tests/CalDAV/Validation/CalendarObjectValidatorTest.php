@@ -735,4 +735,51 @@ class CalendarObjectValidatorTest extends TestCase {
 
         $this->addToAssertionCount(1);
     }
+
+    static function rruleRejectedByVObjectProvider(): array {
+        return [
+            'zero COUNT' => ['RRULE:FREQ=DAILY;COUNT=0', 'COUNT'],
+            'non numeric COUNT' => ['RRULE:FREQ=DAILY;COUNT=abc', 'COUNT'],
+            'zero INTERVAL' => ['RRULE:FREQ=DAILY;INTERVAL=0', 'INTERVAL'],
+            'unknown part' => ['RRULE:FREQ=DAILY;X-FOO=1', 'X-FOO'],
+            'BYMONTH out of range' => ['RRULE:FREQ=YEARLY;BYMONTH=13', 'BYMONTH'],
+            'invalid BYDAY' => ['RRULE:FREQ=WEEKLY;BYDAY=XX', 'BYDAY'],
+            'invalid WKST' => ['RRULE:FREQ=WEEKLY;WKST=XX', 'WKST'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('rruleRejectedByVObjectProvider')]
+    function testRRuleThatCannotBeExpandedIsRejected(string $rruleLine, string $expectedMessage) {
+        $this->assertValidationFails([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260515T090000Z',
+            'DTEND:20260515T100000Z',
+            $rruleLine,
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ], ['Invalid RRULE', $expectedMessage]);
+    }
+
+    function testRRuleWithValidPartsIsAccepted() {
+        $this->validator->validate($this->readCalendar([
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//test//EN',
+            'BEGIN:VEVENT',
+            'UID:event-1',
+            'DTSTAMP:20260515T000000Z',
+            'DTSTART:20260515T090000Z',
+            'DTEND:20260515T100000Z',
+            'RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=5;BYDAY=1MO,-1FR;BYMONTH=5,6;WKST=MO',
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]));
+
+        $this->addToAssertionCount(1);
+    }
 }

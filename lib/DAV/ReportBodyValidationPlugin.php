@@ -25,8 +25,10 @@ use \Sabre\Xml\ParseException;
  *     throw on a malformed `time-range` date (InvalidDataException) and read
  *     the required `name` attribute of `comp-filter`/`prop-filter`/
  *     `param-filter` unchecked (a warning, turned into ErrorException by
- *     esn.php's error handler). We handle REPORT ourselves, like Sabre's core
- *     handler does, run the ACL and sharing POST handlers ourselves, and report
+ *     esn.php's error handler). Property deserialisers also throw a
+ *     TypeError on ill-typed content (e.g. text inside
+ *     `supported-calendar-component-set`). We handle REPORT ourselves, like
+ *     Sabre's core handler does, run the ACL and sharing POST handlers ourselves, and report
  *     a body deserialisation error as 400. Errors raised while running the
  *     report itself are left untouched.
  *
@@ -111,7 +113,7 @@ class ReportBodyValidationPlugin extends ServerPlugin {
             return $this->server->xml->parse($request->getBody(), $request->getUrl(), $rootElementName);
         } catch (ParseException $e) {
             throw new BadRequest('The REPORT request body is not a valid XML document: ' . $e->getMessage());
-        } catch (InvalidDataException | \ErrorException $e) {
+        } catch (InvalidDataException | \ErrorException | \TypeError | \ValueError $e) {
             throw new BadRequest('The REPORT request body is invalid: ' . $e->getMessage());
         }
     }

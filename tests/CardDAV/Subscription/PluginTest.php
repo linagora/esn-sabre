@@ -233,7 +233,8 @@ class PluginTest extends \ESN\CardDAV\PluginTestBase {
             'empty href' => [['_links' => ['self' => ['href' => '']]]],
             'non string href' => [['_links' => ['self' => ['href' => ['nested' => $href]]]]],
             'url without path' => [['_links' => ['self' => ['href' => 'http://example.org']]]],
-            'unparsable url' => [['_links' => ['self' => ['href' => '?://']]]]
+            'unparsable url' => [['_links' => ['self' => ['href' => '?://']]]],
+            'url whose path is a url without path' => [['_links' => ['self' => ['href' => 'http:ttp://localhost']]]]
         ];
     }
 

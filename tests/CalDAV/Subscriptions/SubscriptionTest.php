@@ -95,7 +95,8 @@ class SubscriptionTest extends \ESN\DAV\ServerMock {
     static function hrefsWithoutServerPath() {
         return [
             'url without path' => ['http://example.org'],
-            'scheme only' => ['V://']
+            'scheme only' => ['V://'],
+            'url whose path is a url without path' => ['http:ttp://localhost']
         ];
     }
 

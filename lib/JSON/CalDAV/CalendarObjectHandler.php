@@ -452,20 +452,31 @@ class CalendarObjectHandler {
                 continue;
             }
             $eventStart = $vevent->DTSTART->getDateTime();
-
-            if ($this->isDateTimeProperty($vevent->DTEND)) {
-                $eventEnd = $vevent->DTEND->getDateTime();
-            } elseif (isset($vevent->DURATION)) {
-                $eventEnd = clone $eventStart;
-                $eventEnd->add($vevent->DURATION->getDateInterval());
-            } else {
-                $eventEnd = $eventStart;
-            }
+            $eventEnd = $this->computeEventEnd($vevent, $eventStart);
 
             if ($eventEnd <= $start || $eventStart >= $end) {
                 $vObject->remove($vevent);
             }
         }
+    }
+
+    /**
+     * Computes the end of a VEVENT as defined by RFC 5545 3.6.1: DTEND, else DTSTART + DURATION,
+     * else one day for an all-day DTSTART and the DTSTART instant otherwise.
+     *
+     * getDateTime() returns a \DateTimeImmutable: add() returns a new instance and leaves the receiver untouched.
+     */
+    private function computeEventEnd($vevent, \DateTimeImmutable $eventStart) {
+        if ($this->isDateTimeProperty($vevent->DTEND)) {
+            return $vevent->DTEND->getDateTime();
+        }
+        if (isset($vevent->DURATION)) {
+            return $eventStart->add($vevent->DURATION->getDateInterval());
+        }
+        if (!$vevent->DTSTART->hasTime()) {
+            return $eventStart->add(new \DateInterval('P1D'));
+        }
+        return $eventStart;
     }
 
     /**

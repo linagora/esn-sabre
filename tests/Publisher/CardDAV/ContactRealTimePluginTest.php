@@ -171,6 +171,7 @@ class ContactRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $server = $plugin->getServer();
         $client = $plugin->getClient();
 
+        $server->emit('beforeUnbind', ["addressbooks/bookId/bookName/contact.vcf"]);
         $this->assertTrue($server->emit('afterUnbind', ["addressbooks/bookId/bookName/contact.vcf"]));
         $this->assertNotNull($client->message);
     }
@@ -180,6 +181,7 @@ class ContactRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $server = $plugin->getServer();
         $client = $plugin->getClient();
 
+        $server->emit('beforeUnbind', ['addressbooks/domainId/dab/gcontact.vcf']);
         $this->assertTrue($server->emit('afterUnbind', ['addressbooks/domainId/dab/gcontact.vcf']));
         $this->assertNotNull($client->message);
     }

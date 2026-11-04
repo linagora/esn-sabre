@@ -200,7 +200,9 @@ Published by `AMQPSchedulePlugin` so Twake Calendar Side Service can fan out iTI
 {
   "path": "addressbooks/{userId}/{addressbookUri}/{contactId}.vcf",
   "owner": "principals/users/{userId}",
-  "carddata": "<contact-as-json>"
+  "carddata": "<contact-as-json>",
+  "syncToken": 1234,
+  "etag": "\"<md5>\""
 }
 ```
 
@@ -212,7 +214,9 @@ Published by `AMQPSchedulePlugin` so Twake Calendar Side Service can fan out iTI
 {
   "path": "addressbooks/{userId}/{addressbookUri}/{contactId}.vcf",
   "owner": "principals/users/{userId}",
-  "carddata": "<contact-as-json>"
+  "carddata": "<contact-as-json>",
+  "syncToken": 1234,
+  "etag": "\"<md5>\""
 }
 ```
 
@@ -223,7 +227,9 @@ For subscribed address books, a second message is published with `sourcePath` ad
   "path": "addressbooks/{subscriberUserId}/{addressbookUri}/{contactId}.vcf",
   "sourcePath": "addressbooks/{sourceUserId}/{sourceAddressbookUri}/{contactId}.vcf",
   "owner": "principals/users/{sourceUserId}",
-  "carddata": "<contact-as-json>"
+  "carddata": "<contact-as-json>",
+  "syncToken": 1234,
+  "etag": "\"<md5>\""
 }
 ```
 

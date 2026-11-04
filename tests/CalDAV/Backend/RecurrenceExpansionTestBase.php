@@ -294,6 +294,61 @@ abstract class RecurrenceExpansionTestBase extends \PHPUnit\Framework\TestCase {
     }
 
     /**
+     * An RDATE earlier than DTSTART generates the first instance of the event
+     */
+    function testRdateBeforeDtStartIsFound() {
+        $backend = $this->getBackend();
+        $id = $this->generateId();
+
+        $ical = join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//Test//EN',
+            'BEGIN:VEVENT',
+            'UID:rdate',
+            'DTSTART:20260601T090000Z',
+            'DURATION:PT1H',
+            'RRULE:FREQ=DAILY;COUNT=2',
+            'RDATE:20260520T090000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+            ''
+        ]);
+
+        $backend->createCalendarObject($id, "rdate.ics", $ical);
+
+        $filters = [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [
+                [
+                    'name' => 'VEVENT',
+                    'comp-filters' => [],
+                    'prop-filters' => [],
+                    'is-not-defined' => false,
+                    'time-range' => [
+                        'start' => new \DateTime('2026-05-20T00:00:00Z'),
+                        'end' => new \DateTime('2026-05-21T00:00:00Z'),
+                    ],
+                ],
+            ],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals(['rdate.ics'], $result, 'Should find the RDATE instance before DTSTART');
+
+        $filters['comp-filters'][0]['time-range'] = [
+            'start' => new \DateTime('2026-05-21T00:00:00Z'),
+            'end' => new \DateTime('2026-06-01T00:00:00Z'),
+        ];
+
+        $result = $backend->calendarQuery($id, $filters);
+        $this->assertEquals([], $result, 'Should not find event between the RDATE and DTSTART');
+    }
+
+    /**
      * Test daily recurring event with INTERVAL
      * INTERVAL=3 means every 3rd day
      */

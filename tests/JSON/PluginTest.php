@@ -1912,6 +1912,7 @@ END:VCALENDAR
         return [
             'url without path' => ['http://example.org'],
             'unparsable url' => ['?://'],
+            'url whose path is a url without path' => ['http:ttp://localhost'],
             'calendar home' => ['/calendars/54b64eadf6d7d8e41d263e0f'],
             'address book' => ['/addressbooks/54b64eadf6d7d8e41d263e0f/contacts']
         ];

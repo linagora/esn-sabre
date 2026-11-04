@@ -34,7 +34,7 @@ class SubscriptionSource {
         }
 
         $path = parse_url($href, PHP_URL_PATH);
-        if (!is_string($path) || $path === '') {
+        if (!is_string($path) || $path === '' || $path[0] !== '/') {
             throw new BadRequest('A subscription source href must designate a path');
         }
 

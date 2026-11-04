@@ -299,6 +299,28 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($this->ownerCalendarSharedWith([])->getChildACL(), $sharedCalendar->getChildACL());
     }
 
+    public static function delegatedSourceOwners(): array {
+        return [
+            'resource' => ['principals/resources/o'],
+            'team calendar' => ['principals/team-calendars/o'],
+        ];
+    }
+
+    #[DataProvider('delegatedSourceOwners')]
+    function testSourceCalendarGrantsNothingToADeclinedWriteSharee($owner) {
+        $props = ['id' => 1, 'principaluri' => $owner, 'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED];
+        $backend = new FixedInvitesBackendMock([$props], [], []);
+        $backend->invites = [
+            new \Sabre\DAV\Xml\Element\Sharee(['href' => 'mailto:o@example.org', 'principal' => $owner,
+                'access' => \Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER, 'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED]),
+            $this->sharee('principals/users/bob', \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE, \Sabre\DAV\Sharing\Plugin::INVITE_DECLINED),
+        ];
+        $calendar = new SharedCalendar(new \Sabre\CalDAV\SharedCalendar($backend, $props));
+
+        $this->assertEquals([], $this->privilegesOf('principals/users/bob', $calendar->getACL()));
+        $this->assertEquals([], $this->privilegesOf('principals/users/bob', $calendar->getChildACL()));
+    }
+
     function testOwnerCalendarNoLongerGrantsReadOnceTheShareIsRevoked() {
         $props = [
             'id'           => 1,

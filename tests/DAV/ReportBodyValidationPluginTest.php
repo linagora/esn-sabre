@@ -334,6 +334,13 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertStringContainsString('Sabre\DAV\Exception\BadRequest', $response->getBodyAsString());
     }
 
+    function testEmptyShareResourcePostShouldAnswerBadRequest() {
+        $response = $this->request('POST', '', ['Content-Type' => 'application/davsharing+xml']);
+
+        $this->assertEquals(400, $response->getStatus());
+        $this->assertStringContainsString('Sabre\DAV\Exception\BadRequest', $response->getBodyAsString());
+    }
+
     function testXmlPostWithUndeclaredPrefixShouldAnswerBadRequest() {
         $response = $this->request('POST', '<CS:share xmlns:D="DAV:"><D:set/></CS:share>');
 

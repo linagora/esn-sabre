@@ -24,8 +24,8 @@ use \Sabre\Xml\ParseException;
  * `ParseException` to 400, so these escape as 500.
  *
  * We deserialise the body once ourselves, before any handler, and turn these
- * failures into 400. Parse errors are left to Sabre's handlers, which already
- * deal with them.
+ * failures into 400. Bodies that are not well-formed XML are not parsed at
+ * all, and parse errors are left to the handlers, which already deal with them.
  */
 #[\AllowDynamicProperties]
 class XmlBodyDeserializationPlugin extends ServerPlugin {
@@ -60,7 +60,12 @@ class XmlBodyDeserializationPlugin extends ServerPlugin {
         // the handlers can read it again.
         $request->setBody($body);
 
-        if ('' === $body) {
+        // A malformed body can make Sabre's deserialiser loop forever or
+        // recurse until the stack limit (see ReportBodyValidationPlugin): never
+        // parse it here. It is left to the handlers, where
+        // ReportBodyValidationPlugin rejects it with 400 (and JSON handlers of
+        // the same methods still get their non-XML bodies).
+        if ('' === $body || !ReportBodyValidationPlugin::isWellFormedXml($body)) {
             return;
         }
 

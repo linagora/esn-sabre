@@ -156,13 +156,12 @@ class CalendarObjectHandler {
     }
 
     public function getCalendarObjects($nodePath, $node, $jsonData) {
-        if (!isset($jsonData->match) || !isset($jsonData->match->start) ||
-            !isset($jsonData->match->end)) {
+        $timeRange = TimeRange::fromJson($jsonData);
+        if ($timeRange === null) {
             return [400, null];
         }
 
-        $start = VObject\DateTimeParser::parseDateTime($jsonData->match->start);
-        $end = VObject\DateTimeParser::parseDateTime($jsonData->match->end);
+        list($start, $end) = $timeRange;
         $filters = [
             'name' => 'VCALENDAR',
             'comp-filters' => [
@@ -400,8 +399,12 @@ class CalendarObjectHandler {
      */
     public function expandEvent($nodePath, $node, $jsonData) {
         // Parse time-range parameters
-        $start = VObject\DateTimeParser::parseDateTime($jsonData->match->start);
-        $end = VObject\DateTimeParser::parseDateTime($jsonData->match->end);
+        $timeRange = TimeRange::fromJson($jsonData);
+        if ($timeRange === null) {
+            return [400, null];
+        }
+
+        list($start, $end) = $timeRange;
 
         // Read the calendar event data
         $calendarData = $node->get();

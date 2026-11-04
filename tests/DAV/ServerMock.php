@@ -229,7 +229,7 @@ END:VCALENDAR
     ];
 
     protected $timeRangeDataRecur = [
-          'match' => [ 'start' => '20150227T000000Z', 'end' => '20150229T030000Z' ],
+          'match' => [ 'start' => '20150227T000000Z', 'end' => '20150301T030000Z' ],
           'scope' => [ 'calendars' => [ '/calendars/54b64eadf6d7d8e41d263e0f/calendar1' ] ]
         ];
 

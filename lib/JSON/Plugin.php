@@ -275,10 +275,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         $jsonData = json_decode($request->getBodyAsString());
 
         if (isset($jsonData->type) && $jsonData->type === self::FREE_BUSY_QUERY) {
-            if (!isset($jsonData->match) ||
-                !isset($jsonData->match->start) ||
-                !isset($jsonData->match->end)) {
-                throw new DAV\Exception\BadRequest('Missing report parameters in JSON body');
+            if (\ESN\JSON\CalDAV\TimeRange::fromJson($jsonData) === null) {
+                throw new DAV\Exception\BadRequest('Missing or invalid time range in JSON body');
             }
 
             $writer = new \Sabre\Xml\Writer();

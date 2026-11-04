@@ -3560,6 +3560,76 @@ END:VCALENDAR
         $this->assertCount(1, $vObject->select('VEVENT'));
     }
 
+    function testExpandEventWithDurationOverlappingRangeStartShouldBeKept() {
+        // Issue #755: the end of a DURATION event must be DTSTART + DURATION, not DTSTART
+        $ics = 'BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VEVENT
+UID:duration-overlap
+DTSTART:20350118T230000Z
+DURATION:PT2H
+RRULE:FREQ=DAILY;COUNT=2
+SUMMARY:Late meeting
+END:VEVENT
+END:VCALENDAR
+';
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'duration-overlap.ics', $ics);
+
+        // the second occurrence runs 2035-01-19T23:00Z - 2035-01-20T01:00Z
+        $response = $this->expandEventRequest('duration-overlap.ics', '20350120T000000Z', '20350121T000000Z');
+
+        $this->assertEquals(200, $response->status);
+        $vevents = $this->vEventsOfExpandResponse($response);
+        $this->assertCount(1, $vevents);
+        $this->assertEquals('20350119T230000Z', (string) $vevents[0]->DTSTART);
+    }
+
+    function testExpandOverrideOnlyEventWithDurationOverlappingRangeStartShouldBeKept() {
+        // Issue #755: an override stored alone, as for an attendee invited to a single occurrence
+        $ics = 'BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VEVENT
+UID:invited-once
+RECURRENCE-ID:20350119T230000Z
+DTSTART:20350119T230000Z
+DURATION:PT2H
+SUMMARY:One occurrence
+END:VEVENT
+END:VCALENDAR
+';
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'invited-once.ics', $ics);
+
+        $response = $this->expandEventRequest('invited-once.ics', '20350120T000000Z', '20350121T000000Z');
+
+        $this->assertEquals(200, $response->status);
+        $vevents = $this->vEventsOfExpandResponse($response);
+        $this->assertCount(1, $vevents);
+        $this->assertEquals('20350119T230000Z', (string) $vevents[0]->DTSTART);
+    }
+
+    function testRemoveEventsOutsideTimeRangeShouldKeepAllDayEventWithoutEndOverlappingRangeStart() {
+        // Issue #755: an all-day DTSTART without DTEND nor DURATION lasts one day (RFC 5545 3.6.1)
+        $vObject = \Sabre\VObject\Reader::read('BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:all-day
+DTSTAMP:20150101T000000Z
+DTSTART;VALUE=DATE:20350120
+SUMMARY:All day
+END:VEVENT
+END:VCALENDAR
+');
+        $handler = new CalDAV\CalendarObjectHandler($this->server, null);
+        $removeEventsOutsideTimeRange = new \ReflectionMethod($handler, 'removeEventsOutsideTimeRange');
+
+        $removeEventsOutsideTimeRange->invoke($handler, $vObject,
+            new \DateTime('2035-01-20T12:00:00Z'), new \DateTime('2035-01-21T12:00:00Z'));
+
+        $this->assertCount(1, $vObject->select('VEVENT'));
+    }
+
     private function expandEventRequest($eventUri, $start, $end) {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

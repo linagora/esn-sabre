@@ -87,14 +87,44 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     /**
      * Sabre does not emit calendarObjectChange for a COPY or a MOVE: they are
      * checked by validateBeforeMoveToTeamCalendar() / validateBeforeCopyToTeamCalendar().
+     *
+     * An update already holds its own UID in the Team Calendar: it is only
+     * checked when it changes that UID, which may be held by another object.
      */
     function validateUniqueUidInTeamCalendar(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
-        if (!$isNew || $request->getMethod() === 'ITIP') return;
+        if ($request->getMethod() === 'ITIP') return;
 
         $calendar = $this->teamCalendarAt($calendarPath);
-        if ($calendar) {
-            $this->assertUidNotInTeamCalendar($vCal, $calendar);
+        if (!$calendar) return;
+        if (!$isNew && $this->uidOf($vCal) === $this->storedUid($request->getPath())) return;
+
+        $this->assertUidNotInTeamCalendar($vCal, $calendar);
+    }
+
+    private function storedUid(string $objectPath): ?string {
+        try {
+            $stored = $this->server->tree->getNodeForPath($objectPath);
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            return null;
         }
+        if (!$stored instanceof \Sabre\CalDAV\ICalendarObject) return null;
+
+        $calendar = $this->readCalendarObject($stored);
+        try {
+            return $this->uidOf($calendar);
+        } finally {
+            $calendar->destroy();
+        }
+    }
+
+    private function readCalendarObject(\Sabre\CalDAV\ICalendarObject $object): VCalendar {
+        $data = $object->get();
+
+        return \Sabre\VObject\Reader::read(is_resource($data) ? stream_get_contents($data) : $data);
+    }
+
+    private function uidOf(VCalendar $calendar): ?string {
+        return isset($calendar->VEVENT->UID) ? (string) $calendar->VEVENT->UID : null;
     }
 
     private function validateCopiedObjectUidInTeamCalendar($sourcePath, $destinationPath, bool $sameCalendarConflicts) {
@@ -111,8 +141,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
         $source = $this->server->tree->getNodeForPath($sourcePath);
         if (!$source instanceof \Sabre\CalDAV\ICalendarObject || $source instanceof \Sabre\CalDAV\Schedule\ISchedulingObject) return;
-        $data = $source->get();
-        $calendar = \Sabre\VObject\Reader::read(is_resource($data) ? stream_get_contents($data) : $data);
+        $calendar = $this->readCalendarObject($source);
         try {
             $this->assertUidNotInTeamCalendar($calendar, $destinationCalendar);
         } finally {
@@ -133,8 +162,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     private function assertUidNotInTeamCalendar(VCalendar $calendar, SharedCalendar $teamCalendar) {
-        if (isset($calendar->VEVENT->UID) && $teamCalendar->getBackend()->hasCalendarObjectWithUid(
-            $teamCalendar->getCalendarId(), (string) $calendar->VEVENT->UID)) {
+        $uid = $this->uidOf($calendar);
+        if ($uid !== null && $teamCalendar->getBackend()->hasCalendarObjectWithUid($teamCalendar->getCalendarId(), $uid)) {
             throw new \Sabre\DAV\Exception\Forbidden('The destination Team Calendar already contains an event with this UID.');
         }
     }

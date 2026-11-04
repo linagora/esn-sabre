@@ -42,7 +42,8 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
                 'by-writer.ics' => $this->event('by-writer', 'mailto:writer@example.com')
             ]),
             $this->calendar('team', 'principals/team-calendars/team', self::TEAM_CALENDAR_ID, [
-                'team1.ics' => $this->event(self::EXISTING_UID)
+                'team1.ics' => $this->event(self::EXISTING_UID),
+                'other.ics' => $this->event('other')
             ]),
             $this->calendar('team-mirror', 'principals/team-calendars/team', self::TEAM_CALENDAR_ID, [])
         ]);
@@ -84,15 +85,21 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
     function testPutOfANewEventWithAnExistingUidIntoATeamCalendarIsRefused() {
         $this->expectForbidden('The destination Team Calendar already contains an event with this UID.');
 
-        $this->emitCalendarObjectChange('PUT', 'team', true);
+        $this->emitCalendarObjectChange('PUT', 'team/new.ics', true);
     }
 
     function testPutUpdatingAnEventOfATeamCalendarIsAccepted() {
-        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'team', false));
+        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'team/team1.ics', false));
+    }
+
+    function testPutUpdatingAnotherObjectToAnExistingUidOfATeamCalendarIsRefused() {
+        $this->expectForbidden('The destination Team Calendar already contains an event with this UID.');
+
+        $this->emitCalendarObjectChange('PUT', 'team/other.ics', false);
     }
 
     function testPutOfANewEventWithAnExistingUidIntoAPersonalCalendarIsAccepted() {
-        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'personal', true));
+        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'personal/new.ics', true));
     }
 
     function testCopyOfAMeetingOrganizedByAReadOnlyMemberIntoATeamCalendarIsRefused() {
@@ -118,12 +125,13 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
         $this->expectExceptionMessage($message);
     }
 
-    private function emitCalendarObjectChange(string $method, string $calendarPath, bool $isNew): bool {
+    private function emitCalendarObjectChange(string $method, string $objectPath, bool $isNew): bool {
         $vCal = Reader::read($this->event(self::EXISTING_UID));
         $modified = false;
+        list($calendarPath,) = \Sabre\Uri\split($objectPath);
 
         return $this->server->emit('calendarObjectChange',
-            [new Request($method, '/' . $calendarPath . '/new.ics'), new Response(), $vCal, $calendarPath, &$modified, $isNew]);
+            [new Request($method, '/' . $objectPath), new Response(), $vCal, $calendarPath, &$modified, $isNew]);
     }
 
     private function calendar(string $name, string $owner, string $calendarId, array $objects): SharedCalendar {

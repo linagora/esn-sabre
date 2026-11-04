@@ -112,7 +112,7 @@ class CalendarDataNormalizer {
         foreach ($vObject->select('VEVENT') as $event) {
             $this->validateEventDates($event);
 
-            $start = $event->DTSTART->getDateTime()->getTimeStamp();
+            $start = $this->calculateFirstOccurrence($event);
             // A negative DURATION, or an infinite rule starting after the
             // MAX_DATE fallback, must never yield a window ending before it starts.
             $end = max($start, $this->calculateLastOccurrence($event));
@@ -165,6 +165,46 @@ class CalendarDataNormalizer {
         }
 
         throw new BadRequest('VEVENT DURATION must hold a valid DURATION value');
+    }
+
+    /**
+     * Calculate first occurrence timestamp for VEVENT
+     *
+     * @param VObject\Component $component
+     * @return int First occurrence timestamp
+     */
+    private function calculateFirstOccurrence($component) {
+        $start = $component->DTSTART->getDateTime()->getTimeStamp();
+
+        // An RDATE may precede DTSTART: only the iterator sees it.
+        if (!isset($component->RRULE) && !isset($component->RDATE)) {
+            return $start;
+        }
+
+        return min($start, $this->calculateRecurringStartDate($component));
+    }
+
+    /**
+     * Calculate the start of the earliest instance of a recurring event
+     *
+     * The iterator yields instances in chronological order, RDATE values
+     * included, so its first instance is the earliest one.
+     *
+     * @param VObject\Component $component
+     * @return int Start timestamp, DTSTART when the recurrence cannot be expanded
+     */
+    private function calculateRecurringStartDate($component) {
+        try {
+            $it = new VObject\Recur\EventIterator($component);
+
+            if ($it->valid()) {
+                return $it->getDtStart()->getTimeStamp();
+            }
+        } catch (\Exception $e) {
+            // Logged by calculateRecurringEndDate, which falls back to an open-ended window
+        }
+
+        return $component->DTSTART->getDateTime()->getTimeStamp();
     }
 
     /**

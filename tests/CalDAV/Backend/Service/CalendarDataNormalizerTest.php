@@ -120,6 +120,40 @@ class CalendarDataNormalizerTest extends TestCase {
         $this->assertEquals(strtotime('20260601T100000Z'), $d['lastOccurence']);
     }
 
+    public function testRdateBeforeDtStartShouldLowerFirstOccurrence(): void {
+        $d = $this->denormalize("BEGIN:VEVENT\r\nUID:rdate\r\nDTSTAMP:20260101T000000Z\r\n"
+            . "DTSTART:20260601T090000Z\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=2\r\n"
+            . "RDATE:20260520T090000Z\r\nEND:VEVENT\r\n");
+
+        $this->assertEquals(strtotime('20260520T090000Z'), $d['firstOccurence']);
+        $this->assertEquals(strtotime('20260602T100000Z'), $d['lastOccurence']);
+    }
+
+    public function testRdatePeriodBeforeDtStartShouldLowerFirstOccurrence(): void {
+        $d = $this->denormalize("BEGIN:VEVENT\r\nUID:rdate\r\nDTSTAMP:20260101T000000Z\r\n"
+            . "DTSTART:20260601T090000Z\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=2\r\n"
+            . "RDATE;VALUE=PERIOD:20260520T090000Z/PT1H\r\nEND:VEVENT\r\n");
+
+        $this->assertEquals(strtotime('20260520T090000Z'), $d['firstOccurence']);
+    }
+
+    public function testRdateOnlyBeforeDtStartShouldLowerFirstOccurrence(): void {
+        $d = $this->denormalize("BEGIN:VEVENT\r\nUID:rdate\r\nDTSTAMP:20260101T000000Z\r\n"
+            . "DTSTART:20260601T090000Z\r\nDTEND:20260601T100000Z\r\n"
+            . "RDATE:20260701T090000Z,20260520T090000Z\r\nEND:VEVENT\r\n");
+
+        $this->assertEquals(strtotime('20260520T090000Z'), $d['firstOccurence']);
+        $this->assertEquals(strtotime('20260701T100000Z'), $d['lastOccurence']);
+    }
+
+    public function testExcludedDtStartKeepsDtStartAsFirstOccurrence(): void {
+        $d = $this->denormalize("BEGIN:VEVENT\r\nUID:ex\r\nDTSTAMP:20260101T000000Z\r\n"
+            . "DTSTART:20260601T090000Z\r\nDTEND:20260601T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\n"
+            . "EXDATE:20260601T090000Z\r\nEND:VEVENT\r\n");
+
+        $this->assertEquals(strtotime('20260601T090000Z'), $d['firstOccurence']);
+    }
+
     public function testInfiniteRuleStartingAfterMaxDateKeepsWindowOrdered(): void {
         $d = $this->denormalize("BEGIN:VEVENT\r\nUID:far\r\nDTSTAMP:20260101T000000Z\r\n"
             . "DTSTART:20400101T090000Z\r\nDTEND:20400101T100000Z\r\nRRULE:FREQ=DAILY\r\nEND:VEVENT\r\n");

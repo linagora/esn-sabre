@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+use ESN\Utils\RepairedNameIndex;
 use ESN\Utils\TrustedUrlBase;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
@@ -47,6 +48,8 @@ class VideoConferencePlugin extends ServerPlugin {
     // Shared by CalDAV writes and iTIP delivery before either path stores the event.
     function filterCalendar(VCalendar $vCal): bool {
         $modified = false;
+        // Sabre's name repair can turn "..CONFERENCE" into a CONFERENCE that select() misses.
+        RepairedNameIndex::refresh($vCal);
         if ($this->trustedUrlBase !== null) {
             foreach ($vCal->select('VEVENT') as $event) {
                 foreach ($event->select(self::$VIDEOCONFERENCE_PROPERTY) as $link) {

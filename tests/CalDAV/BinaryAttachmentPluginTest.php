@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Sabre\HTTP\Request;
 use Sabre\HTTP\Response;
@@ -103,6 +104,37 @@ ICS;
         $attachments = $vcal->VEVENT->select('ATTACH');
         $this->assertCount(1, $attachments);
         $this->assertSame('https://tung-drive.linagora.com/files/agenda.pdf', (string) reset($attachments));
+    }
+
+    static function attachmentsWhoseNameSabreRepairs() {
+        return [
+            ['..ATTACH:https://evil.test/a.pdf'],
+            ['..ATTACH;VALUE=BINARY;ENCODING=BASE64:dGVzdA=='],
+        ];
+    }
+
+    #[DataProvider('attachmentsWhoseNameSabreRepairs')]
+    function testFilterRemovesAnAttachmentWhoseNameSabreRepaired(string $attachment) {
+        $vcal = VObject\Reader::read(implode("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:repaired-attach',
+            'DTSTART:20260322T090000Z',
+            'DTEND:20260322T100000Z',
+            $attachment,
+            'END:VEVENT',
+            'END:VCALENDAR'
+        ]));
+        // what Sabre\CalDAV\Plugin::validateICalendar does before emitting calendarObjectChange
+        $vcal->validate(VObject\Node::PROFILE_CALDAV | VObject\Node::REPAIR);
+
+        $modified = $this->emitCalendarObjectChange(BinaryAttachmentPlugin::MODE_FILTER, $vcal,
+            'https://files.linagora.com');
+
+        $this->assertTrue($modified);
+        $stored = VObject\Reader::read($vcal->serialize());
+        $this->assertCount(0, $stored->VEVENT->select('ATTACH'));
     }
 
     /**

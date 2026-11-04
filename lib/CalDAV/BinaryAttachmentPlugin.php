@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+use ESN\Utils\RepairedNameIndex;
 use ESN\Utils\TrustedUrlBase;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
@@ -96,6 +97,8 @@ class BinaryAttachmentPlugin extends ServerPlugin {
             return false;
         }
 
+        // Sabre's name repair can turn "..ATTACH" into an ATTACH that remove() cannot find.
+        RepairedNameIndex::refresh($vCal);
         $filtered = false;
         $this->applyPolicy($vCal, $filtered);
         return $filtered;

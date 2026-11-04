@@ -18,7 +18,7 @@ use \Sabre\Xml\ParseException;
  *
  * Two distinct problems are handled here, both before Sabre's handler runs:
  *
- *  1. Sabre's REPORT, ACL and CalDAV sharing POST handlers let deserialisation
+ *  1. Sabre's REPORT, ACL and CalDAV/WebDAV sharing POST handlers let deserialisation
  *     errors of the request body escape as 500, while PROPFIND/PROPPATCH
  *     already map them to 400. Besides XML parse errors (malformed document,
  *     unexpected root element, empty body), the CalDAV filter deserialisers
@@ -124,7 +124,9 @@ class ReportBodyValidationPlugin extends ServerPlugin {
 
     /**
      * Only XML POSTs are guarded: they are the ones Sabre's CalDAV sharing
-     * plugin parses. Other POSTs (JSON, iCalendar, forms) are left untouched.
+     * (`application/xml`, `text/xml`) and WebDAV sharing
+     * (`application/davsharing+xml`) plugins parse. Other POSTs (JSON,
+     * iCalendar, forms) are left untouched.
      */
     function httpPost(RequestInterface $request, ResponseInterface $response) {
         if (!$this->hasXmlContentType($request)) {
@@ -133,7 +135,11 @@ class ReportBodyValidationPlugin extends ServerPlugin {
 
         $this->assertWellFormedBody($request, $response);
 
-        return $this->delegate('caldav-sharing', 'httpPost', 'POST', $request, $response);
+        if (false === $this->delegate('caldav-sharing', 'httpPost', 'POST', $request, $response)) {
+            return false;
+        }
+
+        return $this->delegate('sharing', 'httpPost', 'POST', $request, $response);
     }
 
     /**

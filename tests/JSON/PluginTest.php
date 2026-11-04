@@ -3752,4 +3752,53 @@ END:VCALENDAR
 
         $this->assertEquals(201, $response->status);
     }
+
+    public static function invalidTimeRangeCases(): array {
+        return [
+            'nonexistent end date' => ['20150227T000000Z', '20150229T030000Z'],
+            'nonexistent start date' => ['20150231T000000Z', '20150302T000000Z'],
+            'not a date' => ['foo', '20150302T000000Z'],
+            'empty end' => ['20150227T000000Z', ''],
+            'number' => [20150227, '20150302T000000Z'],
+            'array' => ['20150227T000000Z', ['20150302T000000Z']],
+        ];
+    }
+
+    private function jsonReport($uri, $body) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => $uri,
+        ));
+        $request->setBody(json_encode($body));
+
+        return $this->request($request);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('invalidTimeRangeCases')]
+    function testCalendarTimeRangeReportRejectsAnInvalidTimeRange($start, $end) {
+        $response = $this->jsonReport('/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+            ['match' => ['start' => $start, 'end' => $end]]);
+
+        $this->assertEquals(400, $response->status);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('invalidTimeRangeCases')]
+    function testExpandEventRejectsAnInvalidTimeRange($start, $end) {
+        $response = $this->jsonReport('/calendars/54b64eadf6d7d8e41d263e0f/calendar1/recur.ics',
+            ['match' => ['start' => $start, 'end' => $end]]);
+
+        $this->assertEquals(400, $response->status);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('invalidTimeRangeCases')]
+    function testFreebusyReportRejectsAnInvalidTimeRange($start, $end) {
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0c');
+
+        $response = $this->jsonReport('/calendars/54b64eadf6d7d8e41d263e0c/events.json',
+            ['type' => 'free-busy-query', 'match' => ['start' => $start, 'end' => $end]]);
+
+        $this->assertEquals(400, $response->status);
+    }
 }

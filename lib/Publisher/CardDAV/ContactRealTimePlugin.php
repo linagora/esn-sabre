@@ -4,6 +4,8 @@ namespace ESN\Publisher\CardDAV;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use Sabre\Uri;
+use ESN\CardDAV\Sharing\SharedAddressBook;
+use ESN\CardDAV\Subscriptions\Subscription;
 use ESN\Utils\Utils as Utils;
 
 #[\AllowDynamicProperties]
@@ -50,7 +52,7 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $node = $this->server->tree->getNodeForPath('/'.$path);
 
         if ($node instanceof \Sabre\CardDAV\Card) {
-            $this->publishCardChange('CREATED', $path, $node);
+            $this->publishCardChange('CREATED', $path, $node->get(), $node->getETag());
         }
 
         return true;
@@ -64,8 +66,6 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $node = $this->server->tree->getNodeForPath('/'.$path);
 
         $this->deletedCards[$path] = [
-            'path'     => $this->ensureContactPathContainsOwnerId($path, $node->getOwner()),
-            'owner'    => $node->getOwner(),
             'carddata' => $node->get(),
             'etag'     => $node->getETag()
         ];
@@ -79,49 +79,51 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $deletedCard = $this->deletedCards[$path];
         unset($this->deletedCards[$path]);
 
-        $addressBook = $this->reloadAddressBook($path);
-        $revision = [
-            'syncToken' => $this->syncToken($addressBook),
-            'etag'      => $deletedCard['etag']
-        ];
-
-        $this->createMessage($this->PUBSUB_TOPICS['CONTACT_DELETED'], array_merge($deletedCard, $revision));
-
-        $this->createMessage(
-            $this->PUBSUB_TOPICS['CONTACT_DELETED'],
-            array_merge(['path' => $path], $revision)
-        );
-
-        $this->notifySubscribedAddressBooks($addressBook, 'DELETED', $path, $revision);
-
-        $this->publishMessages();
+        $this->publishCardChange('DELETED', $path, $deletedCard['carddata'], $deletedCard['etag']);
 
         return true;
     }
 
     function afterWriteContent($path, \Sabre\DAV\IFile $node) {
         if ($node instanceof \Sabre\CardDAV\Card) {
-            $this->publishCardChange('UPDATED', $path, $node);
+            $this->publishCardChange('UPDATED', $path, $node->get(), $node->getETag());
         }
 
         return true;
     }
 
-    private function publishCardChange($action, $path, $node) {
-        $addressBook = $this->reloadAddressBook($path);
-        $dataMessage = [
-            'owner'     => $node->getOwner(),
-            'carddata'  => $node->get(),
+    /**
+     * A card written through a subscribed or delegated address book belongs to the source address book: whichever
+     * way it was written, one message is published for the source, and one for each address book mirroring it.
+     */
+    private function publishCardChange($action, $path, $carddata, $etag) {
+        list($addressBookPath, $cardName) = Uri\split($path);
+        $addressBook = $this->reloadAddressBook($addressBookPath);
+
+        if ($addressBook instanceof SharedAddressBook || $addressBook instanceof Subscription) {
+            $addressBookPath = $addressBook->getShareResourceUri();
+            $addressBook = $this->reloadAddressBook($addressBookPath);
+        }
+
+        $topic = $this->PUBSUB_TOPICS['CONTACT_'.$action];
+        $sourcePath = $addressBookPath.'/'.$cardName;
+        $cardMessage = [
+            'carddata'  => $carddata,
             'syncToken' => $this->syncToken($addressBook),
-            'etag'      => $node->getETag()
+            'etag'      => $etag
         ];
 
-        $this->createMessage(
-            $this->PUBSUB_TOPICS['CONTACT_'.$action],
-            array_merge(['path' => $this->ensureContactPathContainsOwnerId($path, $node->getOwner())], $dataMessage)
-        );
+        $this->createMessage($topic, ['path' => $sourcePath, 'owner' => $addressBook->getOwner()] + $cardMessage);
 
-        $this->notifySubscribedAddressBooks($addressBook, $action, $path, $dataMessage);
+        foreach ($addressBook->getSubscribedAddressBooks() as $mirror) {
+            $principalUriExploded = explode('/', $mirror['principaluri']);
+
+            $this->createMessage($topic, [
+                'path'       => 'addressbooks/'.$principalUriExploded[2].'/'.$mirror['uri'].'/'.$cardName,
+                'sourcePath' => $sourcePath,
+                'owner'      => $mirror['principaluri']
+            ] + $cardMessage);
+        }
 
         $this->publishMessages();
     }
@@ -129,11 +131,10 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     /**
      * The address book node holds the sync token read when it was built, and may have been cached before the write.
      */
-    private function reloadAddressBook($cardPath) {
-        list($parentUri) = Uri\split($cardPath);
-        $this->server->tree->markDirty($parentUri);
+    private function reloadAddressBook($addressBookPath) {
+        $this->server->tree->markDirty($addressBookPath);
 
-        return $this->server->tree->getNodeForPath('/'.$parentUri);
+        return $this->server->tree->getNodeForPath('/'.$addressBookPath);
     }
 
     private function syncToken($addressBook) {
@@ -142,29 +143,7 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         return $syncToken === null ? null : (int) $syncToken;
     }
 
-    private function notifySubscribedAddressBooks($parent, $action, $cardPath, $dataMessage = []) {
-        $subscribedAddressBooks = $parent->getSubscribedAddressBooks();
-
-        foreach ($subscribedAddressBooks as $addressBook) {
-            $principalUriExploded = explode('/', $addressBook['principaluri']);
-            $cardPathExploded = explode('/', $cardPath);
-            $dataMessage['path'] = 'addressbooks/'.$principalUriExploded[2].'/'.$addressBook['uri'].'/'.$cardPathExploded[3];
-            $dataMessage['sourcePath'] = $cardPath;
-
-            $this->createMessage($this->PUBSUB_TOPICS['CONTACT_'.$action], $dataMessage);
-        }
-    }
-
     private function isCardPath($path) {
         return preg_match('/^addressbooks\/.*?\.vcf$/', $path);
-    }
-
-    private function ensureContactPathContainsOwnerId($path, $ownerPrincipal) {
-        $pathExploded = explode('/', $path);
-        $ownerPrincipalExploded = explode('/', $ownerPrincipal);
-
-        $pathExploded[1] = $ownerPrincipalExploded[2];
-
-        return join('/', $pathExploded);
     }
 }

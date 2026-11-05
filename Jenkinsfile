@@ -1,3 +1,5 @@
+def prComment
+
 pipeline {
     agent any
 
@@ -25,6 +27,12 @@ pipeline {
       stage('Compile and Test') {
           steps {
               sh 'bash run_test.sh --skip-java --skip-nginx --skip-build'
+          }
+          post {
+              always {
+                  archiveArtifacts artifacts: 'tests/report/php/*.xml', allowEmptyArchive: true
+                  junit testResults: 'tests/report/php/*.xml', allowEmptyResults: true
+              }
           }
        }
        stage('Nginx Rate Limit Test') {
@@ -100,17 +108,7 @@ pipeline {
             sh 'docker build --pull --no-cache -t linagora/esn-sabre-pr:$CHANGE_ID .'
             sh 'docker login -u $DOCKER_HUB_CREDENTIAL_USR -p $DOCKER_HUB_CREDENTIAL_PSW'
             sh 'docker push linagora/esn-sabre-pr:$CHANGE_ID'
-            sh """
-              HTTP_STATUS=\$(curl -s -o /tmp/gh_comment_response.json -w "%{http_code}" -X POST \\
-                -H "Authorization: token \${GITHUB_CREDENTIAL_PSW}" \\
-                -H "Content-Type: application/json" \\
-                -d "{\\"body\\": \\"✅ Docker image published for this PR: \\`linagora/esn-sabre-pr:\${CHANGE_ID}\\`\\\\n\\\\n---\\\\n*Generated automatically*\\"}" \\
-                "https://api.github.com/repos/linagora/esn-sabre/issues/\${CHANGE_ID}/comments")
-              if [ "\$HTTP_STATUS" -lt 200 ] || [ "\$HTTP_STATUS" -ge 300 ]; then
-                echo "WARNING: GitHub API comment failed with HTTP \$HTTP_STATUS"
-                cat /tmp/gh_comment_response.json
-              fi
-            """
+            env.PR_DOCKER_IMAGE = "linagora/esn-sabre-pr:${env.CHANGE_ID}"
           }
         }
       }
@@ -139,12 +137,26 @@ pipeline {
 
     post {
         always {
+            script {
+                if (env.CHANGE_ID) {
+                    // Notification preparation must not prevent the existing cleanup.
+                    catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+                        prComment = load 'ci/pr-comment.groovy'
+                        prComment.collectFailures()
+                    }
+                }
+            }
             /* Drop the test images and the layers they pinned, on success as well
                as on failure: a surviving esn_sabre_test would be reused by the
                next build's --skip-build stages instead of the one it just built. */
             sh 'docker image rm -f "esn_sabre_test:$TEST_IMAGE_TAG" "esn-sabre-ldap-test:$TEST_IMAGE_TAG" "esn_sabre_nginx_test:$TEST_IMAGE_TAG" || true'
             sh 'docker image prune -f || true'
             deleteDir() /* clean up our workspace */
+        }
+        cleanup {
+            script {
+                prComment?.postResult()
+            }
         }
     }
 }

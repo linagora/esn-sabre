@@ -146,6 +146,7 @@ javatest() {
   if [ -n "$INTEGRATION_TEST_BRANCH" ]; then
     clone_options+=(--branch "$INTEGRATION_TEST_BRANCH")
   fi
+  rm -rf "$JAVA_REPORT_DIR"
   git clone "${clone_options[@]}" "$INTEGRATION_TEST_REPO" it-tests
   # pre-build.sh only treats the untagged name as a local image (built without --pull).
   docker tag "$SABRE_IMAGE" esn_sabre_test
@@ -154,7 +155,6 @@ javatest() {
   # As in integration-tests commit e920d102, each JVM gets its own compilation,
   # reports and Testcontainers stack; Docker images are built only once above.
   # Keep the workspaces outside it-tests so reports survive cleanup, also on failure.
-  rm -rf "$JAVA_REPORT_DIR"
   for group in "${groups[@]}"; do
     mkdir -p "$JAVA_REPORT_DIR/$group"
     cp -R it-tests/pom.xml it-tests/src "$JAVA_REPORT_DIR/$group/"
@@ -216,6 +216,8 @@ fi
 
 # PHP tests
 if [ "$SKIP_PHP" = false ]; then
+  rm -rf tests/report/php
+  mkdir -p tests/report/php
   if [ -n "$FILTER" ]; then
     echo "Running PHP tests with filter: $FILTER"
     docker compose -f docker-compose.test.yaml run --rm esn_test bash -c "sleep 5 && make lint && vendor/bin/phpunit -c tests/phpunit.xml --filter=$FILTER tests" || exit 1

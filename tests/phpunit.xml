@@ -9,6 +9,9 @@
          failOnRisky="true"
          failOnWarning="false"
          failOnDeprecation="false">
+  <logging>
+    <junit outputFile="report/php/junit.xml"/>
+  </logging>
   <source>
     <include>
       <directory suffix=".php">../lib/</directory>

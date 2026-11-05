@@ -57,6 +57,9 @@ services:
       - LDAP_SERVER=ldap://esn_ldap:389
       - LDAP_USERNAME_MODE=username
     working_dir: /var/www
+    volumes:
+      # Keep PHPUnit reports after the one-off test container is removed.
+      - ./tests/report/php:/var/www/tests/report/php
     networks:
       - esn-sabre-test-net
     command: bash -c "sleep 5 && make test"

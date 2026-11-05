@@ -496,6 +496,15 @@ class Subscription extends Collection implements ISubscription, IAddressBook, IS
     }
 
     /**
+     * Returns the path of the source address book, as SharedAddressBook::getShareResourceUri does.
+     *
+     * @return string
+     */
+    function getShareResourceUri() {
+        return trim($this->subscriptionInfo['{http://open-paas.org/contacts}source'], '/');
+    }
+
+    /**
      * Returns a list of ACE's for this node.
      *
      * Each ACE has the following properties:

@@ -194,7 +194,9 @@ Published by `AMQPSchedulePlugin` so Twake Calendar Side Service can fan out iTI
 
 ## CardDAV — Contacts
 
-### `sabre:contact:created` / `sabre:contact:updated`
+### `sabre:contact:created` / `sabre:contact:updated` / `sabre:contact:deleted`
+
+Whichever way a contact is written (directly, or through a subscribed or delegated address book), one message is published for the source address book:
 
 ```json
 {
@@ -206,32 +208,20 @@ Published by `AMQPSchedulePlugin` so Twake Calendar Side Service can fan out iTI
 }
 ```
 
-`carddata` is a contact object following [JSContact (RFC 9553)](https://www.rfc-editor.org/rfc/rfc9553).
-
-### `sabre:contact:deleted`
+and one for each subscribed or delegated address book of that source, on its own path and with its own owner:
 
 ```json
 {
-  "path": "addressbooks/{userId}/{addressbookUri}/{contactId}.vcf",
-  "owner": "principals/users/{userId}",
-  "carddata": "<contact-as-json>",
-  "syncToken": 1234,
-  "etag": "\"<md5>\""
-}
-```
-
-For subscribed address books, a second message is published with `sourcePath` added:
-
-```json
-{
-  "path": "addressbooks/{subscriberUserId}/{addressbookUri}/{contactId}.vcf",
+  "path": "addressbooks/{mirrorUserId}/{mirrorAddressbookUri}/{contactId}.vcf",
   "sourcePath": "addressbooks/{sourceUserId}/{sourceAddressbookUri}/{contactId}.vcf",
-  "owner": "principals/users/{sourceUserId}",
+  "owner": "principals/users/{mirrorUserId}",
   "carddata": "<contact-as-json>",
   "syncToken": 1234,
   "etag": "\"<md5>\""
 }
 ```
+
+`carddata` is a contact object following [JSContact (RFC 9553)](https://www.rfc-editor.org/rfc/rfc9553). `syncToken` is the one of the source address book.
 
 ---
 

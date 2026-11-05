@@ -159,8 +159,7 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
      * MKCOL, MKCALENDAR, ACL and XML POST bodies go through the same deserialisers.
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('xmlBodyMethods')]
-    function testIllFormedBodyIsRejectedForEveryXmlMethod($method, $fixture, array $headers) {
-        $body = file_get_contents(__DIR__ . '/fixtures/' . $fixture);
+    function testIllFormedBodyIsRejectedForEveryXmlMethod($method, $body, array $headers) {
         set_time_limit(5); // the loop would otherwise hang the suite
 
         $start = microtime(true);
@@ -173,16 +172,34 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
     }
 
     static function xmlBodyMethods() {
+        $bodies = [
+            'report-keyvalue-loop.xml' => file_get_contents(__DIR__ . '/fixtures/report-keyvalue-loop.xml'),
+            'mkcol-prop-loop.xml' => file_get_contents(__DIR__ . '/fixtures/mkcol-prop-loop.xml'),
+            'mismatched MKCOL set/prop' => <<<'XML'
+                <?xml version="1.0" encoding="utf-8"?>
+                <D:mkcol xmlns:D="DAV:" xmlns:CS="http://calendarserver.orNg/n/s">
+
+                    <D:resourcetype><D:colletion/><CS:subscribed/></D:resourcetype>
+                    <D:displayname>Sub</D:displayname>
+                    FFFFFFFFFFFFFFFFFF FFFF <D:set><D:prop>
+                    <D:resourcetype>4D:collection/><CS:subscribed/></D:resourcetype>
+                    <D:displayname>Sub</D:displayname>
+                   FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF[FF o FFFFFFFFFFFFFFFFFF<CS:source>~<D:href>/calendars/user4/cal1</D:href></CS:source>
+                  </D:prop></D:set>
+                </D:okcol>
+                XML . "\n",
+        ];
+
         $methods = [];
-        foreach (['report-keyvalue-loop.xml', 'mkcol-prop-loop.xml', 'mkcol-set-prop-mismatched-loop.xml'] as $fixture) {
+        foreach ($bodies as $name => $body) {
             $methods += [
-                "MKCOL $fixture" => ['MKCOL', $fixture, []],
-                "MKCOL text/xml $fixture" => ['MKCOL', $fixture, ['Content-Type' => 'text/xml; charset=utf-8']],
-                "MKCALENDAR $fixture" => ['MKCALENDAR', $fixture, []],
-                "MKCALENDAR without Content-Type $fixture" => ['MKCALENDAR', $fixture, ['Content-Type' => 'text/plain']],
-                "ACL $fixture" => ['ACL', $fixture, []],
-                "POST $fixture" => ['POST', $fixture, []],
-                "POST davsharing $fixture" => ['POST', $fixture, ['Content-Type' => 'application/davsharing+xml']]
+                "MKCOL $name" => ['MKCOL', $body, []],
+                "MKCOL text/xml $name" => ['MKCOL', $body, ['Content-Type' => 'text/xml; charset=utf-8']],
+                "MKCALENDAR $name" => ['MKCALENDAR', $body, []],
+                "MKCALENDAR without Content-Type $name" => ['MKCALENDAR', $body, ['Content-Type' => 'text/plain']],
+                "ACL $name" => ['ACL', $body, []],
+                "POST $name" => ['POST', $body, []],
+                "POST davsharing $name" => ['POST', $body, ['Content-Type' => 'application/davsharing+xml']]
             ];
         }
 

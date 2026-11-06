@@ -195,7 +195,7 @@ class BinaryAttachmentPlugin extends ServerPlugin {
         foreach ($pending as [$component, $attachment, $filename, $type, $content]) {
             $uri = $this->uploader->upload($authorization, $filename, $type, $content);
             if ($this->trustedUrlBase !== null && !$this->trustedUrlBase->accepts($uri)) {
-                throw new \Sabre\DAV\Exception\ServiceUnavailable('Uploaded attachment URL is not trusted by this server.');
+                throw new AttachmentUploadException();
             }
             $replacements[] = [$component, $attachment, $filename, $type, $uri];
         }

@@ -5,7 +5,6 @@ namespace ESN\CalDAV;
 use ESN\CalDAV\Schedule\AMQPSchedulePlugin;
 use ESN\Publisher\CalDAV\EventRealTimePlugin;
 use ESN\Publisher\Publisher;
-use Sabre\DAV\Exception\ServiceUnavailable;
 use Sabre\HTTP\Request;
 
 require_once ESN_TEST_BASE . '/DAV/ServerMock.php';
@@ -62,9 +61,11 @@ class AttachmentUploadPublicationTest extends \ESN\DAV\ServerMock {
     }
 
     function testFailedUploadDoesNotPersistOrPublish() {
-        $this->uploader->expects($this->once())->method('upload')->willThrowException(new ServiceUnavailable('upload unavailable'));
+        $this->uploader->expects($this->once())->method('upload')->willThrowException(new AttachmentUploadException());
 
-        $this->assertSame(503, $this->put($this->calendar())->status);
+        $response = $this->put($this->calendar());
+        $this->assertSame(503, $response->status);
+        $this->assertSame('upload-failed', $response->getHeader('X-Twake-Attachment-Error'));
 
         $this->assertNull($this->storedObject());
         $this->assertSame([], $this->published);

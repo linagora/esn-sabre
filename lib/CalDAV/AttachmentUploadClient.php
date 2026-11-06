@@ -2,7 +2,6 @@
 
 namespace ESN\CalDAV;
 
-use Sabre\DAV\Exception\ServiceUnavailable;
 use Sabre\HTTP\Client;
 use Sabre\HTTP\Request;
 use Sabre\HTTP\ResponseInterface;
@@ -53,7 +52,7 @@ class AttachmentUploadClient {
             return $this->parseUploadResponse($response);
         } catch (\Throwable $error) {
             // Do not expose response bodies, credentials or public share codes in DAV errors.
-            throw new ServiceUnavailable('Attachment upload failed. Please retry saving the event.');
+            throw new AttachmentUploadException();
         }
     }
 

@@ -34,8 +34,8 @@ class AttachmentUploadClientTest extends TestCase {
             try {
                 $client->upload('Bearer user-token', 'file.bin', 'application/octet-stream', 'binary');
                 $this->fail('Invalid upload response was accepted');
-            } catch (\Sabre\DAV\Exception\ServiceUnavailable $error) {
-                $this->assertSame('Attachment upload failed. Please retry saving the event.', $error->getMessage());
+            } catch (AttachmentUploadException $error) {
+                $this->assertSame('Could not upload the attachment. Please try saving the event again.', $error->getMessage());
             }
         }
     }
@@ -48,9 +48,11 @@ class AttachmentUploadClientTest extends TestCase {
             try {
                 $client->upload('Bearer user-token', 'file.bin', 'application/octet-stream', 'binary');
                 $this->fail('Unexpected status was accepted');
-            } catch (\Sabre\DAV\Exception\ServiceUnavailable $error) {
-                $this->assertSame('Attachment upload failed. Please retry saving the event.', $error->getMessage());
+            } catch (AttachmentUploadException $error) {
+                $this->assertSame('Could not upload the attachment. Please try saving the event again.', $error->getMessage());
                 $this->assertNull($error->getPrevious());
+                $this->assertSame(503, $error->getHTTPCode());
+                $this->assertSame(['X-Twake-Attachment-Error' => 'upload-failed'], $error->getHTTPHeaders(new \Sabre\DAV\Server()));
             }
         }
     }

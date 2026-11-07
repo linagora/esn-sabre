@@ -48,7 +48,7 @@ class MigrationCommandTest extends TestCase
         [$code, $output] = $this->runCommand(['--on-startup']);
 
         $this->assertSame(0, $code, $output);
-        $this->assertSame(1, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(2, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
         $this->assertStringContainsString('Database migration runner completed', $output);
     }
 
@@ -68,7 +68,7 @@ class MigrationCommandTest extends TestCase
         [$code, $output] = $this->runCommand([], 'false');
 
         $this->assertSame(0, $code, $output);
-        $this->assertSame(1, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(2, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
         $this->assertStringContainsString('Database migration runner completed', $output);
     }
 }

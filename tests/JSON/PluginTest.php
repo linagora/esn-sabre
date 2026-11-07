@@ -993,6 +993,48 @@ END:VCALENDAR
         $this->assertEquals(403, $response->status);
     }
 
+    public static function privateOverrideOrders() {
+        return [
+            'private override after public master' => [false],
+            'private override before public master' => [true],
+        ];
+    }
+
+    #[DataProvider('privateOverrideOrders')]
+    function test403ModifyOwnerPrivateOverrideViaDelegatedCalendar($overrideFirst) {
+        $delegatedEventUri = $this->givenOwnerPrivateEventInDelegatedCalendar($this->seriesWithPrivateOverride($overrideFirst));
+
+        $response = $this->requestAsDelegate('PUT', $delegatedEventUri, 'text/calendar', $this->seriesWithPrivateOverride(!$overrideFirst));
+
+        $this->assertEquals(403, $response->status);
+        $this->assertStringContainsString('Hospital',
+            $this->caldavBackend->getCalendarObject($this->delegatedCal['id'], 'privateRecurEvent.ics')['calendardata']);
+    }
+
+    #[DataProvider('privateOverrideOrders')]
+    function test403DeleteOwnerPrivateOverrideViaDelegatedCalendar($overrideFirst) {
+        $delegatedEventUri = $this->givenOwnerPrivateEventInDelegatedCalendar($this->seriesWithPrivateOverride($overrideFirst));
+
+        $response = $this->requestAsDelegate('DELETE', $delegatedEventUri);
+
+        $this->assertEquals(403, $response->status);
+        $this->assertNotNull($this->caldavBackend->getCalendarObject($this->delegatedCal['id'], 'privateRecurEvent.ics'));
+    }
+
+    private function seriesWithPrivateOverride($overrideFirst) {
+        $master = ['BEGIN:VEVENT', 'UID:series', 'DTSTAMP:20260101T000000Z',
+            'DTSTART:20260101T090000Z', 'DTEND:20260101T100000Z', 'RRULE:FREQ=WEEKLY;COUNT=3',
+            'CLASS:PUBLIC', 'SUMMARY:Weekly sync', 'END:VEVENT'];
+        $override = ['BEGIN:VEVENT', 'UID:series', 'DTSTAMP:20260101T000000Z',
+            'RECURRENCE-ID:20260108T090000Z', 'DTSTART:20260108T090000Z', 'DTEND:20260108T100000Z',
+            'CLASS:PRIVATE', 'SUMMARY:Doctor', 'LOCATION:Hospital', 'END:VEVENT'];
+
+        return implode("\r\n", array_merge(
+            ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN'],
+            $overrideFirst ? array_merge($override, $master) : array_merge($master, $override),
+            ['END:VCALENDAR', '']));
+    }
+
     function testOwnerCanModifyPrivateCalendarObjectsOfDelegatedCalendar() {
         $this->givenOwnerPrivateEventInDelegatedCalendar();
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
@@ -1007,8 +1049,8 @@ END:VCALENDAR
         $this->assertEquals(204, $response->status);
     }
 
-    private function givenOwnerPrivateEventInDelegatedCalendar() {
-        $this->caldavBackend->createCalendarObject($this->delegatedCal['id'], 'privateRecurEvent.ics', $this->privateRecurEvent);
+    private function givenOwnerPrivateEventInDelegatedCalendar($calendarData = null) {
+        $this->caldavBackend->createCalendarObject($this->delegatedCal['id'], 'privateRecurEvent.ics', $calendarData ?? $this->privateRecurEvent);
         $this->caldavBackend->updateInvites($this->delegatedCal['id'], [
             new \Sabre\DAV\Xml\Element\Sharee([
                 'href'       => 'mailto:johndoe@example.org',

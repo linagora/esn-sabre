@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV\Backend\Service;
 
+use ESN\Utils\Utils;
 use ESN\Utils\VObjectCache;
 use \Sabre\DAV\Exception\BadRequest;
 use \Sabre\VObject;
@@ -49,7 +50,7 @@ class CalendarDataNormalizer {
 
         $componentType = $component->name;
         $uid = (string) $component->UID;
-        $classification = isset($component->CLASS) ? strtoupper((string) $component->CLASS) : null;
+        $classification = $this->calculateClassification($vObject);
 
         list($firstOccurence, $lastOccurence) = $this->calculateOccurrences($component, $vObject);
 
@@ -62,6 +63,29 @@ class CalendarDataNormalizer {
             'uid' => $uid,
             'classification' => $classification,
         ];
+    }
+
+    /**
+     * Every read-side privacy gate trusts the stored classification: an object
+     * is private as soon as one of its components is, typically a private
+     * override of a public series, whatever the component order.
+     *
+     * @param VObject\Component\VCalendar $vObject
+     * @return string|null The first private CLASS, else the first CLASS
+     */
+    private function calculateClassification($vObject) {
+        $classification = null;
+        foreach ($vObject->getComponents() as $component) {
+            if ($component->name === 'VTIMEZONE' || !isset($component->CLASS)) {
+                continue;
+            }
+            $value = strtoupper((string) $component->CLASS);
+            if ($classification === null
+                || (Utils::isPrivateClassification($value) && !Utils::isPrivateClassification($classification))) {
+                $classification = $value;
+            }
+        }
+        return $classification;
     }
 
     /**

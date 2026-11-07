@@ -65,6 +65,57 @@ class PrivateEventPluginTest extends \ESN\DAV\ServerMock {
         $this->assertSame(strlen($properties['calendar-data']), $properties['getcontentlength']);
     }
 
+    public static function privateOverrideOrders() {
+        return [
+            'private override after public master' => [false],
+            'private override before public master' => [true],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateOverrideOrders')]
+    function testGetHidesPrivateOverrideOfPublicSeries($overrideFirst) {
+        $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'series.ics', $this->seriesWithPrivateOverride($overrideFirst));
+
+        $body = $this->getBody(self::PUBLIC_CALENDAR_PATH . 'series.ics');
+
+        $this->assertStringContainsString('Weekly sync', $body);
+        $this->assertStringNotContainsString('Hospital', $body);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateOverrideOrders')]
+    function testPropFindHidesPrivateOverrideOfPublicSeries($overrideFirst) {
+        $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'series.ics', $this->seriesWithPrivateOverride($overrideFirst));
+
+        $properties = $this->propFind(self::PUBLIC_CALENDAR_PATH . 'series.ics', '0', '<c:calendar-data/><d:getcontentlength/>');
+
+        $this->assertStringNotContainsString('Hospital', $properties['calendar-data']);
+        $this->assertSame(strlen($properties['calendar-data']), $properties['getcontentlength']);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateOverrideOrders')]
+    function testCopyOfPublicSeriesWithPrivateOverrideIsForbidden($overrideFirst) {
+        $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'series.ics', $this->seriesWithPrivateOverride($overrideFirst));
+
+        $response = $this->copyOrMove('COPY', self::PUBLIC_CAL . '/series.ics', self::OWN_CAL . '/copy.ics');
+
+        $this->assertEquals(403, $response->status);
+        $this->assertNull($this->caldavBackend->getCalendarObject($this->cal['id'], 'copy.ics'));
+    }
+
+    private function seriesWithPrivateOverride($overrideFirst) {
+        $master = ['BEGIN:VEVENT', 'UID:series', 'DTSTAMP:20260101T000000Z',
+            'DTSTART:20260101T090000Z', 'DTEND:20260101T100000Z', 'RRULE:FREQ=WEEKLY;COUNT=3',
+            'CLASS:PUBLIC', 'SUMMARY:Weekly sync', 'END:VEVENT'];
+        $override = ['BEGIN:VEVENT', 'UID:series', 'DTSTAMP:20260101T000000Z',
+            'RECURRENCE-ID:20260108T090000Z', 'DTSTART:20260108T090000Z', 'DTEND:20260108T100000Z',
+            'CLASS:PRIVATE', 'SUMMARY:Doctor', 'LOCATION:Hospital', 'END:VEVENT'];
+
+        return implode("\r\n", array_merge(
+            ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN'],
+            $overrideFirst ? array_merge($override, $master) : array_merge($master, $override),
+            ['END:VCALENDAR', '']));
+    }
+
     private function privateEvent($location) {
         return implode("\r\n", [
             'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN',

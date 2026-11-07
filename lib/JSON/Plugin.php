@@ -254,14 +254,17 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function checkModificationsRights($path, \Sabre\DAV\IFile $node) {
         if ($node instanceof \Sabre\CalDAV\ICalendarObject) {
-            // Shared instance: the privacy check only reads the VEVENT.
+            // Shared instance: the privacy check only reads the VEVENTs.
             $vcalendar = VObjectCachePlugin::cacheFor($this->server)->read($node->get());
             // Ownership is read on the calendar: the objects of a delegated calendar
             // carry the principal of the delegate, not the one of the owner.
             list($calendarPath) = \Sabre\Uri\split($path);
             $calendar = $this->server->tree->getNodeForPath($calendarPath);
-            if (Utils::isHiddenPrivateEvent($vcalendar->VEVENT, $calendar, $this->currentUser)) {
-                throw new DAV\Exception\Forbidden('You can not modify private events you do not own');
+            // Any VEVENT: a private override of a public series is private too.
+            foreach ($vcalendar->select('VEVENT') as $vevent) {
+                if (Utils::isHiddenPrivateEvent($vevent, $calendar, $this->currentUser)) {
+                    throw new DAV\Exception\Forbidden('You can not modify private events you do not own');
+                }
             }
         }
         return true;

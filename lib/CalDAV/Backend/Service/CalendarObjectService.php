@@ -482,7 +482,7 @@ class CalendarObjectService {
      * @return bool
      */
     private function validateFilterForObjectWithVObject($vObject, array $filters) {
-        $validator = new \Sabre\CalDAV\CalendarQueryValidator();
+        $validator = new \ESN\CalDAV\CalendarQueryValidator();
 
         try {
             return $validator->validate($vObject, $filters);

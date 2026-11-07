@@ -263,7 +263,7 @@ if (SABRE_ENV === SABRE_ENV_DEV) {
 }
 
 // Calendar Ics Export support
-$icsExportPlugin = new Sabre\CalDAV\ICSExportPlugin();
+$icsExportPlugin = new ESN\CalDAV\ICSExportPlugin();
 $server->addPlugin($icsExportPlugin);
 
 // Rabbit publisher plugins - use lazy AMQP connection (only opens when publish() is called)

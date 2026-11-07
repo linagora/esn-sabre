@@ -508,4 +508,62 @@ class CalendarQueryReportTest extends \ESN\DAV\ServerMock {
 
         $this->assertEquals(400, $response->status);
     }
+
+    /**
+     * A daily series with a reminder whose first occurrence was moved, the
+     * override having no VALARM (linagora/sabre-vobject#170).
+     */
+    private function createSeriesWithOverrideWithoutAlarm() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'moved-first.ics', implode("\r\n", [
+            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN',
+            'BEGIN:VEVENT', 'UID:moved-first', 'DTSTAMP:20260101T000000Z',
+            'DTSTART:20260101T100000Z', 'RRULE:FREQ=DAILY;COUNT=20',
+            'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', 'DESCRIPTION:x', 'END:VALARM',
+            'END:VEVENT',
+            'BEGIN:VEVENT', 'UID:moved-first', 'DTSTAMP:20260101T000000Z',
+            'RECURRENCE-ID:20260101T100000Z', 'DTSTART:20260101T150000Z',
+            'END:VEVENT',
+            'END:VCALENDAR', ''
+        ]));
+
+        return '/calendars/54b64eadf6d7d8e41d263e0f/calendar1/moved-first.ics';
+    }
+
+    private function alarmTimeRangeQuery($start, $end) {
+        return $this->vEventQuery('<c:comp-filter name="VALARM"><c:time-range start="' . $start . '" end="' . $end . '"/></c:comp-filter>');
+    }
+
+    function testAlarmTimeRangeMatchesSeriesWhoseFirstOverrideHasNoAlarm() {
+        $href = $this->createSeriesWithOverrideWithoutAlarm();
+
+        $hrefs = $this->reportHrefs('/calendars/54b64eadf6d7d8e41d263e0f/calendar1',
+            $this->alarmTimeRangeQuery('20260101T000000Z', '20260105T180000Z'));
+
+        $this->assertContains($href, $hrefs);
+    }
+
+    function testDepthZeroAlarmTimeRangeMatchesSeriesWhoseFirstOverrideHasNoAlarm() {
+        $href = $this->createSeriesWithOverrideWithoutAlarm();
+
+        $this->assertContains($href, $this->reportHrefs($href,
+            $this->alarmTimeRangeQuery('20260101T000000Z', '20260105T180000Z'), '0'));
+        $this->assertNotContains($href, $this->reportHrefs($href,
+            $this->alarmTimeRangeQuery('20260301T000000Z', '20260401T000000Z'), '0'));
+    }
+
+    function testDepthZeroReturnsCalendarDataOnlyWhenRequested() {
+        $href = $this->createSeriesWithOverrideWithoutAlarm();
+        $filter = '<c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"/></c:comp-filter></c:filter>';
+
+        $withoutData = $this->parseMultiStatus($this->reportRequest($href, '<?xml version="1.0"?>'
+            . '<c:calendar-query xmlns:d="DAV:" xmlns:c="' . self::CALDAV_NS . '"><d:prop><d:getetag/></d:prop>'
+            . $filter . '</c:calendar-query>', '0')->getBodyAsString());
+        $withData = $this->parseMultiStatus($this->reportRequest($href, '<?xml version="1.0"?>'
+            . '<c:calendar-query xmlns:d="DAV:" xmlns:c="' . self::CALDAV_NS . '"><d:prop><c:calendar-data/></d:prop>'
+            . $filter . '</c:calendar-query>', '0')->getBodyAsString());
+
+        $this->assertNull($withoutData[$href]['calendar-data']);
+        $this->assertNotNull($withoutData[$href]['etag']);
+        $this->assertStringContainsString('UID:moved-first', $withData[$href]['calendar-data']);
+    }
 }

@@ -2,6 +2,7 @@
 namespace ESN\CalDAV;
 
 use DateTimeZone;
+use Sabre\CalDAV\ICalendarObject;
 use Sabre\CalDAV\ICalendarObjectContainer;
 use Sabre\DAV\Server;
 use Sabre\VObject\Reader;
@@ -32,9 +33,10 @@ class Report {
      *
      * We override the Depth: 1 calendar-collection case to fetch the calendar
      * data of all matching objects in a single batch, exactly like
-     * ICSExportPlugin does for export. Every other shape (direct object,
-     * Depth: 0, ...) is rare and delegated to $fallback, which runs the stock
-     * implementation.
+     * ICSExportPlugin does for export. A calendar object queried directly
+     * (Depth: 0) is matched here too, as the stock implementation does but with
+     * {@see CalendarQueryValidator}. Every other shape is rare and delegated to
+     * $fallback, which runs the stock implementation.
      *
      * @param \Sabre\CalDAV\Xml\Request\CalendarQueryReport $report
      * @param callable $fallback Runs the stock Sabre implementation.
@@ -45,9 +47,13 @@ class Report {
         $node = $this->server->tree->getNodeForPath($path);
         $depth = $this->server->getHTTPDepth(0);
 
+        if ($node instanceof ICalendarObject && $depth == 0) {
+            $this->sendMultiStatus($this->buildCalendarObjectResult($report, $path));
+
+            return;
+        }
+
         if (!($node instanceof ICalendarObjectContainer) || ($depth != 1 && !$this->isMicrosoftDepthZero($depth))) {
-            // A calendar object queried directly (Depth: 0) is matched by the stock implementation on
-            // its calendar-data property, which PrivateEventPlugin already sanitizes.
             $fallback();
 
             return;
@@ -66,6 +72,55 @@ class Report {
     private function isMicrosoftDepthZero($depth) {
         return $depth == 0
             && strpos((string) $this->server->httpRequest->getHeader('User-Agent'), 'MSFT-') === 0;
+    }
+
+    /**
+     * The multistatus response entries of a calendar-query REPORT on a calendar
+     * object (Depth: 0): the object itself when it matches the filters, as the
+     * stock implementation does, but matched with {@see CalendarQueryValidator}
+     * (linagora/sabre-vobject#170). The calendar-data property it is matched on
+     * is the one PrivateEventPlugin already sanitizes.
+     *
+     * @param \Sabre\CalDAV\Xml\Request\CalendarQueryReport $report
+     * @param string $path
+     * @return array
+     */
+    private function buildCalendarObjectResult($report, $path) {
+        $calendarDataProp = '{' . self::NS_CALDAV . '}calendar-data';
+
+        $requestedProperties = $report->properties;
+        $requestedCalendarData = in_array($calendarDataProp, $requestedProperties);
+        if (!$requestedCalendarData) {
+            // Always retrieved, as it is needed for filtering.
+            $requestedProperties[] = $calendarDataProp;
+        }
+
+        $properties = current($this->server->getPropertiesForPath($path, $requestedProperties, 0));
+        if (!isset($properties[200][$calendarDataProp])) {
+            return [];
+        }
+
+        $vObject = Reader::read($properties[200][$calendarDataProp]);
+        try {
+            $matches = (new CalendarQueryValidator())->validate($vObject, $report->filters);
+        } finally {
+            $vObject->destroy();
+        }
+
+        if (!$matches) {
+            return [];
+        }
+
+        if (!$requestedCalendarData) {
+            unset($properties[200][$calendarDataProp]);
+
+            return [$properties];
+        }
+
+        $needsJson = $report->contentType === 'application/calendar+json';
+        $calendarTimeZone = $report->expand ? $this->resolveCalendarTimeZone($path) : null;
+
+        return [$this->renderBatchedProperties($properties, $report, $needsJson, $calendarTimeZone)];
     }
 
     /**

@@ -35,7 +35,7 @@ class MigrationRunnerTest extends TestCase
     {
         $runner = new MigrationRunner($this->database, $this->logger);
         $runner->run();
-        $this->assertSame(1, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(2, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
         $this->assertTrue($this->logs->hasInfoThatContains('Database schema version saved'));
         $this->assertTrue($this->logs->hasInfoThatContains('Database migration runner completed'));
 
@@ -146,6 +146,6 @@ class MigrationRunnerTest extends TestCase
         }
         $this->database->command(['collMod' => 'db_version', 'validator' => new \stdClass()]);
         $runner->run();
-        $this->assertSame(1, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(2, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
     }
 }

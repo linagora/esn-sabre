@@ -75,7 +75,7 @@ of `config.json`.
 | `PRINCIPAL_PRIVACY` | `true` | Restrict DAV principal discovery |
 | `TRUSTED_VIDEO_URL_BASE` | unset | Keep only video conference URLs at this base; unset leaves links untouched |
 | `TRUSTED_ATTACH_URL_BASE` | unset | Keep only calendar ATTACH and contact PHOTO URLs at this base; unset leaves links untouched |
-| `CALDAV_BINARY_ATTACHMENT_MODE` | `filter` | Inline binary attachment policy: `allow`, `reject` or `filter` |
+| `CALDAV_BINARY_ATTACHMENT_MODE` | `filter` | Inline binary attachment policy: `allow`, `reject`, `filter` or experimental `offload` |
 | `CARDDAV_INLINE_ATTACHMENT_MODE` | `filter` | Inline contact photo policy: `allow`, `reject` or `filter` |
 | `SABRE_ENFORCE_RFC_6638` | `true` | Reject attendee updates to organizer-controlled scheduling fields |
 | `SABRE_EMAIL_VALARM_RECIPIENT_SCHEDULING` | `true` | Recipient-aware scheduling for `ACTION:EMAIL` `VALARM` components |
@@ -138,6 +138,7 @@ Feature flag to control how inline binary attachments (`ATTACH;ENCODING=BASE64;V
    - `filter` : silently strip inline binary attachments from the stored object (default)
    - `reject` : reject any request carrying an inline binary attachment with `403 Forbidden`
    - `allow`  : store the object as-is, inline binary attachments included
+   - `offload` : upload inline attachments to TDrive and replace them with URLs before saving
 
    Inline binaries can significantly bloat calendar objects; the default `filter` keeps them out of storage while still accepting the request. Use `allow` to opt back into the historical behaviour, or `reject` to surface an explicit error to clients.
 
@@ -179,6 +180,16 @@ Expansion always starts from the first occurrence (`DTSTART`), whatever the requ
 - Default: `3500`. Unset, empty, `0` or non-numeric values are treated as `3500`.
 - Set to a negative value to disable the limit. Expansion then remains bounded by year 2100.
 - This limit protects the server against events crafted to recur many times: raise it with care.
+
+## Nginx request body limit
+
+Set `NGINX_CLIENT_MAX_BODY_SIZE` on the Sabre container to control the maximum
+size of an HTTP request body. The default is `1m` (1 MiB). Use a positive
+integer in bytes or append `k` or `m`.
+
+CalDAV clients embed file contents as Base64 in the iCalendar body. For example,
+`16m` leaves room for up to 10 MiB of files plus Base64, line folding and event
+metadata. This setting applies to all requests served by the container's Nginx.
 
 ## Nginx rate limiting
 

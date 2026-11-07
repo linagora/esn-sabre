@@ -2,6 +2,7 @@
 
 namespace ESN\Utils\Migration;
 
+use ESN\CalDAV\Migration\Version0002RecomputePrivateOverrideClassification;
 use ESN\CardDAV\Migration\Version0001BackfillContactSortFields;
 use MongoDB\Collection;
 use MongoDB\Database;
@@ -13,7 +14,10 @@ class MigrationRunner
 
     public function __construct(private Database $database, private LoggerInterface $logger, ?array $migrations = null)
     {
-        $this->migrations = $migrations ?? [1 => new Version0001BackfillContactSortFields()];
+        $this->migrations = $migrations ?? [
+            1 => new Version0001BackfillContactSortFields(),
+            2 => new Version0002RecomputePrivateOverrideClassification(),
+        ];
     }
 
     public function run(): void

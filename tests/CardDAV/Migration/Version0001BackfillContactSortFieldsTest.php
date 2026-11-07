@@ -106,7 +106,7 @@ class Version0001BackfillContactSortFieldsTest extends TestCase
         $runner->run();
         $this->assertSame(501, $this->database->cards->countDocuments(['fn_sort' => ['$exists' => true]]));
         $this->assertSame('Contact', $this->database->cards->findOne(['_id' => 502])['fn_sort']);
-        $this->assertSame(1, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(2, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
         $records = $this->logs->getRecords();
         $batchLogs = array_values(array_filter($records, fn ($record) => $record['message'] === 'Contact sort backfill batch completed'));
         $this->assertCount(2, $batchLogs);
@@ -147,7 +147,7 @@ class Version0001BackfillContactSortFieldsTest extends TestCase
         $this->assertSame('New name', $this->database->cards->findOne(['_id' => 1])['fn_sort']);
         $this->assertSame('new@example.org', $this->database->cards->findOne(['_id' => 1])['email_sort']);
         $this->assertEquals($updated, $this->database->cards->findOne(['_id' => 1]));
-        $this->assertSame(1, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(2, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
     }
 
     public static function invalidCards(): array
@@ -181,7 +181,7 @@ class Version0001BackfillContactSortFieldsTest extends TestCase
         $this->database->command(['collMod' => 'cards', 'validator' => new \stdClass()]);
         $runner->run();
         $this->assertSame(2, $this->database->cards->countDocuments(['fn_sort' => 'Contact', 'email_sort' => '']));
-        $this->assertSame(1, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(2, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
     }
 
     #[DataProvider('invalidCards')]
@@ -194,7 +194,7 @@ class Version0001BackfillContactSortFieldsTest extends TestCase
 
         $this->assertEquals($invalid, $this->database->cards->findOne(['_id' => 1]));
         $this->assertSame('Contact', $this->database->cards->findOne(['_id' => 2])['fn_sort']);
-        $this->assertSame(1, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(2, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
         $this->assertTrue($this->logs->hasWarningThatContains('Skipping contact'));
         $this->assertFalse($this->logs->hasErrorRecords());
     }

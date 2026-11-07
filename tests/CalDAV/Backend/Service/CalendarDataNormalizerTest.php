@@ -203,4 +203,39 @@ class CalendarDataNormalizerTest extends TestCase {
         $this->assertEquals(strtotime('20250101T100000Z'), $d['firstOccurence']);
         $this->assertEquals(strtotime('20250110T150000Z'), $d['lastOccurence']);
     }
+    private const PUBLIC_MASTER = "BEGIN:VEVENT\r\nUID:c\r\nDTSTAMP:20250101T000000Z\r\n"
+        . "DTSTART:20250101T100000Z\r\nDTEND:20250101T110000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\nCLASS:PUBLIC\r\nEND:VEVENT\r\n";
+
+    private static function override(string $class): string {
+        return "BEGIN:VEVENT\r\nUID:c\r\nDTSTAMP:20250101T000000Z\r\nRECURRENCE-ID:20250102T100000Z\r\n"
+            . "DTSTART:20250102T100000Z\r\nDTEND:20250102T110000Z\r\nCLASS:$class\r\nSUMMARY:Doctor\r\nEND:VEVENT\r\n";
+    }
+
+    public static function privateOverrideOrders(): array {
+        return [
+            'private override after public master' => [self::PUBLIC_MASTER . self::override('PRIVATE'), 'PRIVATE'],
+            'private override before public master' => [self::override('PRIVATE') . self::PUBLIC_MASTER, 'PRIVATE'],
+            'confidential override after public master' => [self::PUBLIC_MASTER . self::override('confidential'), 'CONFIDENTIAL'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateOverrideOrders')]
+    public function testPrivateOverrideMakesTheObjectPrivate(string $vevents, string $expected): void {
+        $this->assertSame($expected, $this->denormalize($vevents)['classification']);
+    }
+
+    public function testPrivateEventAfterPublicTodoMakesTheObjectPrivate(): void {
+        $todo = "BEGIN:VTODO\r\nUID:t\r\nDTSTAMP:20250101T000000Z\r\nCLASS:PUBLIC\r\nEND:VTODO\r\n";
+
+        $this->assertSame('PRIVATE', $this->denormalize($todo . self::override('PRIVATE'))['classification']);
+    }
+
+    public function testPublicSeriesKeepsItsClassification(): void {
+        $this->assertSame('PUBLIC', $this->denormalize(self::PUBLIC_MASTER . self::override('PUBLIC'))['classification']);
+    }
+
+    public function testClassificationIsNullWithoutClass(): void {
+        $this->assertNull($this->denormalize("BEGIN:VEVENT\r\nUID:n\r\nDTSTAMP:20250101T000000Z\r\n"
+            . "DTSTART:20250101T100000Z\r\nEND:VEVENT\r\n")['classification']);
+    }
 }

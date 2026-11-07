@@ -2,7 +2,6 @@
 namespace ESN\CalDAV;
 
 use ESN\Utils\Utils;
-use Sabre\CalDAV\CalendarQueryValidator;
 use Sabre\CalDAV\ICalendarObjectContainer;
 use Sabre\VObject\Reader;
 

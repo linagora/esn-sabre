@@ -1,7 +1,6 @@
 <?php
 namespace ESN\CalDAV;
 
-use Sabre\DAV;
 use Sabre\VObject;
 
 /**
@@ -18,6 +17,8 @@ use Sabre\VObject;
  */
 class ICSExportPlugin extends \Sabre\CalDAV\ICSExportPlugin {
 
+    const OBJECT_COMPONENTS = ['VEVENT', 'VTODO', 'VJOURNAL'];
+
     /**
      * Merges all calendar objects, and builds one big iCalendar blob.
      *
@@ -26,165 +27,86 @@ class ICSExportPlugin extends \Sabre\CalDAV\ICSExportPlugin {
      * @return VObject\Component\VCalendar
      */
     public function mergeObjects(array $properties, array $inputObjects) {
-        $calendar = new VObject\Component\VCalendar();
-        $calendar->VERSION = '2.0';
-        if (DAV\Server::$exposeVersion) {
-            $calendar->PRODID = '-//SabreDAV//SabreDAV ' . DAV\Version::VERSION . '//EN';
-        } else {
-            $calendar->PRODID = '-//SabreDAV//SabreDAV//EN';
-        }
-        if (isset($properties['{DAV:}displayname'])) {
-            $calendar->{'X-WR-CALNAME'} = $properties['{DAV:}displayname'];
-        }
-        if (isset($properties['{http://apple.com/ns/ical/}calendar-color'])) {
-            $calendar->{'X-APPLE-CALENDAR-COLOR'} = $properties['{http://apple.com/ns/ical/}calendar-color'];
-        }
+        // The calendar itself, with its properties and no object.
+        $calendar = parent::mergeObjects($properties, []);
 
-        // TZID => [serialized VTIMEZONE => [TZID it is exported under, name of the zone it resolves to]]
-        $collectedTimezones = [];
-        // Every TZID exported so far
-        $usedTzids = [];
-
-        $timezones = [];
+        $timezones = new ExportedTimezones();
         $objects = [];
-
         foreach ($inputObjects as $inputObject) {
             $nodeComp = VObject\Reader::read($inputObject);
 
             // getComponents(), not children(): a property of the VCALENDAR
             // named like a component is not one.
             $components = $nodeComp->getComponents();
+            $renamedTzids = $this->exportTimezones($components, $timezones);
+            $objects = array_merge($objects, $this->exportedObjects($components, $renamedTzids));
 
-            // TZID in this object => TZID it is exported under, when it differs
-            $renamedTzids = [];
-            $seenTzids = [];
-            foreach ($components as $child) {
-                if ($child->name !== 'VTIMEZONE') {
-                    continue;
-                }
-
-                $tzid = (string) $child->TZID;
-                if (isset($seenTzids[$tzid])) {
-                    // The object itself reads its TZID with its first definition.
-                    continue;
-                }
-                $seenTzids[$tzid] = true;
-
-                $exportedTzid = $this->findCollectedTimezone($collectedTimezones, $child);
-                if ($exportedTzid === null) {
-                    $exportedTzid = $this->uniqueTzid($tzid, $usedTzids);
-
-                    $timezone = clone $child;
-                    if ($exportedTzid !== $tzid) {
-                        $timezone->TZID = $exportedTzid;
-                    }
-                    $timezones[] = $timezone;
-                    $collectedTimezones[$tzid][$child->serialize()] = [$exportedTzid, $this->resolvedTimezoneName($child)];
-                    $usedTzids[$exportedTzid] = true;
-                }
-                if ($exportedTzid !== $tzid) {
-                    $renamedTzids[$tzid] = $exportedTzid;
-                }
-            }
-
-            foreach ($components as $child) {
-                switch ($child->name) {
-                    case 'VEVENT':
-                    case 'VTODO':
-                    case 'VJOURNAL':
-                        $object = clone $child;
-                        if ($renamedTzids) {
-                            $this->renameTzidParameters($object, $renamedTzids);
-                        }
-                        $objects[] = $object;
-                        break;
-                }
-            }
             // Destroy circular references to PHP will GC the object.
             $nodeComp->destroy();
-            unset($nodeComp);
         }
 
-        foreach ($timezones as $tz) {
-            $calendar->add($tz);
-        }
-        foreach ($objects as $obj) {
-            $calendar->add($obj);
+        foreach (array_merge($timezones->components(), $objects) as $component) {
+            $calendar->add($component);
         }
 
         return $calendar;
     }
 
     /**
-     * The TZID an already collected definition of the TZID of $vtimezone is
-     * exported under, when it is the same zone: the same serialization, or
-     * the same resolved time zone. Null when there is none.
+     * Adds the time zones of one object to the export.
      *
-     * @param array $collectedTimezones
-     * @param VObject\Component $vtimezone
-     * @return string|null
+     * @param VObject\Component[] $components The components of the object
+     * @param ExportedTimezones $timezones
+     * @return array TZID in the object => TZID it is exported under, when they differ
      */
-    private function findCollectedTimezone(array $collectedTimezones, VObject\Component $vtimezone) {
-        $tzid = (string) $vtimezone->TZID;
-        if (!isset($collectedTimezones[$tzid])) {
-            return null;
-        }
-
-        $serialized = $vtimezone->serialize();
-        if (isset($collectedTimezones[$tzid][$serialized])) {
-            return $collectedTimezones[$tzid][$serialized][0];
-        }
-
-        // Clients write their own definition of the same well-known zone.
-        $resolvedName = $this->resolvedTimezoneName($vtimezone);
-        if ($resolvedName !== null) {
-            foreach ($collectedTimezones[$tzid] as list($exportedTzid, $collectedName)) {
-                if ($collectedName === $resolvedName) {
-                    return $exportedTzid;
-                }
+    private function exportTimezones(array $components, ExportedTimezones $timezones) {
+        $renamedTzids = [];
+        foreach ($this->firstDefinitions($components) as $vtimezone) {
+            $tzid = (string) $vtimezone->TZID;
+            $exportedTzid = $timezones->add($vtimezone);
+            if ($exportedTzid !== $tzid) {
+                $renamedTzids[$tzid] = $exportedTzid;
             }
         }
 
-        return null;
+        return $renamedTzids;
     }
 
     /**
-     * The name of the time zone a VTIMEZONE resolves to in its object, null
-     * when it does not resolve.
+     * The first VTIMEZONE of each TZID: the object itself reads its TZID with it.
      *
-     * @param VObject\Component $vtimezone
-     * @return string|null
+     * @param VObject\Component[] $components
+     * @return VObject\Component[]
      */
-    private function resolvedTimezoneName(VObject\Component $vtimezone) {
-        if (!$vtimezone instanceof VObject\Component\VTimeZone) {
-            return null;
+    private function firstDefinitions(array $components) {
+        $definitions = [];
+        foreach ($components as $component) {
+            if ($component->name === 'VTIMEZONE' && !isset($definitions[(string) $component->TZID])) {
+                $definitions[(string) $component->TZID] = $component;
+            }
         }
 
-        try {
-            return $vtimezone->getTimeZone()->getName();
-        } catch (\Exception $e) {
-            return null;
-        }
+        return array_values($definitions);
     }
 
     /**
-     * $tzid, or $tzid followed by the first free "-N" suffix.
+     * Copies of the objects of $components, with their TZID parameters renamed.
      *
-     * @param string $tzid
-     * @param array $usedTzids TZID => true
-     * @return string
+     * @param VObject\Component[] $components
+     * @param array $renamedTzids TZID => new TZID
+     * @return VObject\Component[]
      */
-    private function uniqueTzid($tzid, array $usedTzids) {
-        if (!isset($usedTzids[$tzid])) {
-            return $tzid;
+    private function exportedObjects(array $components, array $renamedTzids) {
+        $objects = [];
+        foreach ($components as $component) {
+            if (in_array($component->name, self::OBJECT_COMPONENTS, true)) {
+                $object = clone $component;
+                $this->renameTzidParameters($object, $renamedTzids);
+                $objects[] = $object;
+            }
         }
 
-        $suffix = 2;
-        while (isset($usedTzids[$tzid . '-' . $suffix])) {
-            $suffix++;
-        }
-
-        return $tzid . '-' . $suffix;
+        return $objects;
     }
 
     /**
@@ -199,12 +121,25 @@ class ICSExportPlugin extends \Sabre\CalDAV\ICSExportPlugin {
         foreach ($component->children() as $child) {
             if ($child instanceof VObject\Component) {
                 $this->renameTzidParameters($child, $renamedTzids);
-            } elseif (isset($child['TZID'])) {
-                $tzid = (string) $child['TZID'];
-                if (isset($renamedTzids[$tzid])) {
-                    $child['TZID'] = $renamedTzids[$tzid];
-                }
+            } else {
+                $this->renameTzidParameter($child, $renamedTzids);
             }
+        }
+    }
+
+    /**
+     * @param VObject\Property $property
+     * @param array $renamedTzids TZID => new TZID
+     * @return void
+     */
+    private function renameTzidParameter(VObject\Property $property, array $renamedTzids) {
+        if (!isset($property['TZID'])) {
+            return;
+        }
+
+        $tzid = (string) $property['TZID'];
+        if (isset($renamedTzids[$tzid])) {
+            $property['TZID'] = $renamedTzids[$tzid];
         }
     }
 }

@@ -272,40 +272,33 @@ class AddressBook extends \Sabre\CardDAV\AddressBook implements \ESN\DAV\ISortab
                 continue;
             }
 
-            switch($sharee->access) {
-                case SPlugin::ACCESS_ADMINISTRATION:
-                    $acl[] = [
-                        'privilege' => '{DAV:}share',
-                        'principal' => $sharee->principal,
-                        'protected' => true
-                    ];
-                case SPlugin::ACCESS_READWRITE:
-                    $acl[] = [
-                        'privilege' => '{DAV:}write-content',
-                        'principal' => $sharee->principal,
-                        'protected' => true
-                    ];
-                    $acl[] = [
-                        'privilege' => '{DAV:}bind',
-                        'principal' => $sharee->principal,
-                        'protected' => true
-                    ];
-                    $acl[] = [
-                        'privilege' => '{DAV:}unbind',
-                        'principal' => $sharee->principal,
-                        'protected' => true
-                    ];
-                case SPlugin::ACCESS_READ:
-                    $acl[] = [
-                        'privilege' => '{DAV:}read',
-                        'principal' => $sharee->principal,
-                        'protected' => true
-                    ];
-                    break;
+            foreach ($this->privilegesGrantedBy($sharee->access) as $privilege) {
+                $acl[] = [
+                    'privilege' => $privilege,
+                    'principal' => $sharee->principal,
+                    'protected' => true
+                ];
             }
         }
 
         return $acl;
+    }
+
+    /**
+     * Each access level grants its own privileges explicitly: an administrator
+     * can also write and read, a read-write sharee can also read.
+     */
+    private function privilegesGrantedBy($access) {
+        switch ((int) $access) {
+            case SPlugin::ACCESS_ADMINISTRATION:
+                return ['{DAV:}share', '{DAV:}write-content', '{DAV:}bind', '{DAV:}unbind', '{DAV:}read'];
+            case SPlugin::ACCESS_READWRITE:
+                return ['{DAV:}write-content', '{DAV:}bind', '{DAV:}unbind', '{DAV:}read'];
+            case SPlugin::ACCESS_READ:
+                return ['{DAV:}read'];
+            default:
+                return [];
+        }
     }
 
 }

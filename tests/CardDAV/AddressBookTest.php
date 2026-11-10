@@ -203,6 +203,55 @@ class AddressBookTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(0, $backend->getInvitesCalls);
         $this->assertEquals(0, $backend->getAddressBookPublicRightCalls);
     }
+
+    function testAdministrationShareeIsGrantedShareWriteAndRead() {
+        $this->assertEquals(
+            ['{DAV:}share', '{DAV:}write-content', '{DAV:}bind', '{DAV:}unbind', '{DAV:}read'],
+            $this->privilegesOfSharee(\ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION, SPlugin::INVITE_ACCEPTED)
+        );
+    }
+
+    function testReadWriteShareeIsGrantedWriteAndRead() {
+        $this->assertEquals(
+            ['{DAV:}write-content', '{DAV:}bind', '{DAV:}unbind', '{DAV:}read'],
+            $this->privilegesOfSharee(SPlugin::ACCESS_READWRITE, SPlugin::INVITE_ACCEPTED)
+        );
+    }
+
+    function testReadShareeIsGrantedReadOnly() {
+        $this->assertEquals(
+            ['{DAV:}read'],
+            $this->privilegesOfSharee(SPlugin::ACCESS_READ, SPlugin::INVITE_ACCEPTED)
+        );
+    }
+
+    function testShareeWithoutAcceptedInviteIsGrantedNothing() {
+        $this->assertEquals(
+            [],
+            $this->privilegesOfSharee(\ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION, SPlugin::INVITE_NORESPONSE)
+        );
+    }
+
+    private function privilegesOfSharee($access, $inviteStatus) {
+        $backend = new CountingCardDAVBackend($this->sabredb);
+        $backend->sharees = [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'principal' => 'principals/users/user2',
+                'access' => $access,
+                'inviteStatus' => $inviteStatus,
+            ])
+        ];
+        $book = new AddressBook($backend, $this->bookInfo);
+
+        $shareeEntries = array_filter($book->getACL(), function ($ace) {
+            return $ace['principal'] === 'principals/users/user2';
+        });
+        foreach ($shareeEntries as $ace) {
+            $this->assertTrue($ace['protected']);
+        }
+
+        return array_values(array_map(function ($ace) { return $ace['privilege']; }, $shareeEntries));
+    }
 }
 
 class CountingCardDAVBackend extends \ESN\CardDAV\Backend\Mongo {

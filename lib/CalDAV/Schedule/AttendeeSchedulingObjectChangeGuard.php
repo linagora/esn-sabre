@@ -33,7 +33,8 @@ class AttendeeSchedulingObjectChangeGuard {
         $oldEvents = self::indexEvents($oldObject, $timeZone);
         $newEvents = self::indexEvents($newObject, $timeZone);
 
-        self::assertSameMaster($oldMaster, $newMaster, $forbiddenProperties);
+        self::assertSameMaster($oldMaster, $newMaster, $forbiddenProperties, $timeZone);
+        self::assertNoOccurrenceAdded($oldMaster, $newMaster, $oldEvents, $newEvents, $timeZone, $forbiddenProperties);
 
         $oldGeneratedInstances = self::generatedInstances($oldMaster, $timeZone);
         $newGeneratedInstances = self::generatedInstances($newMaster, $timeZone);
@@ -109,13 +110,121 @@ class AttendeeSchedulingObjectChangeGuard {
         return $start instanceof \Sabre\VObject\Property\ICalendar\DateTime ? $start->isFloating() : null;
     }
 
-    private static function assertSameMaster($oldMaster, $newMaster, array $forbiddenProperties): void {
+    private static function assertSameMaster($oldMaster, $newMaster, array $forbiddenProperties, \DateTimeZone $timeZone): void {
         if ($oldMaster && $newMaster) {
             self::assertSameExplicitEvent($oldMaster, $newMaster, $forbiddenProperties);
+            self::assertSameDuration($oldMaster, $newMaster, $timeZone);
         } elseif ($newMaster) {
             // A master the old copy did not have generates instances the organizer never sent.
             throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
         }
+    }
+
+    /**
+     * DTEND alone does not tell the length of the occurrences: a master with a
+     * DURATION has none, and so would compare equal whatever its DURATION.
+     *
+     * @throws ForbiddenAttendeeSchedulingObjectChange
+     */
+    private static function assertSameDuration($oldMaster, $newMaster, \DateTimeZone $timeZone): void {
+        if (self::duration($oldMaster, $timeZone) !== self::duration($newMaster, $timeZone)) {
+            throw new ForbiddenAttendeeSchedulingObjectChange('DTEND');
+        }
+    }
+
+    private static function duration($vevent, \DateTimeZone $timeZone): ?int {
+        try {
+            [$start, $end] = self::eventBounds($vevent, $timeZone);
+
+            return $end->getTimestamp() - $start->getTimestamp();
+        } catch (\Throwable) {
+            // DTSTART and DTEND signatures are compared anyway.
+            return null;
+        }
+    }
+
+    /**
+     * The instance-by-instance comparison only visits the keys of explicit
+     * overrides: the occurrences only the new master generates (changed
+     * RRULE, RDATE, EXRULE, removed EXDATE) must be looked up too. Each of
+     * them must be one the old master generated, which allows the removal of
+     * occurrences (lower COUNT, earlier UNTIL, added EXDATE) and nothing else.
+     *
+     * @throws ForbiddenAttendeeSchedulingObjectChange
+     */
+    private static function assertNoOccurrenceAdded($oldMaster, $newMaster, array $oldEvents, array $newEvents, \DateTimeZone $timeZone, array $forbiddenProperties): void {
+        if (!$oldMaster || !$newMaster) {
+            return;
+        }
+
+        $oldGeneratedInstances = self::generatedInstances($oldMaster, $timeZone);
+        $newGeneratedInstances = self::generatedInstances($newMaster, $timeZone);
+        $uncheckedKeys = array_filter(
+            self::occurrenceKeysTheNewMasterMayAdd($oldMaster, $newMaster, $timeZone),
+            fn(string $key): bool => !isset($oldEvents[$key]) && !isset($newEvents[$key])
+        );
+        foreach ($uncheckedKeys as $key) {
+            self::assertSameInstance($oldGeneratedInstances($key), $newGeneratedInstances($key), $forbiddenProperties);
+        }
+    }
+
+    /**
+     * Chronological keys of the occurrences the new master may generate while
+     * the old one did not. With the same recurrence rule (DTSTART is compared
+     * already), only the old EXDATEs may be brought back. Otherwise the whole
+     * new series is expanded, which an endless one cannot be.
+     *
+     * @throws ForbiddenAttendeeSchedulingObjectChange
+     */
+    private static function occurrenceKeysTheNewMasterMayAdd($oldMaster, $newMaster, \DateTimeZone $timeZone): array {
+        try {
+            return self::hasSameRecurrenceRule($oldMaster, $newMaster)
+                ? self::chronological(array_values(array_unique(self::excludedOccurrenceKeys($oldMaster, $timeZone))))
+                : self::expandedOccurrenceKeys($newMaster, $timeZone);
+        } catch (\Sabre\VObject\Recur\NoInstancesException) {
+            return [];
+        } catch (ForbiddenAttendeeSchedulingObjectChange $e) {
+            throw $e;
+        } catch (\Throwable) {
+            // Fail closed: occurrences we cannot enumerate cannot be proven scheduled by the organizer.
+            throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
+        }
+    }
+
+    private static function hasSameRecurrenceRule($oldMaster, $newMaster): bool {
+        $recurrenceProperties = ['RRULE', 'RDATE', 'EXRULE'];
+
+        return array_reduce(
+            $recurrenceProperties,
+            fn(bool $same, string $propertyName): bool => $same
+                && CalendarObjectHelper::propertySignatures($oldMaster, $propertyName) === CalendarObjectHelper::propertySignatures($newMaster, $propertyName),
+            true
+        );
+    }
+
+    private static function excludedOccurrenceKeys($master, \DateTimeZone $timeZone): array {
+        $keys = [];
+        foreach ($master->select('EXDATE') as $exdate) {
+            foreach ($exdate->getDateTimes($timeZone) as $excluded) {
+                $keys[] = 'at:' . $excluded->getTimestamp();
+            }
+        }
+
+        return $keys;
+    }
+
+    private static function expandedOccurrenceKeys($master, \DateTimeZone $timeZone): array {
+        $iterator = new EventIterator([$master], null, $timeZone);
+        if ($iterator->isInfinite()) {
+            throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
+        }
+
+        $keys = [];
+        for (; $iterator->valid(); $iterator->next()) {
+            $keys[] = 'at:' . $iterator->current()->getTimestamp();
+        }
+
+        return $keys;
     }
 
     /**

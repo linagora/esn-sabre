@@ -251,6 +251,119 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         }
     }
 
+    function testRecurrenceRuleChangeOfTheMasterIsRefused() {
+        $master = fn(string $rule) => [
+            'UID:event-uid',
+            'DTSTART:20350104T090000Z',
+            'DTEND:20350104T100000Z',
+            $rule,
+            'SUMMARY:Daily',
+            'LOCATION:Room 1',
+            'ORGANIZER:mailto:org@example.org',
+            'ATTENDEE:mailto:att@example.org',
+        ];
+
+        $this->assertRefused(
+            self::calendar($master('RRULE:FREQ=DAILY;COUNT=5')),
+            self::calendar($master('RRULE:FREQ=WEEKLY;COUNT=5')),
+            'DTSTART'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotAddOccurrencesThroughTheRecurrenceRule(SeriesKind $kind) {
+        $this->assertRefused(
+            self::calendar(self::master($kind)),
+            self::calendar(self::master($kind, ['RRULE' => 'RRULE:FREQ=DAILY;COUNT=31'])),
+            'DTSTART'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotAddOccurrencesThroughAnRdate(SeriesKind $kind) {
+        $rdate = $kind === SeriesKind::Timed
+            ? 'RDATE;TZID=Europe/Paris:20350301T090000'
+            : 'RDATE;VALUE=DATE:20350301';
+
+        $this->assertRefused(
+            self::calendar(self::master($kind)),
+            self::calendar(self::master($kind, ['RDATE' => $rdate])),
+            'DTSTART'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotMakeTheSeriesEndless(SeriesKind $kind) {
+        $this->assertRefused(
+            self::calendar(self::master($kind)),
+            self::calendar(self::master($kind, ['RRULE' => 'RRULE:FREQ=DAILY'])),
+            'DTSTART'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotBringBackAnOccurrenceTheOrganizerExcluded(SeriesKind $kind) {
+        $this->assertRefused(
+            self::calendar(self::master($kind, ['EXDATE' => self::exdateLine($kind, self::OCCURRENCE)])),
+            self::calendar(self::master($kind)),
+            'DTSTART'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCanShortenTheSeries(SeriesKind $kind) {
+        $this->assertAllowed(
+            self::calendar(self::master($kind)),
+            self::calendar(self::master($kind, ['RRULE' => 'RRULE:FREQ=DAILY;COUNT=10']))
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCanEndTheSeriesEarlier(SeriesKind $kind) {
+        $until = $kind === SeriesKind::Timed ? '20350110T080000Z' : '20350110';
+
+        $this->assertAllowed(
+            self::calendar(self::master($kind)),
+            self::calendar(self::master($kind, ['RRULE' => 'RRULE:FREQ=DAILY;UNTIL=' . $until]))
+        );
+    }
+
+    function testAttendeeCanEndAnEndlessSeries() {
+        $this->assertAllowed(
+            self::calendar(self::master(SeriesKind::Timed, ['RRULE' => 'RRULE:FREQ=DAILY'])),
+            self::calendar(self::master(SeriesKind::Timed, ['RRULE' => 'RRULE:FREQ=DAILY;COUNT=10']))
+        );
+    }
+
+    function testAttendeeCanExcludeAnOccurrenceOfAnEndlessSeries() {
+        $this->assertAllowed(
+            self::calendar(self::master(SeriesKind::Timed, ['RRULE' => 'RRULE:FREQ=DAILY'])),
+            self::calendar(self::master(SeriesKind::Timed, ['RRULE' => 'RRULE:FREQ=DAILY', 'EXDATE' => self::exdateLine(SeriesKind::Timed, self::OCCURRENCE)]))
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCanShortenTheSeriesKeepingAnOrganizerOverride(SeriesKind $kind) {
+        $override = self::override($kind, self::OCCURRENCE, ['SUMMARY' => 'SUMMARY:Moved by organizer']);
+
+        $this->assertAllowed(
+            self::calendar(self::master($kind), $override),
+            self::calendar(self::master($kind, ['RRULE' => 'RRULE:FREQ=DAILY;COUNT=10']), $override)
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotChangeTheDurationOfTheMaster(SeriesKind $kind) {
+        $duration = fn(string $value) => self::master($kind, ['DTEND' => null, 'DURATION' => 'DURATION:' . $value]);
+        [$organizerDuration, $attendeeDuration] = $kind === SeriesKind::Timed ? ['PT1H', 'PT2H'] : ['P1D', 'P2D'];
+
+        $this->assertRefused(
+            self::calendar($duration($organizerDuration)),
+            self::calendar($duration($attendeeDuration)),
+            'DTEND'
+        );
+    }
+
     function testAttendeeCannotRewriteAnOverrideRecurrenceIdAsFloating() {
         $this->assertRefused(
             self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE)),

@@ -36,6 +36,7 @@ class BinaryAttachmentPlugin extends ServerPlugin {
     const MODE_FILTER = 'filter';
     const MODE_OFFLOAD = 'offload';
     private static string $ATTACH_PROPERTY = 'ATTACH';
+    private static string $MIME_TYPE_PATTERN = '/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+$/';
 
     /**
      * @var string
@@ -184,9 +185,9 @@ class BinaryAttachmentPlugin extends ServerPlugin {
         // Validate the full set before creating any files.
         $pending = $this->collectAttachmentsToUpload($calendar);
 
-        // Forward only the authenticated user's credential; side-service resolves the uploader itself.
+        // Authentication is handled by the DAV auth plugin. The upload API still needs the header.
         $authorization = $request->getHeader('Authorization') ?? '';
-        if ($pending && !preg_match('/^(Basic|Bearer) [^\\s]+$/', $authorization)) {
+        if ($pending && $authorization === '') {
             throw new \Sabre\DAV\Exception\Forbidden('Attachment upload requires Basic or Bearer user authentication.');
         }
 
@@ -229,7 +230,7 @@ class BinaryAttachmentPlugin extends ServerPlugin {
                 if (!is_string($content) || strlen($content) > 5 * 1024 * 1024 || ($total += strlen($content)) > 10 * 1024 * 1024
                     || count($pending) >= 20 || $filename === '' || strlen($filename) > 160
                     || preg_match('/[\x00-\x1f\x7f\/\\\\]/', $filename)
-                    || !preg_match('/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+$/', $type)) {
+                    || !preg_match(self::$MIME_TYPE_PATTERN, $type)) {
                     throw new \Sabre\DAV\Exception\BadRequest('Invalid or oversized binary attachment.');
                 }
                 $pending[] = [$component, $attachment, $filename, $type, $content];

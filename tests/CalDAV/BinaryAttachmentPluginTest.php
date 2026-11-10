@@ -15,6 +15,7 @@ use Sabre\VObject;
  * @medium
  */
 class BinaryAttachmentPluginTest extends TestCase {
+    private const AUTHORIZATION = 'basic Ym9iOnBhc3M=';
 
     private function calendarWithBinaryAttach() {
         return <<<ICS
@@ -208,7 +209,7 @@ ICS;
 
     private function emitOffloadChange($server, $calendar) {
         $modified = false;
-        $server->emit('calendarObjectChange', [new Request('PUT', '/calendars/bob/default/test.ics', ['Authorization' => 'Bearer user-token']), new Response(),
+        $server->emit('calendarObjectChange', [new Request('PUT', '/calendars/bob/default/test.ics', ['Authorization' => self::AUTHORIZATION]), new Response(),
             $calendar, 'calendars/bob/default', &$modified, true]);
         return $modified;
     }
@@ -216,7 +217,7 @@ ICS;
     function testConvertsMultipleAttachmentsBeforeSchedulingAndUsesAuthenticatedUploader() {
         $client = $this->createMock(AttachmentUploadClient::class);
         $client->expects($this->exactly(2))->method('upload')->willReturnCallback(function ($authorization, $name, $type, $content) {
-            $this->assertSame('Bearer user-token', $authorization);
+            $this->assertSame(self::AUTHORIZATION, $authorization);
             $this->assertContains($content, ["\x00\x01\x02\xff\r\n", 'second']);
             return 'https://bob-drive.example.test/public?sharecode=' . $name . '#/';
         });

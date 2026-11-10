@@ -2,11 +2,21 @@
 
 namespace ESN\CalDAV;
 
+use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
 use Sabre\HTTP\Client;
 use Sabre\HTTP\Response;
 
 class AttachmentUploadClientTest extends TestCase {
+    #[TestWith(['https://side-service/api/attachments?query=value'])]
+    #[TestWith(['https://side-service/api/attachments#fragment'])]
+    #[TestWith(['https://user@side-service/api/attachments'])]
+    function testRejectsInvalidUploadEndpoint(string $endpoint) {
+        $this->expectException(\InvalidArgumentException::class);
+
+        new AttachmentUploadClient($endpoint);
+    }
+
     function testUsesSideServiceContractAndForwardsUserAuthorization() {
         foreach (['Bearer user-token', 'Basic Ym9iOnBhc3N3b3Jk'] as $authorization) {
             $http = $this->createMock(Client::class);

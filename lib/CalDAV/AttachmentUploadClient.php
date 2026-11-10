@@ -13,13 +13,9 @@ class AttachmentUploadClient {
         private string $endpoint,
         ?Client $client = null
     ) {
-        if (
-            !in_array(parse_url($endpoint, PHP_URL_SCHEME), ['http', 'https'], true)
-            || !parse_url($endpoint, PHP_URL_HOST)
-            || parse_url($endpoint, PHP_URL_USER)
-            || parse_url($endpoint, PHP_URL_QUERY)
-            || parse_url($endpoint, PHP_URL_FRAGMENT)
-        ) {
+        $endpointParts = $this->parseUploadUrl($endpoint);
+        $hasQueryOrFragment = !empty($endpointParts['query']) || !empty($endpointParts['fragment']);
+        if ($endpointParts === null || $hasQueryOrFragment) {
             throw new \InvalidArgumentException('Attachment upload endpoint must be configured');
         }
 
@@ -64,16 +60,26 @@ class AttachmentUploadClient {
         $result = json_decode($response->getBodyAsString(), true, 32, JSON_THROW_ON_ERROR);
         $uri = $result['uri'] ?? '';
 
-        if (
-            !is_string($uri)
-            || !in_array(parse_url($uri, PHP_URL_SCHEME), ['https', 'http'], true)
-            || !parse_url($uri, PHP_URL_HOST)
-            || parse_url($uri, PHP_URL_USER)
-            || preg_match('/[\x00-\x20\x7f]/', $uri)
-        ) {
+        if (!$this->isValidAttachmentUri($uri)) {
             throw new \RuntimeException('Attachment service returned invalid metadata');
         }
 
         return $uri;
+    }
+
+    private function isValidAttachmentUri(mixed $uri): bool {
+        if (!is_string($uri)) {
+            return false;
+        }
+
+        return $this->parseUploadUrl($uri) !== null && !preg_match('/[\x00-\x20\x7f]/', $uri);
+    }
+
+    private function parseUploadUrl(string $url): ?array {
+        $parts = parse_url($url);
+        $isHttp = in_array($parts['scheme'] ?? '', ['http', 'https'], true);
+        $hasHostWithoutUser = !empty($parts['host']) && empty($parts['user']);
+
+        return $isHttp && $hasHostWithoutUser ? $parts : null;
     }
 }

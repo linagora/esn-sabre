@@ -309,14 +309,31 @@ class AttendeeSchedulingObjectChangeGuard {
         return [$start, $end];
     }
 
+    /**
+     * DTSTART / DTEND carry their floating form next to their instant: a
+     * floating value only matches a zoned one because it is resolved in the
+     * master's time zone, readers resolving it elsewhere (expansion in UTC,
+     * clients in other zones) see another instant. An instance generated from
+     * the master takes the form of the master's DTSTART / DTEND.
+     */
     private static function instanceFields($vevent, \DateTimeInterface $start, int $end): array {
         return [
-            'DTSTART' => [$start->getTimestamp(), $vevent->DTSTART->hasTime()],
-            'DTEND' => $end,
+            'DTSTART' => [$start->getTimestamp(), $vevent->DTSTART->hasTime(), $vevent->DTSTART->isFloating()],
+            'DTEND' => [$end, self::isFloatingEnd($vevent)],
             'SUMMARY' => self::sortedValues($vevent, 'SUMMARY', false),
             'LOCATION' => self::sortedValues($vevent, 'LOCATION', false),
             'ORGANIZER' => self::sortedValues($vevent, 'ORGANIZER', true),
         ];
+    }
+
+    /**
+     * Without DTEND, the end derives from DTSTART (DURATION or default) and
+     * shares its form.
+     */
+    private static function isFloatingEnd($vevent): bool {
+        return isset($vevent->DTEND)
+            ? $vevent->DTEND->isFloating()
+            : $vevent->DTSTART->isFloating();
     }
 
     private static function sortedValues($vevent, string $propertyName, bool $isAddress): array {

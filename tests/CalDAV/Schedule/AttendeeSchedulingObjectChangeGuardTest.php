@@ -292,6 +292,51 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         );
     }
 
+    function testAttendeeCannotOverrideAZonedOccurrenceWithAFloatingStart() {
+        // Resolved in the master's zone, the floating DTSTART matches the generated instance;
+        // expanded in UTC, it is an hour later than the organizer scheduled.
+        $this->assertRefused(
+            self::calendar(self::master(SeriesKind::Timed)),
+            self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE, [
+                'DTSTART' => 'DTSTART:' . self::OCCURRENCE . 'T090000',
+                'DTEND' => 'DTEND:' . self::OCCURRENCE . 'T100000',
+            ])),
+            'DTSTART'
+        );
+    }
+
+    function testAttendeeCannotOverrideAZonedOccurrenceWithAFloatingEnd() {
+        $this->assertRefused(
+            self::calendar(self::master(SeriesKind::Timed)),
+            self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE, [
+                'DTEND' => 'DTEND:' . self::OCCURRENCE . 'T100000',
+            ])),
+            'DTEND'
+        );
+    }
+
+    function testAttendeeCannotTurnTheMasterIntoAnOverrideWithAFloatingEnd() {
+        $this->assertRefused(
+            self::calendar(self::master(SeriesKind::Timed)),
+            self::calendar(self::master(SeriesKind::Timed, [
+                'RECURRENCE-ID' => self::recurrenceIdLine(SeriesKind::Timed, self::SERIES_START),
+                'DTEND' => 'DTEND:' . self::SERIES_START . 'T100000',
+            ])),
+            'DTEND'
+        );
+    }
+
+    function testAttendeeCanOverrideAZonedOccurrenceWithItsStartInUtc() {
+        // Another zoned spelling of the same instant: every reader sees the organizer's time.
+        $this->assertAllowed(
+            self::calendar(self::master(SeriesKind::Timed)),
+            self::calendar(self::master(SeriesKind::Timed), self::override(SeriesKind::Timed, self::OCCURRENCE, [
+                'DTSTART' => 'DTSTART:' . self::OCCURRENCE . 'T080000Z',
+                'DTEND' => 'DTEND:' . self::OCCURRENCE . 'T090000Z',
+            ]))
+        );
+    }
+
     #[DataProvider('seriesKinds')]
     function testAttendeeCannotGiveAnOverrideATextOrganizer(SeriesKind $kind) {
         $this->assertRefused(

@@ -195,11 +195,12 @@ When a user accepts a recurring event with exception, exceptions are also accept
 
 Controls how inline binary attachments (`ATTACH;ENCODING=BASE64;VALUE=BINARY`) are handled on calendar object creation and update. URI attachments (`ATTACH:https://...`) are always preserved.
 
-Three modes, selected via the `CALDAV_BINARY_ATTACHMENT_MODE` environment variable (see [CONFIGURE.md](./CONFIGURE.md)):
+Four modes, selected via the `CALDAV_BINARY_ATTACHMENT_MODE` environment variable (see [CONFIGURE.md](./CONFIGURE.md)):
 
 - `filter` (default): inline binary attachments are stripped from the stored object.
 - `reject`: requests carrying an inline binary attachment are rejected with `403 Forbidden`.
 - `allow`: the object is stored as-is, inline binary attachments included.
+- `offload` (experimental): upload inline attachments to TDrive before scheduling and replace them with URLs. Upload failures reject the write.
 
 ### ESN\CalDAV\VideoConferencePlugin
 

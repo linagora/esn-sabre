@@ -51,7 +51,7 @@ class AttendeeSchedulingObjectChangeGuard {
                 $oldEvent = self::counterpart($oldOverrides, $position);
 
                 if ($oldEvent && $newEvent) {
-                    self::assertSameExplicitEvent($oldEvent, $newEvent, $forbiddenProperties);
+                    self::assertSameExplicitEvent($oldEvent, $newEvent, $forbiddenProperties, $timeZone);
                 } else {
                     self::assertSameInstance(
                         self::instanceAt($oldEvent, $oldGeneratedInstances, $key, $timeZone),
@@ -112,7 +112,7 @@ class AttendeeSchedulingObjectChangeGuard {
 
     private static function assertSameMaster($oldMaster, $newMaster, array $forbiddenProperties, \DateTimeZone $timeZone): void {
         if ($oldMaster && $newMaster) {
-            self::assertSameExplicitEvent($oldMaster, $newMaster, $forbiddenProperties);
+            self::assertSameExplicitEvent($oldMaster, $newMaster, $forbiddenProperties, $timeZone);
             self::assertSameDuration($oldMaster, $newMaster, $timeZone);
         } elseif ($newMaster) {
             // A master the old copy did not have generates instances the organizer never sent.
@@ -170,15 +170,17 @@ class AttendeeSchedulingObjectChangeGuard {
 
     /**
      * Chronological keys of the occurrences the new master may generate while
-     * the old one did not. With the same recurrence rule (DTSTART is compared
-     * already), only the old EXDATEs may be brought back. Otherwise the whole
-     * new series is expanded, which an endless one cannot be.
+     * the old one did not. With the same recurrence rule expanded in the same
+     * time zone (the DTSTART instant is compared already), only the old
+     * EXDATEs may be brought back. Otherwise the whole new series is
+     * expanded, which an endless one cannot be: the same first instant in
+     * another time zone gives other occurrences across a DST change.
      *
      * @throws ForbiddenAttendeeSchedulingObjectChange
      */
     private static function occurrenceKeysTheNewMasterMayAdd($oldMaster, $newMaster, \DateTimeZone $timeZone): array {
         try {
-            return self::hasSameRecurrenceRule($oldMaster, $newMaster)
+            return self::hasSameRecurrenceRule($oldMaster, $newMaster) && self::hasSameTimeZone($oldMaster, $newMaster)
                 ? self::chronological(array_values(array_unique(self::excludedOccurrenceKeys($oldMaster, $timeZone))))
                 : self::expandedOccurrenceKeys($newMaster, $timeZone);
         } catch (\Sabre\VObject\Recur\NoInstancesException) {
@@ -200,6 +202,14 @@ class AttendeeSchedulingObjectChangeGuard {
                 && CalendarObjectHelper::propertySignatures($oldMaster, $propertyName) === CalendarObjectHelper::propertySignatures($newMaster, $propertyName),
             true
         );
+    }
+
+    /**
+     * A TZID the zone database does not know is resolved from the VTIMEZONE
+     * of each copy, which the attendee may have rewritten.
+     */
+    private static function hasSameTimeZone($oldMaster, $newMaster): bool {
+        return self::referenceTimeZone($oldMaster)->getName() === self::referenceTimeZone($newMaster)->getName();
     }
 
     private static function excludedOccurrenceKeys($master, \DateTimeZone $timeZone): array {
@@ -254,11 +264,46 @@ class AttendeeSchedulingObjectChangeGuard {
         }
     }
 
-    private static function assertSameExplicitEvent($oldEvent, $newEvent, array $forbiddenProperties): void {
+    private static function assertSameExplicitEvent($oldEvent, $newEvent, array $forbiddenProperties, \DateTimeZone $timeZone): void {
         foreach ($forbiddenProperties as $propertyName) {
             if (CalendarObjectHelper::propertySignatures($oldEvent, $propertyName) !== CalendarObjectHelper::propertySignatures($newEvent, $propertyName)) {
                 throw new ForbiddenAttendeeSchedulingObjectChange($propertyName);
             }
+        }
+        self::assertSameResolvedBounds($oldEvent, $newEvent, $forbiddenProperties, $timeZone);
+    }
+
+    /**
+     * The same DTSTART / DTEND text is another instant when its TZID points to
+     * a VTIMEZONE the attendee redefined: each copy resolves it against its
+     * own VTIMEZONE.
+     *
+     * @throws ForbiddenAttendeeSchedulingObjectChange
+     */
+    private static function assertSameResolvedBounds($oldEvent, $newEvent, array $forbiddenProperties, \DateTimeZone $timeZone): void {
+        $oldBounds = self::resolvedBounds($oldEvent, $timeZone);
+        $newBounds = self::resolvedBounds($newEvent, $timeZone);
+        $changedBound = array_find(
+            array_keys($newBounds),
+            fn(string $propertyName): bool => in_array($propertyName, $forbiddenProperties, true)
+                && $oldBounds[$propertyName] !== $newBounds[$propertyName]
+        );
+        if ($changedBound !== null) {
+            throw new ForbiddenAttendeeSchedulingObjectChange($changedBound);
+        }
+    }
+
+    /**
+     * Start and end instants of a VEVENT, null when they cannot be evaluated:
+     * their identical text is then compared through the signatures only.
+     */
+    private static function resolvedBounds($vevent, \DateTimeZone $timeZone): array {
+        try {
+            [$start, $end] = self::eventBounds($vevent, $timeZone);
+
+            return ['DTSTART' => $start->getTimestamp(), 'DTEND' => $end->getTimestamp()];
+        } catch (\Throwable) {
+            return ['DTSTART' => null, 'DTEND' => null];
         }
     }
 

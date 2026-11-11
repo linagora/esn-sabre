@@ -23,6 +23,8 @@ class XmlBodyDeserializationPluginTest extends \PHPUnit\Framework\TestCase {
         $server->addPlugin(new \Sabre\DAV\Sharing\Plugin());
         $server->addPlugin(new \Sabre\CalDAV\SharingPlugin());
         $server->addPlugin(new XmlBodyDeserializationPlugin());
+        // As \Sabre\DAVACL\Plugin does in production.
+        $server->xml->elementMap['{DAV:}acl'] = 'Sabre\\DAVACL\\Xml\\Property\\Acl';
 
         return $server;
     }
@@ -80,6 +82,34 @@ class XmlBodyDeserializationPluginTest extends \PHPUnit\Framework\TestCase {
     function testAclWithNamelessCompFilterShouldAnswerBadRequest() {
         $this->assertBadRequest($this->request('ACL',
             '<C:calendar-query xmlns:C="urn:ietf:params:xml:ns:caldav"><C:filter><C:comp-filter/></C:filter></C:calendar-query>'));
+    }
+
+    function testAclWithEmptyPrincipalHrefShouldAnswerBadRequest() {
+        $this->assertBadRequest($this->request('ACL',
+            '<D:acl xmlns:D="DAV:"><D:ace><D:principal><D:href/></D:principal>' .
+            '<D:grant><D:privilege><D:read/></D:privilege></D:grant></D:ace></D:acl>'));
+    }
+
+    function testAclWithBlankPrincipalHrefShouldAnswerBadRequest() {
+        $this->assertBadRequest($this->request('ACL',
+            "<D:acl xmlns:D=\"DAV:\"><D:ace><D:principal><D:href>\n</D:href></D:principal>" .
+            '<D:grant><D:privilege><D:read/></D:privilege></D:grant></D:ace></D:acl>'));
+    }
+
+    function testMkcolWithEmptyPrincipalHrefShouldAnswerBadRequest() {
+        $this->assertBadRequest($this->request('MKCOL',
+            '<D:acl xmlns:D="DAV:"><D:ace><D:principal><D:href/></D:principal>' .
+            '<D:grant><D:privilege><D:read/></D:privilege></D:grant></D:ace></D:acl>'));
+    }
+
+    function testAclWithUnknownPrincipalKeepsSabreBadRequest() {
+        $response = $this->request('ACL',
+            '<D:acl xmlns:D="DAV:"><D:ace><D:principal><D:self/></D:principal>' .
+            '<D:grant><D:privilege><D:read/></D:privilege></D:grant></D:ace></D:acl>');
+
+        // The deserialiser's own BadRequest passes through unchanged.
+        $this->assertEquals(400, $response->getStatus());
+        $this->assertStringNotContainsString('could not be deserialised', $response->getBodyAsString());
     }
 
     function testMalformedXmlIsLeftToSabreHandlers() {

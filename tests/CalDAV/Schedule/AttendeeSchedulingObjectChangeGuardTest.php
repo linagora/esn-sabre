@@ -450,6 +450,44 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         );
     }
 
+    function testAttendeeCannotMoveTheSeriesByRedefiningItsTimeZone() {
+        $this->assertRefused(
+            self::customTimeZoneCalendar('X-LIC-LOCATION:Europe/Paris', self::customTimeZoneSeries('COUNT=5')),
+            self::customTimeZoneCalendar('X-LIC-LOCATION:America/New_York', self::customTimeZoneSeries('COUNT=5')),
+            'DTSTART'
+        );
+    }
+
+    function testAttendeeCannotMoveAnOverrideByRedefiningItsTimeZone() {
+        // The attendee is only invited to this occurrence: their copy has no master.
+        $override = "BEGIN:VEVENT\r\nUID:event-uid\r\nRECURRENCE-ID:20350105T090000Z\r\n"
+            . "DTSTART;TZID=Custom:20350105T100000\r\nDTEND;TZID=Custom:20350105T110000\r\n"
+            . "SUMMARY:Daily\r\nORGANIZER:mailto:org@example.org\r\nATTENDEE:mailto:att@example.org\r\n"
+            . "DTSTAMP:20350101T000000Z\r\nEND:VEVENT\r\n";
+
+        $this->assertRefused(
+            self::customTimeZoneCalendar('X-LIC-LOCATION:Europe/Paris', $override),
+            self::customTimeZoneCalendar('X-LIC-LOCATION:America/New_York', $override),
+            'DTSTART'
+        );
+    }
+
+    function testAttendeeCannotShiftTheOccurrencesAfterADstChangeByRedefiningTheTimeZone() {
+        // The first instant is the same in both zones, the occurrences after the end of March are not.
+        $this->assertRefused(
+            self::customTimeZoneCalendar('X-LIC-LOCATION:Europe/Paris', self::customTimeZoneSeries('COUNT=100')),
+            self::customTimeZoneCalendar('X-LIC-LOCATION:Africa/Lagos', self::customTimeZoneSeries('COUNT=100')),
+            'DTSTART'
+        );
+    }
+
+    function testAttendeeCanRefreshTheDefinitionOfTheTimeZone() {
+        $this->assertAllowed(
+            self::customTimeZoneCalendar('X-LIC-LOCATION:Europe/Paris', self::customTimeZoneSeries('COUNT=5')),
+            self::customTimeZoneCalendar("X-LIC-LOCATION:Europe/Paris\r\nLAST-MODIFIED:20350101T000000Z", self::customTimeZoneSeries('COUNT=5'))
+        );
+    }
+
     #[DataProvider('seriesKinds')]
     function testAttendeeCannotGiveAnOverrideATextOrganizer(SeriesKind $kind) {
         $this->assertRefused(
@@ -762,6 +800,24 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         }
 
         return $calendar . "END:VCALENDAR\r\n";
+    }
+
+    /**
+     * A calendar whose events use a time zone the zone database does not know
+     * by its TZID, which vobject resolves from the embedded VTIMEZONE.
+     */
+    private static function customTimeZoneCalendar(string $timeZoneProperties, string $events): string {
+        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n"
+            . "BEGIN:VTIMEZONE\r\nTZID:Custom\r\n$timeZoneProperties\r\n"
+            . "BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n"
+            . $events
+            . "END:VCALENDAR\r\n";
+    }
+
+    private static function customTimeZoneSeries(string $count): string {
+        return "BEGIN:VEVENT\r\nUID:event-uid\r\nDTSTART;TZID=Custom:20350104T100000\r\nDTEND;TZID=Custom:20350104T110000\r\n"
+            . "RRULE:FREQ=DAILY;$count\r\nSUMMARY:Daily\r\nORGANIZER:mailto:org@example.org\r\n"
+            . "ATTENDEE:mailto:att@example.org\r\nDTSTAMP:20350101T000000Z\r\nEND:VEVENT\r\n";
     }
 
     private static function addDays(string $day, int $days): string {

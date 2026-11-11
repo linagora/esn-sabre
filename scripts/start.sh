@@ -129,6 +129,14 @@ render_rate_limit() {
 
 render_rate_limit
 
+# CalDAV clients embed file bytes as Base64 in the request body. Deployments
+# that accept attachments can raise this limit without changing Nginx's default.
+NGINX_CLIENT_MAX_BODY_SIZE=${NGINX_CLIENT_MAX_BODY_SIZE:-1m}
+[[ "$NGINX_CLIENT_MAX_BODY_SIZE" =~ ^[1-9][0-9]*[kKmM]?$ ]] \
+  || fail "NGINX_CLIENT_MAX_BODY_SIZE: invalid size (expected a positive size such as 1m or 16m)"
+printf 'client_max_body_size %s;\n' "$NGINX_CLIENT_MAX_BODY_SIZE" > /etc/nginx/conf.d/client_max_body_size.conf \
+  || fail "could not write the nginx request body limit"
+
 if [ -f /etc/nginx/sites-available/default.template ]; then
   cp /etc/nginx/sites-available/default.template /etc/nginx/sites-available/default
 fi

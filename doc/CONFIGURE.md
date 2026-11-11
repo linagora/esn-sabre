@@ -181,6 +181,16 @@ Expansion always starts from the first occurrence (`DTSTART`), whatever the requ
 - Set to a negative value to disable the limit. Expansion then remains bounded by year 2100.
 - This limit protects the server against events crafted to recur many times: raise it with care.
 
+## Nginx request body limit
+
+Set `NGINX_CLIENT_MAX_BODY_SIZE` on the Sabre container to control the maximum
+size of an HTTP request body. The default is `1m` (1 MiB). Use a positive
+integer in bytes or append `k` or `m`.
+
+CalDAV clients embed file contents as Base64 in the iCalendar body. For example,
+`16m` leaves room for up to 10 MiB of files plus Base64, line folding and event
+metadata. This setting applies to all requests served by the container's Nginx.
+
 ## Nginx rate limiting
 
 The embedded Nginx is configured with `ngx_http_limit_req_module` to protect the CalDAV server from

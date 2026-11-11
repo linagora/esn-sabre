@@ -189,6 +189,67 @@ ICS;
         $this->assertFalse(isset($overrideEvent->ATTENDEE));
     }
 
+    function testProcessICalendarParticipationShouldMatchAnUpperCasePrincipalAddress() {
+        $this->esndb->users->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId('54b64eadf6d7d8e41d263e0f')],
+            ['$set' => ['accounts.0.emails.0' => 'RobertoCarlos@realmadrid.com']]
+        );
+
+        $oldCal = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=White;PARTSTAT=NEEDS-ACTION:mailto:robertocarlos@realmadrid.com
+DTSTART:20140716T120000Z
+DURATION:PT1H
+RRULE:FREQ=DAILY
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:30250718T120000Z
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=White;PARTSTAT=NEEDS-ACTION:mailto:robertocarlos@realmadrid.com
+DTSTART:30250718T120000Z
+DURATION:PT1H
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $data = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:foobar
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=White;PARTSTAT=ACCEPTED:mailto:robertocarlos@realmadrid.com
+DTSTART:20140716T120000Z
+DURATION:PT1H
+RRULE:FREQ=DAILY
+END:VEVENT
+BEGIN:VEVENT
+UID:foobar
+RECURRENCE-ID:30250718T120000Z
+ORGANIZER;CN=Strunk:mailto:strunk@example.org
+ATTENDEE;CN=White;PARTSTAT=NEEDS-ACTION:mailto:robertocarlos@realmadrid.com
+DTSTART:30250718T120000Z
+DURATION:PT1H
+END:VEVENT
+END:VCALENDAR
+ICS;
+
+        $calendarId = $this->caldavBackend->createCalendar('principals/users/54b64eadf6d7d8e41d263e0f', 'participationUpperCaseCal', []);
+        $this->caldavBackend->createCalendarObject($calendarId, 'objecturi.ics', $oldCal);
+
+        $eventNode = \Sabre\VObject\Reader::read($data);
+        $this->assertTrue($this->emitCalendarObjectChange(
+            'calendars/54b64eadf6d7d8e41d263e0f/participationUpperCaseCal/objecturi.ics', $eventNode));
+
+        [, $futureOverride] = $eventNode->select('VEVENT');
+        $this->assertEquals('ACCEPTED', $futureOverride->ATTENDEE['PARTSTAT']->getValue());
+    }
+
     /**
      * Drives the plugin the way Sabre does: through calendarObjectChange, with
      * the object it has already parsed and which it mutates in place.

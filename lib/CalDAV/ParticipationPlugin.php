@@ -66,8 +66,13 @@ class ParticipationPlugin extends ServerPlugin {
             return;
         }
 
-        $newInstances = $this->getAllInstancePartstatForAttendee($vCal, $addresses[0]);
-        $oldInstances = $this->getAllInstancePartstatForAttendee($oldCal, $addresses[0]);
+        // Calendar user addresses are case-insensitive: the stored e-mail of the
+        // principal and the ATTENDEE written by the organiser's client may differ
+        // in letter case.
+        $addresses = array_map('strtolower', $addresses);
+
+        $newInstances = $this->getAllInstancePartstatForAttendee($vCal, $addresses);
+        $oldInstances = $this->getAllInstancePartstatForAttendee($oldCal, $addresses);
 
         if (!isset($newInstances['master']) || !isset($oldInstances['master'])) {
             return;
@@ -96,7 +101,7 @@ class ParticipationPlugin extends ServerPlugin {
             }
 
             foreach ($vevent->ATTENDEE as $attendee) {
-                if (strtolower($attendee->getValue()) == $addresses[0]) {
+                if ($this->isOneOf($attendee, $addresses)) {
                     isset($attendee['PARTSTAT']) ? $attendee['PARTSTAT']->setValue($partstat) : $attendee['PARTSTAT'] = $partstat;
                     $modified = true;
                 }
@@ -150,7 +155,7 @@ class ParticipationPlugin extends ServerPlugin {
         return $addresses;
     }
 
-    private function getAllInstancePartstatForAttendee($vcal, $email) {
+    private function getAllInstancePartstatForAttendee($vcal, array $addresses) {
         $instances = [];
 
         foreach ($vcal->VEVENT as $vevent) {
@@ -158,24 +163,31 @@ class ParticipationPlugin extends ServerPlugin {
 
             $instances[$recurId] = [
                 'id' => $recurId,
-                'partstat' => $this->getParstatFromEmail($vevent, $email)
+                'partstat' => $this->getPartstatFromAddresses($vevent, $addresses)
             ];
         }
 
         return $instances;
     }
 
-    private function getParstatFromEmail($event, $email) {
-        $partstat= null;
+    private function getPartstatFromAddresses($event, array $addresses) {
+        $partstat = null;
 
         if ($event->ATTENDEE) {
             foreach ($event->ATTENDEE as $attendee) {
-                if (strtolower($attendee->getValue()) == $email) {
+                if ($this->isOneOf($attendee, $addresses)) {
                     $partstat = isset($attendee['PARTSTAT']) ? $attendee['PARTSTAT']->getValue() : null;
                 }
             }
         }
 
         return $partstat;
+    }
+
+    /**
+     * @param array $addresses lower-cased calendar user addresses
+     */
+    private function isOneOf($attendee, array $addresses) {
+        return in_array(strtolower((string) $attendee->getValue()), $addresses, true);
     }
 }

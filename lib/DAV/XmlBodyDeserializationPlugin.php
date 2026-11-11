@@ -2,6 +2,7 @@
 
 namespace ESN\DAV;
 
+use \Sabre\DAV\Exception;
 use \Sabre\DAV\Exception\BadRequest;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
@@ -20,8 +21,10 @@ use \Sabre\Xml\ParseException;
  * `CalDAV\Xml\Property\SupportedCalendarComponentSet`, `DAV\Xml\Property\ShareAccess`,
  * `CalDAV\Xml\Filter\CompFilter`...): a well-formed body missing an element or
  * an attribute raises a PHP warning (an ErrorException under esn.php's error
- * handler), a TypeError or an InvalidDataException. Sabre's handlers only map
- * `ParseException` to 400, so these escape as 500.
+ * handler), a TypeError or an InvalidDataException. Some also throw the base
+ * `Sabre\DAV\Exception`, which answers 500 (`DAVACL\Xml\Property\Principal`
+ * with an empty `<D:href/>`, `DAV\Xml\Property\SupportedReportSet`). Sabre's
+ * handlers only map `ParseException` to 400, so these escape as 500.
  *
  * We deserialise the body once ourselves, before any handler, and turn these
  * failures into 400. Bodies that are not well-formed XML are not parsed at
@@ -74,8 +77,19 @@ class XmlBodyDeserializationPlugin extends ServerPlugin {
         } catch (ParseException $e) {
             return;
         } catch (\ErrorException | \TypeError | \ValueError | InvalidDataException $e) {
-            throw new BadRequest('The ' . $request->getMethod() . ' request body could not be deserialised: ' . $e->getMessage());
+            throw $this->undeserialisableBody($request, $e);
+        } catch (Exception $e) {
+            // Client errors (a BadRequest from a deserialiser) already answer
+            // the right status: only server errors are mapped.
+            if ($e->getHTTPCode() < 500) {
+                throw $e;
+            }
+            throw $this->undeserialisableBody($request, $e);
         }
+    }
+
+    private function undeserialisableBody(RequestInterface $request, \Throwable $cause): BadRequest {
+        return new BadRequest('The ' . $request->getMethod() . ' request body could not be deserialised: ' . $cause->getMessage());
     }
 
     private function hasXmlBody(RequestInterface $request): bool {

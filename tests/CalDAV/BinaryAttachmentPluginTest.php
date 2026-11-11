@@ -2,8 +2,11 @@
 
 namespace ESN\CalDAV;
 
+use ESN\Utils\AuthTenant;
+use ESN\Utils\TenantType;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Sabre\DAV\Server;
 use Sabre\HTTP\Request;
 use Sabre\HTTP\Response;
 use Sabre\VObject;
@@ -12,6 +15,7 @@ use Sabre\VObject;
  * @medium
  */
 class BinaryAttachmentPluginTest extends TestCase {
+    private const AUTHORIZATION = 'basic Ym9iOnBhc3M=';
 
     private function calendarWithBinaryAttach() {
         return <<<ICS
@@ -184,5 +188,125 @@ ICS;
         ]);
 
         return $modified;
+    }
+
+    private function calendarForOffload(string $extra = '') {
+        return VObject\Reader::read(implode("\r\n", [
+            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN', 'BEGIN:VEVENT',
+            'UID:upload-test', 'DTSTAMP:20261022T000000Z', 'DTSTART:20261022T090000Z',
+            'ORGANIZER:mailto:someone-else@example.test',
+            'ATTACH;VALUE=BINARY;ENCODING=BASE64;FILENAME=report.bin;FMTTYPE=application/octet-stream:AAEC/w0K',
+            $extra, 'END:VEVENT', 'END:VCALENDAR', ''
+        ]));
+    }
+
+    private function offloadServer($client, ?AuthTenant $tenant = null, ?string $trusted = null) {
+        $server = new Server([]);
+        $server->addPlugin(new BinaryAttachmentPlugin(BinaryAttachmentPlugin::MODE_OFFLOAD, $trusted, $client));
+        if ($tenant !== null) $server->emit('auth:success', [$tenant]);
+        return $server;
+    }
+
+    private function emitOffloadChange($server, $calendar) {
+        $modified = false;
+        $server->emit('calendarObjectChange', [new Request('PUT', '/calendars/bob/default/test.ics', ['Authorization' => self::AUTHORIZATION]), new Response(),
+            $calendar, 'calendars/bob/default', &$modified, true]);
+        return $modified;
+    }
+
+    function testConvertsMultipleAttachmentsBeforeSchedulingAndUsesAuthenticatedUploader() {
+        $client = $this->createMock(AttachmentUploadClient::class);
+        $client->expects($this->exactly(2))->method('upload')->willReturnCallback(function ($authorization, $name, $type, $content) {
+            $this->assertSame(self::AUTHORIZATION, $authorization);
+            $this->assertContains($content, ["\x00\x01\x02\xff\r\n", 'second']);
+            return 'https://bob-drive.example.test/public?sharecode=' . $name . '#/';
+        });
+        $server = $this->offloadServer($client, new AuthTenant('bob-id', 'domain-id'));
+        $calendar = $this->calendarForOffload('ATTACH;VALUE=BINARY;ENCODING=BASE64;X-FILENAME=second.txt;FMTTYPE=text/plain:c2Vjb25k');
+        $server->on('calendarObjectChange', function ($request, $response, $calendar) {
+            foreach ($calendar->VEVENT->select('ATTACH') as $attachment) {
+                $this->assertSame('BINARY', $attachment->getValueType());
+            }
+        }, 80);
+        $server->on('calendarObjectChange', function ($request, $response, $calendar) {
+            foreach ($calendar->VEVENT->select('ATTACH') as $attachment) {
+                $this->assertSame('URI', $attachment->getValueType());
+                $this->assertNotEmpty((string) $attachment['X-FILENAME']);
+                $this->assertFalse(isset($attachment['ENCODING']));
+            }
+        }, 100);
+        $this->assertTrue($this->emitOffloadChange($server, $calendar));
+        $this->assertStringNotContainsString('VALUE=BINARY', $calendar->serialize());
+        $roundTrip = VObject\Reader::read($calendar->serialize());
+        $this->assertCount(2, $roundTrip->VEVENT->select('ATTACH'));
+        $this->assertSame('report.bin', (string) $roundTrip->VEVENT->ATTACH['X-FILENAME']);
+    }
+
+    function testValidatesAllAttachmentsBeforeAnyUpload() {
+        $client = $this->createMock(AttachmentUploadClient::class);
+        $client->expects($this->never())->method('upload');
+        $calendar = $this->calendarForOffload('ATTACH;VALUE=BINARY;ENCODING=BASE64;FILENAME=../bad.txt:Zm9v');
+        $this->expectException(\Sabre\DAV\Exception\BadRequest::class);
+        $this->emitOffloadChange($this->offloadServer($client, new AuthTenant('bob-id', 'domain-id')), $calendar);
+    }
+
+    function testFailedUploadDoesNotReplaceAnyAttachment() {
+        $client = $this->createMock(AttachmentUploadClient::class);
+        $calls = 0;
+        $client->expects($this->exactly(2))->method('upload')->willReturnCallback(function () use (&$calls) {
+            if (++$calls === 2) throw new \Sabre\DAV\Exception\ServiceUnavailable('unavailable');
+            return 'https://bob-drive.example.test/public?sharecode=test#/';
+        });
+        $calendar = $this->calendarForOffload('ATTACH;VALUE=BINARY;ENCODING=BASE64;FILENAME=second.txt:c2Vjb25k');
+        $original = $calendar->serialize();
+        try {
+            $this->emitOffloadChange($this->offloadServer($client, new AuthTenant('bob-id', 'domain-id')), $calendar);
+            $this->fail('Expected upload failure');
+        } catch (\Sabre\DAV\Exception\ServiceUnavailable $error) {
+            $this->assertSame($original, $calendar->serialize());
+        }
+    }
+
+    function testNoUploadAfterValidationRejectsEvent() {
+        $client = $this->createMock(AttachmentUploadClient::class);
+        $client->expects($this->never())->method('upload');
+        $server = $this->offloadServer($client, new AuthTenant('bob-id', 'domain-id'));
+        $server->on('calendarObjectChange', function () { throw new \Sabre\DAV\Exception\BadRequest('invalid event'); }, 80);
+        $this->expectException(\Sabre\DAV\Exception\BadRequest::class);
+        $this->emitOffloadChange($server, $this->calendarForOffload());
+    }
+
+    function testTechnicalUserCannotSelectAnotherUsersDrive() {
+        $client = $this->createMock(AttachmentUploadClient::class);
+        $client->expects($this->never())->method('upload');
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+        $this->emitOffloadChange($this->offloadServer($client, new AuthTenant('bob-id', 'domain-id', TenantType::Technical)), $this->calendarForOffload());
+    }
+
+    function testItipRejectsUnprocessedBinaryRatherThanUploadingForRecipient() {
+        $client = $this->createMock(AttachmentUploadClient::class);
+        $client->expects($this->never())->method('upload');
+        $plugin = new BinaryAttachmentPlugin(BinaryAttachmentPlugin::MODE_OFFLOAD, null, $client);
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+        $plugin->filterCalendar($this->calendarForOffload());
+    }
+
+    function testRejectsUploadWithoutForwardableCredentials() {
+        $client = $this->createMock(AttachmentUploadClient::class);
+        $client->expects($this->never())->method('upload');
+        $server = $this->offloadServer($client, new AuthTenant('bob-id', 'domain-id'));
+        $modified = false;
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+        $server->emit('calendarObjectChange', [new Request('PUT', '/calendars/bob/default/test.ics'), new Response(),
+            $this->calendarForOffload(), 'calendars/bob/default', &$modified, true]);
+    }
+
+    function testUriOnlyCalendarDoesNotRequireProvisionedDrive() {
+        $client = $this->createMock(AttachmentUploadClient::class);
+        $client->expects($this->never())->method('upload');
+        $calendar = $this->calendarForOffload();
+        unset($calendar->VEVENT->ATTACH);
+        $calendar->VEVENT->add('ATTACH', 'https://drive.example.test/public?sharecode=existing#/');
+        $this->assertFalse($this->emitOffloadChange($this->offloadServer($client), $calendar));
     }
 }

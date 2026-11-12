@@ -584,6 +584,56 @@ END:VCALENDAR
         $this->assertSame('ACCEPTED', $this->attendeePartstat(Reader::read($storedCopy->putData)->VEVENT[0], 'mailto:alice@example.org'));
     }
 
+    function testShouldRefuseITipRequestListingTheOrganizerAsAttendeeFromAnotherSender() {
+        $storedCopy = $this->initializePluginWithStoredCopy($this->newCalendarObjectOrganizedByBob());
+        $message = $this->newMessage('REQUEST', 'mailto:mallory@example.org',
+            $this->newHandedOverCalendarObject('mailto:mallory@example.org'));
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('5.', $message->scheduleStatus);
+        $this->assertSame(0, $storedCopy->putCount);
+        $this->assertCount(0, $this->inbox->getChildren());
+    }
+
+    function testShouldRefuseOrganizerHandoverFromTeamCalendarTheFormerOrganizerIsNotMemberOf() {
+        $storedCopy = $this->initializePluginWithStoredCopyAndSenderTeamCalendar('mailto:mallory@example.org',
+            ['principals/users/mallory']);
+        $message = $this->newMessage('REQUEST', 'mailto:mallory@example.org',
+            $this->newHandedOverCalendarObject('mailto:mallory@example.org'));
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('5.', $message->scheduleStatus);
+        $this->assertSame(0, $storedCopy->putCount);
+        $this->assertCount(0, $this->inbox->getChildren());
+    }
+
+    function testShouldRefuseOrganizerHandoverWhenTheTeamCalendarCopyIsNotOrganizedByTheSender() {
+        $storedCopy = $this->initializePluginWithStoredCopyAndSenderTeamCalendar('mailto:bob@example.org',
+            ['principals/users/mallory', 'principals/users/bob']);
+        $message = $this->newMessage('REQUEST', 'mailto:mallory@example.org',
+            $this->newHandedOverCalendarObject('mailto:mallory@example.org'));
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('5.', $message->scheduleStatus);
+        $this->assertSame(0, $storedCopy->putCount);
+    }
+
+    function testShouldDeliverOrganizerHandoverBetweenWriteEnabledMembersOfATeamCalendar() {
+        $storedCopy = $this->initializePluginWithStoredCopyAndSenderTeamCalendar('mailto:mallory@example.org',
+            ['principals/users/mallory', 'principals/users/bob']);
+        $message = $this->newMessage('REQUEST', 'mailto:mallory@example.org',
+            $this->newHandedOverCalendarObject('mailto:mallory@example.org'));
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertSame('1.2;Message delivered locally', $message->scheduleStatus);
+        $this->assertSame(1, $storedCopy->putCount);
+        $this->assertSame('mailto:mallory@example.org', (string) Reader::read($storedCopy->putData)->VEVENT->ORGANIZER);
+    }
+
     function testShouldNotCreateInboxItemWhenTheBrokerRefusesTheMerge() {
         // The stored master holds an RRULE part the recurrence iterator does not
         // support: merging a REPLY to a not yet overridden occurrence throws.
@@ -1926,7 +1976,8 @@ ICS;
         return $teamEvent;
     }
 
-    private function initializePluginForDelivery(array $calendarHomes, array $privileges = []): void {
+    private function initializePluginForDelivery(array $calendarHomes, array $privileges = [], array $otherPrincipals = [],
+        array $plugins = []): void {
         $server = new Server([
             new SimpleCollection('principals', [
                 new SimpleCollection('users', [
@@ -1940,23 +1991,87 @@ ICS;
             new SimpleCollection('calendars', $calendarHomes)
         ]);
         $server->httpRequest = new Request('ITIP', '/itip');
-        $server->addPlugin(new TeamCalendarAclPluginTestDouble($privileges, ['mailto:bob@example.org' => 'principals/users/bob']));
+        $server->addPlugin(new TeamCalendarAclPluginTestDouble($privileges, ['mailto:bob@example.org' => 'principals/users/bob'] + $otherPrincipals));
+        array_map(fn($plugin) => $server->addPlugin($plugin), $plugins);
 
         $this->plugin = new Plugin();
         $this->plugin->initialize($server);
     }
 
-    private function initializePluginWithStoredCopy(string $calendarData): WritableCalendarObjectTestDouble {
+    private function initializePluginWithStoredCopy(string $calendarData, array $otherHomes = [], array $otherPrincipals = [],
+        array $plugins = []): WritableCalendarObjectTestDouble {
         $storedCopy = new WritableCalendarObjectTestDouble('event.ics', $calendarData);
         $this->inbox = new WritableCollectionTestDouble('inbox');
-        $this->initializePluginForDelivery([
+        $this->initializePluginForDelivery(array_merge([
             new TeamCalendarHomeTestDouble('bob', ['daily-2' => 'default/event.ics'], [
                 $this->inbox,
                 new WritableCollectionTestDouble('default', [$storedCopy])
             ])
-        ]);
+        ], $otherHomes), [], $otherPrincipals, $plugins);
 
         return $storedCopy;
+    }
+
+    /**
+     * Bob's personal copy of daily-2, and a Team Calendar mallory writes to, whose copy of
+     * daily-2 has the given organizer and the given write-enabled members.
+     */
+    private function initializePluginWithStoredCopyAndSenderTeamCalendar(string $teamCopyOrganizer,
+        array $writeEnabledMembers): WritableCalendarObjectTestDouble {
+        $backend = $this->createStub(\ESN\CalDAV\Backend\Mongo::class);
+        $backend->method('findCalendarObjectsByUid')->willReturn([['calendarid' => 'team-id', 'uri' => 'team-event.ics']]);
+        $teamCalendar = $this->createStub(\ESN\CalDAV\SharedCalendar::class);
+        $teamCalendar->method('getName')->willReturn('team');
+        $teamCalendar->method('getCalendarId')->willReturn('team-id');
+        $teamCalendar->method('getOwner')->willReturn('principals/team-calendars/team');
+        $teamCalendar->method('getShareAccess')->willReturn(\ESN\DAV\Sharing\Plugin::ACCESS_READWRITE);
+        $teamCalendar->method('getChild')->willReturn(new SimpleFile('team-event.ics', $this->newHandedOverCalendarObject($teamCopyOrganizer)));
+        $teamCalendar->method('getInvites')->willReturn(array_map(fn($principal) => new \Sabre\DAV\Xml\Element\Sharee([
+            'principal' => $principal,
+            'access' => \ESN\DAV\Sharing\Plugin::ACCESS_READWRITE
+        ]), $writeEnabledMembers));
+        $malloryHome = $this->createStub(\ESN\CalDAV\CalendarHome::class);
+        $malloryHome->method('getName')->willReturn('mallory');
+        $malloryHome->method('getChildren')->willReturn([$teamCalendar]);
+        $malloryHome->method('getChild')->willReturn($teamCalendar);
+
+        return $this->initializePluginWithStoredCopy($this->newCalendarObjectOrganizedByBob(), [$malloryHome],
+            ['mailto:mallory@example.org' => 'principals/users/mallory'],
+            [new \ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin($backend)]);
+    }
+
+    private function newCalendarObjectOrganizedByBob(): string {
+        return 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:daily-2
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SUMMARY:Board meeting
+ORGANIZER:mailto:bob@example.org
+ATTENDEE:mailto:bob@example.org
+ATTENDEE:mailto:carol@example.org
+END:VEVENT
+END:VCALENDAR
+';
+    }
+
+    private function newHandedOverCalendarObject(string $organizer): string {
+        return "BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:daily-2
+DTSTAMP:20260202T080000Z
+DTSTART:20351005T090000Z
+DTEND:20351005T100000Z
+SEQUENCE:1
+SUMMARY:Moved - join https://evil.example.org
+ORGANIZER:$organizer
+ATTENDEE:mailto:bob@example.org
+END:VEVENT
+END:VCALENDAR
+";
     }
 
     private function newMessage(string $method, string $sender, string $ical): Message {

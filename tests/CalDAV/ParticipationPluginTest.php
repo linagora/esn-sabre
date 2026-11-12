@@ -250,6 +250,47 @@ ICS;
         $this->assertEquals('ACCEPTED', $futureOverride->ATTENDEE['PARTSTAT']->getValue());
     }
 
+    function testProcessICalendarParticipationShouldIgnoreATaskWithoutVevent() {
+        $oldCal = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example//CalDAV VTODO Reproducer//EN
+BEGIN:VTODO
+UID:vtodo-update-reproducer@example.invalid
+DTSTAMP:20260407T093826Z
+DTSTART:20260408T100000Z
+SUMMARY:Example task
+STATUS:NEEDS-ACTION
+PERCENT-COMPLETE:0
+END:VTODO
+END:VCALENDAR
+ICS;
+
+        $data = <<<ICS
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example//CalDAV VTODO Reproducer//EN
+BEGIN:VTODO
+UID:vtodo-update-reproducer@example.invalid
+DTSTAMP:20260407T093826Z
+DTSTART:20260408T100000Z
+SUMMARY:Example task
+STATUS:COMPLETED
+PERCENT-COMPLETE:100
+END:VTODO
+END:VCALENDAR
+ICS;
+
+        $calendarId = $this->caldavBackend->createCalendar('principals/users/54b64eadf6d7d8e41d263e0f', 'participationTaskCal', []);
+        $this->caldavBackend->createCalendarObject($calendarId, 'task.ics', $oldCal);
+
+        $taskNode = \Sabre\VObject\Reader::read($data);
+        $this->assertTrue($this->emitCalendarObjectChange(
+            'calendars/54b64eadf6d7d8e41d263e0f/participationTaskCal/task.ics', $taskNode));
+
+        $this->assertEquals('COMPLETED', $taskNode->VTODO->STATUS->getValue());
+    }
+
     /**
      * Drives the plugin the way Sabre does: through calendarObjectChange, with
      * the object it has already parsed and which it mutates in place.

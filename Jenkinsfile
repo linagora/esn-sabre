@@ -13,6 +13,13 @@ pipeline {
         disableConcurrentBuilds()
     }
 
+    /* Rebuild master weekly even without a new commit: the delivered image is
+       built with --pull --no-cache, so this picks up the Debian security updates
+       of the base image and of its apt-get upgrade. */
+    triggers {
+        cron(env.BRANCH_NAME == 'master' ? 'H H * * 0' : '')
+    }
+
     stages {
       stage('Build Test Images') {
           steps {

@@ -1,7 +1,7 @@
 #
 # Optimized Docker container for ESN Sabre frontend
 # Optimizations:
-# - Use debian:bullseye-slim base image
+# - Use debian:trixie-slim base image
 # - Remove build tools after compilation
 # - Install composer dependencies without dev packages
 # - Combine RUN commands to reduce layers

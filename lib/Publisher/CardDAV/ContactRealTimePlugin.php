@@ -19,6 +19,12 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
      */
     private $deletedCards = [];
 
+    /**
+     * Card data before an update, by path: consumers keeping derived data (e.g. auto-complete indexes) need it to
+     * drop what the update removed from the card.
+     */
+    private $previousCards = [];
+
     private $PUBSUB_TOPICS = [
         'CONTACT_CREATED' => 'sabre:contact:created',
         'CONTACT_UPDATED' => 'sabre:contact:updated',
@@ -37,6 +43,7 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $server->on('afterBind',          [$this, 'afterBind']);
         $server->on('beforeUnbind',        [$this, 'beforeUnbind']);
         $server->on('afterUnbind',        [$this, 'afterUnbind']);
+        $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
         $server->on('afterWriteContent',  [$this, 'afterWriteContent']);
     }
 
@@ -84,9 +91,21 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         return true;
     }
 
+    function beforeWriteContent($path, \Sabre\DAV\IFile $node) {
+        if ($node instanceof \Sabre\CardDAV\Card) {
+            $this->previousCards[$path] = $node->get();
+        }
+
+        return true;
+    }
+
     function afterWriteContent($path, \Sabre\DAV\IFile $node) {
         if ($node instanceof \Sabre\CardDAV\Card) {
-            $this->publishCardChange('UPDATED', $path, $node->get(), $node->getETag());
+            $previousCard = $this->previousCards[$path] ?? null;
+            unset($this->previousCards[$path]);
+
+            $this->publishCardChange('UPDATED', $path, $node->get(), $node->getETag(),
+                $previousCard === null ? [] : ['oldcarddata' => $previousCard]);
         }
 
         return true;
@@ -96,7 +115,7 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
      * A card written through a subscribed or delegated address book belongs to the source address book: whichever
      * way it was written, one message is published for the source, and one for each address book mirroring it.
      */
-    private function publishCardChange($action, $path, $carddata, $etag) {
+    private function publishCardChange($action, $path, $carddata, $etag, $extraData = []) {
         list($addressBookPath, $cardName) = Uri\split($path);
         $addressBook = $this->reloadAddressBook($addressBookPath);
 
@@ -111,7 +130,7 @@ class ContactRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             'carddata'  => $carddata,
             'syncToken' => $this->syncToken($addressBook),
             'etag'      => $etag
-        ];
+        ] + $extraData;
 
         $this->createMessage($topic, ['path' => $sourcePath, 'owner' => $addressBook->getOwner()] + $cardMessage);
 

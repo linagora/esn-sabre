@@ -126,6 +126,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $oldICalendarData = $loaded['calendarData'];
         $currentObject = $loaded['calendarObject'];
 
+        if ($this->changesOrganizerWithoutAuthorization($iTipMessage, $currentObject)) {
+            $this->refuseUnauthorizedOrganizerChange($iTipMessage);
+            return;
+        }
+
         $this->normalizeIncomingReplyMessage($iTipMessage, $currentObject);
         $this->ensureOrganizerValarmUidsForRequest($iTipMessage);
 
@@ -174,6 +179,87 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             'exception' => get_class($e) . ': ' . $e->getMessage()
         ]);
         $iTipMessage->scheduleStatus = '5.0;iTip message was not processed by the server: ' . $e->getMessage();
+    }
+
+    private function refuseUnauthorizedOrganizerChange(ITip\Message $iTipMessage): void {
+        $this->logger->warning('iTip REQUEST from a sender who does not organize the stored event was refused', [
+            'recipient' => $iTipMessage->recipient,
+            'sender' => $iTipMessage->sender,
+            'uid' => $iTipMessage->uid
+        ]);
+        $iTipMessage->scheduleStatus = '5.0;iTip message was not processed by the server: '
+            . 'the sender is not the organizer of the stored event';
+    }
+
+    /**
+     * Whether a REQUEST rewrites the recipient's copy on behalf of somebody who does not
+     * organize it, without that being an authorized organizer handover.
+     *
+     * The broker accepts a REQUEST from another sender as a handover as soon as the message
+     * keeps the stored organizer as an attendee. That only depends on the content of the
+     * message, which the sender writes: anybody knowing the UID of an event could rewrite
+     * somebody else's copy of it. The handover is therefore authorized here from who the
+     * sender is, see isTeamCalendarOrganizerHandover().
+     */
+    private function changesOrganizerWithoutAuthorization(ITip\Message $iTipMessage, ?VCalendar $currentObject): bool {
+        if ($iTipMessage->method !== 'REQUEST' || $currentObject === null) {
+            return false;
+        }
+
+        $formerOrganizers = $this->storedOrganizersOtherThan($currentObject, $iTipMessage->sender);
+
+        return $formerOrganizers && !$this->isTeamCalendarOrganizerHandover($iTipMessage, $formerOrganizers);
+    }
+
+    private function storedOrganizersOtherThan(VCalendar $calendar, ?string $sender): array {
+        $sender = $this->calendarAddressValue($sender);
+        $organizers = array_map(
+            fn($vevent) => $this->calendarAddressValue($vevent->ORGANIZER->getValue()),
+            array_filter($calendar->select('VEVENT'), fn($vevent) => isset($vevent->ORGANIZER))
+        );
+
+        return array_values(array_unique(array_filter($organizers, fn($organizer) => $organizer !== null && $organizer !== $sender)));
+    }
+
+    /**
+     * A member of a Team Calendar may hand one of its events over to another write-enabled
+     * member, who then sends the REQUEST to every attendee, including ones whose copy sits in
+     * a personal calendar.
+     *
+     * Such a REQUEST is only honoured when the sender writes to a Team Calendar whose copy of
+     * the event is already organized by the sender, and every former organizer is a
+     * write-enabled member of that same calendar: members organize on one another's behalf,
+     * but nobody may take over the event of somebody outside the calendar.
+     */
+    private function isTeamCalendarOrganizerHandover(ITip\Message $iTipMessage, array $formerOrganizers): bool {
+        $plugin = $this->server->getPlugin(TeamCalendarSchedulingRecipientPlugin::PLUGIN_NAME);
+        $senderPrincipal = Utils::getPrincipalByUri($iTipMessage->sender, $this->server);
+        if (!$plugin || !$senderPrincipal) {
+            return false;
+        }
+
+        try {
+            $paths = $plugin->findCalendarObjectPathsWithoutSchedulingRecipient('calendars/' . basename($senderPrincipal), $iTipMessage->uid);
+            return (bool) array_filter($paths,
+                fn($path) => $this->handsOverTeamCalendarObject($path, $iTipMessage->sender, $formerOrganizers));
+        } catch (\Sabre\DAV\Exception $e) {
+            $this->logger->warning('Organizer handover lookup failed', ['reason' => $e->getMessage()]);
+            return false;
+        }
+    }
+
+    private function handsOverTeamCalendarObject(string $objectPath, string $sender, array $formerOrganizers): bool {
+        $teamObject = $this->loadTeamCalendarObjectAtPath($objectPath, $sender)['calendarObject'];
+        if (!$teamObject) {
+            return false;
+        }
+        $teamObject->destroy();
+
+        [$calendarPath] = \Sabre\Uri\split($objectPath);
+        $formerOrganizersWithoutWriteAccess = array_filter($formerOrganizers,
+            fn($organizer) => !$this->mayScheduleAsOrganizer($organizer, $calendarPath));
+
+        return !$formerOrganizersWithoutWriteAccess;
     }
 
     /**

@@ -124,6 +124,44 @@ class ContactRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertNotNull($client->message);
     }
 
+    function testAfterWriteContentShouldPublishTheCardDataBeforeTheUpdate() {
+        $plugin = $this->getPlugin();
+        $server = $plugin->getServer();
+        $client = $plugin->getClient();
+        $path = 'addressbooks/bookId/bookName/contact.vcf';
+
+        $nodeMock = $this->getMockBuilder('\Sabre\CardDAV\Card')
+            ->disableOriginalConstructor()
+            ->getMock();
+        $nodeMock->method('get')
+            ->willReturnOnConsecutiveCalls("BEGIN:VCARD\r\nEMAIL:old@x\r\nEND:VCARD\r\n", "BEGIN:VCARD\r\nEMAIL:new@x\r\nEND:VCARD\r\n");
+
+        $data = 'ignored';
+        $modified = false;
+        $this->assertTrue($server->emit('beforeWriteContent', [$path, $nodeMock, &$data, &$modified]));
+        $this->assertTrue($server->emit('afterWriteContent', [$path, $nodeMock]));
+
+        $message = json_decode($client->message, true);
+        $this->assertEquals("BEGIN:VCARD\r\nEMAIL:new@x\r\nEND:VCARD\r\n", $message['carddata']);
+        $this->assertEquals("BEGIN:VCARD\r\nEMAIL:old@x\r\nEND:VCARD\r\n", $message['oldcarddata']);
+    }
+
+    function testAfterWriteContentWithoutPreviousCardShouldNotPublishOldCardData() {
+        $plugin = $this->getPlugin();
+        $server = $plugin->getServer();
+        $client = $plugin->getClient();
+
+        $nodeMock = $this->getMockBuilder('\Sabre\CardDAV\Card')
+            ->disableOriginalConstructor()
+            ->getMock();
+        $nodeMock->method('get')
+            ->willReturn("BEGIN:VCARD\r\nEMAIL:new@x\r\nEND:VCARD\r\n");
+
+        $this->assertTrue($server->emit('afterWriteContent', ['addressbooks/bookId/bookName/contact.vcf', $nodeMock]));
+
+        $this->assertArrayNotHasKey('oldcarddata', json_decode($client->message, true));
+    }
+
     function testAfterWriteContentWithNonUtf8ParameterShouldPublishJson() {
         $plugin = $this->getPlugin();
         $server = $plugin->getServer();

@@ -86,7 +86,7 @@ class ParticipationPlugin extends ServerPlugin {
 
         $now = new \DateTimeImmutable();
 
-        foreach ($vCal->VEVENT as $vevent) {
+        foreach ($vCal->select('VEVENT') as $vevent) {
             if (!isset($vevent->{'RECURRENCE-ID'})) {
                 continue;
             }
@@ -158,7 +158,9 @@ class ParticipationPlugin extends ServerPlugin {
     private function getAllInstancePartstatForAttendee($vcal, array $addresses) {
         $instances = [];
 
-        foreach ($vcal->VEVENT as $vevent) {
+        // A calendar object may hold no VEVENT at all (e.g. a VTODO), in which
+        // case the magic ->VEVENT accessor returns null.
+        foreach ($vcal->select('VEVENT') as $vevent) {
             $recurId = isset($vevent->{'RECURRENCE-ID'}) ? $vevent->{'RECURRENCE-ID'}->getValue() : 'master';
 
             $instances[$recurId] = [

@@ -87,7 +87,7 @@ class OrganizerValidationPlugin extends ServerPlugin {
 
     private function validateCalendarOrganizer(VCalendar $calendar, $calendarPath): void {
         $vevents = $calendar->select('VEVENT');
-        if (empty($vevents) || !($organizerUri = $this->extractOrganizerUri($vevents))) return;
+        if (empty($vevents) || ($organizerUri = $this->extractOrganizerUri($vevents)) === null) return;
 
         $this->validateOrganizerAuthorized($organizerUri, $calendarPath);
     }
@@ -109,11 +109,13 @@ class OrganizerValidationPlugin extends ServerPlugin {
     private function collectOrganizerValues(array $vevents): array {
         $organizerValues = [];
         foreach ($vevents as $vevent) {
-            if (isset($vevent->ATTENDEE) && !isset($vevent->ORGANIZER)) {
+            // A blank ORGANIZER names nobody: handle it as a missing one.
+            $organizer = isset($vevent->ORGANIZER) ? trim((string) $vevent->ORGANIZER) : '';
+            if (isset($vevent->ATTENDEE) && $organizer === '') {
                 throw new Forbidden('A VEVENT with ATTENDEE properties must also have an ORGANIZER.');
             }
-            if (isset($vevent->ORGANIZER)) {
-                $organizerValues[] = strtolower((string) $vevent->ORGANIZER);
+            if ($organizer !== '') {
+                $organizerValues[] = strtolower($organizer);
             }
         }
         return $organizerValues;

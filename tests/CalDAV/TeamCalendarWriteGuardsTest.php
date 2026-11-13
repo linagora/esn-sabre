@@ -120,13 +120,39 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
         $this->assertTrue($this->server->emit('beforeCopy', ['personal/by-reader.ics', 'personal/new.ics']));
     }
 
+    public static function blankOrganizers(): array {
+        return [
+            'empty' => [''],
+            'spaces' => ['   ']
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('blankOrganizers')]
+    function testPutOfAMeetingWithABlankOrganizerIntoATeamCalendarIsRefused(string $organizer) {
+        $this->expectForbidden('A VEVENT with ATTENDEE properties must also have an ORGANIZER.');
+
+        $this->emitCalendarObjectChange('PUT', 'team/team1.ics', false, $this->event(self::EXISTING_UID, $organizer));
+    }
+
+    function testPutOfAMeetingWithAFalsyOrganizerIntoATeamCalendarIsRefused() {
+        $this->expectForbidden('The ORGANIZER must be a write-enabled team calendar member.');
+
+        $this->emitCalendarObjectChange('PUT', 'team/team1.ics', false, $this->event(self::EXISTING_UID, '0'));
+    }
+
+    function testPutOfAnEventWithABlankOrganizerAndNoAttendeeIntoATeamCalendarIsAccepted() {
+        $data = str_replace("DTEND:", "ORGANIZER:\r\nDTEND:", $this->event(self::EXISTING_UID));
+
+        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'team/team1.ics', false, $data));
+    }
+
     private function expectForbidden(string $message): void {
         $this->expectException(Forbidden::class);
         $this->expectExceptionMessage($message);
     }
 
-    private function emitCalendarObjectChange(string $method, string $objectPath, bool $isNew): bool {
-        $vCal = Reader::read($this->event(self::EXISTING_UID));
+    private function emitCalendarObjectChange(string $method, string $objectPath, bool $isNew, ?string $data = null): bool {
+        $vCal = Reader::read($data ?? $this->event(self::EXISTING_UID));
         $modified = false;
         list($calendarPath,) = \Sabre\Uri\split($objectPath);
 
@@ -162,7 +188,7 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
     }
 
     private function event(string $uid, ?string $organizer = null): string {
-        $meeting = $organizer ? "ORGANIZER:$organizer\r\nATTENDEE:mailto:other@example.com\r\n" : '';
+        $meeting = $organizer !== null ? "ORGANIZER:$organizer\r\nATTENDEE:mailto:other@example.com\r\n" : '';
 
         return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:$uid\r\nDTSTART:20260101T100000Z\r\n"
             . "DTEND:20260101T110000Z\r\n{$meeting}END:VEVENT\r\nEND:VCALENDAR\r\n";

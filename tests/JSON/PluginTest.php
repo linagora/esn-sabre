@@ -3020,6 +3020,23 @@ END:VCALENDAR
         $this->assertEquals(200, $response->status);
     }
 
+    public static function nonStringPublicRights(): array {
+        return [
+            'array' => [[]],
+            'object' => [new \stdClass()],
+            'list' => [['{DAV:}read']],
+            'number' => [1],
+            'boolean' => [true],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonStringPublicRights')]
+    function testACLRejectsNonStringPublicRight($privilege) {
+        $response = $this->changePublicRight($privilege);
+
+        $this->assertEquals(400, $response->status);
+    }
+
     private function changePublicRight($privilege) {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'ACL',

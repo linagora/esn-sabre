@@ -699,6 +699,10 @@ class CalendarHandler {
             throw new DAV\Exception\BadRequest('Missing public_right property in JSON request');
         }
 
+        if (!is_string($jsonData->public_right)) {
+            throw new DAV\Exception\BadRequest('public_right must be a string');
+        }
+
         return $jsonData->public_right;
     }
 

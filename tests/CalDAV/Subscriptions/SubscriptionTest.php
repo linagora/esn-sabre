@@ -162,6 +162,94 @@ class SubscriptionTest extends \ESN\DAV\ServerMock {
         $this->assertFalse($subscription->childExists('privateRecurEvent.ics'));
     }
 
+    function testSubscriptionShouldServeAPrivateSourceSharedWithTheSubscriber() {
+        $this->shareCalendarUser2WithUser1(\Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+
+        $subscription = $this->subscriptionToCalendarUser2();
+
+        $this->assertEquals(['shared.ics'], array_map(fn($child) => $child->getName(), $subscription->getChildren()));
+    }
+
+    function testSubscriptionShouldStopServingASourceWhoseShareIsRevoked() {
+        $this->shareCalendarUser2WithUser1(\Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+        $this->shareCalendarUser2WithUser1(\Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS);
+
+        $this->assertServesNothing($this->subscriptionToCalendarUser2());
+    }
+
+    function testSubscriptionShouldStopServingASourceWhoseShareIsDeclined() {
+        $this->shareCalendarUser2WithUser1(\Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+        $this->caldavBackend->saveCalendarInviteStatus($this->user1InstanceOfCalendarUser2(), \Sabre\DAV\Sharing\Plugin::INVITE_DECLINED);
+
+        $this->assertServesNothing($this->subscriptionToCalendarUser2());
+    }
+
+    function testSubscriptionShouldNotServeASourceSharedForFreeBusyOnly() {
+        $this->shareCalendarUser2WithUser1(\ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY);
+
+        $this->assertServesNothing($this->subscriptionToCalendarUser2());
+    }
+
+    function testRevokedShareShouldNotBeReadableThroughTheSubscriptionOverCalDAV() {
+        $this->shareCalendarUser2WithUser1(\Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+        $this->subscriptionToCalendarUser2();
+        $this->shareCalendarUser2WithUser1(\Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI'    => '/calendars/54b64eadf6d7d8e41d263e0f/sharedsub/shared.ics',
+        ]);
+        $response = $this->request($request);
+
+        $this->assertEquals(404, $response->status);
+        $this->assertStringNotContainsString('Sprint planning', $response->getBodyAsString());
+    }
+
+    private function assertServesNothing(Subscription $subscription) {
+        $this->assertEquals([], $subscription->getChildren());
+        $this->assertFalse($subscription->childExists('shared.ics'));
+        $this->assertEquals([], $subscription->calendarQuery(['name' => 'VCALENDAR', 'comp-filters' => [], 'prop-filters' => [],
+            'is-not-defined' => false, 'time-range' => null]));
+        $this->assertNull($subscription->getChanges(null, 1));
+    }
+
+    private function shareCalendarUser2WithUser1($access) {
+        if (!$this->caldavBackend->getCalendarObject($this->calUser2['id'], 'shared.ics')) {
+            $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'shared.ics',
+                "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:shared-event\r\nSUMMARY:Sprint planning\r\n"
+                . "DTSTART:20150227T090000Z\r\nDTEND:20150227T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        }
+        $this->caldavBackend->updateInvites($this->calUser2['id'], [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'      => 'mailto:user1@example.org',
+                'principal' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'access'    => $access,
+            ]),
+        ]);
+    }
+
+    private function user1InstanceOfCalendarUser2() {
+        foreach ($this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0f') as $calendar) {
+            if ($calendar['id'][0] === $this->calUser2['id'][0]) {
+                return $calendar['id'];
+            }
+        }
+
+        $this->fail('No instance of the shared calendar');
+    }
+
+    private function subscriptionToCalendarUser2() {
+        $id = $this->caldavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0f', 'sharedsub', [
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('calendars/' . $this->user2Id() . '/' . $this->calUser2['uri'])
+        ]);
+        $subscriptionInfo = current(array_filter(
+            $this->caldavBackend->getSubscriptionsForUser('principals/users/54b64eadf6d7d8e41d263e0f'),
+            fn($subscription) => $subscription['uri'] === 'sharedsub'
+        ));
+
+        return new Subscription($this->caldavBackend, $subscriptionInfo);
+    }
+
     private function subscriptionResolvedThroughThePrincipalBackend() {
         $this->principalBackend->setAuthTenant(new \ESN\Utils\AuthTenant('54b64eadf6d7d8e41d263e0f', SERVER_MOCK_DOMAIN_ID));
         $backend = new \ESN\CalDAV\Backend\Esn($this->sabredb, $this->principalBackend);

@@ -4,6 +4,7 @@ namespace ESN\CalDAV\Subscriptions;
 
 use Sabre\CalDAV\Backend\SubscriptionSupport;
 use Sabre\CalDAV\ICalendarObjectContainer;
+use ESN\DAV\Sharing\Plugin as SPlugin;
 use Sabre\DAV\Sync\ISyncCollection;
 
 /**
@@ -111,13 +112,65 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
         $calendars = $this->caldavBackend->getCalendarsForUser($sourcePrincipal);
         foreach ($calendars as $calendar) {
             if ($calendar['uri'] === $calendarUri) {
-                $this->sourceCalendarInfo = $calendar;
-                return $this->sourceCalendarInfo;
+                $this->sourceCalendarInfo = $this->subscriberMayReadSource($calendar) ? $calendar : false;
+                return $this->sourceCalendarInfo ?: null;
             }
         }
 
         $this->sourceCalendarInfo = false;
         return null;
+    }
+
+    /**
+     * Whether the subscriber may still read the source calendar, as the source calendar's own
+     * ACL grants it (see ESN\CalDAV\SharedCalendar): read access is only checked when the
+     * subscription is created, and a share or a team calendar membership can be revoked since.
+     *
+     * @param array $calendar
+     * @return bool
+     */
+    private function subscriberMayReadSource(array $calendar) {
+        $subscriber = $this->subscriptionInfo['principaluri'] ?? null;
+        if (!$subscriber) {
+            return false;
+        }
+
+        if (in_array($this->caldavBackend->getCalendarPublicRight($calendar['id']), ['{DAV:}read', '{DAV:}write'], true)) {
+            return true;
+        }
+
+        $owner = $calendar['principaluri'] ?? null;
+        if ($owner === $subscriber || $this->isProxyOf($subscriber, $owner)) {
+            return true;
+        }
+
+        // The sharees only read the owner's instance of a calendar, not a shared one.
+        if (isset($calendar['share-access'])) {
+            return false;
+        }
+
+        foreach ($this->caldavBackend->getInvites($calendar['id']) as $sharee) {
+            if ($sharee->principal === $subscriber
+                && in_array((int) $sharee->access, [SPlugin::ACCESS_READ, SPlugin::ACCESS_READWRITE, SPlugin::ACCESS_ADMINISTRATION], true)
+                && (int) $sharee->inviteStatus !== SPlugin::INVITE_DECLINED) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isProxyOf($principal, $owner) {
+        $principalBackend = method_exists($this->caldavBackend, 'getPrincipalBackend')
+            ? $this->caldavBackend->getPrincipalBackend()
+            : null;
+        if (!$owner || !$principalBackend) {
+            return false;
+        }
+
+        $groups = $principalBackend->getGroupMembership($principal);
+
+        return in_array($owner . '/calendar-proxy-read', $groups, true) || in_array($owner . '/calendar-proxy-write', $groups, true);
     }
 
     /**

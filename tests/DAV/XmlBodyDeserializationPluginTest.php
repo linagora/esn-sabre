@@ -96,6 +96,12 @@ class XmlBodyDeserializationPluginTest extends \PHPUnit\Framework\TestCase {
             '<D:grant><D:privilege><D:read/></D:privilege></D:grant></D:ace></D:acl>'));
     }
 
+    function testAclWithFalsyPrincipalHrefShouldAnswerBadRequest() {
+        $this->assertBadRequest($this->request('ACL',
+            '<D:acl xmlns:D="DAV:"><D:ace><D:principal><D:href>0</D:href></D:principal>' .
+            '<D:grant><D:privilege><D:read/></D:privilege></D:grant></D:ace></D:acl>'));
+    }
+
     function testMkcolWithEmptyPrincipalHrefShouldAnswerBadRequest() {
         $this->assertBadRequest($this->request('MKCOL',
             '<D:acl xmlns:D="DAV:"><D:ace><D:principal><D:href/></D:principal>' .

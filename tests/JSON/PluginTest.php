@@ -2886,6 +2886,43 @@ END:VCALENDAR
         $this->assertEquals($response->status, 400);
     }
 
+    public static function nonStringUids(): array {
+        return [
+            'regex operator' => [['$regex' => '^']],
+            'ne operator' => [['$ne' => 'x']],
+            'list' => [['event1']],
+            'number' => [1],
+            'empty' => [''],
+            'blank' => ['  ']
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonStringUids')]
+    function testUIDQueryShouldReturn400WhenUidIsNotANonEmptyString($uid) {
+        $response = $this->uidQuery('/calendars/54b64eadf6d7d8e41d263e0f', $uid);
+
+        $this->assertEquals(400, $response->status);
+    }
+
+    function testUIDQueryOnAnotherUserHomeShouldNotTellAnUnreadableEventApartFromAMissingOne() {
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0e');
+
+        $this->assertEquals(404, $this->uidQuery('/calendars/54b64eadf6d7d8e41d263e0f', 'event1')->status);
+        $this->assertEquals(404, $this->uidQuery('/calendars/54b64eadf6d7d8e41d263e0f', 'CertainlyDoesNotExist')->status);
+    }
+
+    private function uidQuery(string $homeUri, $uid) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => $homeUri,
+        ));
+        $request->setBody(json_encode(['uid' => $uid]));
+
+        return $this->request($request);
+    }
+
     function testUIDQueryShouldReturn404WhenEventDoesNotExist() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

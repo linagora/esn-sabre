@@ -44,7 +44,7 @@ class CalendarObjectDAO extends BaseDAO {
         return $this->find($query, $options);
     }
 
-    public function findByUid($calendarIds, $uid, array $projection = []) {
+    public function findByUid($calendarIds, string $uid, array $projection = []) {
         $query = ['calendarid' => ['$in' => $calendarIds], 'uid' => $uid];
         $options = empty($projection) ? [] : ['projection' => $projection];
         return $this->findOne($query, $options);
@@ -56,7 +56,7 @@ class CalendarObjectDAO extends BaseDAO {
         return $this->findOne($query, $options);
     }
 
-    public function findByUidMultiple($calendarIds, $uid, array $projection = []) {
+    public function findByUidMultiple($calendarIds, string $uid, array $projection = []) {
         $query = ['calendarid' => ['$in' => $calendarIds], 'uid' => $uid];
         $options = empty($projection) ? [] : ['projection' => $projection];
         return $this->find($query, $options);

@@ -254,7 +254,7 @@ class CalendarService {
      * @param string $uid
      * @return string|null Calendar object path or null
      */
-    public function getCalendarObjectByUID($principalUri, $uid) {
+    public function getCalendarObjectByUID($principalUri, string $uid) {
         $calendarUris = $this->getCalendarInstancesByPrincipalUri($principalUri);
         if (empty($calendarUris)) return null;
 

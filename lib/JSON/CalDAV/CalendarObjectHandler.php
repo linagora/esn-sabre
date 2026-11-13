@@ -101,17 +101,28 @@ class CalendarObjectHandler {
     }
 
     public function getCalendarObjectByUID($nodePath, $node, $jsonData) {
-        if (!isset($jsonData->uid)) {
+        // A non-string uid (e.g. {"$regex": "..."}) would reach the MongoDB
+        // query as an operator document.
+        if (!isset($jsonData->uid) || !is_string($jsonData->uid) || '' === trim($jsonData->uid)) {
             return [400, null];
         }
 
         $eventPath = $node->getCalendarObjectByUID($jsonData->uid);
 
-        if (!$eventPath) {
+        // Any user of the domain may read a calendar home: an object the
+        // requester cannot read answers like a missing one, so the lookup does
+        // not tell which UIDs the home holds.
+        if (!$eventPath || !$this->canReadObject($nodePath . '/' . $eventPath)) {
             return [404, null];
         }
 
         return [200, $this->getMultipleDAVItems($nodePath, $node, [$eventPath])];
+    }
+
+    private function canReadObject(string $path): bool {
+        $acl = $this->server->getPlugin('acl');
+
+        return !$acl || $acl->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false);
     }
 
     public function getMultipleCalendarObjectsFromPaths($nodePath, $jsonData) {

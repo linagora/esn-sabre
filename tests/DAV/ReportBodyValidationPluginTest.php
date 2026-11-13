@@ -318,6 +318,13 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(400, $response->getStatus());
     }
 
+    function testAclWithFalsyPrincipalHrefShouldAnswerBadRequest() {
+        $response = $this->request('ACL', '<D:acl xmlns:D="DAV:"><D:ace><D:principal><D:href>0</D:href></D:principal>'
+            . '<D:grant><D:privilege><D:read/></D:privilege></D:grant></D:ace></D:acl>');
+
+        $this->assertEquals(400, $response->getStatus());
+    }
+
     function testAclWithWrongRootShouldAnswerBadRequest() {
         $response = $this->request('ACL', '<D:propfind xmlns:D="DAV:"/>');
 

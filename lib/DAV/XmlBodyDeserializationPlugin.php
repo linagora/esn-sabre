@@ -6,6 +6,7 @@ use \Sabre\DAV\Exception;
 use \Sabre\DAV\Exception\BadRequest;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
+use \Sabre\DAVACL\Xml\Property\Acl;
 use \Sabre\HTTP\RequestInterface;
 use \Sabre\HTTP\ResponseInterface;
 use \Sabre\VObject\InvalidDataException;
@@ -73,7 +74,7 @@ class XmlBodyDeserializationPlugin extends ServerPlugin {
         }
 
         try {
-            $this->server->xml->parse($body, $request->getUrl());
+            $result = $this->server->xml->parse($body, $request->getUrl());
         } catch (ParseException $e) {
             return;
         } catch (\ErrorException | \TypeError | \ValueError | InvalidDataException $e) {
@@ -85,6 +86,23 @@ class XmlBodyDeserializationPlugin extends ServerPlugin {
                 throw $e;
             }
             throw $this->undeserialisableBody($request, $e);
+        }
+
+        if ($result instanceof Acl) {
+            $this->assertAcePrincipals($result);
+        }
+    }
+
+    /**
+     * `DAVACL\Xml\Property\Principal` leaves its href unset for a falsy one
+     * such as `<D:href>0</D:href>`: the ACE then carries a null principal,
+     * which Sabre's ACL handler passes to `Server::calculateUri()` (a TypeError).
+     */
+    private function assertAcePrincipals(Acl $acl): void {
+        foreach ($acl->getPrivileges() as $ace) {
+            if (!is_string($ace['principal'] ?? null) || '' === $ace['principal']) {
+                throw new BadRequest('The ACL request body contains an ACE whose principal has no usable href');
+            }
         }
     }
 

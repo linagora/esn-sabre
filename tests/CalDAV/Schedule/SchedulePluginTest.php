@@ -621,7 +621,11 @@ END:VCALENDAR
         $this->assertSame(0, $storedCopy->putCount);
     }
 
-    function testShouldDeliverOrganizerHandoverBetweenWriteEnabledMembersOfATeamCalendar() {
+    /**
+     * #819: mallory creates a Team Calendar object with the UID of bob's personal meeting.
+     * Bob organizes his own copy of it: it is not a Team Calendar event, nothing is handed over.
+     */
+    function testShouldRefuseOrganizerHandoverOfTheOwnCopyOfThePersonalEventOfATeamCalendarMember() {
         $storedCopy = $this->initializePluginWithStoredCopyAndSenderTeamCalendar('mailto:mallory@example.org',
             ['principals/users/mallory', 'principals/users/bob']);
         $message = $this->newMessage('REQUEST', 'mailto:mallory@example.org',
@@ -629,9 +633,33 @@ END:VCALENDAR
 
         $this->plugin->scheduleLocalDelivery($message);
 
+        $this->assertStringStartsWith('5.', $message->scheduleStatus);
+        $this->assertSame(0, $storedCopy->putCount);
+        $this->assertCount(0, $this->inbox->getChildren());
+    }
+
+    function testShouldRefuseOrganizerHandoverOfAnAttendeeCopyOfThePersonalEventOfATeamCalendarMember() {
+        $carolsCopy = $this->initializePluginWithCarolsCopyAndSenderTeamCalendar(true);
+        $message = $this->newMessageToCarol('mailto:mallory@example.org',
+            $this->newHandedOverCalendarObject('mailto:mallory@example.org'));
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('5.', $message->scheduleStatus);
+        $this->assertSame(0, $carolsCopy->putCount);
+        $this->assertCount(0, $this->inbox->getChildren());
+    }
+
+    function testShouldDeliverOrganizerHandoverBetweenWriteEnabledMembersOfATeamCalendar() {
+        $carolsCopy = $this->initializePluginWithCarolsCopyAndSenderTeamCalendar(false);
+        $message = $this->newMessageToCarol('mailto:mallory@example.org',
+            $this->newHandedOverCalendarObject('mailto:mallory@example.org'));
+
+        $this->plugin->scheduleLocalDelivery($message);
+
         $this->assertSame('1.2;Message delivered locally', $message->scheduleStatus);
-        $this->assertSame(1, $storedCopy->putCount);
-        $this->assertSame('mailto:mallory@example.org', (string) Reader::read($storedCopy->putData)->VEVENT->ORGANIZER);
+        $this->assertSame(1, $carolsCopy->putCount);
+        $this->assertSame('mailto:mallory@example.org', (string) Reader::read($carolsCopy->putData)->VEVENT->ORGANIZER);
     }
 
     function testShouldNotCreateInboxItemWhenTheBrokerRefusesTheMerge() {
@@ -1981,11 +2009,8 @@ ICS;
         $server = new Server([
             new SimpleCollection('principals', [
                 new SimpleCollection('users', [
-                    new PrincipalPropertiesTestDouble('bob', [
-                        '{urn:ietf:params:xml:ns:caldav}calendar-home-set' => new \Sabre\DAV\Xml\Property\Href('calendars/bob'),
-                        '{urn:ietf:params:xml:ns:caldav}schedule-inbox-URL' => new \Sabre\DAV\Xml\Property\Href('calendars/bob/inbox'),
-                        '{urn:ietf:params:xml:ns:caldav}schedule-default-calendar-URL' => new \Sabre\DAV\Xml\Property\Href('calendars/bob/default'),
-                    ])
+                    $this->newSchedulingPrincipal('bob'),
+                    $this->newSchedulingPrincipal('carol')
                 ])
             ]),
             new SimpleCollection('calendars', $calendarHomes)
@@ -2018,6 +2043,61 @@ ICS;
      */
     private function initializePluginWithStoredCopyAndSenderTeamCalendar(string $teamCopyOrganizer,
         array $writeEnabledMembers): WritableCalendarObjectTestDouble {
+        list($malloryHome, $schedulingRecipientPlugin) = $this->newSenderTeamCalendar($teamCopyOrganizer, $writeEnabledMembers);
+
+        return $this->initializePluginWithStoredCopy($this->newCalendarObjectOrganizedByBob(), [$malloryHome],
+            ['mailto:mallory@example.org' => 'principals/users/mallory'], [$schedulingRecipientPlugin]);
+    }
+
+    /**
+     * Carol's copy of daily-2, organized by bob, and a Team Calendar of mallory and bob whose
+     * copy of daily-2 mallory now organizes. Bob may keep his own organizer copy of it.
+     */
+    private function initializePluginWithCarolsCopyAndSenderTeamCalendar(bool $bobKeepsHisOwnCopy): WritableCalendarObjectTestDouble {
+        list($malloryHome, $schedulingRecipientPlugin) = $this->newSenderTeamCalendar('mailto:mallory@example.org',
+            ['principals/users/mallory', 'principals/users/bob']);
+        $carolsCopy = new WritableCalendarObjectTestDouble('event.ics', $this->newCalendarObjectOrganizedByBob());
+        $bobsCopy = new WritableCalendarObjectTestDouble('event.ics', $this->newCalendarObjectOrganizedByBob());
+        $this->inbox = new WritableCollectionTestDouble('inbox');
+
+        $this->initializePluginForDelivery([
+            new TeamCalendarHomeTestDouble('carol', ['daily-2' => 'default/event.ics'], [
+                $this->inbox,
+                new WritableCollectionTestDouble('default', [$carolsCopy])
+            ]),
+            new TeamCalendarHomeTestDouble('bob', $bobKeepsHisOwnCopy ? ['daily-2' => 'default/event.ics'] : [], [
+                new WritableCollectionTestDouble('inbox'),
+                new WritableCollectionTestDouble('default', $bobKeepsHisOwnCopy ? [$bobsCopy] : [])
+            ]),
+            $malloryHome
+        ], [], [
+            'mailto:mallory@example.org' => 'principals/users/mallory',
+            'mailto:carol@example.org' => 'principals/users/carol'
+        ], [$schedulingRecipientPlugin]);
+
+        return $carolsCopy;
+    }
+
+    private function newMessageToCarol(string $sender, string $ical): Message {
+        $message = $this->newMessage('REQUEST', $sender, $ical);
+        $message->recipient = 'mailto:carol@example.org';
+
+        return $message;
+    }
+
+    private function newSchedulingPrincipal(string $name): PrincipalPropertiesTestDouble {
+        return new PrincipalPropertiesTestDouble($name, [
+            '{urn:ietf:params:xml:ns:caldav}calendar-home-set' => new \Sabre\DAV\Xml\Property\Href('calendars/' . $name),
+            '{urn:ietf:params:xml:ns:caldav}schedule-inbox-URL' => new \Sabre\DAV\Xml\Property\Href('calendars/' . $name . '/inbox'),
+            '{urn:ietf:params:xml:ns:caldav}schedule-default-calendar-URL' => new \Sabre\DAV\Xml\Property\Href('calendars/' . $name . '/default'),
+        ]);
+    }
+
+    /**
+     * A Team Calendar mallory writes to, whose copy of daily-2 has the given organizer and
+     * the given write-enabled members: mallory's calendar home, and the plugin finding it.
+     */
+    private function newSenderTeamCalendar(string $teamCopyOrganizer, array $writeEnabledMembers): array {
         $backend = $this->createStub(\ESN\CalDAV\Backend\Mongo::class);
         $backend->method('findCalendarObjectsByUid')->willReturn([['calendarid' => 'team-id', 'uri' => 'team-event.ics']]);
         $teamCalendar = $this->createStub(\ESN\CalDAV\SharedCalendar::class);
@@ -2035,9 +2115,7 @@ ICS;
         $malloryHome->method('getChildren')->willReturn([$teamCalendar]);
         $malloryHome->method('getChild')->willReturn($teamCalendar);
 
-        return $this->initializePluginWithStoredCopy($this->newCalendarObjectOrganizedByBob(), [$malloryHome],
-            ['mailto:mallory@example.org' => 'principals/users/mallory'],
-            [new \ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin($backend)]);
+        return [$malloryHome, new \ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin($backend)];
     }
 
     private function newCalendarObjectOrganizedByBob(): string {

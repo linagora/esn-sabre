@@ -230,6 +230,11 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * the event is already organized by the sender, and every former organizer is a
      * write-enabled member of that same calendar: members organize on one another's behalf,
      * but nobody may take over the event of somebody outside the calendar.
+     *
+     * UIDs are only unique within a calendar: a member may create a Team Calendar copy of
+     * any event whose UID they know. The event of a Team Calendar is organized from it, so
+     * its organizer keeps no copy of their own: a former organizer still organizing a copy
+     * in one of their own calendars proves a personal event, which is never handed over.
      */
     private function isTeamCalendarOrganizerHandover(ITip\Message $iTipMessage, array $formerOrganizers): bool {
         $plugin = $this->server->getPlugin(TeamCalendarSchedulingRecipientPlugin::PLUGIN_NAME);
@@ -239,6 +244,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         try {
+            if ($this->anyOrganizerOrganizesAnOwnCopy($formerOrganizers, $iTipMessage->uid)) {
+                return false;
+            }
+
             $paths = $plugin->findCalendarObjectPathsWithoutSchedulingRecipient('calendars/' . basename($senderPrincipal), $iTipMessage->uid);
             return (bool) array_filter($paths,
                 fn($path) => $this->handsOverTeamCalendarObject($path, $iTipMessage->sender, $formerOrganizers));
@@ -246,6 +255,28 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             $this->logger->warning('Organizer handover lookup failed', ['reason' => $e->getMessage()]);
             return false;
         }
+    }
+
+    private function anyOrganizerOrganizesAnOwnCopy(array $organizers, string $uid): bool {
+        foreach ($organizers as $organizer) {
+            $principal = Utils::getPrincipalByUri($organizer, $this->server);
+            if (!$principal) {
+                continue;
+            }
+
+            $copy = $this->loadExistingCalendarObject('calendars/' . basename($principal), $uid)['calendarObject'];
+            if (!$copy) {
+                continue;
+            }
+            $organizesCopy = $this->calendarObjectHasOrganizer($copy, $organizer);
+            $copy->destroy();
+
+            if ($organizesCopy) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function handsOverTeamCalendarObject(string $objectPath, string $sender, array $formerOrganizers): bool {

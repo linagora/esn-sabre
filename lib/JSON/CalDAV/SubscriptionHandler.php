@@ -2,6 +2,7 @@
 
 namespace ESN\JSON\CalDAV;
 
+use ESN\CalDAV\Subscriptions\Subscription;
 use ESN\CalDAV\Subscriptions\SubscriptionSource;
 use ESN\DAV\SubscriptionSource as SubscriptionSourceHref;
 use \Sabre\DAV;
@@ -118,6 +119,12 @@ class SubscriptionHandler {
     }
 
     public function getCalendarObjectsForSubscription($subscription, $jsonData) {
+        // The source is read from the tree below, which applies no ACL: only the subscription
+        // node knows whether its subscriber may still read it.
+        if (!$subscription instanceof Subscription || !$subscription->hasReadableSource()) {
+            return [404, null];
+        }
+
         $propertiesList = ['{http://calendarserver.org/ns/}source'];
         $subprops = $subscription->getProperties($propertiesList);
 

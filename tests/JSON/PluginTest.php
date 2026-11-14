@@ -902,6 +902,68 @@ END:VCALENDAR
         $this->assertEquals(403, $response->status);
     }
 
+    function testShareeCanJsonReportTheSharedCalendarThroughASubscription() {
+        $this->shareCalendarUser2With('principals/users/54b64eadf6d7d8e41d263e0f', \Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+        $this->subscribeUser1To('sharedsub', 'calendars/54b64eadf6d7d8e41d263e0e/calendar2');
+
+        $response = $this->jsonReportSubscriptionOfUser1('sharedsub');
+
+        $this->assertEquals(200, $response->status);
+        $this->assertEquals('Sprint planning', (string) $this->eventsOf($response)['shared-event']->SUMMARY);
+    }
+
+    function testFormerShareeCannotJsonReportTheSharedCalendarThroughASubscription() {
+        $this->shareCalendarUser2With('principals/users/54b64eadf6d7d8e41d263e0f', \Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+        $this->subscribeUser1To('sharedsub', 'calendars/54b64eadf6d7d8e41d263e0e/calendar2');
+        $this->caldavBackend->updateInvites($this->calUser2['id'], [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'      => 'mailto:sharee@example.org',
+                'principal' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+                'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS,
+            ]),
+        ]);
+
+        $response = $this->jsonReportSubscriptionOfUser1('sharedsub');
+
+        $this->assertEquals(404, $response->status);
+        $this->assertStringNotContainsString('Sprint planning', $response->getBodyAsString());
+    }
+
+    function testShareeWhoDeclinedCannotJsonReportTheSharedCalendarThroughASubscription() {
+        $this->shareCalendarUser2With('principals/users/54b64eadf6d7d8e41d263e0f', \Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+        $this->subscribeUser1To('sharedsub', 'calendars/54b64eadf6d7d8e41d263e0e/calendar2');
+        $this->caldavBackend->saveCalendarInviteStatus($this->user1InstanceOfCalendarUser2(), \Sabre\DAV\Sharing\Plugin::INVITE_DECLINED);
+
+        $response = $this->jsonReportSubscriptionOfUser1('sharedsub');
+
+        $this->assertEquals(404, $response->status);
+        $this->assertStringNotContainsString('Sprint planning', $response->getBodyAsString());
+    }
+
+    private function user1InstanceOfCalendarUser2() {
+        $instances = array_filter(
+            $this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0f'),
+            fn($calendar) => $calendar['id'][0] == $this->calUser2['id'][0]
+        );
+        $this->assertNotEmpty($instances, 'No instance of the shared calendar');
+
+        return current($instances)['id'];
+    }
+
+    private function jsonReportSubscriptionOfUser1($subscriptionUri) {
+        $this->authBackend->setPrincipal('principals/users/54b64eadf6d7d8e41d263e0f');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/' . $subscriptionUri . '.json',
+        ));
+        $request->setBody(json_encode($this->timeRangeDataRecur));
+
+        return $this->request($request);
+    }
+
     function testGetSubscriptionObjects() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',

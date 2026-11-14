@@ -84,6 +84,16 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
     }
 
     /**
+     * Whether this subscription still exposes its source calendar: it exists and the subscriber
+     * may still read it. Routes reading the source outside of this node must check it first.
+     *
+     * @return bool
+     */
+    function hasReadableSource() {
+        return $this->getSourceCalendarInfo() !== null;
+    }
+
+    /**
      * Returns calendar info for the source calendar that this subscription points to.
      *
      * @return array|null

@@ -126,7 +126,7 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $oldICalendarData = $loaded['calendarData'];
         $currentObject = $loaded['calendarObject'];
 
-        if ($this->changesOrganizerWithoutAuthorization($iTipMessage, $currentObject)) {
+        if (!$this->authorizeOrganizerHandover($iTipMessage, $currentObject)) {
             $this->refuseUnauthorizedOrganizerChange($iTipMessage);
             return;
         }
@@ -192,23 +192,31 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
     }
 
     /**
-     * Whether a REQUEST rewrites the recipient's copy on behalf of somebody who does not
-     * organize it, without that being an authorized organizer handover.
+     * Whether a REQUEST may rewrite the recipient's copy, and if it takes the event over from
+     * another organizer, authorizes that handover to the broker.
      *
-     * The broker accepts a REQUEST from another sender as a handover as soon as the message
-     * keeps the stored organizer as an attendee. That only depends on the content of the
-     * message, which the sender writes: anybody knowing the UID of an event could rewrite
-     * somebody else's copy of it. The handover is therefore authorized here from who the
-     * sender is, see isTeamCalendarOrganizerHandover().
+     * The broker refuses a REQUEST onto a copy that its sender does not organize: the message
+     * cannot prove an organizer change, its sender writes every property of it, the ATTENDEE
+     * list included. The handover is therefore authorized here from who the sender is, see
+     * isTeamCalendarOrganizerHandover(), and handed to the broker through
+     * ITip\Message::$authorizedFormerOrganizers.
      */
-    private function changesOrganizerWithoutAuthorization(ITip\Message $iTipMessage, ?VCalendar $currentObject): bool {
+    private function authorizeOrganizerHandover(ITip\Message $iTipMessage, ?VCalendar $currentObject): bool {
+        $iTipMessage->authorizedFormerOrganizers = [];
         if ($iTipMessage->method !== 'REQUEST' || $currentObject === null) {
-            return false;
+            return true;
         }
 
         $formerOrganizers = $this->storedOrganizersOtherThan($currentObject, $iTipMessage->sender);
+        if (!$formerOrganizers) {
+            return true;
+        }
+        if (!$this->isTeamCalendarOrganizerHandover($iTipMessage, $formerOrganizers)) {
+            return false;
+        }
 
-        return $formerOrganizers && !$this->isTeamCalendarOrganizerHandover($iTipMessage, $formerOrganizers);
+        $iTipMessage->authorizedFormerOrganizers = $formerOrganizers;
+        return true;
     }
 
     private function storedOrganizersOtherThan(VCalendar $calendar, ?string $sender): array {

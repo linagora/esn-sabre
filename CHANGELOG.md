@@ -40,6 +40,60 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
  - ISSUE-801 Tighten the attendee-change guard on scheduling: an attendee can no longer move every occurrence of an event by rewriting only the `VTIMEZONE` definition (`X-LIC-LOCATION` or its observances) behind a `TZID`; the resolved start and end instants are now compared (#802)
  - ISSUE-799 A new answer of a participant whose stored e-mail address contains upper-case letters is now propagated to the future overrides of the series (#804)
  - ISSUE-807 Updating a calendar object without any `VEVENT` (e.g. a task) no longer fails with a `500` (#808)
+ - A JSON calendar ACL request whose `public_right` is not a string (e.g. `[]` or `{}`) is answered `400` instead of `500` (#816)
+ - A team calendar event with a blank or falsy `ORGANIZER` (empty, `0`) is now refused when it has attendees, instead of being accepted and sending invitations with an empty organizer (#817)
+ - An ACL request whose ACE principal `<D:href>` is falsy (e.g. `0`) is answered `400` instead of `500` (#818)
+
+### Security
+
+ - Fix users enumerating the event UIDs stored in someone else's calendars through the JSON REPORT on a calendar home: the `uid` must now be a non-empty string (`400` otherwise), and an event the user cannot read answers `404` like a missing one (#821)
+ - Fix a team calendar member taking over another member's personal event: an organizer handover is no longer accepted from a copy of the event in a team calendar that reuses its UID (#819)
+ - Stop serving the source of a calendar subscription to a subscriber who can no longer read it: a sharee whose share was revoked or declined, or a former team calendar member, no longer reads the source through an existing subscription (GET, calendar-query, multiget, sync-collection, JSON REPORT) (#820, #824, #825)
+
+## [2.5.0.3] - 2026-11-13
+
+### Security
+
+ - Fix any user knowing the UID of an event being able to rewrite another user's copy of it (time, location, ORGANIZER...) with an iTIP REQUEST that lists the stored organizer as an attendee: a REQUEST from someone other than the organizer is now refused unless it hands over a team calendar event (#812)
+
+## [2.5.0.2] - 2026-11-12
+
+### New Features
+
+ - ISSUE-437 Expose video conference links through the standard RFC 7986 `CONFERENCE` property — events carrying `X-OPENPAAS-VIDEOCONFERENCE` are decorated upon `PUT` (and upon iTIP delivery) so that external clients (Apple Calendar, iOS, Outlook, ...) display a join button. `X-OPENPAAS-VIDEOCONFERENCE` is kept for Twake clients, and is conversely derived from the `CONFERENCE` property of events created by external clients (#437)
+ - Every runtime setting can now be configured from `config.json` instead of the process environment. The `environment` section of `config.json` takes precedence, the process environment is still honoured as a fallback, and the built-in default applies last, so existing deployments keep working untouched. `scripts/generate_config.sh` materializes the whole section, `config.json.default` lists every key with its default value, and [doc/CONFIGURE.md](doc/CONFIGURE.md) documents all of them.
+ - Nginx rate limiting: `X-Forwarded-For` is trusted by default to key the limit on the client IP; `NGINX_TRUSTED_PROXIES` can restrict which peers may supply it, `NGINX_TRUSTED_CLIENTS_CIDR` exempts trusted clients such as the Twake Calendar side service, `NGINX_RATE_LIMIT=off` disables rate limiting, and `NGINX_RATE_LIMIT_STATUS` sets the rejection status. Invalid values stop the container at startup. See [doc/CONFIGURE.md](doc/CONFIGURE.md#nginx-rate-limiting)
+ - ISSUE-536 The recurrence expansion limit is configurable through `SABRE_MAX_RECURRENCES` (default `3500`, negative disables it), so that long-running recurring series still return their occurrences in recent time ranges. See [doc/CONFIGURE.md](doc/CONFIGURE.md#recurrence-expansion) (#536)
+ - ISSUE-425 Auto-provision users upon a DAV request — when an LDAP or impersonated user authenticates successfully but has no entry in the `users` collection yet, the entry is created on the fly (following the twake-calendar-side-service document format) instead of returning a `401`. Gated by the `AUTO_PROVISION` env var (default `true`). Needed upon migrations (#425)
+ - The `sabre:contact:updated` real-time notification now also carries the card as it was before the update (`oldcarddata`), so consumers that keep data derived from a card, such as TMail's auto-complete index of domain members, can tell which email addresses the update removed. The field is optional and only added: existing consumers ignore it
+
+### Performance
+
+ - Listing a calendar (PROPFIND `Depth: 1`, `sync-collection`, `calendar-multiget`) no longer reads the calendar sharing state from MongoDB once per event: the child ACL is computed once per listing. On a 3000 event calendar, a PROPFIND `Depth: 1` goes from 21014 MongoDB commands (~5 s) down to 21 (~50 ms).
+ - Same for address books: listing the cards of an address book no longer reads its public right and sharees once per card, and checking that a card exists no longer computes its ACL. On a 3000 card address book, a PROPFIND `Depth: 1` goes from 6018 MongoDB commands down to 20, an `addressbook-multiget` of 500 cards from 2508 down to 510.
+ - The read access check of `calendar-multiget` and `addressbook-multiget` REPORTs looks up the requested hrefs in one query per collection instead of one query per href. A `calendar-multiget` of 500 events goes from 4004 MongoDB commands (~1 s) down to 20 (~60 ms), an `addressbook-multiget` of 500 cards down to 14.
+ - Multi-get lookups of calendar objects and cards query at most 512 URIs at a time, so that a request carrying thousands of hrefs does not turn into a single query that could hit the database timeout.
+ - MongoDB indexes are created once when the container starts (`scripts/create-indexes.php`) instead of on every HTTP request, which sent 14 `createIndexes` commands per request. The `SHOULD_CREATE_INDEX` setting is removed.
+ - Add the missing MongoDB indexes: `calendarinstances { calendarid, share_href }` (the sharees and public right lookups of a calendar were collection scans), `sharedaddressbooks { addressbookid, share_href }` and `{ principaluri }`, `addressbooksubscriptions { principaluri }` and `{ source }`. Drop the redundant `calendarobjects { calendarid }` and `cards { addressbookid }`, covered by the `{ calendarid, uri }` and `{ addressbookid, uri }` indexes.
+
+   Upgrade: the new indexes are created at startup. To drop the redundant ones, or if index creation fails at startup, run the `mongosh` script from [doc/storage/MONGO.md](doc/storage/MONGO.md#index-creation).
+
+### Changes
+
+ - **Behaviour change**: an LDAP infrastructure failure during Basic authentication (server down or unreachable, timeout, server busy/unavailable, service account bind failure, failing search) is now answered `503 Service Unavailable` instead of `401`, so that an outage is no longer mistaken for bad credentials. Only an answer of the directory about the credentials keeps returning `401`. LDAP operations now time out after `LDAP_TIMEOUT` seconds (default `5`) instead of hanging
+ - **Behaviour change**: requests rejected by the Nginx rate limit are now answered `429 Too Many Requests` with `Retry-After: 1` and the CORS headers, instead of `503 Service Unavailable`. Clients and monitoring that treat 503 as a rate-limit signal must be updated, or set `NGINX_RATE_LIMIT_STATUS=503` to keep the previous status
+
+### Bug Fixes
+
+ - The bulk free/busy route (`POST /calendars/freebusy`) accepts an optional `timezone` (IANA identifier, `400` when unknown) in which floating dates and times are read. All-day events used to be reported busy from UTC midnight to UTC midnight, so that a booking page offered the first hours of a Paris owner's day off (linagora/twake-calendar-side-service#1200). Without `timezone`, UTC is used as before
+ - Sharees (read, read-write, administration) can read the owner's calendar again (`calendarserver:delegatedsource`, e.g. `REPORT /calendars/{ownerId}/{calendarId}.json`): since #411 enforces `{DAV:}read` on JSON REPORTs, they got `403`. The owner's calendar and its events now grant `{DAV:}read`, and only read, to these sharees. PRIVATE / CONFIDENTIAL events stay anonymized for them. Free-busy sharees, declined and revoked shares and other users still get `403`
+ - Deleting a calendar now deletes its events. They were left behind in `calendarobjects` because the deletion filtered on an `ObjectId` while the calendar id is stored as a string there. Existing orphans can be listed with `db.calendarobjects.aggregate([{ $lookup: { from: "calendars", let: { id: "$calendarid" }, pipeline: [{ $match: { $expr: { $eq: [{ $toString: "$_id" }, "$$id"] } } }], as: "c" } }, { $match: { c: [] } }, { $count: "orphans" }])`.
+ - ISSUE-699 Expanding a single event over a time range (`REPORT` with `match.start` / `match.end` on an event) is answered `422` instead of `500` when the series generates more occurrences than `SABRE_MAX_RECURRENCES` before reaching the range, e.g. an open-ended daily event that started more than ten years before (#699)
+ - ISSUE-404 Fix duplicated `DAV`/`X-Sabre-Version` headers in DAV responses — the nginx capability headers are now only emitted for the OPTIONS short-circuit, letting Sabre emit them once (with consistent casing) for proxied responses (#404)
+ - ISSUE-800 ACL, MKCOL, MKCALENDAR and XML POST requests whose body holds a `<D:principal>` with an empty or blank `<D:href>` are answered `400` instead of `500` (#803)
+ - ISSUE-801 Tighten the attendee-change guard on scheduling: an attendee can no longer move every occurrence of an event by rewriting only the `VTIMEZONE` definition (`X-LIC-LOCATION` or its observances) behind a `TZID`; the resolved start and end instants are now compared (#802)
+ - ISSUE-799 A new answer of a participant whose stored e-mail address contains upper-case letters is now propagated to the future overrides of the series (#804)
+ - ISSUE-807 Updating a calendar object without any `VEVENT` (e.g. a task) no longer fails with a `500` (#808)
 
 ## [2.5.0.1] - 2026-11-11
 

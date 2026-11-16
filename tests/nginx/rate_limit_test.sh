@@ -5,7 +5,7 @@
 #
 # Usage: tests/nginx/rate_limit_test.sh [image]   (default: esn_sabre_nginx_test)
 #
-# No MongoDB is needed: requests that pass the rate limit get a fast 500 from PHP,
+# No MongoDB is needed (index creation is not required, see WITHOUT_MONGO): requests that pass the rate limit get a fast 500 from PHP,
 # rejected ones get the rate limit status from nginx. Two peers are used:
 #  - "inside":  curl run in the container, the peer is 127.0.0.1;
 #  - "outside": curl run on the docker host, the peer is the docker gateway.
@@ -25,10 +25,14 @@ trap cleanup EXIT
 pass() { echo "  PASS: $*"; }
 failed() { echo "  FAIL: $*"; FAILURES=$((FAILURES + 1)); }
 
+# There is no MongoDB: try the index creation once and start anyway, as sabre refuses to start without indexes
+# by default (see doc/storage/MONGO.md § "Index creation").
+WITHOUT_MONGO=(-e MONGO_INDEX_CREATION_ATTEMPTS=1 -e MONGO_INDEX_CREATION_REQUIRED=false)
+
 # Starts the image with the given `-e` options, waits for nginx and prints the container id.
 start() {
   local cid
-  cid=$(docker run -d -p 127.0.0.1::80 "$@" "$IMAGE") || return 1
+  cid=$(docker run -d -p 127.0.0.1::80 "${WITHOUT_MONGO[@]}" "$@" "$IMAGE") || return 1
   CONTAINERS+=("$cid")
   for _ in $(seq 1 60); do
     if [ "$(docker exec "$cid" curl -s -o /dev/null -w '%{http_code}' -X OPTIONS http://127.0.0.1/ 2>/dev/null)" = 200 ]; then

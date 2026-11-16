@@ -321,6 +321,17 @@ class CalendarService {
     }
 
     /**
+     * Whether the principal holds an instance of the given calendar URI
+     *
+     * @param string $principalUri
+     * @param string $calendarUri
+     * @return bool
+     */
+    public function calendarInstanceExists($principalUri, $calendarUri) {
+        return $this->checkIfCalendarInstanceExist($principalUri, $calendarUri) !== false;
+    }
+
+    /**
      * Check if calendar instance exists
      *
      * @param string $principalUri

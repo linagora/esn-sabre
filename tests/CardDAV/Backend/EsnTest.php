@@ -2,6 +2,8 @@
 
 namespace ESN\CardDAV\Backend;
 
+require_once ESN_TEST_BASE . '/DAV/MongoFindCounter.php';
+
 /**
  * @medium
  */
@@ -68,6 +70,37 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->checkAddressbook($anotherAddressBook, $books[0]);
         $this->checkAddressbook($collectedAddressBook, $books[1]);
         $this->checkAddressbook($contactAddressBook, $books[2]);
+    }
+
+    function testEnsureDefaultAddressBooksCreatesTheMissingOnes() {
+        $backend = $this->getBackend();
+        $backend->createAddressBook('principals/users/user2', $backend::CONTACTS_URI, []);
+
+        $backend->ensureDefaultAddressBooks('principals/users/user2');
+
+        $this->assertSame([$backend::COLLECTED_URI, $backend::CONTACTS_URI],
+            array_column($backend->getAddressBooksFor('principals/users/user2'), 'uri'));
+    }
+
+    function testEnsureDefaultAddressBooksDoesNotDuplicateExistingOnes() {
+        $backend = $this->getBackend();
+
+        $backend->ensureDefaultAddressBooks('principals/users/user2');
+        $backend->ensureDefaultAddressBooks('principals/users/user2');
+
+        $this->assertSame([$backend::COLLECTED_URI, $backend::CONTACTS_URI],
+            array_column($backend->getAddressBooksFor('principals/users/user2'), 'uri'));
+    }
+
+    function testEnsureDefaultAddressBooksReadsOnceWhenTheyExist() {
+        $backend = $this->getBackend();
+        $backend->ensureDefaultAddressBooks('principals/users/user2');
+
+        $queries = \ESN\DAV\MongoFindCounter::count('addressbooks', function () use ($backend) {
+            $backend->ensureDefaultAddressBooks('principals/users/user2');
+        });
+
+        $this->assertSame(1, $queries);
     }
 
     private function checkAddressbook($expected, $item) {

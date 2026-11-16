@@ -118,6 +118,26 @@ class XmlBodyDeserializationPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertStringNotContainsString('could not be deserialised', $response->getBodyAsString());
     }
 
+    #[\PHPUnit\Framework\Attributes\DataProvider('wellFormedButIncompleteBodies')]
+    function testIncompleteBodyAnswersBadRequest($method, $body) {
+        $this->assertBadRequest($this->request($method, $body));
+    }
+
+    static function wellFormedButIncompleteBodies() {
+        return [
+            'empty propertyupdate' => ['PROPPATCH', '<D:propertyupdate xmlns:D="DAV:"></D:propertyupdate>'],
+            'share without href' => ['PROPPATCH', '<CS:share xmlns:D="DAV:" xmlns:CS="http://calendarserver.org/ns/"><CS:set><CS:read-write/></CS:set></CS:share>'],
+            'comp-filter without name' => ['PROPFIND', '<C:calendar-query xmlns:C="urn:ietf:params:xml:ns:caldav"><C:filter><C:comp-filter/></C:filter></C:calendar-query>'],
+            'text component set' => ['PROPPATCH', '<D:propertyupdate xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><C:supported-calendar-component-set>x</C:supported-calendar-component-set></D:prop></D:set></D:propertyupdate>'],
+        ];
+    }
+
+    function testPropfindWithoutBodyStaysAllowed() {
+        $response = $this->request('PROPFIND', '');
+        $this->assertStringNotContainsString('could not be deserialised', $response->getBodyAsString());
+        $this->assertNotEquals(500, $response->getStatus());
+    }
+
     function testMalformedXmlIsLeftToSabreHandlers() {
         $response = $this->request('MKCOL', '<D:mkcol xmlns:D="DAV:">');
 

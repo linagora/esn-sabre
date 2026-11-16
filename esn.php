@@ -123,6 +123,9 @@ $server->addPlugin(new ESN\DAV\VObjectCachePlugin($calendarBackend->getVObjectCa
 // Responses hold per-principal data: forbid browsers from reusing them across credentials.
 $server->addPlugin(new ESN\DAV\PrivateCachePlugin());
 
+// Refuse "." and ".." as resource names: clients resolve them to the parent collection.
+$server->addPlugin(new ESN\DAV\DotSegmentNameGuardPlugin());
+
 // Auth backend
 $authBackend = new ESN\DAV\Auth\Backend\Esn($config['esn']['apiRoot'], $config['webserver']['realm'], $principalBackend, $server, SABRE_ENV === SABRE_ENV_DEV);
 $server->on('auth:success',

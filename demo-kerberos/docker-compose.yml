@@ -1,0 +1,138 @@
+# Demo #483: Kerberos (SPNEGO) in front of esn-sabre.
+#
+#   ./build.sh                       # images
+#   docker compose up -d --wait      # stack
+#   docker compose exec kdc bash /demo/run-tests.sh
+#   docker compose down -v           # the tests rotate a key: reset before re-running
+#
+# Three sabre containers share the image and differ only by their environment:
+#   sabre               Kerberos on, realm TEST.LOCAL mapped to linagora.com
+#   sabre-norealm       Kerberos on, but TEST.LOCAL is not an allowed realm
+#   sabre-kerberos-off  Kerberos off (KERBEROS_ENABLED=false)
+
+x-sabre: &sabre
+  image: esn-sabre:krb-demo
+  volumes:
+    - shared:/shared:ro
+  depends_on:
+    kdc:
+      condition: service_healthy
+    mongodb:
+      condition: service_healthy
+    amqp_host:
+      condition: service_healthy
+    esn_ldap:
+      condition: service_started
+  healthcheck:
+    test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://localhost/"]
+    interval: 5s
+    timeout: 5s
+    retries: 30
+
+x-sabre-env: &sabre-env
+  SABRE_ENV: dev
+  ESN_MONGO_HOST: mongodb
+  SABRE_MONGO_HOST: mongodb
+  AMQP_HOST: amqp_host
+  NGINX_RATE_LIMIT: "off"
+  LDAP_SERVER: ldap://esn_ldap:389
+  LDAP_BASE: ou=users,dc=linagora.com,dc=lng
+  LDAP_ADMIN_DN: cn=admin,dc=linagora.com,dc=lng
+  LDAP_ADMIN_PASSWORD: admin
+  LDAP_USERNAME_MODE: username
+  AUTO_PROVISION: "false"
+  KERBEROS_KEYTAB: /etc/sabre.keytab
+
+services:
+  kdc:
+    build: ./kdc
+    hostname: kdc
+    volumes:
+      - shared:/shared
+      - ./krb5.conf:/etc/krb5.conf:ro
+      - ./run-tests.sh:/demo/run-tests.sh:ro
+    healthcheck:
+      test: ["CMD", "test", "-f", "/shared/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks:
+      demo:
+        aliases: [kdc.test.local]
+    # ports: ["88:88/tcp", "88:88/udp"]   # README: "Thunderbird on the host"
+
+  sabre:
+    <<: *sabre
+    hostname: sabre
+    environment:
+      <<: *sabre-env
+      KERBEROS_ENABLED: "true"
+      KERBEROS_REALM_DOMAINS: TEST.LOCAL:linagora.com
+      KERBEROS_SERVICE_PRINCIPAL: HTTP/sabre.test.local@TEST.LOCAL
+    networks:
+      demo:
+        aliases: [sabre.test.local]
+    # ports: ["8001:80"]                  # README: "Thunderbird on the host"
+
+  sabre-norealm:
+    <<: *sabre
+    hostname: sabre-norealm
+    environment:
+      <<: *sabre-env
+      KERBEROS_ENABLED: "true"
+      KERBEROS_REALM_DOMAINS: OTHER.LOCAL:linagora.com
+      KERBEROS_SERVICE_PRINCIPAL: HTTP/sabre-norealm.test.local@TEST.LOCAL
+    networks:
+      demo:
+        aliases: [sabre-norealm.test.local]
+
+  sabre-kerberos-off:
+    <<: *sabre
+    hostname: sabre-kerberos-off
+    environment:
+      <<: *sabre-env
+      KERBEROS_ENABLED: "false"
+      KERBEROS_REALM_DOMAINS: TEST.LOCAL:linagora.com
+      KERBEROS_SERVICE_PRINCIPAL: HTTP/sabre-kerberos-off.test.local@TEST.LOCAL
+    networks:
+      demo:
+        aliases: [sabre-kerberos-off.test.local]
+
+  mongodb:
+    image: docker.io/library/mongo:8.0.6
+    hostname: mongodb
+    volumes:
+      - ./mongo/init.js:/docker-entrypoint-initdb.d/init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [demo]
+
+  amqp_host:
+    image: docker.io/library/rabbitmq:4.1.1-management
+    hostname: amqp_host
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [demo]
+
+  esn_ldap:
+    image: esn-sabre-ldap-test:krb-demo
+    hostname: esn_ldap
+    environment:
+      LDAP_PORT_NUMBER: "389"
+      LDAP_ADMIN_USERNAME: admin
+      LDAP_ADMIN_PASSWORD: admin
+      LDAP_ROOT: dc=linagora.com,dc=lng
+    networks: [demo]
+
+networks:
+  demo:
+    driver: bridge
+
+volumes:
+  shared:

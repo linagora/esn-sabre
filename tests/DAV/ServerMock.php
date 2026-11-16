@@ -441,6 +441,7 @@ END:VCALENDAR'
             // Mirrors esn.php: the plugins and the backend share one parse cache.
             $this->vObjectCache = $this->caldavBackend->getVObjectCache();
             $this->server->addPlugin(new \ESN\DAV\VObjectCachePlugin($this->vObjectCache));
+            $this->server->addPlugin(new \ESN\DAV\DotSegmentNameGuardPlugin());
 
             $principalBackend = $this->principalBackend;
             $calendarRoot = $this->calendarRoot;

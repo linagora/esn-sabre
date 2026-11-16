@@ -216,8 +216,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
-                    'members' => self::$domainMembers
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
                 ]
             ]
         ];
@@ -229,8 +228,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
-                    'members' => self::$domainMembers
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
                 ]
             ]
         ];
@@ -242,8 +240,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
-                    'members' => self::$domainMembers
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
                 ]
             ]
         ];
@@ -255,8 +252,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
-                    'members' => self::$domainMembers
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
                 ]
             ]
         ];
@@ -268,8 +264,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
-                    'members' => self::$domainMembers
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
                 ]
             ]
         ];
@@ -281,8 +276,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
-                    'members' => self::$domainMembers
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
                 ]
             ]
         ];
@@ -294,8 +288,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
-                    'members' => self::$domainMembers
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
                 ]
             ]
         ];
@@ -307,8 +300,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             'groupPrincipals' => [
                 [
                     'uri' => 'principals/domains/' . self::DOMAIN_ID,
-                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID],
-                    'members' => self::$domainMembers
+                    'administrators' => ['principals/users/' . self::USER_DOMAIN_ADMIN_ID]
                 ]
             ],
             'adminForDomains' => [ self::DOMAIN_ID ]
@@ -329,7 +321,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame($expected['id'], $principal['id']);
     }
 
-    function testUserPrincipalsByPrefixShouldListTheDomainMembersOnce() {
+    function testUserPrincipalsByPrefixShouldNotListTheDomainMembers() {
         $backend = new Mongo(self::$esndb, self::$tenant);
 
         $queries = \ESN\DAV\MongoFindCounter::count('users', function () use ($backend, &$principals) {
@@ -338,10 +330,21 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
         $this->assertCount(8, $principals);
         foreach ($principals as $principal) {
-            $this->assertEqualsCanonicalizing(self::$domainMembers, $principal['groupPrincipals'][0]['members']);
+            $this->assertArrayNotHasKey('members', $principal['groupPrincipals'][0]);
         }
-        // The users, the domains of each user, then the members of their domain once: not once per user
-        $this->assertEquals(count($principals) + 2, $queries);
+        // The users, then the domains of each user: the members of the domain are never read
+        $this->assertEquals(count($principals) + 1, $queries);
+    }
+
+    function testUserPrincipalByPathShouldNotReadTheDomainMembers() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $queries = \ESN\DAV\MongoFindCounter::count('users', function () use ($backend) {
+            $backend->getPrincipalByPath('principals/users/' . self::USER_ID);
+        });
+
+        // The user, then its domains: no read of all the users of the domain
+        $this->assertEquals(2, $queries);
     }
 
     function testDomainPrincipalsByPrefix() {

@@ -28,7 +28,11 @@ Key fields: `calendarid`, `principaluri`, `uri`, `access`, `share_href`, `share_
 ### `calendarobjects`
 Stores the individual calendar events/tasks (raw iCalendar data + parsed metadata).
 
-Key fields: `calendarid`, `uri`, `uid`, `calendardata`, `componenttype`, `firstoccurence`, `lastoccurence`.
+Key fields: `calendarid`, `uri`, `uid`, `calendardata`, `componenttype`, `firstoccurence`, `lastoccurence`, `recurring`.
+
+`recurring` is `false` when the object holds a single VEVENT without `RRULE` nor `RDATE`: its `firstoccurence` /
+`lastoccurence` are then the exact bounds of the event, and a VEVENT time-range query skips the vobject post-filter
+for it. A missing value is treated as `true`.
 
 **Class:** `CalDAV\Backend\DAO\CalendarObjectDAO`  
 **Indexes:**

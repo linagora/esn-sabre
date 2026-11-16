@@ -238,4 +238,33 @@ class CalendarDataNormalizerTest extends TestCase {
         $this->assertNull($this->denormalize("BEGIN:VEVENT\r\nUID:n\r\nDTSTAMP:20250101T000000Z\r\n"
             . "DTSTART:20250101T100000Z\r\nEND:VEVENT\r\n")['classification']);
     }
+
+    public function testSingleEventIsNotRecurring(): void {
+        $this->assertFalse($this->denormalize("BEGIN:VEVENT\r\nUID:s\r\nDTSTAMP:20250101T000000Z\r\n"
+            . "DTSTART:20250101T100000Z\r\nDTEND:20250101T110000Z\r\nEND:VEVENT\r\n")['recurring']);
+    }
+
+    public function testLoneOverrideIsNotRecurring(): void {
+        $this->assertFalse($this->denormalize("BEGIN:VEVENT\r\nUID:o\r\nDTSTAMP:20250101T000000Z\r\n"
+            . "RECURRENCE-ID:20250101T100000Z\r\nDTSTART:20250101T140000Z\r\nEND:VEVENT\r\n")['recurring']);
+    }
+
+    public function testRruleIsRecurring(): void {
+        $this->assertTrue($this->denormalize("BEGIN:VEVENT\r\nUID:r\r\nDTSTAMP:20250101T000000Z\r\n"
+            . "DTSTART:20250101T100000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT\r\n")['recurring']);
+    }
+
+    public function testRdateIsRecurring(): void {
+        $this->assertTrue($this->denormalize("BEGIN:VEVENT\r\nUID:r\r\nDTSTAMP:20250101T000000Z\r\n"
+            . "DTSTART:20250101T100000Z\r\nRDATE:20250105T100000Z\r\nEND:VEVENT\r\n")['recurring']);
+    }
+
+    public function testSeveralEventsAreRecurring(): void {
+        // Detached instances without their master: the stored range is their hull
+        $this->assertTrue($this->denormalize(
+            "BEGIN:VEVENT\r\nUID:d\r\nDTSTAMP:20250101T000000Z\r\nRECURRENCE-ID:20250101T100000Z\r\n"
+            . "DTSTART:20250101T100000Z\r\nEND:VEVENT\r\n"
+            . "BEGIN:VEVENT\r\nUID:d\r\nDTSTAMP:20250101T000000Z\r\nRECURRENCE-ID:20250108T100000Z\r\n"
+            . "DTSTART:20250108T100000Z\r\nEND:VEVENT\r\n")['recurring']);
+    }
 }

@@ -37,7 +37,7 @@ class CalendarDataNormalizer {
      * Extract denormalized metadata from calendar data
      *
      * @param string $calendarData iCalendar data
-     * @return array Array with etag, size, componentType, firstOccurence, lastOccurence, uid
+     * @return array Array with etag, size, componentType, firstOccurence, lastOccurence, uid, classification, recurring
      * @throws \Sabre\DAV\Exception\BadRequest If no valid component found
      */
     public function getDenormalizedData($calendarData) {
@@ -62,7 +62,28 @@ class CalendarDataNormalizer {
             'lastOccurence'  => $lastOccurence,
             'uid' => $uid,
             'classification' => $classification,
+            'recurring' => $this->isRecurring($vObject),
         ];
+    }
+
+    /**
+     * Whether the occurrence range may be a hull rather than the exact bounds
+     * of a single event: a time-range calendar-query can then only be answered
+     * by expanding the object.
+     *
+     * A lone VEVENT without RRULE nor RDATE has a single instance whose bounds
+     * are exactly the stored firstoccurence / lastoccurence, computed as
+     * VEvent::isInTimeRange computes them.
+     *
+     * @param VObject\Component\VCalendar $vObject
+     * @return bool
+     */
+    private function isRecurring($vObject) {
+        $events = array_values($vObject->select('VEVENT'));
+
+        return count($events) !== 1
+            || isset($events[0]->RRULE)
+            || isset($events[0]->RDATE);
     }
 
     /**

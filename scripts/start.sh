@@ -147,8 +147,40 @@ sh /var/www/scripts/generate_config.sh > /var/www/config.json
 
 nginx -t || fail "invalid nginx configuration, see the error above"
 
-# Indexes are created here once, not on every request. A failure must not keep sabre from starting.
-php /var/www/scripts/create-indexes.php /var/www/config.json || echo "WARNING: MongoDB index creation failed, see doc/storage/MONGO.md to create them manually" >&2
+# Indexes are created here once, not on every request. Without them every query is a collection scan,
+# so retry while MongoDB is not reachable yet, then refuse to start. See doc/storage/MONGO.md § "Index creation".
+MONGO_INDEX_CREATION_ATTEMPTS=${MONGO_INDEX_CREATION_ATTEMPTS:-30}
+MONGO_INDEX_CREATION_RETRY_DELAY=${MONGO_INDEX_CREATION_RETRY_DELAY:-2}
+MONGO_INDEX_CREATION_REQUIRED=${MONGO_INDEX_CREATION_REQUIRED:-true}
+[[ "$MONGO_INDEX_CREATION_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] \
+  || fail "MONGO_INDEX_CREATION_ATTEMPTS: invalid value (expected a positive integer)"
+[[ "$MONGO_INDEX_CREATION_RETRY_DELAY" =~ ^[0-9]+$ ]] \
+  || fail "MONGO_INDEX_CREATION_RETRY_DELAY: invalid value (expected a number of seconds)"
+[[ "$MONGO_INDEX_CREATION_REQUIRED" =~ ^(true|false)$ ]] \
+  || fail "MONGO_INDEX_CREATION_REQUIRED: invalid value (expected true or false)"
+
+create_indexes() {
+  local attempt
+  for ((attempt = 1; attempt <= MONGO_INDEX_CREATION_ATTEMPTS; attempt++)); do
+    php /var/www/scripts/create-indexes.php /var/www/config.json && return 0
+    echo "start.sh: MongoDB index creation failed (attempt $attempt/$MONGO_INDEX_CREATION_ATTEMPTS)" >&2
+    if ((attempt < MONGO_INDEX_CREATION_ATTEMPTS)); then
+      sleep "$MONGO_INDEX_CREATION_RETRY_DELAY"
+    fi
+  done
+  return 1
+}
+
+if ! create_indexes; then
+  if [ "$MONGO_INDEX_CREATION_REQUIRED" = "true" ]; then
+    fail "ERROR: MongoDB index creation failed after $MONGO_INDEX_CREATION_ATTEMPTS attempts," \
+      "refusing to start without indexes (every query would be a collection scan)." \
+      "See doc/storage/MONGO.md, or set MONGO_INDEX_CREATION_REQUIRED=false to start anyway"
+  fi
+  echo "start.sh: ERROR: MongoDB index creation failed after $MONGO_INDEX_CREATION_ATTEMPTS attempts," \
+    "starting WITHOUT indexes because MONGO_INDEX_CREATION_REQUIRED=false: every query will be a collection scan." \
+    "Create them manually, see doc/storage/MONGO.md" >&2
+fi
 
 # Run migrations in the background so DAV startup does not wait; keep stdout/stderr for operational logs.
 php /var/www/scripts/migrate-database.php --on-startup /var/www/config.json < /dev/null &

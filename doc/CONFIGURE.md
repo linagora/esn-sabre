@@ -131,6 +131,10 @@ Feature flag to restrict DAV principal discovery.
    This prevents DAV clients from enumerating other users or resources and leaking internal principal ids.
 
 MongoDB indexes are created once when the container starts (`scripts/create-indexes.php`), not on every request. See [doc/storage/MONGO.md](storage/MONGO.md#index-creation).
+Index creation is retried while MongoDB is not reachable, then the container refuses to start (these variables are read by `scripts/start.sh` from the process environment only):
+ - MONGO_INDEX_CREATION_ATTEMPTS: number of attempts (default `30`)
+ - MONGO_INDEX_CREATION_RETRY_DELAY: seconds between two attempts (default `2`)
+ - MONGO_INDEX_CREATION_REQUIRED: `true` (default) stops the container when every attempt failed; `false` starts anyway and logs an `ERROR`
 
 Feature flag to control how inline binary attachments (`ATTACH;ENCODING=BASE64;VALUE=BINARY`) are handled on calendar object creation and update. URI attachments (`ATTACH:https://...`) are always preserved.
  - CALDAV_BINARY_ATTACHMENT_MODE

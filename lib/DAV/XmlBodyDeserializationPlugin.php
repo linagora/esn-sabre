@@ -13,8 +13,8 @@ use \Sabre\VObject\InvalidDataException;
 use \Sabre\Xml\ParseException;
 
 /**
- * Answers 400 when the XML request body of MKCOL, MKCALENDAR, ACL or an XML
- * POST cannot be deserialised.
+ * Answers 400 when the XML request body of PROPFIND, PROPPATCH, MKCOL,
+ * MKCALENDAR, ACL or an XML POST cannot be deserialised.
  *
  * Sabre deserialises the whole body with the server's element map before its
  * handlers look at it. Several vendored deserialisers read keys and attributes
@@ -35,6 +35,8 @@ use \Sabre\Xml\ParseException;
 class XmlBodyDeserializationPlugin extends ServerPlugin {
     // After authentication and ACL checks (beforeMethod), before every handler
     // of these methods (ESN\CalDAV\Subscriptions\Plugin's MKCOL handler is at 90).
+    // PROPFIND and PROPPATCH need it too: Sabre's CorePlugin only maps
+    // ParseException to 400 there.
     const PRIORITY = 10;
 
     // Methods whose handlers only read an XML body when the Content-Type says so.
@@ -48,7 +50,7 @@ class XmlBodyDeserializationPlugin extends ServerPlugin {
 
     function initialize(Server $server) {
         $this->server = $server;
-        foreach (['MKCOL', 'MKCALENDAR', 'ACL', 'POST'] as $method) {
+        foreach (['PROPFIND', 'PROPPATCH', 'MKCOL', 'MKCALENDAR', 'ACL', 'POST'] as $method) {
             $server->on('method:' . $method, [$this, 'assertDeserializableBody'], self::PRIORITY);
         }
     }

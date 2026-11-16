@@ -6,6 +6,10 @@ server {
 
   server_name _;
 
+  # The /__krb location when KERBEROS_ENABLED=true, or nothing: rendered by
+  # scripts/start.sh from the environment at container boot.
+  include /etc/nginx/snippets/kerberos_server.conf;
+
   location = /.well-known/caldav {
     absolute_redirect off;
     return 301 /calendars;
@@ -27,6 +31,11 @@ server {
   }
 
   location / {
+    # Sends "Authorization: Negotiate" requests to /__krb when KERBEROS_ENABLED=true,
+    # or nothing. Being a rewrite, it runs before limit_req and auth_basic
+    # whatever its position, and before the OPTIONS short-circuit below.
+    include /etc/nginx/snippets/kerberos_location.conf;
+
     # limit_req directives, or nothing when NGINX_RATE_LIMIT=off: rendered by
     # scripts/start.sh from the environment at container boot.
     include /etc/nginx/snippets/rate_limit_location.conf;
@@ -60,6 +69,9 @@ server {
     fastcgi_pass unix:/var/run/php/php-fpm.sock;
     include fastcgi_params;
     fastcgi_param SCRIPT_FILENAME /var/www/esn.php;
+    # Set by /__krb only: Sabre must never see a principal coming from here,
+    # not even one from the process environment.
+    fastcgi_param KRB5_PRINCIPAL "";
     fastcgi_read_timeout 120s;
     proxy_http_version 1.1;
 

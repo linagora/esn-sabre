@@ -129,6 +129,67 @@ render_rate_limit() {
 
 render_rate_limit
 
+# Kerberos (SPNEGO) authentication, rendered from the environment at container boot.
+# See doc/CONFIGURE.md § "Kerberos authentication".
+NGINX_KERBEROS_SERVER_CONF=/etc/nginx/snippets/kerberos_server.conf
+NGINX_KERBEROS_LOCATION_CONF=/etc/nginx/snippets/kerberos_location.conf
+NGINX_KERBEROS_TEMPLATE=/etc/nginx/kerberos.conf.template
+
+render_kerberos() {
+  local enabled value=${KERBEROS_ENABLED:-false}
+
+  # Same spellings as ESN\Utils\Env::getBoolean, which reads it on the PHP side.
+  value=${value,,}
+  value=${value//[[:space:]]/}
+  case "$value" in
+    1|true|on|yes) enabled=true ;;
+    0|false|off|no|"") enabled=false ;;
+    *) fail "KERBEROS_ENABLED: invalid value '$KERBEROS_ENABLED' (expected true or false)" ;;
+  esac
+
+  mkdir -p "$(dirname "$NGINX_KERBEROS_SERVER_CONF")"
+
+  if [ "$enabled" = false ]; then
+    : > "$NGINX_KERBEROS_SERVER_CONF"
+    : > "$NGINX_KERBEROS_LOCATION_CONF"
+    return
+  fi
+
+  export KERBEROS_KEYTAB=${KERBEROS_KEYTAB:-/etc/krb5.keytab}
+  export KERBEROS_LARGE_CLIENT_HEADER_BUFFERS=${KERBEROS_LARGE_CLIENT_HEADER_BUFFERS:-4 64k}
+
+  [[ "${KERBEROS_SERVICE_NAME:-}" =~ ^[A-Za-z]+/[A-Za-z0-9.-]+$ ]] \
+    || fail "KERBEROS_SERVICE_NAME: invalid value '${KERBEROS_SERVICE_NAME:-}' (expected the SPN of the keytab, e.g. HTTP/dav.example.com)"
+  [ -n "${KERBEROS_REALM_DOMAINS:-}" ] \
+    || fail "KERBEROS_REALM_DOMAINS: required when KERBEROS_ENABLED=true (e.g. CORP.EXAMPLE.COM:example.com)"
+  [[ "$KERBEROS_LARGE_CLIENT_HEADER_BUFFERS" =~ ^[1-9][0-9]*\ [1-9][0-9]*[kKmM]?$ ]] \
+    || fail "KERBEROS_LARGE_CLIENT_HEADER_BUFFERS: invalid value '$KERBEROS_LARGE_CLIENT_HEADER_BUFFERS' (expected e.g. 4 64k)"
+  [ -f "$KERBEROS_KEYTAB" ] \
+    || fail "KERBEROS_KEYTAB: '$KERBEROS_KEYTAB' does not exist"
+  # nginx workers run as www-data and read the keytab on every Negotiate request.
+  runuser -u www-data -- test -r "$KERBEROS_KEYTAB" \
+    || fail "KERBEROS_KEYTAB: '$KERBEROS_KEYTAB' is not readable by www-data (e.g. chown root:www-data and chmod 0640)"
+  # nginx basic authentication runs in "location /", which Negotiate requests leave.
+  [ -z "${NGINX_AUTH_BASIC:-}" ] \
+    || fail "NGINX_AUTH_BASIC cannot be combined with KERBEROS_ENABLED=true"
+
+  # Only our placeholders: the nginx variables ($remote_user...) stay untouched.
+  envsubst '${KERBEROS_KEYTAB} ${KERBEROS_SERVICE_NAME} ${KERBEROS_LARGE_CLIENT_HEADER_BUFFERS}' \
+    < "$NGINX_KERBEROS_TEMPLATE" > "$NGINX_KERBEROS_SERVER_CONF" \
+    || fail "could not write the nginx Kerberos configuration"
+  {
+    echo "# Rendered by scripts/start.sh: Kerberos tickets are validated in /__krb."
+    echo "if (\$http_authorization ~* \"^Negotiate\\s\") {"
+    echo "  rewrite ^ /__krb last;"
+    echo "}"
+  } > "$NGINX_KERBEROS_LOCATION_CONF"
+
+  echo "start.sh: Kerberos authentication enabled: service=$KERBEROS_SERVICE_NAME keytab=$KERBEROS_KEYTAB" \
+    "realm_domains=[$KERBEROS_REALM_DOMAINS] header_buffers=[$KERBEROS_LARGE_CLIENT_HEADER_BUFFERS]"
+}
+
+render_kerberos
+
 # CalDAV clients embed file bytes as Base64 in the request body. Deployments
 # that accept attachments can raise this limit without changing Nginx's default.
 NGINX_CLIENT_MAX_BODY_SIZE=${NGINX_CLIENT_MAX_BODY_SIZE:-1m}

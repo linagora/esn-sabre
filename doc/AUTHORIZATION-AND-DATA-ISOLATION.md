@@ -63,13 +63,20 @@ delegated, cross-tenant, or alternate-protocol paths.
 The DAV authentication backend currently supports the following mechanisms, in
 this order:
 
-1. `Authorization: Bearer <JWT>`: the token is verified with the configured
+1. Kerberos (SPNEGO), when `KERBEROS_ENABLED` is set: Nginx validates the
+   `Authorization: Negotiate` ticket against its keytab and hands the principal
+   over as the `KRB5_PRINCIPAL` FastCGI parameter, set only in the internal
+   location that runs `auth_gss`. A client cannot forge it: its headers only
+   reach PHP as `HTTP_*`. The principal is mapped to an existing user through
+   `KERBEROS_REALM_DOMAINS`; a principal Sabre refuses gets `403`, not `401`.
+   See [Kerberos authentication](CONFIGURE.md#kerberos-authentication).
+2. `Authorization: Bearer <JWT>`: the token is verified with the configured
    RS256 public key and its `sub` email is resolved to a user tenant. This
    legacy OpenPaaS frontend compatibility path is deprecated and should be
    removed when those frontends no longer depend on it.
-2. `TwakeCalendarToken: <token>`: the token is introspected by the calendar side
+3. `TwakeCalendarToken: <token>`: the token is introspected by the calendar side
    service and produces a technical or user tenant.
-3. HTTP Basic authentication: credentials are checked against LDAP. When
+4. HTTP Basic authentication: credentials are checked against LDAP. When
    enabled, the same mechanism also supports administrator impersonation using
    the configured administrator credential and an explicit target identity.
 

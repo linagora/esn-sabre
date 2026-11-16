@@ -987,6 +987,193 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals('Bad credentials', $msg);
     }
 
+    protected function tearDown(): void {
+        putenv('KERBEROS_ENABLED');
+        putenv('KERBEROS_REALM_DOMAINS');
+    }
+
+    function testKerberosPrincipalAuthenticatesTheMatchingUser() {
+        putenv('KERBEROS_ENABLED=true');
+        putenv('KERBEROS_REALM_DOMAINS=CORP.EXAMPLE.COM:example.com');
+
+        $authNotificationResult = [];
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $esnauth->getServer()->on("auth:success", function($tenant) use (&$authNotificationResult) {
+            $authNotificationResult[] = $tenant->getPrincipal();
+        });
+
+        $esnDb = $esnauth->getDb();
+        $userId = new \MongoDB\BSON\ObjectId(self::USER_ID);
+        $domainId = new \MongoDB\BSON\ObjectId(self::DOMAIN_ID);
+        $esnDb->users->insertOne([
+            '_id' => $userId,
+            'firstname' => 'Alice',
+            'lastname' => 'Doe',
+            'accounts' => [
+                [ 'type' => 'email', 'emails' => [ 'alice@example.com' ] ]
+            ],
+            'domains' => [
+                [ 'domain_id' => $domainId ]
+            ]
+        ]);
+        $esnDb->domains->insertOne([
+            '_id' => $domainId,
+            'name' => 'example.com'
+        ]);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'KRB5_PRINCIPAL' => 'Alice@CORP.EXAMPLE.COM',
+            'REQUEST_URI'    => '/',
+            'REQUEST_METHOD' => 'PROPFIND',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        [$rv, $msg] = $esnauth->check($request, $response);
+
+        $this->assertTrue($rv);
+        $this->assertEquals('principals/users/' . self::USER_ID, $msg);
+        $this->assertEquals(['principals/users/' . self::USER_ID], $authNotificationResult);
+    }
+
+    function testKerberosPrincipalIsIgnoredWhenKerberosIsDisabled() {
+        putenv('KERBEROS_REALM_DOMAINS=CORP.EXAMPLE.COM:example.com');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'KRB5_PRINCIPAL' => 'alice@CORP.EXAMPLE.COM',
+            'REQUEST_URI'    => '/',
+            'REQUEST_METHOD' => 'PROPFIND',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        [$rv, $msg] = $esnauth->check($request, $response);
+
+        $this->assertFalse($rv);
+        $this->assertEquals("No 'Authorization: Basic' header found. Either the client didn't send one, or the server is misconfigured", $msg);
+        $this->assertNull($esnauth->getCurrentPrincipal());
+    }
+
+    function testKerberosPrincipalWithoutUserIsForbidden() {
+        putenv('KERBEROS_ENABLED=true');
+        putenv('KERBEROS_REALM_DOMAINS=CORP.EXAMPLE.COM:example.com');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'KRB5_PRINCIPAL' => 'nobody@CORP.EXAMPLE.COM',
+            'REQUEST_URI'    => '/',
+            'REQUEST_METHOD' => 'PROPFIND',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+        $this->expectExceptionMessage('checkKerberos: no user found');
+
+        $esnauth->check($request, $response);
+    }
+
+    function testKerberosPrincipalOfAnUnknownRealmIsForbidden() {
+        putenv('KERBEROS_ENABLED=true');
+        putenv('KERBEROS_REALM_DOMAINS=CORP.EXAMPLE.COM:example.com');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        // Kerberos realms are case sensitive
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'KRB5_PRINCIPAL' => 'alice@corp.example.com',
+            'REQUEST_URI'    => '/',
+            'REQUEST_METHOD' => 'PROPFIND',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+        $this->expectExceptionMessage('checkKerberos: realm not allowed');
+
+        $esnauth->check($request, $response);
+    }
+
+    function testKerberosServicePrincipalIsForbidden() {
+        putenv('KERBEROS_ENABLED=true');
+        putenv('KERBEROS_REALM_DOMAINS=CORP.EXAMPLE.COM:example.com');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'KRB5_PRINCIPAL' => 'HTTP/dav.example.com@CORP.EXAMPLE.COM',
+            'REQUEST_URI'    => '/',
+            'REQUEST_METHOD' => 'PROPFIND',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+        $this->expectExceptionMessage('checkKerberos: unsupported principal');
+
+        $esnauth->check($request, $response);
+    }
+
+    function testKerberosRejectionDoesNotLeakItsReasonInProduction() {
+        putenv('KERBEROS_ENABLED=true');
+        putenv('KERBEROS_REALM_DOMAINS=CORP.EXAMPLE.COM:example.com');
+
+        $esnauth = new EsnMock('http://localhost:8080/', false);
+
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'KRB5_PRINCIPAL' => 'nobody@CORP.EXAMPLE.COM',
+            'REQUEST_URI'    => '/',
+            'REQUEST_METHOD' => 'PROPFIND',
+        ]);
+        $response = new \Sabre\HTTP\Response();
+
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+        $this->expectExceptionMessage('Authentification failure');
+
+        $esnauth->check($request, $response);
+    }
+
+    function testChallengeOffersNegotiateBeforeBasicWhenKerberosIsEnabled() {
+        putenv('KERBEROS_ENABLED=true');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $request = new \Sabre\HTTP\Request('PROPFIND', '/');
+        $response = new \Sabre\HTTP\Response();
+
+        $esnauth->challenge($request, $response);
+
+        $this->assertEquals(
+            ['Negotiate', 'Basic realm="Realm", charset="UTF-8"'],
+            $response->getHeaderAsArray('WWW-Authenticate')
+        );
+    }
+
+    function testChallengeOffersOnlyBasicWhenKerberosIsDisabled() {
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $request = new \Sabre\HTTP\Request('PROPFIND', '/');
+        $response = new \Sabre\HTTP\Response();
+
+        $esnauth->challenge($request, $response);
+
+        $this->assertEquals(
+            ['Basic realm="Realm", charset="UTF-8"'],
+            $response->getHeaderAsArray('WWW-Authenticate')
+        );
+    }
+
+    function testChallengeDoesNotOfferNegotiateAgainWhenNginxDidNotHandleIt() {
+        putenv('KERBEROS_ENABLED=true');
+
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $request = new \Sabre\HTTP\Request('PROPFIND', '/', ['Authorization' => 'Negotiate YIIDCAYGKwYBBQUC']);
+        $response = new \Sabre\HTTP\Response();
+
+        $esnauth->challenge($request, $response);
+
+        $this->assertEquals(
+            ['Basic realm="Realm", charset="UTF-8"'],
+            $response->getHeaderAsArray('WWW-Authenticate')
+        );
+    }
+
 }
 
 class FailingPrincipalBackend {

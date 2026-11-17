@@ -270,4 +270,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         });
     }
 
+    /**
+     * Handles the free-busy-query REPORT without reading the busy events one
+     * at a time, see {@see FreeBusyQueryReport}.
+     *
+     * @param \Sabre\CalDAV\Xml\Request\FreeBusyQueryReport $report
+     * @return void
+     */
+    protected function freeBusyQueryReport(\Sabre\CalDAV\Xml\Request\FreeBusyQueryReport $report) {
+        (new FreeBusyQueryReport($this->server))->freeBusyQueryReport($report);
+    }
+
 }

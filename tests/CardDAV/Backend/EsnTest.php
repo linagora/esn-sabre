@@ -103,6 +103,37 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame(1, $queries);
     }
 
+    function testCreateAddressBookIfAbsentKeepsAConcurrentlyCreatedAddressBook() {
+        $backend = $this->getBackend();
+        $collectedId = $backend->createAddressBook('principals/users/user2', $backend::COLLECTED_URI, []);
+        $backend->createCard($collectedId, 'card1.vcf', "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Card\r\nEND:VCARD\r\n");
+        $syncTokenBefore = $this->collectedSyncToken($backend);
+
+        $backend->createAddressBookIfAbsent('principals/users/user2', $backend::COLLECTED_URI);
+
+        $this->assertSame($syncTokenBefore, $this->collectedSyncToken($backend));
+        $this->assertNotEquals(1, $syncTokenBefore);
+    }
+
+    function testCreateAddressBookIfAbsentEmitsCreationOnlyOnce() {
+        $backend = $this->getBackend();
+        $createdEvents = 0;
+        $backend->getEventEmitter()->on('sabre:addressBookCreated', function () use (&$createdEvents) {
+            $createdEvents++;
+        });
+
+        $backend->createAddressBookIfAbsent('principals/users/user2', $backend::COLLECTED_URI);
+        $backend->createAddressBookIfAbsent('principals/users/user2', $backend::COLLECTED_URI);
+
+        $this->assertSame(1, $createdEvents);
+    }
+
+    private function collectedSyncToken($backend) {
+        $books = array_column($backend->getAddressBooksFor('principals/users/user2'), null, 'uri');
+
+        return $books[$backend::COLLECTED_URI]['{http://sabredav.org/ns}sync-token'];
+    }
+
     private function checkAddressbook($expected, $item) {
         foreach ($expected as $name => $value) {
             $this->assertArrayHasKey($name, $item);

@@ -24,7 +24,8 @@ class Esn extends Mongo {
 
     /**
      * Creates the default address books the principal does not have yet,
-     * checking them all with a single read.
+     * checking them all with a single read. The creation never overwrites a
+     * default address book a concurrent request created in the meantime.
      *
      * @param string $principalUri
      * @return void
@@ -32,7 +33,7 @@ class Esn extends Mongo {
     function ensureDefaultAddressBooks($principalUri) {
         $missingUris = array_diff(self::DEFAULT_ADDRESS_BOOK_URIS, $this->existingDefaultAddressBookUris($principalUri));
 
-        array_walk($missingUris, fn($uri) => parent::createAddressBook($principalUri, $uri, []));
+        array_walk($missingUris, fn($uri) => $this->createAddressBookIfAbsent($principalUri, $uri));
     }
 
     private function existingDefaultAddressBookUris($principalUri) {

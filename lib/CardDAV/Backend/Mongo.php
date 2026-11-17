@@ -191,6 +191,58 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function createAddressBook($principalUri, $uri, array $properties) {
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $modified = $collection->findOneAndUpdate(
+            [
+                'principaluri' => $principalUri,
+                'uri' => $uri
+            ],
+            [
+                '$set' => $this->newAddressBookValues($principalUri, $uri, $properties)
+            ],
+            [
+                'projection' => [ '_id' => 1 ],
+                'upsert' => true,
+                'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER
+            ]
+        );
+
+        $this->emitAddressBookCreated($principalUri, $uri);
+
+        return (string) $modified['_id'];
+    }
+
+    /**
+     * Creates the address book unless the principal already holds one with
+     * this URI, in which case it is left untouched (sync token included).
+     *
+     * @param string $principalUri
+     * @param string $uri
+     * @return void
+     */
+    function createAddressBookIfAbsent($principalUri, $uri) {
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $previous = $collection->findOneAndUpdate(
+            [
+                'principaluri' => $principalUri,
+                'uri' => $uri
+            ],
+            [
+                '$setOnInsert' => $this->newAddressBookValues($principalUri, $uri, [])
+            ],
+            [
+                'projection' => [ '_id' => 1 ],
+                'upsert' => true,
+                'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_BEFORE
+            ]
+        );
+
+        if ($previous === null) {
+            $this->emitAddressBookCreated($principalUri, $uri);
+        }
+    }
+
+    private function newAddressBookValues($principalUri, $uri, array $properties) {
         $values = [
             'synctoken' => 1,
             'displayname' => '',
@@ -226,30 +278,16 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
         }
 
-        $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $modified = $collection->findOneAndUpdate(
-            [
-                'principaluri' => $principalUri,
-                'uri' => $uri
-            ],
-            [
-                '$set' => $values
-            ],
-            [
-                'projection' => [ '_id' => 1 ],
-                'upsert' => true,
-                'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER
-            ]
-        );
+        return $values;
+    }
 
+    private function emitAddressBookCreated($principalUri, $uri) {
         $this->eventEmitter->emit('sabre:addressBookCreated', [
             [
                 'principaluri' => $principalUri,
                 'path' => $this->buildAddressBookPath($principalUri, $uri)
             ]
         ]);
-
-        return (string) $modified['_id'];
     }
 
     function deleteAddressBook($addressBookId) {

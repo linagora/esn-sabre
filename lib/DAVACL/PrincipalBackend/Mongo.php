@@ -713,25 +713,46 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     private function searchUserPrincipals(array $searchProperties, $test = 'allof') {
-        $query = $this->userSearchQuery($searchProperties);
-
-        $domainId = $this->requireAuthDomainId();
+        $query = $this->userSearchQuery($searchProperties, fn($value) => $this->caseFoldedAddressMatch($value));
 
         if (empty($query)) {
             return [];
         }
 
-        $finalQuery = $this->withDomainFilter($query, $domainId, $test);
+        $domainId = $this->requireAuthDomainId();
 
-        $principals = [];
-        $res = $this->db->users->find($finalQuery, ['projection' => ['_id' => 1]]);
-        foreach ($res as $obj) {
-            $principals[] = 'principals/users/' . $obj['_id'];
+        if ($this->canUseExactAddressLookup($searchProperties, $test)) {
+            $exactQuery = $this->userSearchQuery($searchProperties, fn($value) => $this->exactAddressMatch($value));
+            $principals = $this->findUserPrincipals($this->withDomainFilter($exactQuery, $domainId, $test));
+            if (!empty($principals)) {
+                return $principals;
+            }
         }
-        return $principals;
+
+        return $this->findUserPrincipals($this->withDomainFilter($query, $domainId, $test));
     }
 
-    private function userSearchQuery(array $searchProperties): array {
+    /**
+     * The exact lookup can use the accounts.emails index, whereas the case-folded regex
+     * walks every user of the domain. Its results are a subset of the regex ones, so it
+     * can only stand in for it when every criterion must hold ('allof'): with 'anyof',
+     * hits on another criterion would hide the users matching the address in another case.
+     */
+    private function canUseExactAddressLookup(array $searchProperties, $test): bool {
+        return $test === 'allof'
+            && isset($searchProperties['{http://sabredav.org/ns}email-address']);
+    }
+
+    private function findUserPrincipals(array $query): array {
+        $res = $this->db->users->find($query, ['projection' => ['_id' => 1]]);
+
+        return array_map(
+            fn($obj) => 'principals/users/' . $obj['_id'],
+            iterator_to_array($res, false)
+        );
+    }
+
+    private function userSearchQuery(array $searchProperties, callable $addressMatch): array {
         $query = [];
 
         foreach ($searchProperties as $property => $value) {
@@ -743,7 +764,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
                     ] ];
                     break;
                 case '{http://sabredav.org/ns}email-address':
-                    $query[] = [ 'accounts.emails' => [ '$elemMatch' => $this->exactAddressMatch($value) ] ];
+                    $query[] = [ 'accounts.emails' => $addressMatch($value) ];
                     break;
             }
         }
@@ -752,18 +773,28 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     }
 
     /**
+     * Matches the address as given or lower-cased, so that MongoDB can use the
+     * accounts.emails index. strtolower only folds ASCII letters.
+     */
+    private function exactAddressMatch($value): array {
+        $address = (string) $value;
+
+        return [ '$in' => array_values(array_unique([$address, strtolower($address)])) ];
+    }
+
+    /**
      * Matches an address exactly, ignoring ASCII case only. MongoDB's '$options' => 'i'
      * also folds non-ASCII characters (e.g. 'ſ' matches 's'), so letters are expanded
      * into explicit [xX] classes instead.
      */
-    private function exactAddressMatch($value): array {
+    private function caseFoldedAddressMatch($value): array {
         $pattern = preg_replace_callback(
             '/[a-z]/i',
             fn($letter) => '[' . strtolower($letter[0]) . strtoupper($letter[0]) . ']',
             preg_quote((string) $value)
         );
 
-        return [ '$regex' => '\\A' . $pattern . '\\z' ];
+        return [ '$elemMatch' => [ '$regex' => '\\A' . $pattern . '\\z' ] ];
     }
 
     /**

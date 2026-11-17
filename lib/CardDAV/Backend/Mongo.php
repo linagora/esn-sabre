@@ -191,21 +191,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     function createAddressBook($principalUri, $uri, array $properties) {
-        $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $modified = $collection->findOneAndUpdate(
-            [
-                'principaluri' => $principalUri,
-                'uri' => $uri
-            ],
-            [
-                '$set' => $this->newAddressBookValues($principalUri, $uri, $properties)
-            ],
-            [
-                'projection' => [ '_id' => 1 ],
-                'upsert' => true,
-                'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER
-            ]
-        );
+        $modified = $this->upsertAddressBook($principalUri, $uri, [
+            '$set' => $this->newAddressBookValues($principalUri, $uri, $properties)
+        ], \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER);
 
         $this->emitAddressBookCreated($principalUri, $uri);
 
@@ -221,25 +209,21 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
      * @return void
      */
     function createAddressBookIfAbsent($principalUri, $uri) {
-        $collection = $this->db->selectCollection($this->addressBooksTableName);
-        $previous = $collection->findOneAndUpdate(
-            [
-                'principaluri' => $principalUri,
-                'uri' => $uri
-            ],
-            [
-                '$setOnInsert' => $this->newAddressBookValues($principalUri, $uri, [])
-            ],
-            [
-                'projection' => [ '_id' => 1 ],
-                'upsert' => true,
-                'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_BEFORE
-            ]
-        );
+        $previous = $this->upsertAddressBook($principalUri, $uri, [
+            '$setOnInsert' => $this->newAddressBookValues($principalUri, $uri, [])
+        ], \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_BEFORE);
 
         if ($previous === null) {
             $this->emitAddressBookCreated($principalUri, $uri);
         }
+    }
+
+    private function upsertAddressBook($principalUri, $uri, array $update, $returnDocument) {
+        return $this->db->selectCollection($this->addressBooksTableName)->findOneAndUpdate(
+            [ 'principaluri' => $principalUri, 'uri' => $uri ],
+            $update,
+            [ 'projection' => [ '_id' => 1 ], 'upsert' => true, 'returnDocument' => $returnDocument ]
+        );
     }
 
     private function newAddressBookValues($principalUri, $uri, array $properties) {

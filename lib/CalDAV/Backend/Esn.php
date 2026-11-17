@@ -62,6 +62,20 @@ class Esn extends Mongo {
     }
 
     /**
+     * Creates the principal's default calendar when it is missing, with a single
+     * read when it already exists.
+     *
+     * @param string $principalUri
+     * @return void
+     * @throws \Sabre\DAV\Exception throwed by parent::createCalendar()
+     */
+    function ensureDefaultCalendar($principalUri) {
+        if (!$this->calendarInstanceExists($principalUri, basename($principalUri))) {
+            $this->createDefaultCalendar($principalUri);
+        }
+    }
+
+    /**
      * Creates the principal's default calendar (whose URI equals the principal
      * id). createCalendar is idempotent: when the instance already exists it
      * is returned untouched, so this is safe to call defensively.

@@ -120,6 +120,10 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         return $this->calendarService->getCalendarsForUser($principalUri);
     }
 
+    function calendarInstanceExists($principalUri, $calendarUri) {
+        return $this->calendarService->calendarInstanceExists($principalUri, $calendarUri);
+    }
+
     function createCalendar($principalUri, $calendarUri, array $properties) {
         return $this->calendarService->createCalendar($principalUri, $calendarUri, $properties);
     }

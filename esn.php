@@ -134,21 +134,12 @@ $server->on('auth:success',
                 $calendarRoot->setAuthTenant($authTenant);
             }, 1);
 
-// listener
-$server->on("auth:success", function($authTenant) use ($addressbookBackend) {
-    if ($authTenant->tenantType === \ESN\Utils\TenantType::Technical) {
-        return [];
-    }
-
-    return $addressbookBackend->getAddressBooksForUser((string) $authTenant->getPrincipal());
-});
-$server->on("auth:success", function($authTenant) use ($calendarBackend) {
-    if ($authTenant->tenantType === \ESN\Utils\TenantType::Technical) {
-        return [];
-    }
-
-    return $calendarBackend->getCalendarsForUser((string) $authTenant->getPrincipal());
-});
+// Default address books and calendar, checked once per principal rather than on every request.
+$server->addPlugin(new ESN\DAV\Provisioning\DefaultCollectionsPlugin(
+    $addressbookBackend,
+    $calendarBackend,
+    new ESN\DAV\Provisioning\ApcuProvisionedPrincipals()
+));
 
 // Add stack trace to HTML response in dev mode
 if (SABRE_ENV === SABRE_ENV_DEV) {

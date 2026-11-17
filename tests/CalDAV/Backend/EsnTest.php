@@ -2,6 +2,8 @@
 
 namespace ESN\CalDAV\Backend;
 
+require_once ESN_TEST_BASE . '/DAV/MongoFindCounter.php';
+
 /**
  * @medium
  */
@@ -62,6 +64,52 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
             $this->assertCount(1, $calendars);
             $this->assertSame('My calendar', $calendars[0]['{DAV:}displayname']);
         }
+    }
+
+    function testEnsureDefaultCalendarCreatesItWhenMissing() {
+        $backend = $this->getBackend();
+        $principalUri = 'principals/users/54b64eadf6d7d8e41d263e0f';
+        $backend->createCalendar($principalUri, 'other-calendar', []);
+
+        $backend->ensureDefaultCalendar($principalUri);
+
+        $this->assertTrue($backend->calendarInstanceExists($principalUri, '54b64eadf6d7d8e41d263e0f'));
+    }
+
+    function testEnsureDefaultCalendarKeepsTheExistingOne() {
+        $backend = $this->getBackend();
+        $principalUri = 'principals/users/54b64eadf6d7d8e41d263e0f';
+        $backend->createCalendar($principalUri, '54b64eadf6d7d8e41d263e0f', ['{DAV:}displayname' => 'My calendar']);
+
+        $backend->ensureDefaultCalendar($principalUri);
+
+        $calendars = $backend->getCalendarsForUser($principalUri);
+        $this->assertCount(1, $calendars);
+        $this->assertSame('My calendar', $calendars[0]['{DAV:}displayname']);
+    }
+
+    function testEnsureDefaultCalendarOnlyReadsTheDefaultInstanceWhenItExists() {
+        $backend = $this->getBackend();
+        $principalUri = 'principals/users/54b64eadf6d7d8e41d263e0f';
+        $backend->ensureDefaultCalendar($principalUri);
+
+        $instanceQueries = \ESN\DAV\MongoFindCounter::count('calendarinstances', function () use ($backend, $principalUri) {
+            $calendarQueries = \ESN\DAV\MongoFindCounter::count('calendars', function () use ($backend, $principalUri) {
+                $backend->ensureDefaultCalendar($principalUri);
+            });
+            $this->assertSame(0, $calendarQueries);
+        });
+
+        $this->assertSame(1, $instanceQueries);
+    }
+
+    function testEnsureDefaultCalendarNamesTheResourceCalendar() {
+        $backend = $this->getBackend();
+
+        $backend->ensureDefaultCalendar('principals/resources/resourceId');
+
+        $calendars = $backend->getCalendarsForUser('principals/resources/resourceId');
+        $this->assertSame('resourceName', $calendars[0]['{DAV:}displayname']);
     }
 
     function testResourceCalendarShouldBeCreatedWhenRequesting() {

@@ -2,6 +2,8 @@
 
 namespace ESN\CardDAV\Backend;
 
+require_once ESN_TEST_BASE . '/DAV/MongoFindCounter.php';
+
 /**
  * @medium
  */
@@ -68,6 +70,68 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->checkAddressbook($anotherAddressBook, $books[0]);
         $this->checkAddressbook($collectedAddressBook, $books[1]);
         $this->checkAddressbook($contactAddressBook, $books[2]);
+    }
+
+    function testEnsureDefaultAddressBooksCreatesTheMissingOnes() {
+        $backend = $this->getBackend();
+        $backend->createAddressBook('principals/users/user2', $backend::CONTACTS_URI, []);
+
+        $backend->ensureDefaultAddressBooks('principals/users/user2');
+
+        $this->assertSame([$backend::COLLECTED_URI, $backend::CONTACTS_URI],
+            array_column($backend->getAddressBooksFor('principals/users/user2'), 'uri'));
+    }
+
+    function testEnsureDefaultAddressBooksDoesNotDuplicateExistingOnes() {
+        $backend = $this->getBackend();
+
+        $backend->ensureDefaultAddressBooks('principals/users/user2');
+        $backend->ensureDefaultAddressBooks('principals/users/user2');
+
+        $this->assertSame([$backend::COLLECTED_URI, $backend::CONTACTS_URI],
+            array_column($backend->getAddressBooksFor('principals/users/user2'), 'uri'));
+    }
+
+    function testEnsureDefaultAddressBooksReadsOnceWhenTheyExist() {
+        $backend = $this->getBackend();
+        $backend->ensureDefaultAddressBooks('principals/users/user2');
+
+        $queries = \ESN\DAV\MongoFindCounter::count('addressbooks', function () use ($backend) {
+            $backend->ensureDefaultAddressBooks('principals/users/user2');
+        });
+
+        $this->assertSame(1, $queries);
+    }
+
+    function testCreateAddressBookIfAbsentKeepsAConcurrentlyCreatedAddressBook() {
+        $backend = $this->getBackend();
+        $collectedId = $backend->createAddressBook('principals/users/user2', $backend::COLLECTED_URI, []);
+        $backend->createCard($collectedId, 'card1.vcf', "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Card\r\nEND:VCARD\r\n");
+        $syncTokenBefore = $this->collectedSyncToken($backend);
+
+        $backend->createAddressBookIfAbsent('principals/users/user2', $backend::COLLECTED_URI);
+
+        $this->assertSame($syncTokenBefore, $this->collectedSyncToken($backend));
+        $this->assertNotEquals(1, $syncTokenBefore);
+    }
+
+    function testCreateAddressBookIfAbsentEmitsCreationOnlyOnce() {
+        $backend = $this->getBackend();
+        $createdEvents = 0;
+        $backend->getEventEmitter()->on('sabre:addressBookCreated', function () use (&$createdEvents) {
+            $createdEvents++;
+        });
+
+        $backend->createAddressBookIfAbsent('principals/users/user2', $backend::COLLECTED_URI);
+        $backend->createAddressBookIfAbsent('principals/users/user2', $backend::COLLECTED_URI);
+
+        $this->assertSame(1, $createdEvents);
+    }
+
+    private function collectedSyncToken($backend) {
+        $books = array_column($backend->getAddressBooksFor('principals/users/user2'), null, 'uri');
+
+        return $books[$backend::COLLECTED_URI]['{http://sabredav.org/ns}sync-token'];
     }
 
     private function checkAddressbook($expected, $item) {

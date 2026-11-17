@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
 ### Performance
 
+ - ISSUE-842 A request on one event no longer reads it from MongoDB once per `nodeExists` check (ACL check, `PUT` create-or-update choice, every realtime message): the existence check now resolves the node through the tree cache. A `GET` of an event goes from 2 `calendarobjects` reads down to 1, a `PUT` update from 4 down to 1 (#842)
  - Listing a calendar (PROPFIND `Depth: 1`, `sync-collection`, `calendar-multiget`) no longer reads the calendar sharing state from MongoDB once per event: the child ACL is computed once per listing. On a 3000 event calendar, a PROPFIND `Depth: 1` goes from 21014 MongoDB commands (~5 s) down to 21 (~50 ms).
  - Same for address books: listing the cards of an address book no longer reads its public right and sharees once per card, and checking that a card exists no longer computes its ACL. On a 3000 card address book, a PROPFIND `Depth: 1` goes from 6018 MongoDB commands down to 20, an `addressbook-multiget` of 500 cards from 2508 down to 510.
  - The read access check of `calendar-multiget` and `addressbook-multiget` REPORTs looks up the requested hrefs in one query per collection instead of one query per href. A `calendar-multiget` of 500 events goes from 4004 MongoDB commands (~1 s) down to 20 (~60 ms), an `addressbook-multiget` of 500 cards down to 14.

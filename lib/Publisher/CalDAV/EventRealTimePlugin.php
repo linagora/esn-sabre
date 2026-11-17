@@ -23,6 +23,8 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
     protected $caldavBackend;
 
+    private $etagsByPath = [];
+
     // We use a topic per action, as in OP
     private $EVENT_TOPICS = [
         'EVENT_CREATED' => 'calendar:event:created',
@@ -91,8 +93,9 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             $path = $data['eventPath'];
         }
 
-        if($this->server->tree->nodeExists($path)) {
-            $data['etag'] = $this->server->tree->getNodeForPath($path)->getETag();
+        $etag = $this->etagOf($path);
+        if ($etag !== null) {
+            $data['etag'] = $etag;
         }
 
         // Ensure required fields are present before publishing
@@ -101,6 +104,36 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         }
 
         return $data;
+    }
+
+    /**
+     * Each queued message would look its event up again, and most of them share
+     * a path: an absent event (after a delete) is not cached by the tree, so the
+     * lookups are memoized for the batch being published, during which nothing
+     * is written.
+     */
+    public function publishMessages() {
+        try {
+            parent::publishMessages();
+        } finally {
+            $this->etagsByPath = [];
+        }
+    }
+
+    private function etagOf($path) {
+        if (!array_key_exists($path, $this->etagsByPath)) {
+            $this->etagsByPath[$path] = $this->lookUpEtag($path);
+        }
+
+        return $this->etagsByPath[$path];
+    }
+
+    private function lookUpEtag($path) {
+        if (!$this->server->tree->nodeExists($path)) {
+            return null;
+        }
+
+        return $this->server->tree->getNodeForPath($path)->getETag();
     }
 
     function afterMove($path, $destinationPath) {

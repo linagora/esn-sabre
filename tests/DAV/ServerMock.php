@@ -373,7 +373,8 @@ END:VCALENDAR'
         );
         $this->tree[] = $this->calendarRoot;
 
-        $this->server = new \Sabre\DAV\Server($this->tree);
+        // Mirrors esn.php.
+        $this->server = new \Sabre\DAV\Server(new Tree(new \Sabre\DAV\SimpleCollection('root', $this->tree)));
         $this->server->sapi = new \Sabre\HTTP\SapiMock();
 
         $this->registerPlugins();

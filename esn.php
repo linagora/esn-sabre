@@ -109,7 +109,8 @@ $tree = [
     new ESN\CardDAV\AddressBookRoot($principalBackend, $addressbookBackend),
 ];
 
-$server = new Sabre\DAV\Server($tree);
+// ESN\DAV\Tree caches the nodes nodeExists() resolves: Sabre's own re-reads them on every call.
+$server = new Sabre\DAV\Server(new ESN\DAV\Tree(new Sabre\DAV\SimpleCollection('root', $tree)));
 
 // logger plugin
 $server->addPlugin($loggerPlugin);

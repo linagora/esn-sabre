@@ -468,23 +468,24 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             // Not a credential problem: let it surface as a 503
             throw $e;
         } catch(KerberosRejectedException $e) {
-            throw new \Sabre\DAV\Exception\Forbidden($this->debug ? $e->getMessage() : 'Authentification failure');
+            throw new \Sabre\DAV\Exception\Forbidden($this->failureMessage($e));
         } catch(AuthException $e) {
-            if($this->debug)
-                return [false, $e->getMessage()];
-            // clear exception message returned to user
-            return [false, "Authentification failure"];
+            return [false, $this->failureMessage($e)];
         } catch(\Throwable $e) {
-            $msg = $e->getMessage();
             $this->server->getLogger()->error(
                 'An unexpected error happened when check',
-                ['error' => $msg]
+                ['error' => $e->getMessage()]
             );
-            if($this->debug)
-                return [false, $msg];
-            // never leak internal error texts to the client
-            return [false, "Authentification failure"];
+            return [false, $this->failureMessage($e)];
         }
+    }
+
+    /**
+     * The reason of an authentication failure in debug mode only: never leak
+     * internal error texts, or which users and realms exist, to the client.
+     */
+    private function failureMessage(\Throwable $e): string {
+        return $this->debug ? $e->getMessage() : 'Authentification failure';
     }
 
     private function authenticateRequest(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): AuthTenant {
@@ -547,12 +548,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
      * ("CORP.COM:mycompany.com,OTHER.COM:other.com"). Realms are case sensitive.
      */
     private function kerberosPrincipalToEmail(string $principal): string {
-        $parts = explode('@', $principal);
-        if (count($parts) !== 2 || $parts[0] === '' || str_contains($parts[0], '/')) {
+        // A user principal: "user@REALM", not a service one ("HTTP/host@REALM").
+        if (!preg_match('/^([^@\/]+)@([^@]+)$/', $principal, $parts)) {
             error_log("checkKerberos: unsupported principal '$principal'");
             throw new KerberosRejectedException('checkKerberos: unsupported principal');
         }
-        [$user, $realm] = $parts;
+        [, $user, $realm] = $parts;
 
         $domains = $this->kerberosRealmDomains();
         if (!isset($domains[$realm])) {
@@ -571,9 +572,9 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     private function kerberosRealmDomains(): array {
         $domains = [];
         foreach (explode(',', (string) Env::getString('KERBEROS_REALM_DOMAINS')) as $entry) {
-            $pair = explode(':', trim($entry), 2);
-            if (count($pair) === 2 && $pair[0] !== '' && $pair[1] !== '') {
-                $domains[$pair[0]] = strtolower($pair[1]);
+            // "REALM:domain", malformed entries are skipped
+            if (preg_match('/^([^:]+):(.+)$/', trim($entry), $pair)) {
+                $domains[$pair[1]] = strtolower($pair[2]);
             }
         }
         return $domains;

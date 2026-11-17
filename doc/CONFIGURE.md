@@ -260,6 +260,51 @@ docker run -d -p 8001:80 \
   linagora/esn-sabre
 ```
 
+## PHP-FPM slow log and status page
+
+The PHP-FPM pool that runs Sabre (`www`, `pm.max_children = 96`) logs requests that take too long and
+publishes its status page. As for the Nginx settings, these are environment variables that
+`scripts/start.sh` reads when the container starts. An invalid value stops the container at startup.
+
+| Variable                      | Default          | Meaning                                                                                  |
+|-------------------------------|------------------|------------------------------------------------------------------------------------------|
+| `PHP_FPM_SLOWLOG_TIMEOUT`     | `5s`             | A request running longer than this is reported as slow (`request_slowlog_timeout`). A number with an optional `s`, `m`, `h` or `d` unit (no unit means seconds). `0`, `off`, `false` or `disabled` turns the slow log off. |
+| `PHP_FPM_SLOWLOG_TRACE_DEPTH` | `20`             | Depth of the PHP backtrace written for a slow request (`request_slowlog_trace_depth`).   |
+| `PHP_FPM_STATUS_LISTEN`       | `127.0.0.1:8081` | Address where Nginx serves the FPM `/status` and `/ping` pages (`[address:]port`). `off`, `false` or `disabled` stops Nginx from serving them. |
+
+Each slow request writes a line to the container log (stderr), naming the worker, the script and the
+request:
+
+```
+WARNING: [pool www] child 67, script '/var/www/esn.php' (request: "REPORT /calendars/...") executing too slow (5.004245 sec), logging
+```
+
+**The backtrace and the `slow requests` counter need `ptrace`.** After this line, the FPM master
+attaches to the worker with `ptrace` to write the PHP backtrace (for example the
+`ESN\CalDAV\Backend\DAO\BaseDAO::find` the request waits on) to the container log. Only then does it
+increment the `slow requests` counter of the status page. A container without the `SYS_PTRACE`
+capability, which is the Docker and Kubernetes default, refuses this. The `executing too slow` line is
+still logged, followed by `ERROR: failed to ptrace(ATTACH) child 67: Operation not permitted`. The
+backtrace is missing and `slow requests` stays at `0`. To get them, add the capability:
+`docker run --cap-add SYS_PTRACE`, or in Kubernetes
+`securityContext: { capabilities: { add: ["SYS_PTRACE"] } }`.
+
+**The status page answers even when the pool is full.** FPM serves `/status` and `/ping` from a
+dedicated pool (`pm.status_listen = 127.0.0.1:9001`), not from the 96 workers that run Sabre. A
+monitoring probe therefore keeps getting an answer while every worker is busy, which is exactly when
+it matters. Nginx serves these pages on their own port, never on port 80. The full view
+(`/status?full`) shows the URI of each running request, so by default the port is only reachable from
+inside the container. To scrape it from outside, set `PHP_FPM_STATUS_LISTEN=8081` and keep that port
+off the public network (do not route it through the ingress):
+
+```bash
+docker run -d -p 8001:80 -p 127.0.0.1:8081:8081 \
+  -e PHP_FPM_STATUS_LISTEN=8081 \
+  linagora/esn-sabre
+curl http://127.0.0.1:8081/status   # pool counters: active processes, listen queue, slow requests...
+curl http://127.0.0.1:8081/ping     # pong
+```
+
 ## Nginx basic authentication
 
  - `NGINX_AUTH_BASIC` — unset by default, which leaves the server open. When set, its content is

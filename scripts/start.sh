@@ -137,6 +137,89 @@ NGINX_CLIENT_MAX_BODY_SIZE=${NGINX_CLIENT_MAX_BODY_SIZE:-1m}
 printf 'client_max_body_size %s;\n' "$NGINX_CLIENT_MAX_BODY_SIZE" > /etc/nginx/conf.d/client_max_body_size.conf \
   || fail "could not write the nginx request body limit"
 
+# PHP-FPM slow log and status page, rendered from the environment at container boot.
+# See doc/CONFIGURE.md § "PHP-FPM slow log and status page".
+PHP_FPM_SLOWLOG_TIMEOUT=${PHP_FPM_SLOWLOG_TIMEOUT:-5s}
+PHP_FPM_SLOWLOG_TRACE_DEPTH=${PHP_FPM_SLOWLOG_TRACE_DEPTH:-20}
+PHP_FPM_STATUS_LISTEN=${PHP_FPM_STATUS_LISTEN:-127.0.0.1:8081}
+PHP_FPM_POOL_CONF=/etc/php/${PHPVERSION:-8.4}/fpm/pool.d/www.conf
+# The status page is served by a dedicated FPM pool, so it answers while every worker of the main pool is busy.
+PHP_FPM_STATUS_POOL_LISTEN=127.0.0.1:9001
+NGINX_FPM_STATUS_CONF=/etc/nginx/conf.d/fpm_status.conf
+
+# Sets `key = value` in the FPM pool configuration, whether the key is commented out, already set or absent.
+set_fpm_pool_setting() {
+  local key=$1 value=$2 key_pattern
+  key_pattern="^;\?[[:space:]]*${key//./\\.}[[:space:]]*="
+  if grep -q "$key_pattern" "$PHP_FPM_POOL_CONF"; then
+    sed -i "s|${key_pattern}.*|${key} = ${value}|" "$PHP_FPM_POOL_CONF"
+  else
+    echo "${key} = ${value}" >> "$PHP_FPM_POOL_CONF"
+  fi
+}
+
+render_php_fpm_slowlog() {
+  case "${PHP_FPM_SLOWLOG_TIMEOUT,,}" in
+    off|false|disabled) PHP_FPM_SLOWLOG_TIMEOUT=0 ;;
+  esac
+  [[ "$PHP_FPM_SLOWLOG_TIMEOUT" =~ ^[0-9]+[smhd]?$ ]] \
+    || fail "PHP_FPM_SLOWLOG_TIMEOUT: invalid timeout '$PHP_FPM_SLOWLOG_TIMEOUT' (expected e.g. 5s, 500 or 'off')"
+  [[ "$PHP_FPM_SLOWLOG_TRACE_DEPTH" =~ ^[1-9][0-9]*$ ]] \
+    || fail "PHP_FPM_SLOWLOG_TRACE_DEPTH: invalid depth '$PHP_FPM_SLOWLOG_TRACE_DEPTH' (expected a positive integer)"
+
+  set_fpm_pool_setting request_slowlog_timeout "$PHP_FPM_SLOWLOG_TIMEOUT"
+  set_fpm_pool_setting request_slowlog_trace_depth "$PHP_FPM_SLOWLOG_TRACE_DEPTH"
+  set_fpm_pool_setting slowlog /proc/self/fd/2
+
+  if [[ "$PHP_FPM_SLOWLOG_TIMEOUT" =~ ^0+[smhd]?$ ]]; then
+    echo "start.sh: php-fpm slow log disabled"
+  else
+    echo "start.sh: php-fpm slow log enabled: timeout=$PHP_FPM_SLOWLOG_TIMEOUT trace_depth=$PHP_FPM_SLOWLOG_TRACE_DEPTH"
+  fi
+}
+
+render_php_fpm_status() {
+  set_fpm_pool_setting pm.status_path /status
+  set_fpm_pool_setting ping.path /ping
+  set_fpm_pool_setting pm.status_listen "$PHP_FPM_STATUS_POOL_LISTEN"
+
+  case "${PHP_FPM_STATUS_LISTEN,,}" in
+    off|false|disabled)
+      : > "$NGINX_FPM_STATUS_CONF"
+      echo "start.sh: php-fpm status page not exposed by nginx"
+      return
+      ;;
+  esac
+  [[ "$PHP_FPM_STATUS_LISTEN" =~ ^([0-9.]+:|\[[0-9a-fA-F:]+\]:)?[1-9][0-9]{0,4}$ ]] \
+    || fail "PHP_FPM_STATUS_LISTEN: invalid address '$PHP_FPM_STATUS_LISTEN' (expected e.g. 127.0.0.1:8081, 8081 or 'off')"
+
+  {
+    echo "# Rendered by scripts/start.sh: PHP-FPM status and ping pages, served by a dedicated FPM pool."
+    echo "server {"
+    echo "    listen $PHP_FPM_STATUS_LISTEN;"
+    echo "    access_log off;"
+    echo "    location ~ ^/(status|ping)\$ {"
+    echo "        include fastcgi_params;"
+    echo "        fastcgi_param SCRIPT_NAME \$uri;"
+    echo "        fastcgi_param SCRIPT_FILENAME \$uri;"
+    echo "        fastcgi_pass $PHP_FPM_STATUS_POOL_LISTEN;"
+    echo "    }"
+    echo "    location / {"
+    echo "        return 404;"
+    echo "    }"
+    echo "}"
+  } > "$NGINX_FPM_STATUS_CONF"
+  echo "start.sh: php-fpm status page exposed by nginx on $PHP_FPM_STATUS_LISTEN (/status, /ping)"
+}
+
+if [ -f "$PHP_FPM_POOL_CONF" ]; then
+  render_php_fpm_slowlog
+  render_php_fpm_status
+else
+  echo "start.sh: $PHP_FPM_POOL_CONF not found, php-fpm slow log and status page not configured" >&2
+  : > "$NGINX_FPM_STATUS_CONF"
+fi
+
 if [ -f /etc/nginx/sites-available/default.template ]; then
   cp /etc/nginx/sites-available/default.template /etc/nginx/sites-available/default
 fi

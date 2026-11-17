@@ -577,6 +577,23 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertNull($backend->findByUri('mailto:user@example.co', 'principals/users'));
     }
 
+    function testSearchUserPrincipalsAnyofKeepsAddressesStoredInAnotherCase() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $result = $backend->searchPrincipals('principals/users', [
+            '{DAV:}displayname' => 'first',
+            '{http://sabredav.org/ns}email-address' => 'usernolast@example.com'
+        ], 'anyof');
+
+        sort($result);
+        $expected = [
+            'principals/users/' . self::USER_ID,
+            'principals/users/' . self::USER_WITH_NO_LASTNAME
+        ];
+        sort($expected);
+        $this->assertEquals($expected, $result);
+    }
+
     function testUpdatePrincipal() {
         $this->expectException(\Sabre\DAV\Exception\MethodNotAllowed::class);
         $backend = new Mongo(self::$esndb, self::$tenant);

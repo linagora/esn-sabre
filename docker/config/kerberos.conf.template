@@ -1,6 +1,7 @@
-# Kerberos (SPNEGO) authentication, rendered by scripts/start.sh into
+# Kerberos (SPNEGO) authentication, rendered by scripts/kerberos.sh into
 # /etc/nginx/snippets/kerberos_server.conf when KERBEROS_ENABLED=true; only the
-# ${KERBEROS_*} placeholders are substituted. See doc/CONFIGURE.md § "Kerberos".
+# ${KERBEROS_*} and ${NGINX_KERBEROS_*} placeholders are substituted. See
+# doc/CONFIGURE.md § "Kerberos".
 #
 # "location /" rewrites the requests carrying "Authorization: Negotiate ..." to
 # this internal location. auth_gss validates the ticket against the keytab,
@@ -19,7 +20,8 @@ location = /__krb {
 
     auth_gss on;
     auth_gss_keytab ${KERBEROS_KEYTAB};
-    auth_gss_service_name ${KERBEROS_SERVICE_NAME};
+    auth_gss_service_name ${NGINX_KERBEROS_SERVICE};
+    auth_gss_realm ${NGINX_KERBEROS_REALM};
     # Keep "@REALM": Sabre maps the realm to a mail domain.
     auth_gss_format_full on;
     # Basic stays with Sabre (LDAP), in "location /".

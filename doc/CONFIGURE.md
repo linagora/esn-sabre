@@ -277,7 +277,7 @@ authentication keep working alongside, so clients without a ticket still use the
 | Variable | Default | Meaning |
 |---|---|---|
 | `KERBEROS_ENABLED` | `false` | Enable Kerberos authentication. |
-| `KERBEROS_SERVICE_NAME` | (required) | Service principal of the keytab, `HTTP/<host name the clients use>`, e.g. `HTTP/dav.example.com`. |
+| `KERBEROS_SERVICE_PRINCIPAL` | (required) | Service principal of the keytab, with its realm, as `klist -k` prints it: `HTTP/<host name the clients use>@REALM`, e.g. `HTTP/dav.example.com@CORP.EXAMPLE.COM`. |
 | `KERBEROS_KEYTAB` | `/etc/krb5.keytab` | Keytab holding the key of that service principal, readable by `www-data`. |
 | `KERBEROS_REALM_DOMAINS` | (required) | Comma separated `REALM:domain` pairs. Realms are case sensitive. |
 | `KERBEROS_LARGE_CLIENT_HEADER_BUFFERS` | `4 64k` | Nginx `large_client_header_buffers` once Kerberos is enabled. |
@@ -290,7 +290,7 @@ sabre_dav:
   image: linagora/esn-sabre
   environment:
     - KERBEROS_ENABLED=true
-    - KERBEROS_SERVICE_NAME=HTTP/dav.example.com
+    - KERBEROS_SERVICE_PRINCIPAL=HTTP/dav.example.com@CORP.EXAMPLE.COM
     - KERBEROS_KEYTAB=/etc/sabre/dav.keytab
     - KERBEROS_REALM_DOMAINS=CORP.EXAMPLE.COM:example.com
   volumes:

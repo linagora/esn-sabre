@@ -91,7 +91,8 @@ class CalendarObjectService {
             'firstoccurence' => $extraData['firstOccurence'],
             'lastoccurence' => $extraData['lastOccurence'],
             'uid' => $extraData['uid'],
-            'classification' => $extraData['classification']
+            'classification' => $extraData['classification'],
+            'recurring' => $extraData['recurring']
         ];
     }
 
@@ -310,11 +311,12 @@ class CalendarObjectService {
     private function executeCalendarQuery($calendarId, array $filters, $returnFullData) {
         $calendarId = $calendarId[0];
 
-        list($query, $projection, $requirePostFilter) =
+        list($query, $projection, $requirePostFilter, $exactForSingleEvents) =
             $this->buildQueryFromFilters($calendarId, $filters, $returnFullData);
 
         foreach ($this->calendarObjectDAO->findWithQuery($query, $projection) as $row) {
-            $result = $this->processQueryResult($row, $filters, $requirePostFilter, $returnFullData);
+            $rowRequiresPostFilter = $requirePostFilter && !($exactForSingleEvents && $this->isSingleEvent($row));
+            $result = $this->processQueryResult($row, $filters, $rowRequiresPostFilter, $returnFullData);
 
             if ($result !== null) {
                 yield $result;
@@ -328,7 +330,7 @@ class CalendarObjectService {
      * @param string $calendarId
      * @param array $filters
      * @param bool $returnFullData
-     * @return array [query, projection, requirePostFilter]
+     * @return array [query, projection, requirePostFilter, exactForSingleEvents]
      */
     private function buildQueryFromFilters($calendarId, array $filters, $returnFullData) {
         $query = ['calendarid' => $calendarId];
@@ -339,14 +341,19 @@ class CalendarObjectService {
             $requirePostFilter = false;
         }
 
-        list($componentType, $timeRange, $requirePostFilter) =
+        list($componentType, $timeRange, $requirePostFilter, $onlyEventTimeRange) =
             $this->extractComponentFilters($filters, $requirePostFilter);
 
         // The validator compares the top-level name case-sensitively and rejects
         // anything that is not VCALENDAR: only the post-filter can reproduce that.
-        if (!$this->isVCalendarFilter($filters)) {
+        $isVCalendarFilter = $this->isVCalendarFilter($filters);
+        if (!$isVCalendarFilter) {
             $requirePostFilter = true;
         }
+
+        // The Mongo range below is the exact RFC 4791 §9.9 overlap for the rows
+        // holding a single non recurring event: only the others need the post-filter.
+        $exactForSingleEvents = $isVCalendarFilter && $onlyEventTimeRange;
 
         if ($componentType) {
             $query['componenttype'] = $componentType;
@@ -362,7 +369,17 @@ class CalendarObjectService {
 
         $projection = $this->buildProjection($requirePostFilter, $returnFullData);
 
-        return [$query, $projection, $requirePostFilter];
+        return [$query, $projection, $requirePostFilter, $exactForSingleEvents];
+    }
+
+    /**
+     * Objects stored before the recurring marker existed are treated as recurring.
+     *
+     * @param array|object $row Database row
+     * @return bool true when the row is known to hold a single non recurring event
+     */
+    private function isSingleEvent($row) {
+        return isset($row['recurring']) && $row['recurring'] === false;
     }
 
     /**
@@ -370,11 +387,13 @@ class CalendarObjectService {
      *
      * @param array $filters
      * @param bool $requirePostFilter
-     * @return array [componentType, timeRange, requirePostFilter]
+     * @return array [componentType, timeRange, requirePostFilter, onlyEventTimeRange]
+     *               onlyEventTimeRange: the VEVENT time-range is the only filter the post-filter checks
      */
     private function extractComponentFilters(array $filters, $requirePostFilter) {
         $componentType = null;
         $timeRange = null;
+        $onlyEventTimeRange = false;
 
         // Figuring out if there's a component filter
         if (!empty($filters['comp-filters']) && is_array($filters['comp-filters']) && !$filters['comp-filters'][0]['is-not-defined']) {
@@ -395,6 +414,7 @@ class CalendarObjectService {
             $hasTimeRange = $componentType == 'VEVENT' && is_array($compFilter['time-range']);
             if ($hasTimeRange) {
                 $timeRange = $compFilter['time-range'];
+                $onlyEventTimeRange = $hasNoPropFilters && $hasNoOtherSubFilters;
 
                 $canOptimizeTimeRange = empty($timeRange['start']) || empty($timeRange['end']);
 
@@ -405,7 +425,7 @@ class CalendarObjectService {
             }
         }
 
-        return [$componentType, $timeRange, $requirePostFilter];
+        return [$componentType, $timeRange, $requirePostFilter, $onlyEventTimeRange];
     }
 
     /**
@@ -425,11 +445,11 @@ class CalendarObjectService {
      */
     private function buildProjection($requirePostFilter, $returnFullData) {
         if ($returnFullData) {
-            return ['uri' => 1, 'calendardata' => 1, 'etag' => 1, 'classification' => 1];
+            return ['uri' => 1, 'calendardata' => 1, 'etag' => 1, 'classification' => 1, 'recurring' => 1];
         }
 
         if ($requirePostFilter) {
-            return ['uri' => 1, 'calendardata' => 1];
+            return ['uri' => 1, 'calendardata' => 1, 'recurring' => 1];
         }
 
         return ['uri' => 1];

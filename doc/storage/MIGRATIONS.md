@@ -20,3 +20,15 @@ Skipped contacts are not automatically retried once version `1` is saved.
 
 This backfill runs in the background. FN/email sorting and cursor pagination can return incomplete or duplicate
 results while contacts are still being migrated.
+
+## Version 3 — Backfill the recurring marker of calendar objects
+
+Upgrades database version `2` to `3`. Existing `calendarobjects` of type `VEVENT` stored without a `recurring` field
+get the value computed from their `calendardata`, matching event creation and update: `false` for a single VEVENT
+without `RRULE` nor `RDATE`, `true` otherwise. Their `firstoccurence` / `lastoccurence` are recomputed at the same
+time: single events skip the vobject post-filter and rely on them only, so bounds wrongly stored by an older backend
+(e.g. custom `VTIMEZONE` events) would otherwise make time-range queries return them outside the requested range.
+
+Until an object is migrated it is treated as recurring: time-range queries stay correct, they only keep running the
+vobject post-filter on it. Each update checks that the payload is unchanged and the field still missing, so
+concurrent DAV writes keep their value. Objects with invalid data are skipped with a WARNING containing their ID.

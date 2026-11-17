@@ -120,4 +120,44 @@ class MongoTest extends AbstractDatabaseTestBase {
         $backend = $this->getBackend();
         $this->assertTrue($backend instanceof Mongo);
     }
+
+    function testWeekQueryOnlyPostFiltersRecurringEvents() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        $backend->createCalendarObject($calendarId, 'single.ics', $this->event('single', "DTSTART:20350102T090000Z\r\nDTEND:20350102T100000Z\r\n"));
+        $backend->createCalendarObject($calendarId, 'single-outside.ics', $this->event('single-outside', "DTSTART:20350110T090000Z\r\nDTEND:20350110T100000Z\r\n"));
+        $backend->createCalendarObject($calendarId, 'legacy.ics', $this->event('legacy', "DTSTART:20350103T090000Z\r\nDTEND:20350103T100000Z\r\n"));
+        $backend->createCalendarObject($calendarId, 'weekly.ics', $this->event('weekly', "DTSTART:20341225T090000Z\r\nDTEND:20341225T100000Z\r\nRRULE:FREQ=WEEKLY;COUNT=3\r\n"));
+        // Its occurrence hull overlaps the range, none of its instances does
+        $backend->createCalendarObject($calendarId, 'monthly.ics', $this->event('monthly', "DTSTART:20341215T090000Z\r\nDTEND:20341215T100000Z\r\nRRULE:FREQ=MONTHLY;COUNT=3\r\n"));
+        // Stored before the recurring marker existed
+        $collection = (new \MongoDB\Client(ESN_MONGO_SABREURI))->{ESN_MONGO_SABREDB}->calendarobjects;
+        $collection->updateOne(['uri' => 'legacy.ics'], ['$unset' => ['recurring' => '']]);
+
+        $filters = [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [[
+                'name' => 'VEVENT',
+                'comp-filters' => [],
+                'prop-filters' => [],
+                'is-not-defined' => false,
+                'time-range' => ['start' => new \DateTime('20350101T000000Z'), 'end' => new \DateTime('20350108T000000Z')],
+            ]],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+
+        $parsed = [];
+        foreach ($backend->calendarQueryWithAllData($calendarId, $filters) as $object) {
+            $parsed[$object['uri']] = $object['vObject'] !== null;
+        }
+
+        $this->assertEquals(['single.ics' => false, 'legacy.ics' => true, 'weekly.ics' => true], $parsed);
+        $this->assertEqualsCanonicalizing(['single.ics', 'legacy.ics', 'weekly.ics'], $backend->calendarQuery($calendarId, $filters));
+    }
+
+    private function event($uid, $dates) {
+        return "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:" . $uid . "\r\n" . $dates . "END:VEVENT\r\nEND:VCALENDAR\r\n";
+    }
 }

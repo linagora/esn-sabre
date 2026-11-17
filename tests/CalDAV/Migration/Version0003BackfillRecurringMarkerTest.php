@@ -58,4 +58,20 @@ class Version0003BackfillRecurringMarkerTest extends TestCase
         $this->assertTrue($this->logs->hasWarningThatContains('Skipping calendar object'));
         $this->assertFalse($this->logs->hasErrorRecords());
     }
+
+    public function testLegacyBoundsAreRecomputedWithTheMarker(): void
+    {
+        // An older backend stored this 09:00-10:00 UTC event one hour late.
+        $this->database->calendarobjects->insertOne([
+            '_id' => 1, 'componenttype' => 'VEVENT', 'calendardata' => $this->event("DTEND:20260101T100000Z\r\n"),
+            'firstoccurence' => 1767261600, 'lastoccurence' => 1767265200,
+        ]);
+
+        (new MigrationRunner($this->database, $this->logger))->run();
+
+        $object = $this->database->calendarobjects->findOne(['_id' => 1]);
+        $this->assertFalse($object['recurring']);
+        $this->assertSame(1767258000, $object['firstoccurence']);
+        $this->assertSame(1767261600, $object['lastoccurence']);
+    }
 }

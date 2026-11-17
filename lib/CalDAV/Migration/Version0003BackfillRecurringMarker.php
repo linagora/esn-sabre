@@ -12,6 +12,11 @@ use Psr\Log\LoggerInterface;
  * Time-range calendar-queries skip the vobject post-filter for the events
  * stored with `recurring: false`. Events stored before that marker existed
  * are treated as recurring, which is correct but slow: compute it for them.
+ *
+ * Skipping the post-filter trusts `firstoccurence` / `lastoccurence` as the
+ * exact event bounds, while older backends may have stored them wrongly (e.g.
+ * custom VTIMEZONE events stored in local time): recompute them together with
+ * the marker so the Mongo range alone stays correct.
  */
 class Version0003BackfillRecurringMarker implements Migration
 {
@@ -45,7 +50,7 @@ class Version0003BackfillRecurringMarker implements Migration
         foreach ($cursor as $object) {
             $read++;
             try {
-                $recurring = $normalizer->getDenormalizedData($object['calendardata'])['recurring'];
+                $denormalized = $normalizer->getDenormalizedData($object['calendardata']);
             } catch (\Exception $error) {
                 $skipped++;
                 // Parser messages can contain event contents; log only the object ID.
@@ -58,7 +63,11 @@ class Version0003BackfillRecurringMarker implements Migration
             // DAV remains writable: only update the payload we actually read, unless a write already set the marker.
             $operations[] = ['updateOne' => [
                 ['_id' => $object['_id'], 'calendardata' => $object['calendardata'], 'recurring' => ['$exists' => false]],
-                ['$set' => ['recurring' => $recurring]],
+                ['$set' => [
+                    'firstoccurence' => $denormalized['firstOccurence'],
+                    'lastoccurence' => $denormalized['lastOccurence'],
+                    'recurring' => $denormalized['recurring'],
+                ]],
             ]];
             if (count($operations) === self::BATCH_SIZE) {
                 $updated += $this->writeBatch($objects, $operations, ++$batch);

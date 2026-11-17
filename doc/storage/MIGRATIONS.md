@@ -25,7 +25,9 @@ results while contacts are still being migrated.
 
 Upgrades database version `2` to `3`. Existing `calendarobjects` of type `VEVENT` stored without a `recurring` field
 get the value computed from their `calendardata`, matching event creation and update: `false` for a single VEVENT
-without `RRULE` nor `RDATE`, `true` otherwise.
+without `RRULE` nor `RDATE`, `true` otherwise. Their `firstoccurence` / `lastoccurence` are recomputed at the same
+time: single events skip the vobject post-filter and rely on them only, so bounds wrongly stored by an older backend
+(e.g. custom `VTIMEZONE` events) would otherwise make time-range queries return them outside the requested range.
 
 Until an object is migrated it is treated as recurring: time-range queries stay correct, they only keep running the
 vobject post-filter on it. Each update checks that the payload is unchanged and the field still missing, so

@@ -173,7 +173,16 @@ Indexes are created once when the container starts: `scripts/start.sh` runs `scr
 exists is a no-op, so this is safe on every restart. Index creation never runs on HTTP requests. Before this change it
 ran on every request unless `SHOULD_CREATE_INDEX=false` was set; that setting no longer exists.
 
-If index creation fails at startup, sabre still starts and logs a warning. You can rerun
+Without these indexes every query is a collection scan, which saturates MongoDB under load. Index creation is therefore
+retried at startup, so that a MongoDB not reachable yet does not leave sabre without indexes, and the container refuses
+to start when it still fails:
+
+ - `MONGO_INDEX_CREATION_ATTEMPTS`: number of attempts (default `30`)
+ - `MONGO_INDEX_CREATION_RETRY_DELAY`: seconds to wait between two attempts (default `2`)
+ - `MONGO_INDEX_CREATION_REQUIRED`: `true` (default) stops the container when every attempt failed; `false` starts
+   sabre anyway and logs an `ERROR`
+
+The script prints the name of the database it created the indexes on. You can rerun
 `php scripts/create-indexes.php [config.json]` or use the `mongosh` script below, which also drops the indexes that
 became redundant.
 

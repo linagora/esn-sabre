@@ -460,6 +460,23 @@ ICS;
         $this->assertTrue(Utils::isHiddenPrivateEvent($this->privateEvent(), $node, 'principals/users/subscriber'));
     }
 
+    function testIsHiddenPrivateEventForTechnicalUser() {
+        $node = new class() {
+            public function getOwner() { return 'principals/resources/resource'; }
+        };
+
+        $this->assertFalse(Utils::isHiddenPrivateEvent($this->privateEvent(), $node, 'principals/technicalUser'));
+    }
+
+    function testIsHiddenPrivateEventForTechnicalUserReadingASubscription() {
+        $node = new class() {
+            public function getOwner() { return 'principals/users/subscriber'; }
+            public function getSourceOwner() { return 'principals/users/owner'; }
+        };
+
+        $this->assertFalse(Utils::isHiddenPrivateEvent($this->privateEvent(), $node, 'principals/technicalUser'));
+    }
+
     private function privateEvent() {
         return \Sabre\VObject\Reader::read(join("\r\n", [
             'BEGIN:VCALENDAR',

@@ -2,6 +2,8 @@
 
 namespace ESN\Utils;
 
+use ESN\DAVACL\PrincipalBackend\PrivatePrincipalBackend;
+
 #[\AllowDynamicProperties]
 class Utils {
 
@@ -301,11 +303,19 @@ class Utils {
     /**
      * Whether the PRIVATE / CONFIDENTIAL events of this calendar are reduced when read by this user.
      *
+     * The technical user reads them in full: it serves the internal workflows of its domain
+     * (resource participation, exports, reindexing), and CalendarRoot already denies it the
+     * calendars of other domains.
+     *
      * @param mixed $node The calendar (or calendar object) the events are read through
      * @param string|null $userPrincipal
      * @return bool
      */
     static function hidesPrivateEventsFrom($node, $userPrincipal) {
+        if ($userPrincipal === PrivatePrincipalBackend::TECHNICAL_PRINCIPAL) {
+            return false;
+        }
+
         // For subscriptions, check against the source calendar owner
         if (method_exists($node, 'getSourceOwner')) {
             return $node->getSourceOwner() !== $userPrincipal;

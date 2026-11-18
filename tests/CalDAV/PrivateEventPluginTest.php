@@ -2,6 +2,9 @@
 
 namespace ESN\CalDAV;
 
+use ESN\Utils\AuthTenant;
+use ESN\Utils\TenantType;
+
 require_once ESN_TEST_BASE . '/DAV/ServerMock.php';
 
 /**
@@ -19,6 +22,7 @@ class PrivateEventPluginTest extends \ESN\DAV\ServerMock {
     const PUBLIC_CALENDAR_PATH = '/calendars/54b64eadf6d7d8e41d263e0e/publicCal1/';
     const SUBSCRIPTION_PATH = '/calendars/54b64eadf6d7d8e41d263e0f/subscription1/';
     const HIDDEN_LOCATION = 'Hospital, a much longer hidden location';
+    const USER2_CALENDAR_PATH = '/calendars/54b64eadf6d7d8e41d263e0e/calendar2/';
 
     function setUp(): void {
         parent::setUp();
@@ -100,6 +104,79 @@ class PrivateEventPluginTest extends \ESN\DAV\ServerMock {
 
         $this->assertEquals(403, $response->status);
         $this->assertNull($this->caldavBackend->getCalendarObject($this->cal['id'], 'copy.ics'));
+    }
+
+    public static function privateClasses() {
+        return [
+            'PRIVATE' => ['PRIVATE'],
+            'CONFIDENTIAL' => ['CONFIDENTIAL'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateClasses')]
+    function testTechnicalUserGetsPrivateEventInFull($class) {
+        $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'secret.ics', $this->event('secret', $class));
+        $this->authenticateAsTechnicalUser();
+
+        $this->assertEventInFull($this->getBody(self::USER2_CALENDAR_PATH . 'secret.ics'), $class);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateClasses')]
+    function testTechnicalUserPropFindsPrivateEventInFull($class) {
+        $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'secret.ics', $this->event('secret', $class));
+        $this->authenticateAsTechnicalUser();
+
+        $properties = $this->propFind(self::USER2_CALENDAR_PATH . 'secret.ics', '0', '<c:calendar-data/>');
+
+        $this->assertEventInFull($properties['calendar-data'], $class);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateClasses')]
+    function testTechnicalUserQueriesPrivateEventInFull($class) {
+        $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'secret.ics', $this->event('secret', $class));
+        $this->authenticateAsTechnicalUser();
+
+        $response = $this->calendarQuery(self::USER2_CALENDAR_PATH,
+            '<c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">'
+            . '<c:prop-filter name="LOCATION"><c:text-match>Hospital</c:text-match></c:prop-filter>'
+            . '</c:comp-filter></c:comp-filter>');
+
+        $this->assertEventInFull($this->propertiesOf($response, self::USER2_CALENDAR_PATH . 'secret.ics')['calendar-data'], $class);
+    }
+
+    function testUserStillGetsPrivateEventOfAnotherUserSanitized() {
+        $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'secret.ics', $this->event('secret', 'CONFIDENTIAL'));
+
+        $body = $this->getBody(self::PUBLIC_CALENDAR_PATH . 'secret.ics');
+
+        $this->assertStringContainsString('SUMMARY:Busy', $body);
+        $this->assertStringNotContainsString('Hospital', $body);
+    }
+
+    private function authenticateAsTechnicalUser() {
+        $this->authBackend->setAuthTenant(new AuthTenant('technicalUser', SERVER_MOCK_DOMAIN_ID, TenantType::Technical));
+    }
+
+    private function assertEventInFull($calendarData, $class) {
+        $this->assertStringContainsString('SUMMARY:Doctor', $calendarData);
+        $this->assertStringContainsString('LOCATION:Hospital', $calendarData);
+        $this->assertStringContainsString('CLASS:' . $class, $calendarData);
+    }
+
+    private function calendarQuery($uri, $filter) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray([
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_DEPTH'        => '1',
+            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'REQUEST_URI'       => $uri,
+        ]);
+        $request->setBody('<?xml version="1.0"?><c:calendar-query xmlns:d="DAV:" xmlns:c="' . self::CALDAV_NS . '">'
+            . '<d:prop><c:calendar-data/></d:prop><c:filter>' . $filter . '</c:filter></c:calendar-query>');
+
+        $response = $this->request($request);
+        $this->assertEquals(207, $response->status);
+
+        return $response->getBodyAsString();
     }
 
     private function seriesWithPrivateOverride($overrideFirst) {

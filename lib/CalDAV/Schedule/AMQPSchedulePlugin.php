@@ -373,18 +373,16 @@ class AMQPSchedulePlugin extends Plugin {
         );
         // Hand the broker the object rather than the ICS: given a string it parses
         // it itself, which is the same payload a third time.
-        $messages = $broker->parseEvent(null, $addresses, $sourceCalendar);
+        $messages = $this->messagesNotIgnored($broker->parseEvent(null, $addresses, $sourceCalendar), $ignore);
 
-        foreach ($messages as $message) {
-            if (in_array($message->recipient, $ignore)) {
-                continue;
+        $this->withRecipientPrincipalsResolved($messages, function () use ($messages, $sourceCalendar) {
+            foreach ($messages as $message) {
+                if ($sourceCalendar) {
+                    $this->preservePublicAgendaMetadata($message, $sourceCalendar);
+                }
+                $this->deliver($message);
             }
-
-            if ($sourceCalendar) {
-                $this->preservePublicAgendaMetadata($message, $sourceCalendar);
-            }
-            $this->deliver($message);
-        }
+        });
         // flushDeliveries() is called in afterUnbind.
     }
 

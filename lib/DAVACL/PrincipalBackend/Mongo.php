@@ -7,7 +7,17 @@ use \ESN\Utils\TenantType as TenantType;
 use \ESN\Utils\AuthTenant as AuthTenant;
 
 #[\AllowDynamicProperties]
-class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
+class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements BatchUserPrincipalLookup {
+    private const USERS_PREFIX = 'principals/users';
+    private const MAILTO = 'mailto:';
+
+    /**
+     * Addresses resolved per users query, i.e. at most twice as many '$in' values (the
+     * address as given and lower-cased). Not measured yet: a conservative bound that
+     * covers the attendee list of most events in a single query.
+     */
+    private const ADDRESS_LOOKUP_BATCH_SIZE = 50;
+
     protected $db;
     protected $collectionMap;
     protected ?AuthTenant $authTenant = null;
@@ -20,6 +30,13 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
      * principal itself (see domainToPrincipal).
      */
     private array $groupPrincipals = [];
+
+    /**
+     * While withUserPrincipalsResolved() runs: the user principal URI of each address
+     * already looked up, null when there is none, by tenant domain id.
+     */
+    private array $userPrincipalsByAddress = [];
+    private int $userPrincipalResolutionDepth = 0;
 
     function setAuthTenant(AuthTenant $authTenant) {
         $this->authTenant = $authTenant;
@@ -154,6 +171,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         }
     }
 
+    private function hasAuthDomain(): bool {
+        return (bool) $this->authTenant?->domainId;
+    }
+
     private function requireAuthDomainId(): string {
         $domainId = $this->authTenant?->domainId;
         if (!$domainId) {
@@ -194,6 +215,148 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
     function updatePrincipal($path, \Sabre\DAV\PropPatch $propPatch) {
         // Not handling updates here, this is done through the ESN.
         throw new \Sabre\DAV\Exception\MethodNotAllowed('Changing principals is not permitted');
+    }
+
+    function withUserPrincipalsResolved(array $addresses, callable $operation) {
+        $this->userPrincipalResolutionDepth++;
+        try {
+            if ($this->hasAuthDomain()) {
+                $this->resolveUserAddresses($addresses);
+            }
+
+            return $operation();
+        } finally {
+            if (--$this->userPrincipalResolutionDepth === 0) {
+                $this->userPrincipalsByAddress = [];
+            }
+        }
+    }
+
+    function findByUri($uri, $principalPrefix) {
+        if (!$this->isResolvedUserLookup($uri, $principalPrefix)) {
+            return parent::findByUri($uri, $principalPrefix);
+        }
+
+        $address = substr($uri, strlen(self::MAILTO));
+        $this->resolveUserAddresses([$address]);
+
+        return $this->userPrincipalsByAddress[$this->requireAuthDomainId()][$address];
+    }
+
+    private function isResolvedUserLookup($uri, $principalPrefix): bool {
+        return $this->userPrincipalResolutionDepth > 0
+            && $this->hasAuthDomain()
+            && $principalPrefix === self::USERS_PREFIX
+            && is_string($uri)
+            && str_starts_with($uri, self::MAILTO);
+    }
+
+    private function resolveUserAddresses(array $addresses): void {
+        $domainId = $this->requireAuthDomainId();
+        $resolved = $this->userPrincipalsByAddress[$domainId] ?? [];
+
+        $pending = array_values(array_unique(array_filter(
+            array_map('strval', $addresses),
+            fn(string $address) => !array_key_exists($address, $resolved)
+        )));
+
+        $this->userPrincipalsByAddress[$domainId] = array_reduce(
+            array_chunk($pending, self::ADDRESS_LOOKUP_BATCH_SIZE),
+            fn(array $carry, array $chunk) => $carry + $this->lookUpUserAddresses($chunk, $domainId),
+            $resolved
+        );
+    }
+
+    /**
+     * Same lookup as searchUserPrincipals() for each address, each step querying all of them
+     * at once: the exact addresses first, then the case-folded regex for the addresses still
+     * unresolved, so that a match for one address never skips the fallback of another.
+     *
+     * @return array the user principal URI of each address, null when there is none
+     */
+    private function lookUpUserAddresses(array $addresses, string $domainId): array {
+        $exactMatches = $this->findUserPrincipalsByAddress(
+            $addresses,
+            array_unique(array_merge(...array_map(fn(string $address) => $this->exactAddressForms($address), $addresses))),
+            $domainId,
+            fn(string $address, array $emails) => $this->exactAddressRank($address, $emails)
+        );
+
+        $unresolved = array_values(array_filter($addresses, fn(string $address) => $exactMatches[$address] === null));
+        if (empty($unresolved)) {
+            return $exactMatches;
+        }
+
+        $caseFoldedMatches = $this->findUserPrincipalsByAddress(
+            $unresolved,
+            array_map(fn(string $address) => new \MongoDB\BSON\Regex($this->caseFoldedAddressPattern($address)), $unresolved),
+            $domainId,
+            fn(string $address, array $emails) => $this->caseFoldedAddressRank($address, $emails)
+        );
+
+        return $caseFoldedMatches + $exactMatches;
+    }
+
+    /**
+     * Finds the users of the domain owning any of $values, then maps each address to the
+     * best ranked of them: $rank tells how well a user's e-mails match an address, null
+     * meaning not at all. Ties keep the query order, as findByUri() picks the first result.
+     */
+    private function findUserPrincipalsByAddress(array $addresses, array $values, string $domainId, callable $rank): array {
+        $query = ['$and' => [
+            ['accounts.emails' => ['$in' => array_values($values)]],
+            $this->userDomainFilter($domainId)
+        ]];
+        $users = array_map(
+            fn($user) => ['uri' => self::USERS_PREFIX . '/' . $user['_id'], 'emails' => $this->accountEmails($user)],
+            iterator_to_array($this->db->users->find($query, ['projection' => ['_id' => 1, 'accounts.emails' => 1]]), false)
+        );
+
+        return array_combine(
+            $addresses,
+            array_map(fn(string $address) => $this->bestRankedUser($users, $address, $rank), $addresses)
+        );
+    }
+
+    private function bestRankedUser(array $users, string $address, callable $rank): ?string {
+        $ranked = array_values(array_filter(
+            array_map(fn(array $user) => ['rank' => $rank($address, $user['emails']), 'uri' => $user['uri']], $users),
+            fn(array $candidate) => $candidate['rank'] !== null
+        ));
+        usort($ranked, fn(array $left, array $right) => $left['rank'] <=> $right['rank']);
+
+        return $ranked[0]['uri'] ?? null;
+    }
+
+    private function accountEmails($user): array {
+        $emails = array_merge(...array_map(
+            fn($account) => (array) ($account['emails'] ?? []),
+            (array) ($user['accounts'] ?? [])
+        ));
+
+        return array_values(array_filter($emails, 'is_string'));
+    }
+
+    /**
+     * The address as given ranks before its lower-cased form, as in the accounts.emails
+     * index order the single-address lookup returns its results in.
+     */
+    private function exactAddressRank(string $address, array $emails): ?int {
+        $matchingForms = array_keys(array_filter(
+            $this->exactAddressForms($address),
+            fn(string $form) => in_array($form, $emails, true)
+        ));
+
+        return $matchingForms[0] ?? null;
+    }
+
+    /**
+     * PHP equivalent of caseFoldedAddressPattern(): strtolower only folds ASCII letters.
+     */
+    private function caseFoldedAddressRank(string $address, array $emails): ?int {
+        $foldedEmails = array_map('strtolower', $emails);
+
+        return in_array(strtolower($address), $foldedEmails, true) ? 0 : null;
     }
 
     function searchPrincipals($prefixPath, array $searchProperties, $test = 'allof') {
@@ -777,9 +940,11 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
      * accounts.emails index. strtolower only folds ASCII letters.
      */
     private function exactAddressMatch($value): array {
-        $address = (string) $value;
+        return [ '$in' => $this->exactAddressForms((string) $value) ];
+    }
 
-        return [ '$in' => array_values(array_unique([$address, strtolower($address)])) ];
+    private function exactAddressForms(string $address): array {
+        return array_values(array_unique([$address, strtolower($address)]));
     }
 
     /**
@@ -788,13 +953,17 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
      * into explicit [xX] classes instead.
      */
     private function caseFoldedAddressMatch($value): array {
+        return [ '$elemMatch' => [ '$regex' => $this->caseFoldedAddressPattern((string) $value) ] ];
+    }
+
+    private function caseFoldedAddressPattern(string $address): string {
         $pattern = preg_replace_callback(
             '/[a-z]/i',
             fn($letter) => '[' . strtolower($letter[0]) . strtoupper($letter[0]) . ']',
-            preg_quote((string) $value)
+            preg_quote($address)
         );
 
-        return [ '$elemMatch' => [ '$regex' => '\\A' . $pattern . '\\z' ] ];
+        return '\\A' . $pattern . '\\z';
     }
 
     /**
@@ -802,7 +971,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
      * 'allof' / 'anyof' search semantics.
      */
     private function withDomainFilter(array $query, string $domainId, $test): array {
-        $domainFilter = ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
+        $domainFilter = $this->userDomainFilter($domainId);
 
         if ($test === 'anyof') {
             return ['$and' => [['$or' => $query], $domainFilter]];
@@ -811,6 +980,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
         $query[] = $domainFilter;
 
         return ['$and' => $query];
+    }
+
+    private function userDomainFilter(string $domainId): array {
+        return ['domains.domain_id' => new \MongoDB\BSON\ObjectId($domainId)];
     }
 
     private function getAdministratorsForGroup($principal) {

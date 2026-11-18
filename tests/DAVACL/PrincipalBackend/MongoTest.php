@@ -594,6 +594,179 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($expected, $result);
     }
 
+    function testResolvedUserPrincipalsShouldBeLookedUpInASingleQuery() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $addresses = [
+            'user@example.com',
+            'userNoLast@example.com',
+            'userNoFirst@example.com',
+            'userWithAccount@example.com',
+            'userWithTwoAccounts@example.com'
+        ];
+
+        $queries = \ESN\DAV\MongoFindCounter::count('users', function () use ($backend, $addresses, &$principals) {
+            $principals = $backend->withUserPrincipalsResolved($addresses, fn() => array_map(
+                fn($address) => $backend->findByUri('mailto:' . $address, 'principals/users'),
+                $addresses
+            ));
+        });
+
+        $this->assertSame([
+            'principals/users/' . self::USER_ID,
+            'principals/users/' . self::USER_WITH_NO_LASTNAME,
+            'principals/users/' . self::USER_WITH_NO_FIRSTNAME,
+            'principals/users/' . self::USER_WITH_ACCOUNT_ID,
+            'principals/users/' . self::USER_WITH_TWO_ACCOUNTS_ID
+        ], $principals);
+        $this->assertEquals(1, $queries);
+    }
+
+    function testResolvedUserPrincipalsShouldFallBackOnlyForUnresolvedAddresses() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $queries = \ESN\DAV\MongoFindCounter::count('users', function () use ($backend, &$principals) {
+            $principals = $backend->withUserPrincipalsResolved(['user@example.com', 'usernolast@example.com'], fn() => [
+                $backend->findByUri('mailto:user@example.com', 'principals/users'),
+                $backend->findByUri('mailto:usernolast@example.com', 'principals/users')
+            ]);
+        });
+
+        // The exact lookup finds the first address only: it must not hide the second one
+        $this->assertSame([
+            'principals/users/' . self::USER_ID,
+            'principals/users/' . self::USER_WITH_NO_LASTNAME
+        ], $principals);
+        $this->assertEquals(2, $queries);
+    }
+
+    function testResolvedUserPrincipalsShouldIgnoreAsciiCaseOnly() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $addresses = ['USER@Example.COM', "u\u{017F}er@example.com", "admin@example.com\n", 'user@example.co'];
+
+        $principals = $backend->withUserPrincipalsResolved($addresses, fn() => array_map(
+            fn($address) => $backend->findByUri('mailto:' . $address, 'principals/users'),
+            $addresses
+        ));
+
+        $this->assertSame(['principals/users/' . self::USER_ID, null, null, null], $principals);
+    }
+
+    function testResolvedUserPrincipalsShouldBeReusedHitsAndMissesAlike() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $queries = \ESN\DAV\MongoFindCounter::count('users', function () use ($backend, &$principals) {
+            $principals = $backend->withUserPrincipalsResolved(['user@example.com', 'external@example.com'], fn() => [
+                $backend->findByUri('mailto:user@example.com', 'principals/users'),
+                $backend->findByUri('mailto:external@example.com', 'principals/users'),
+                $backend->findByUri('mailto:user@example.com', 'principals/users'),
+                $backend->findByUri('mailto:external@example.com', 'principals/users')
+            ]);
+        });
+
+        $this->assertSame(['principals/users/' . self::USER_ID, null, 'principals/users/' . self::USER_ID, null], $principals);
+        // The exact lookup, then the case-folded one for the external address
+        $this->assertEquals(2, $queries);
+    }
+
+    function testUserPrincipalsResolvedLaterInTheOperationShouldBeLookedUpOnce() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $queries = \ESN\DAV\MongoFindCounter::count('users', function () use ($backend, &$principals) {
+            $principals = $backend->withUserPrincipalsResolved([], fn() => [
+                $backend->findByUri('mailto:admin@example.com', 'principals/users'),
+                $backend->findByUri('mailto:admin@example.com', 'principals/users')
+            ]);
+        });
+
+        $this->assertSame(['principals/users/' . self::USER_DOMAIN_ADMIN_ID, 'principals/users/' . self::USER_DOMAIN_ADMIN_ID], $principals);
+        $this->assertEquals(1, $queries);
+    }
+
+    function testResolvedUserPrincipalsShouldBeForgottenAfterTheOperation() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $backend->withUserPrincipalsResolved(['user@example.com'], fn() => null);
+
+        $queries = \ESN\DAV\MongoFindCounter::count('users', function () use ($backend) {
+            $backend->findByUri('mailto:user@example.com', 'principals/users');
+        });
+
+        $this->assertEquals(1, $queries);
+    }
+
+    function testResolvedUserPrincipalsShouldBeScopedToTheTenant() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $principals = $backend->withUserPrincipalsResolved(['user@example.com'], function () use ($backend) {
+            $backend->setAuthTenant(new AuthTenant(self::USER_ID, self::OTHER_DOMAIN_ID));
+            try {
+                return $backend->findByUri('mailto:user@example.com', 'principals/users');
+            } finally {
+                $backend->setAuthTenant(self::$tenant);
+            }
+        });
+
+        $this->assertNull($principals);
+    }
+
+    function testResolvedUserPrincipalsShouldOnlyAnswerUserLookups() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $resourceAddress = 'mailto:' . self::RESOURCE_ID . '@example.com';
+
+        $principals = $backend->withUserPrincipalsResolved([self::RESOURCE_ID . '@example.com'], fn() => [
+            $backend->findByUri($resourceAddress, 'principals/users'),
+            $backend->findByUri($resourceAddress, 'principals/resources')
+        ]);
+
+        $this->assertSame([null, 'principals/resources/' . self::RESOURCE_ID], $principals);
+    }
+
+    function testResolvedUserPrincipalsShouldSplitLargeAddressListsIntoBatches() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $addresses = array_map(fn($index) => "external$index@example.com", range(1, 51));
+        $addresses[] = 'user@example.com';
+
+        $queries = \ESN\DAV\MongoFindCounter::count('users', function () use ($backend, $addresses, &$principal) {
+            $principal = $backend->withUserPrincipalsResolved($addresses,
+                fn() => $backend->findByUri('mailto:user@example.com', 'principals/users'));
+        });
+
+        $this->assertSame('principals/users/' . self::USER_ID, $principal);
+        // Two batches, each with its exact lookup then its case-folded one
+        $this->assertEquals(4, $queries);
+    }
+
+    function testResolvedUserPrincipalsShouldPreferTheAddressInTheCaseGiven() {
+        $lowerCaseOwnerId = new \MongoDB\BSON\ObjectId();
+        $exactCaseOwnerId = new \MongoDB\BSON\ObjectId();
+        self::$esndb->users->insertMany([
+            $this->userWithEmails($lowerCaseOwnerId, ['aaron@example.com', 'alice@example.com']),
+            $this->userWithEmails($exactCaseOwnerId, ['Alice@example.com'])
+        ]);
+
+        try {
+            $backend = new Mongo(self::$esndb, self::$tenant);
+            $principals = $backend->withUserPrincipalsResolved(['aaron@example.com', 'Alice@example.com', 'alice@example.com'], fn() => [
+                $backend->findByUri('mailto:Alice@example.com', 'principals/users'),
+                $backend->findByUri('mailto:alice@example.com', 'principals/users')
+            ]);
+
+            $this->assertSame([
+                'principals/users/' . $exactCaseOwnerId,
+                'principals/users/' . $lowerCaseOwnerId
+            ], $principals);
+        } finally {
+            self::$esndb->users->deleteMany(['_id' => ['$in' => [$lowerCaseOwnerId, $exactCaseOwnerId]]]);
+        }
+    }
+
+    private function userWithEmails(\MongoDB\BSON\ObjectId $id, array $emails): array {
+        return [
+            '_id' => $id,
+            'accounts' => [[ 'type' => 'email', 'emails' => $emails ]],
+            'domains' => [[ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]]
+        ];
+    }
+
     function testUpdatePrincipal() {
         $this->expectException(\Sabre\DAV\Exception\MethodNotAllowed::class);
         $backend = new Mongo(self::$esndb, self::$tenant);

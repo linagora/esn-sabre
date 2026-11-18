@@ -8,7 +8,7 @@ use ESN\Utils\TenantType;
 use Sabre\DAV\PropPatch;
 use Sabre\DAVACL\PrincipalBackend\AbstractBackend;
 
-class PrivatePrincipalBackend extends AbstractBackend {
+class PrivatePrincipalBackend extends AbstractBackend implements BatchUserPrincipalLookup {
     const TECHNICAL_PRINCIPAL = 'principals/technicalUser';
     const DISPLAYNAME = '{DAV:}displayname';
     const EMAIL_ADDRESS = '{http://sabredav.org/ns}email-address';
@@ -27,6 +27,10 @@ class PrivatePrincipalBackend extends AbstractBackend {
 
     function findByUri($uri, $principalPrefix) {
         return $this->principalBackend->findByUri($uri, $principalPrefix);
+    }
+
+    function withUserPrincipalsResolved(array $addresses, callable $operation) {
+        return $this->principalBackend->withUserPrincipalsResolved($addresses, $operation);
     }
 
     function updatePrincipal($path, PropPatch $propPatch) {

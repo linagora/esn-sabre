@@ -6,6 +6,7 @@ use ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin;
 use ESN\CalDAV\VObjectPropertyRegistry;
 use ESN\DAV\VObjectCachePlugin;
 use ESN\DAV\Sharing\Plugin as SharingPlugin;
+use ESN\DAVACL\PrincipalBackend\BatchUserPrincipalLookup;
 use ESN\Utils\Env;
 use ESN\Utils\Utils;
 use Monolog\Logger;
@@ -962,26 +963,69 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 
         if ($messages) $modified = true;
 
-        foreach ($messages as $message) {
-            if (in_array($message->recipient, $ignore)) {
-                continue;
+        $messages = $this->messagesNotIgnored($messages, $ignore);
+
+        $this->withRecipientPrincipalsResolved($messages, function () use ($messages, $oldObject, $newObject) {
+            foreach ($messages as $message) {
+                // Fix for issue #152: Skip delivery for unchanged occurrences
+                // When modifying one occurrence (e.g. creating exception #3), SabreDAV re-processes
+                // all occurrences including unchanged ones (e.g. exception #2). We need to skip
+                // delivering messages for occurrences that haven't actually changed.
+                if ($oldObject && $this->shouldSkipUnchangedOccurrence($message, $oldObject, $newObject)) {
+                    continue;
+                }
+
+                $this->preservePublicAgendaMetadata($message, $newObject);
+                $this->prepareOutgoingSchedulingMessage($message, $newObject);
+
+                $this->deliver($message);
+
+                CalendarObjectHelper::updateScheduleStatus($newObject, $message);
             }
+        });
+    }
 
-            // Fix for issue #152: Skip delivery for unchanged occurrences
-            // When modifying one occurrence (e.g. creating exception #3), SabreDAV re-processes
-            // all occurrences including unchanged ones (e.g. exception #2). We need to skip
-            // delivering messages for occurrences that haven't actually changed.
-            if ($oldObject && $this->shouldSkipUnchangedOccurrence($message, $oldObject, $newObject)) {
-                continue;
-            }
+    protected function messagesNotIgnored(array $messages, array $ignore): array {
+        return array_values(array_filter(
+            $messages,
+            fn(ITip\Message $message) => !in_array($message->recipient, $ignore)
+        ));
+    }
 
-            $this->preservePublicAgendaMetadata($message, $newObject);
-            $this->prepareOutgoingSchedulingMessage($message, $newObject);
-
-            $this->deliver($message);
-
-            CalendarObjectHelper::updateScheduleStatus($newObject, $message);
+    /**
+     * Runs the delivery of $messages with the user principals of their recipients and
+     * senders resolved together, instead of one lookup per address during the delivery.
+     * Messages the delivery ends up skipping only add their addresses to the same queries.
+     */
+    protected function withRecipientPrincipalsResolved(array $messages, callable $delivery): void {
+        if (!$this->principalBackend instanceof BatchUserPrincipalLookup) {
+            $delivery();
+            return;
         }
+
+        $this->principalBackend->withUserPrincipalsResolved(self::schedulingEmailAddresses($messages), $delivery);
+    }
+
+    private static function schedulingEmailAddresses(array $messages): array {
+        $calendarAddresses = array_merge(...array_map(
+            fn(ITip\Message $message) => [$message->recipient, $message->sender],
+            $messages
+        ));
+        $emailAddresses = array_map(
+            fn($calendarAddress) => self::emailAddressOf($calendarAddress),
+            $calendarAddresses
+        );
+
+        return array_values(array_unique(array_filter($emailAddresses, fn($address) => $address !== null)));
+    }
+
+    /**
+     * The address lookups strip a 'mailto:' scheme in any case (see Utils::getPrincipalByUri).
+     */
+    private static function emailAddressOf($calendarAddress): ?string {
+        $isEmailAddress = is_string($calendarAddress) && stripos($calendarAddress, 'mailto:') === 0;
+
+        return $isEmailAddress ? substr($calendarAddress, strlen('mailto:')) : null;
     }
 
     /**
@@ -1218,16 +1262,14 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
             ? PublicAgendaScheduleUtils::recipientsExceptBooker([$oldObject])
             : [];
 
-        $messages = $this->createBroker()->parseEvent(null, $addresses, $oldObject);
+        $messages = $this->messagesNotIgnored($this->createBroker()->parseEvent(null, $addresses, $oldObject), $ignore);
 
-        foreach ($messages as $message) {
-            if (in_array($message->recipient, $ignore)) {
-                continue;
+        $this->withRecipientPrincipalsResolved($messages, function () use ($messages, $oldObject) {
+            foreach ($messages as $message) {
+                $this->preservePublicAgendaMetadata($message, $oldObject);
+                $this->deliver($message);
             }
-
-            $this->preservePublicAgendaMetadata($message, $oldObject);
-            $this->deliver($message);
-        }
+        });
     }
 
     /**

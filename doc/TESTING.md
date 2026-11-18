@@ -31,8 +31,9 @@ bash tests/nginx/rate_limit_test.sh linagora/esn-sabre
 ```
 
 `tests/nginx/fpm_status_test.sh` checks, on the same image, that the PHP-FPM `/status` and `/ping` pages are never
-served on port 80 (as written, normalised or percent-encoded), are served on the private port of
-`PHP_FPM_STATUS_LISTEN`, and are gone from FPM altogether with `PHP_FPM_STATUS_LISTEN=off`
+served on port 80 (as written, normalised or percent-encoded), are off by default in production (gone
+from FPM altogether), on with `SABRE_ENV=dev` or an explicit `PHP_FPM_STATUS_LISTEN`, and then served on its
+private port only
 ([CONFIGURE.md](CONFIGURE.md#php-fpm-slow-log-and-status-page)). `run_test.sh` runs it after the rate limit test:
 
 ```bash

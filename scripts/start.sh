@@ -141,7 +141,13 @@ printf 'client_max_body_size %s;\n' "$NGINX_CLIENT_MAX_BODY_SIZE" > /etc/nginx/c
 # See doc/CONFIGURE.md § "PHP-FPM slow log and status page".
 PHP_FPM_SLOWLOG_TIMEOUT=${PHP_FPM_SLOWLOG_TIMEOUT:-5s}
 PHP_FPM_SLOWLOG_TRACE_DEPTH=${PHP_FPM_SLOWLOG_TRACE_DEPTH:-20}
-PHP_FPM_STATUS_LISTEN=${PHP_FPM_STATUS_LISTEN:-127.0.0.1:8081}
+# The status page is a dev tool: on by default with SABRE_ENV=dev only. In production it is off unless
+# PHP_FPM_STATUS_LISTEN asks for it (a monitoring probe, on a private port).
+if [ "${SABRE_ENV:-production}" = dev ]; then
+  PHP_FPM_STATUS_LISTEN=${PHP_FPM_STATUS_LISTEN:-127.0.0.1:8081}
+else
+  PHP_FPM_STATUS_LISTEN=${PHP_FPM_STATUS_LISTEN:-off}
+fi
 PHP_FPM_POOL_CONF=/etc/php/${PHPVERSION:-8.4}/fpm/pool.d/www.conf
 # The status page is served by a dedicated FPM pool, so it answers while every worker of the main pool is busy.
 PHP_FPM_STATUS_POOL_LISTEN=127.0.0.1:9001
@@ -183,7 +189,7 @@ render_php_fpm_status() {
     off|false|disabled)
       # Nothing in FPM either: no worker of the main pool answers /status or /ping.
       : > "$NGINX_FPM_STATUS_CONF"
-      echo "start.sh: php-fpm status page disabled"
+      echo "start.sh: php-fpm status page disabled (SABRE_ENV=${SABRE_ENV:-production}, set PHP_FPM_STATUS_LISTEN to enable it)"
       return
       ;;
   esac

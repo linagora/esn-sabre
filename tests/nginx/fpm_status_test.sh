@@ -1,8 +1,9 @@
 #!/bin/bash
 #
-# Integration test: the PHP-FPM status and ping pages are served on the private port of PHP_FPM_STATUS_LISTEN only,
-# never on the public port 80 (see doc/CONFIGURE.md § "PHP-FPM slow log and status page"). /status?full shows the URI
-# and the user of every request under way: answered on port 80, anyone reaching the DAV endpoint would read them.
+# Integration test: the PHP-FPM status and ping pages are a dev tool (on by default with SABRE_ENV=dev only, else when
+# PHP_FPM_STATUS_LISTEN asks for them), served on the private port of PHP_FPM_STATUS_LISTEN only, never on the public
+# port 80 (see doc/CONFIGURE.md § "PHP-FPM slow log and status page"). /status?full shows the URI and the user of every
+# request under way: answered on port 80, anyone reaching the DAV endpoint would read them.
 #
 # Usage: tests/nginx/fpm_status_test.sh [image]   (default: esn_sabre_nginx_test)
 #
@@ -62,24 +63,50 @@ assert_public_closed() {
   done
 }
 
-echo "Default configuration (PHP_FPM_STATUS_LISTEN=127.0.0.1:8081)"
-if cid=$(start); then
-  assert_public_closed "$cid"
+assert_private_open() {
+  local cid=$1
   grep -q "accepted conn" <<< "$(body "$cid" http://127.0.0.1:8081/status)" \
     && pass "port 8081 /status serves the FPM page" || failed "port 8081 /status does not serve the FPM page"
   [ "$(body "$cid" http://127.0.0.1:8081/ping)" = pong ] \
     && pass "port 8081 /ping answers pong" || failed "port 8081 /ping does not answer pong"
+}
+
+assert_disabled() {
+  local cid=$1
+  grep -q "accepted conn" <<< "$(body "$cid" http://127.0.0.1:8081/status)" \
+    && failed "port 8081 /status serves the FPM page" || pass "port 8081 /status is closed"
+  docker exec "$cid" sh -c 'grep -q "^pm.status_path\|^ping.path\|^pm.status_listen" /etc/php/*/fpm/pool.d/www.conf' \
+    && failed "the main pool has a status URI" || pass "the main pool has no status URI"
+}
+
+echo "Production (default SABRE_ENV): the status page is off"
+if cid=$(start); then
+  assert_public_closed "$cid"
+  assert_disabled "$cid"
 else
   failed "the container did not start"
 fi
 
-echo "PHP_FPM_STATUS_LISTEN=off"
-if cid=$(start -e PHP_FPM_STATUS_LISTEN=off); then
+echo "SABRE_ENV=dev: the status page is on, on the private port only"
+if cid=$(start -e SABRE_ENV=dev); then
   assert_public_closed "$cid"
-  grep -q "accepted conn" <<< "$(body "$cid" http://127.0.0.1:8081/status)" \
-    && failed "port 8081 /status still serves the FPM page" || pass "port 8081 /status is closed"
-  docker exec "$cid" sh -c 'grep -q "^pm.status_path\|^ping.path\|^pm.status_listen" /etc/php/*/fpm/pool.d/www.conf' \
-    && failed "the main pool still has a status URI" || pass "the main pool has no status URI"
+  assert_private_open "$cid"
+else
+  failed "the container did not start"
+fi
+
+echo "Production with PHP_FPM_STATUS_LISTEN=127.0.0.1:8081: on, on the private port only"
+if cid=$(start -e PHP_FPM_STATUS_LISTEN=127.0.0.1:8081); then
+  assert_public_closed "$cid"
+  assert_private_open "$cid"
+else
+  failed "the container did not start"
+fi
+
+echo "SABRE_ENV=dev with PHP_FPM_STATUS_LISTEN=off: off"
+if cid=$(start -e SABRE_ENV=dev -e PHP_FPM_STATUS_LISTEN=off); then
+  assert_public_closed "$cid"
+  assert_disabled "$cid"
 else
   failed "the container did not start"
 fi

@@ -179,19 +179,23 @@ render_php_fpm_slowlog() {
 }
 
 render_php_fpm_status() {
-  set_fpm_pool_setting pm.status_path /status
-  set_fpm_pool_setting ping.path /ping
-  set_fpm_pool_setting pm.status_listen "$PHP_FPM_STATUS_POOL_LISTEN"
-
   case "${PHP_FPM_STATUS_LISTEN,,}" in
     off|false|disabled)
+      # Nothing in FPM either: no worker of the main pool answers /status or /ping.
       : > "$NGINX_FPM_STATUS_CONF"
-      echo "start.sh: php-fpm status page not exposed by nginx"
+      echo "start.sh: php-fpm status page disabled"
       return
       ;;
   esac
   [[ "$PHP_FPM_STATUS_LISTEN" =~ ^([0-9.]+:|\[[0-9a-fA-F:]+\]:)?[1-9][0-9]{0,4}$ ]] \
     || fail "PHP_FPM_STATUS_LISTEN: invalid address '$PHP_FPM_STATUS_LISTEN' (expected e.g. 127.0.0.1:8081, 8081 or 'off')"
+
+  # pm.status_listen serves the status of the main pool from a dedicated pool, which reads the status
+  # URIs of the main pool: they are set there too, so its workers answer them on the main socket.
+  # The public server (default.conf) answers 404 to these two URIs before they reach that socket.
+  set_fpm_pool_setting pm.status_path /status
+  set_fpm_pool_setting ping.path /ping
+  set_fpm_pool_setting pm.status_listen "$PHP_FPM_STATUS_POOL_LISTEN"
 
   {
     echo "# Rendered by scripts/start.sh: PHP-FPM status and ping pages, served by a dedicated FPM pool."

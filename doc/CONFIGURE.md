@@ -270,7 +270,7 @@ publishes its status page. As for the Nginx settings, these are environment vari
 |-------------------------------|------------------|------------------------------------------------------------------------------------------|
 | `PHP_FPM_SLOWLOG_TIMEOUT`     | `5s`             | A request running longer than this is reported as slow (`request_slowlog_timeout`). A number with an optional `s`, `m`, `h` or `d` unit (no unit means seconds). `0`, `off`, `false` or `disabled` turns the slow log off. |
 | `PHP_FPM_SLOWLOG_TRACE_DEPTH` | `20`             | Depth of the PHP backtrace written for a slow request (`request_slowlog_trace_depth`).   |
-| `PHP_FPM_STATUS_LISTEN`       | `127.0.0.1:8081` | Address where Nginx serves the FPM `/status` and `/ping` pages (`[address:]port`). `off`, `false` or `disabled` stops Nginx from serving them. |
+| `PHP_FPM_STATUS_LISTEN`       | `127.0.0.1:8081` | Address where Nginx serves the FPM `/status` and `/ping` pages (`[address:]port`). `off`, `false` or `disabled` turns them off: Nginx does not serve them and FPM does not answer them. |
 
 Each slow request writes a line to the container log (stderr), naming the worker, the script and the
 request:
@@ -292,7 +292,10 @@ backtrace is missing and `slow requests` stays at `0`. To get them, add the capa
 **The status page answers even when the pool is full.** FPM serves `/status` and `/ping` from a
 dedicated pool (`pm.status_listen = 127.0.0.1:9001`), not from the 96 workers that run Sabre. A
 monitoring probe therefore keeps getting an answer while every worker is busy, which is exactly when
-it matters. Nginx serves these pages on their own port, never on port 80. The full view
+it matters. Nginx serves these pages on their own port, never on port 80: the public server answers
+`404` to `/status` and `/ping`. That block matters, because `pm.status_listen` reads the status URIs of
+the `www` pool, so they are set on `www` too and its workers would answer them on its socket, before
+`esn.php` and its authentication run. The full view
 (`/status?full`) shows the URI of each running request, so by default the port is only reachable from
 inside the container. To scrape it from outside, set `PHP_FPM_STATUS_LISTEN=8081` and keep that port
 off the public network (do not route it through the ingress):

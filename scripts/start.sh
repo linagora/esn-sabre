@@ -141,7 +141,13 @@ printf 'client_max_body_size %s;\n' "$NGINX_CLIENT_MAX_BODY_SIZE" > /etc/nginx/c
 # See doc/CONFIGURE.md § "PHP-FPM slow log and status page".
 PHP_FPM_SLOWLOG_TIMEOUT=${PHP_FPM_SLOWLOG_TIMEOUT:-5s}
 PHP_FPM_SLOWLOG_TRACE_DEPTH=${PHP_FPM_SLOWLOG_TRACE_DEPTH:-20}
-PHP_FPM_STATUS_LISTEN=${PHP_FPM_STATUS_LISTEN:-127.0.0.1:8081}
+# The status page is a dev tool: on by default with SABRE_ENV=dev only. In production it is off unless
+# PHP_FPM_STATUS_LISTEN asks for it (a monitoring probe, on a private port).
+if [ "${SABRE_ENV:-production}" = dev ]; then
+  PHP_FPM_STATUS_LISTEN=${PHP_FPM_STATUS_LISTEN:-127.0.0.1:8081}
+else
+  PHP_FPM_STATUS_LISTEN=${PHP_FPM_STATUS_LISTEN:-off}
+fi
 PHP_FPM_POOL_CONF=/etc/php/${PHPVERSION:-8.4}/fpm/pool.d/www.conf
 # The status page is served by a dedicated FPM pool, so it answers while every worker of the main pool is busy.
 PHP_FPM_STATUS_POOL_LISTEN=127.0.0.1:9001
@@ -179,19 +185,23 @@ render_php_fpm_slowlog() {
 }
 
 render_php_fpm_status() {
-  set_fpm_pool_setting pm.status_path /status
-  set_fpm_pool_setting ping.path /ping
-  set_fpm_pool_setting pm.status_listen "$PHP_FPM_STATUS_POOL_LISTEN"
-
   case "${PHP_FPM_STATUS_LISTEN,,}" in
     off|false|disabled)
+      # Nothing in FPM either: no worker of the main pool answers /status or /ping.
       : > "$NGINX_FPM_STATUS_CONF"
-      echo "start.sh: php-fpm status page not exposed by nginx"
+      echo "start.sh: php-fpm status page disabled (SABRE_ENV=${SABRE_ENV:-production}, set PHP_FPM_STATUS_LISTEN to enable it)"
       return
       ;;
   esac
   [[ "$PHP_FPM_STATUS_LISTEN" =~ ^([0-9.]+:|\[[0-9a-fA-F:]+\]:)?[1-9][0-9]{0,4}$ ]] \
     || fail "PHP_FPM_STATUS_LISTEN: invalid address '$PHP_FPM_STATUS_LISTEN' (expected e.g. 127.0.0.1:8081, 8081 or 'off')"
+
+  # pm.status_listen serves the status of the main pool from a dedicated pool, which reads the status
+  # URIs of the main pool: they are set there too, so its workers answer them on the main socket.
+  # The public server (default.conf) answers 404 to these two URIs before they reach that socket.
+  set_fpm_pool_setting pm.status_path /status
+  set_fpm_pool_setting ping.path /ping
+  set_fpm_pool_setting pm.status_listen "$PHP_FPM_STATUS_POOL_LISTEN"
 
   {
     echo "# Rendered by scripts/start.sh: PHP-FPM status and ping pages, served by a dedicated FPM pool."

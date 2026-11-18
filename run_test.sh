@@ -227,9 +227,10 @@ if [ "$SKIP_PHP" = false ]; then
   fi
 fi
 
-# Nginx rate limit tests, against the production image
+# Nginx tests (rate limit, FPM status page), against the production image
 if [ "$SKIP_NGINX" = false ]; then
   bash tests/nginx/rate_limit_test.sh "$NGINX_IMAGE" || exit 1
+  bash tests/nginx/fpm_status_test.sh "$NGINX_IMAGE" || exit 1
 else
   echo "Skipping nginx rate limit tests"
 fi

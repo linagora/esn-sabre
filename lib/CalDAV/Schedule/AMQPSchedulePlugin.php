@@ -111,7 +111,7 @@ class AMQPSchedulePlugin extends Plugin {
      */
     function scheduleLocalDelivery(ITip\Message $iTipMessage) {
         $req = $this->server->httpRequest;
-        if ($req->getMethod() === 'ITIP' || $req->getPath() === 'itip') {
+        if (self::isItipRequest($req)) {
             $this->assertCanAccessItipRequestPath($req);
 
             if (strtoupper((string)$iTipMessage->method) === 'COUNTER') {
@@ -161,6 +161,24 @@ class AMQPSchedulePlugin extends Plugin {
         // '1.0' (no description text) — short-circuits EventRealTimePlugin.schedule()
         // which treats the pending status code as a delivery that did not happen yet.
         $iTipMessage->scheduleStatus = '1.0';
+    }
+
+    private static function isItipRequest(RequestInterface $request): bool {
+        return $request->getMethod() === 'ITIP' || $request->getPath() === 'itip';
+    }
+
+    /**
+     * Buffering a delivery for the broker looks no recipient up: resolving them together
+     * beforehand only pays off when scheduleLocalDelivery() does, i.e. on synchronous
+     * ITIP deliveries and when only the local recipients are kept.
+     */
+    protected function withRecipientPrincipalsResolved(array $messages, callable $delivery): void {
+        if (!self::isItipRequest($this->server->httpRequest) && !$this->localRecipientsOnly) {
+            $delivery();
+            return;
+        }
+
+        parent::withRecipientPrincipalsResolved($messages, $delivery);
     }
 
     private function mergeReplyOccurrences(string $pendingReply, ITip\Message $iTipMessage): string {
@@ -277,7 +295,7 @@ class AMQPSchedulePlugin extends Plugin {
         &$modified,
         $isNew
     ) {
-        if ($request->getMethod() === 'ITIP' || $request->getPath() === 'itip' || !$this->scheduleReply($this->server->httpRequest)) {
+        if (self::isItipRequest($request) || !$this->scheduleReply($this->server->httpRequest)) {
             return;
         }
 

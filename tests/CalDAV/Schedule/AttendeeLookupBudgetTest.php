@@ -21,13 +21,9 @@ class AttendeeLookupBudgetTest extends \ESN\DAV\ServerMock {
         'external@external.test', 'other-external@external.test'
     ];
 
-    function setUp(): void {
-        parent::setUp();
-
-        $this->server->addPlugin(new Plugin($this->principalBackend));
-    }
-
     function testSchedulingShouldResolveTheAttendeesTogether() {
+        $this->server->addPlugin(new Plugin($this->principalBackend));
+
         $fewAttendeesLookups = $this->emailLookupsOf(fn() => $this->put('one', self::FEW_ATTENDEES));
         $this->request($this->deleteRequest());
 
@@ -41,6 +37,8 @@ class AttendeeLookupBudgetTest extends \ESN\DAV\ServerMock {
     }
 
     function testCancellingShouldResolveTheAttendeesTogether() {
+        $this->server->addPlugin(new Plugin($this->principalBackend));
+
         $this->put('one', self::FEW_ATTENDEES);
         $fewAttendeesLookups = $this->emailLookupsOf(fn() => $this->request($this->deleteRequest()));
 
@@ -48,6 +46,22 @@ class AttendeeLookupBudgetTest extends \ESN\DAV\ServerMock {
         $manyAttendeesLookups = $this->emailLookupsOf(fn() => $this->request($this->deleteRequest()));
 
         $this->assertSame($fewAttendeesLookups, $manyAttendeesLookups);
+    }
+
+    /**
+     * The broker is handed the recipients as they are: nobody needs looking up.
+     */
+    function testAsynchronousSchedulingShouldNotLookTheAttendeesUp() {
+        $this->server->addPlugin(new AMQPSchedulePlugin(new DiscardingAmqpPublisher(), $this->principalBackend));
+
+        $this->assertSame(0, $this->emailLookupsOf(fn() => $this->put('many', self::MANY_ATTENDEES)));
+    }
+
+    function testAsynchronousCancellingShouldNotLookTheAttendeesUp() {
+        $this->server->addPlugin(new AMQPSchedulePlugin(new DiscardingAmqpPublisher(), $this->principalBackend));
+        $this->put('many', self::MANY_ATTENDEES);
+
+        $this->assertSame(0, $this->emailLookupsOf(fn() => $this->request($this->deleteRequest())));
     }
 
     /**
@@ -150,4 +164,8 @@ class UserEmailLookupCounter implements \MongoDB\Driver\Monitoring\CommandSubscr
     function commandSucceeded(\MongoDB\Driver\Monitoring\CommandSucceededEvent $event): void {}
 
     function commandFailed(\MongoDB\Driver\Monitoring\CommandFailedEvent $event): void {}
+}
+
+class DiscardingAmqpPublisher {
+    function publish($topic, $message) {}
 }

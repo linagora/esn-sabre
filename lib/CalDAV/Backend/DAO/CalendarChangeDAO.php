@@ -3,8 +3,11 @@
 namespace ESN\CalDAV\Backend\DAO;
 
 class CalendarChangeDAO extends BaseDAO {
-    public function __construct(\MongoDB\Database $db, $collectionName = 'calendarchanges') {
+    private $calendarChangesTTLInDays;
+
+    public function __construct(\MongoDB\Database $db, $calendarChangesTTLInDays = 0, $collectionName = 'calendarchanges') {
         parent::__construct($db, $collectionName);
+        $this->calendarChangesTTLInDays = $calendarChangesTTLInDays;
     }
 
     public function deleteChangesByCalendarId($calendarId) {
@@ -34,12 +37,25 @@ class CalendarChangeDAO extends BaseDAO {
         return $this->find($query, $options);
     }
 
+    /**
+     * Returns the sync token of the oldest change kept for the calendar, null when none is kept.
+     */
+    public function findOldestSyncToken($calendarId) {
+        $oldest = $this->findOne(
+            ['calendarid' => new \MongoDB\BSON\ObjectId($calendarId)],
+            ['projection' => ['synctoken' => 1], 'sort' => ['synctoken' => 1]]
+        );
+
+        return $oldest ? (int) $oldest['synctoken'] : null;
+    }
+
     public function addChange($calendarId, $objectUri, $syncToken, $operation) {
         $obj = [
             'uri' => $objectUri,
             'synctoken' => $syncToken,
             'calendarid' => new \MongoDB\BSON\ObjectId($calendarId),
-            'operation' => $operation
+            'operation' => $operation,
+            'date' => new \MongoDB\BSON\UTCDateTime()
         ];
         return $this->insertOne($obj);
     }
@@ -49,5 +65,13 @@ class CalendarChangeDAO extends BaseDAO {
             'calendarid' => 1,
             'synctoken' => 1
         ]);
+
+        // Bounds the change log: a client holding a token older than the oldest kept change resyncs from scratch
+        if ($this->calendarChangesTTLInDays > 0) {
+            $this->createIndex(
+                ['date' => 1],
+                ['expireAfterSeconds' => $this->calendarChangesTTLInDays * 86400]
+            );
+        }
     }
 }

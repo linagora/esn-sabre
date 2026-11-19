@@ -36,13 +36,21 @@ class ExportedTimezones {
      * @return string The TZID it is exported under
      */
     public function add(VObject\Component $vtimezone) {
+        $tzid = (string) $vtimezone->TZID;
+        $serialized = $vtimezone->serialize();
+
+        // The same text as a definition already exported, which is the case of
+        // nearly every object of a calendar: no need to resolve the zone.
+        if (isset($this->definitions[$tzid][$serialized])) {
+            return $this->definitions[$tzid][$serialized][0];
+        }
+
         $resolvedName = self::resolvedName($vtimezone);
-        $exportedTzid = $this->find($vtimezone, $resolvedName);
+        $exportedTzid = $this->findSameZone($tzid, $resolvedName);
         if ($exportedTzid !== null) {
             return $exportedTzid;
         }
 
-        $tzid = (string) $vtimezone->TZID;
         $exportedTzid = $this->uniqueTzid($tzid);
         $timezone = clone $vtimezone;
         if ($exportedTzid !== $tzid) {
@@ -50,7 +58,7 @@ class ExportedTimezones {
         }
 
         $this->components[] = $timezone;
-        $this->definitions[$tzid][$vtimezone->serialize()] = [$exportedTzid, $resolvedName];
+        $this->definitions[$tzid][$serialized] = [$exportedTzid, $resolvedName];
         $this->usedTzids[$exportedTzid] = true;
 
         return $exportedTzid;
@@ -64,23 +72,21 @@ class ExportedTimezones {
     }
 
     /**
-     * The TZID an exported definition of the same zone is exported under:
-     * the same text, or the same resolved time zone. Null when there is none.
+     * The TZID an exported definition of $tzid resolving to the same time
+     * zone is exported under, null when there is none.
      *
-     * @param VObject\Component $vtimezone
+     * @param string $tzid
      * @param string|null $resolvedName
      * @return string|null
      */
-    private function find(VObject\Component $vtimezone, $resolvedName) {
-        $definitions = $this->definitions[(string) $vtimezone->TZID] ?? [];
-        $serialized = $vtimezone->serialize();
-        if (isset($definitions[$serialized])) {
-            return $definitions[$serialized][0];
+    private function findSameZone($tzid, $resolvedName) {
+        if ($resolvedName === null) {
+            return null;
         }
 
         // Clients write their own definition of the same well-known zone.
-        foreach ($definitions as [$exportedTzid, $exportedName]) {
-            if ($resolvedName !== null && $exportedName === $resolvedName) {
+        foreach ($this->definitions[$tzid] ?? [] as [$exportedTzid, $exportedName]) {
+            if ($exportedName === $resolvedName) {
                 return $exportedTzid;
             }
         }

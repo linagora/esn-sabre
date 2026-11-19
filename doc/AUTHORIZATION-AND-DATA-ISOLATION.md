@@ -67,10 +67,11 @@ this order:
    `Authorization: Negotiate` ticket against its keytab and hands the principal
    over as the `KRB5_PRINCIPAL` FastCGI parameter, set only in the internal
    location that runs `auth_gss`. A client cannot forge it: its headers only
-   reach PHP as `HTTP_*`. As in James, the principal is mapped to the user whose
-   primary address is its lower-case name in the domain `KERBEROS_REALM_DOMAINS`
-   maps its realm to, never an alias, and the directory is not queried. A
-   principal Sabre refuses gets `403`, not `401`.
+   reach PHP as `HTTP_*`. Its name must be lower case. The principal is mapped to an existing user through
+   its single LDAP entry when a directory is configured (`LDAP_FILTER` applies),
+   otherwise through the primary address made of its name in the domain
+   `KERBEROS_REALM_DOMAINS` maps its realm to, never an alias. A principal Sabre
+   refuses gets `403`, not `401`.
    See [Kerberos authentication](CONFIGURE.md#kerberos-authentication).
 2. `Authorization: Bearer <JWT>`: the token is verified with the configured
    RS256 public key and its `sub` email is resolved to a user tenant. This

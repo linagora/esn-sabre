@@ -129,6 +129,10 @@ render_rate_limit() {
 
 render_rate_limit
 
+# Kerberos (SPNEGO) authentication.
+source "$(dirname "${BASH_SOURCE[0]}")/kerberos.sh"
+render_kerberos
+
 # CalDAV clients embed file bytes as Base64 in the request body. Deployments
 # that accept attachments can raise this limit without changing Nginx's default.
 NGINX_CLIENT_MAX_BODY_SIZE=${NGINX_CLIENT_MAX_BODY_SIZE:-1m}

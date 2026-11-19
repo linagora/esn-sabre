@@ -1,0 +1,47 @@
+# Kerberos (SPNEGO) authentication, rendered by scripts/kerberos.sh into
+# /etc/nginx/snippets/kerberos_server.conf when KERBEROS_ENABLED=true; only the
+# ${KERBEROS_*} and ${NGINX_KERBEROS_*} placeholders are substituted. See
+# doc/CONFIGURE.md § "Kerberos".
+#
+# "location /" rewrites the requests carrying "Authorization: Negotiate ..." to
+# this internal location. auth_gss validates the ticket against the keytab,
+# offline, and the authenticated principal reaches PHP as the KRB5_PRINCIPAL
+# FastCGI parameter. A bad ticket is answered 403 here, PHP never runs.
+
+# Active Directory tickets carry the groups of the user (PAC) and easily exceed
+# the default 8k header buffer.
+large_client_header_buffers ${KERBEROS_LARGE_CLIENT_HEADER_BUFFERS};
+
+location = /__krb {
+    internal;
+
+    # The rewrite left "location /" before its limit_req ran: apply it here.
+    include /etc/nginx/snippets/rate_limit_location.conf;
+
+    auth_gss on;
+    auth_gss_keytab ${KERBEROS_KEYTAB};
+    auth_gss_service_name ${NGINX_KERBEROS_SERVICE};
+    auth_gss_realm ${NGINX_KERBEROS_REALM};
+    # Keep "@REALM": Sabre maps the realm to a mail domain.
+    auth_gss_format_full on;
+    # Basic stays with Sabre (LDAP), in "location /".
+    auth_gss_allow_basic_fallback off;
+
+    add_header 'Access-Control-Allow-Origin' "$http_origin" always;
+    add_header 'Access-Control-Allow-Methods' 'OPTIONS, GET, HEAD, DELETE, PROPFIND, PUT, PROPPATCH, COPY, MOVE, REPORT, ITIP, ACL, PATCH, POST' always;
+    add_header 'Access-Control-Allow-Headers' 'Depth, Authorization, Content-Type, Accept, Prefer, If-Match, X-Http-Method-Override, Destination, Overwrite' always;
+    add_header 'Access-Control-Expose-Headers' 'ETag' always;
+    add_header 'Access-Control-Allow-Credentials' 'true' always;
+    add_header 'Vary' 'Origin' always;
+
+    fastcgi_pass unix:/var/run/php/php-fpm.sock;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME /var/www/esn.php;
+    # REQUEST_URI comes from $request_uri: Sabre sees the client's path, not /__krb.
+    # Once the ticket is accepted, the module replaces Authorization with a
+    # bogus Basic header carrying the principal: never let it reach Sabre.
+    fastcgi_param HTTP_AUTHORIZATION "";
+    # Only reached after auth_gss accepted the ticket.
+    fastcgi_param KRB5_PRINCIPAL $remote_user;
+    fastcgi_read_timeout 120s;
+}

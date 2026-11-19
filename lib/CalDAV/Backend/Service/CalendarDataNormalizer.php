@@ -318,6 +318,11 @@ class CalendarDataNormalizer {
                 return $maxDate->getTimeStamp();
             }
 
+            $bound = $this->recurrenceRuleBound($component, $it, $maxDate);
+            if ($bound !== null) {
+                return $bound;
+            }
+
             return $this->findLastRecurrenceDate($it, $maxDate);
         } catch (\Exception $e) {
             // Be lenient: a malformed recurrence (e.g. an invalid RRULE UNTIL value) must not
@@ -328,6 +333,55 @@ class CalendarDataNormalizer {
 
             return $maxDate->getTimeStamp();
         }
+    }
+
+    /**
+     * The end of the window of a series bounded by its RRULE alone, without
+     * walking its instances, or null when the instances must be walked.
+     *
+     * The window of a recurring row is a hull, always post-filtered: it must
+     * never end before an instance does, and may end later.
+     * - UNTIL, without COUNT nor RDATE: no instance starts after UNTIL
+     *   (RFC 5545 3.3.10), and each one lasts as long as the master (EXDATE
+     *   only removes instances). A day is added when UNTIL is a DATE or the
+     *   times are floating or all-day, whose reading depends on a time zone.
+     * - COUNT above Settings::$maxRecurrences: the walk would give up at the
+     *   cap and fall back to MAX_DATE anyway.
+     *
+     * @param VObject\Component $component
+     * @param VObject\Recur\EventIterator $it rewound on the first instance
+     * @param \DateTime $maxDate
+     * @return int|null
+     */
+    private function recurrenceRuleBound($component, $it, $maxDate) {
+        // The iterator ignores the RRULE of an override and prefers RDATE to it.
+        if (isset($component->{'RECURRENCE-ID'}) || isset($component->RDATE)
+            || count($component->select('RRULE')) !== 1) {
+            return null;
+        }
+
+        $parts = array_change_key_case($component->RRULE->getParts(), CASE_UPPER);
+
+        if (isset($parts['COUNT'])) {
+            $cap = VObject\Settings::$maxRecurrences;
+            return $cap !== -1 && (int) $parts['COUNT'] > $cap ? $maxDate->getTimeStamp() : null;
+        }
+
+        if (!isset($parts['UNTIL']) || !is_string($parts['UNTIL'])) {
+            return null;
+        }
+
+        $firstStart = $it->getDtStart();
+        $duration = max(0, $it->getDtEnd()->getTimeStamp() - $firstStart->getTimeStamp());
+        // Read as the iterator reads it.
+        $until = VObject\DateTimeParser::parse($parts['UNTIL'], $firstStart->getTimezone());
+
+        $end = max($until->getTimeStamp(), $firstStart->getTimeStamp()) + $duration;
+        if (strlen($parts['UNTIL']) === 8 || !$component->DTSTART->hasTime() || $component->DTSTART->isFloating()) {
+            $end += 86400;
+        }
+
+        return min($end, $maxDate->getTimeStamp());
     }
 
     /**

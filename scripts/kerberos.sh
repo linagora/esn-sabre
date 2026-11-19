@@ -38,6 +38,12 @@ render_kerberos() {
   export NGINX_KERBEROS_REALM=${BASH_REMATCH[2]}
   [ -n "${KERBEROS_REALM_DOMAINS:-}" ] \
     || fail "KERBEROS_REALM_DOMAINS: required when KERBEROS_ENABLED=true (e.g. CORP.EXAMPLE.COM:example.com)"
+  # Two realms on one domain would sign alice@REALM1 and alice@REALM2 in as the same user.
+  local shared_domain
+  shared_domain=$(tr ',' '\n' <<< "$KERBEROS_REALM_DOMAINS" | cut -s -d: -f2- | tr -d ' \t\r' \
+    | tr '[:upper:]' '[:lower:]' | sort | uniq -d | head -n 1)
+  [ -z "$shared_domain" ] \
+    || fail "KERBEROS_REALM_DOMAINS: several realms are mapped onto the domain '$shared_domain'"
   [[ "$KERBEROS_LARGE_CLIENT_HEADER_BUFFERS" =~ ^[1-9][0-9]*\ [1-9][0-9]*[kKmM]?$ ]] \
     || fail "KERBEROS_LARGE_CLIENT_HEADER_BUFFERS: invalid value '$KERBEROS_LARGE_CLIENT_HEADER_BUFFERS' (expected e.g. 4 64k)"
   [ -f "$KERBEROS_KEYTAB" ] \

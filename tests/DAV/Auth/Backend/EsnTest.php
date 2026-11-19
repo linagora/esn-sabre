@@ -8,7 +8,6 @@ $GLOBALS['__ldap_mock_email'] = 'johndoe@linagora.com';
 $GLOBALS['__ldap_mock_entries_empty'] = false;
 $GLOBALS['__ldap_mock_entry_without_mail'] = false;
 $GLOBALS['__ldap_mock_search_fails'] = false;
-$GLOBALS['__ldap_mock_duplicate_entries'] = false;
 $GLOBALS['__ldap_last_search_filter'] = null;
 $GLOBALS['__ldap_errno'] = 49;
 $GLOBALS['__ldap_bind_calls'] = 0;
@@ -64,16 +63,15 @@ function ldap_get_entries($conn, $result) {
         if ($GLOBALS['__ldap_mock_entry_without_mail']) {
             return [ 'count' => 1, 0 => [ 'uid' => ['alice', 'count' => 1], 'count' => 1 ] ];
         }
-        $entry = [
-            'mail' => [$GLOBALS['__ldap_mock_email'], 'count' => 1],
-            'givenname' => ['John', 'count' => 1],
-            'sn' => ['Doe', 'count' => 1],
-            'count' => 3
+        return [
+            'count' => 1,
+            0 => [
+                'mail' => [$GLOBALS['__ldap_mock_email'], 'count' => 1],
+                'givenname' => ['John', 'count' => 1],
+                'sn' => ['Doe', 'count' => 1],
+                'count' => 3
+            ]
         ];
-        if ($GLOBALS['__ldap_mock_duplicate_entries']) {
-            return [ 'count' => 2, 0 => $entry, 1 => $entry ];
-        }
-        return [ 'count' => 1, 0 => $entry ];
     }
     return \ldap_get_entries($conn, $result);
 }
@@ -526,7 +524,6 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $GLOBALS['__ldap_mock_search_fails'] = false;
         $GLOBALS['__ldap_mock_entry_without_mail'] = false;
         $GLOBALS['__ldap_mock_entries_empty'] = false;
-        $GLOBALS['__ldap_mock_duplicate_entries'] = false;
         $GLOBALS['__ldap_mock_email'] = 'johndoe@linagora.com';
         $GLOBALS['__ldap_last_search_filter'] = null;
         $GLOBALS['__ldap_errno'] = 49;
@@ -1002,8 +999,6 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
     protected function tearDown(): void {
         putenv('KERBEROS_ENABLED');
         putenv('KERBEROS_REALM_DOMAINS');
-        putenv('KERBEROS_LDAP_PRINCIPAL_FILTER');
-        putenv('LDAP_FILTER');
         if ($this->ldapServerOverridden) {
             putenv($this->originalLdapServer === false ? 'LDAP_SERVER' : "LDAP_SERVER=$this->originalLdapServer");
             $this->ldapServerOverridden = false;
@@ -1016,11 +1011,10 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->overrideLdapServer('LDAP_SERVER');
     }
 
-    private function enableKerberosWithMockedLdap(string $directoryMail) {
+    private function enableKerberosWithLdapServer() {
         $this->enableKerberos();
         $this->overrideLdapServer('LDAP_SERVER=ldap://mocked');
         $GLOBALS['__ldap_mock_enabled'] = true;
-        $GLOBALS['__ldap_mock_email'] = $directoryMail;
     }
 
     private function overrideLdapServer(string $assignment) {
@@ -1102,7 +1096,7 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         ]);
 
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
-            'KRB5_PRINCIPAL' => 'Alice@CORP.EXAMPLE.COM',
+            'KRB5_PRINCIPAL' => 'alice@CORP.EXAMPLE.COM',
             'REQUEST_URI'    => '/',
             'REQUEST_METHOD' => 'PROPFIND',
         ]);
@@ -1253,87 +1247,39 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->assertKerberosRejected($esnauth, 'alice@CORP.EXAMPLE.COM', 'checkKerberos: no user found');
     }
 
-    function testKerberosPrincipalIsResolvedThroughTheDirectory() {
-        $this->enableKerberosWithMockedLdap('alice.martin@example.com');
-        $esnauth = new EsnMock('http://localhost:8080/');
-        $this->insertExampleUser($esnauth, self::USER_ID, [
-            'accounts' => [ [ 'type' => 'email', 'emails' => [ 'jdoe@example.com' ] ] ]
-        ]);
-        $this->insertExampleUser($esnauth, self::OTHER_USER_ID, [
-            'accounts' => [ [ 'type' => 'email', 'emails' => [ 'alice.martin@example.com' ] ] ]
-        ]);
-
-        // The directory, not the principal name, tells which mailbox jdoe owns
-        $this->assertKerberosAuthenticates($esnauth, 'jdoe@CORP.EXAMPLE.COM', self::OTHER_USER_ID);
-        $this->assertEquals('(uid=jdoe)', $GLOBALS['__ldap_last_search_filter']);
-    }
-
-    function testKerberosDirectorySearchUsesTheConfiguredPrincipalFilter() {
-        $this->enableKerberosWithMockedLdap('alice@example.com');
-        putenv('KERBEROS_LDAP_PRINCIPAL_FILTER=(|(krbPrincipalName={principal})(sAMAccountName={user}))');
+    function testKerberosPrincipalIsNotLookedUpInTheDirectory() {
+        $this->enableKerberosWithLdapServer();
         $esnauth = new EsnMock('http://localhost:8080/');
         $this->insertExampleUser($esnauth, self::USER_ID, [
             'accounts' => [ [ 'type' => 'email', 'emails' => [ 'alice@example.com' ] ] ]
         ]);
 
-        $this->assertKerberosAuthenticates($esnauth, 'Alice@CORP.EXAMPLE.COM', self::USER_ID);
-        $this->assertEquals(
-            '(|(krbPrincipalName=Alice@CORP.EXAMPLE.COM)(sAMAccountName=Alice))',
-            $GLOBALS['__ldap_last_search_filter']
-        );
+        // Like James: the realm is rewritten, the directory is never asked
+        $this->assertKerberosAuthenticates($esnauth, 'alice@CORP.EXAMPLE.COM', self::USER_ID);
+        $this->assertEquals(0, $GLOBALS['__ldap_bind_calls']);
+        $this->assertNull($GLOBALS['__ldap_last_search_filter']);
     }
 
-    function testKerberosDirectorySearchAppliesTheLdapFilter() {
-        $this->enableKerberosWithMockedLdap('alice@example.com');
-        putenv('LDAP_FILTER=(memberOf=cn=dav,ou=groups,dc=example,dc=com)');
-        // The directory answers that no entry passes LDAP_FILTER
-        $GLOBALS['__ldap_mock_entries_empty'] = true;
+    function testKerberosPrincipalWithANameThatIsNotLowerCaseIsForbidden() {
+        $this->enableKerberosWithoutLdap();
         $esnauth = new EsnMock('http://localhost:8080/');
         $this->insertExampleUser($esnauth, self::USER_ID, [
             'accounts' => [ [ 'type' => 'email', 'emails' => [ 'alice@example.com' ] ] ]
         ]);
 
-        $this->assertKerberosRejected($esnauth, 'alice@CORP.EXAMPLE.COM',
-            'checkKerberos: Unable to find alice@CORP.EXAMPLE.COM which is valid for auth');
-        $this->assertEquals(
-            '(& (uid=alice) (memberOf=cn=dav,ou=groups,dc=example,dc=com))',
-            $GLOBALS['__ldap_last_search_filter']
-        );
+        // Kerberos names are case sensitive: "Alice" is not "alice"
+        $this->assertKerberosRejected($esnauth, 'Alice@CORP.EXAMPLE.COM', 'checkKerberos: principal name not lower case');
     }
 
-    function testKerberosPrincipalWithSeveralDirectoryEntriesIsForbidden() {
-        $this->enableKerberosWithMockedLdap('alice@example.com');
-        $GLOBALS['__ldap_mock_duplicate_entries'] = true;
+    function testKerberosRealmsMappedOntoTheSameDomainAreForbidden() {
+        $this->enableKerberosWithoutLdap();
+        putenv('KERBEROS_REALM_DOMAINS=CORP.EXAMPLE.COM:example.com,PARTNER.ORG:EXAMPLE.COM');
         $esnauth = new EsnMock('http://localhost:8080/');
         $this->insertExampleUser($esnauth, self::USER_ID, [
             'accounts' => [ [ 'type' => 'email', 'emails' => [ 'alice@example.com' ] ] ]
         ]);
 
-        $this->assertKerberosRejected($esnauth, 'alice@CORP.EXAMPLE.COM', 'checkKerberos: no unique directory entry');
-    }
-
-    function testKerberosPrincipalWhoseDirectoryMailIsOutsideTheRealmDomainIsForbidden() {
-        $this->enableKerberosWithMockedLdap('alice@other.org');
-        $esnauth = new EsnMock('http://localhost:8080/');
-
-        $this->assertKerberosRejected($esnauth, 'alice@CORP.EXAMPLE.COM', 'checkKerberos: mail outside the realm domain');
-    }
-
-    function testKerberosPrincipalWhoseDirectoryMailHasNoUserIsForbidden() {
-        $this->enableKerberosWithMockedLdap('alice@example.com');
-        $esnauth = new EsnMock('http://localhost:8080/');
-
-        $this->assertKerberosRejected($esnauth, 'alice@CORP.EXAMPLE.COM', 'checkKerberos: no user found');
-    }
-
-    function testKerberosAnswers503WhenTheDirectoryIsUnavailable() {
-        $this->enableKerberosWithMockedLdap('alice@example.com');
-        $GLOBALS['__ldap_mock_search_fails'] = true;
-        $esnauth = new EsnMock('http://localhost:8080/');
-
-        $this->expectException(LdapUnavailableException::class);
-
-        $esnauth->check($this->kerberosRequest('alice@CORP.EXAMPLE.COM'), new \Sabre\HTTP\Response());
+        $this->assertKerberosRejected($esnauth, 'alice@CORP.EXAMPLE.COM', 'checkKerberos: several realms map to the same domain');
     }
 
     function testChallengeOffersNegotiateBeforeBasicWhenKerberosIsEnabled() {

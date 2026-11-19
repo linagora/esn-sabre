@@ -32,7 +32,7 @@
         "connectTimeoutMS": 10000
       }
     },
-    "schedulingObjectTTLInDays": 56
+    "schedulingObjectTTLInDays": 7
   },
   "esn": {
     "apiRoot": "http://esn_host:8080",

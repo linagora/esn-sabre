@@ -141,6 +141,63 @@ class CalendarQueryValidatorTest extends \PHPUnit\Framework\TestCase {
         $this->assertFalse($this->validate($vcal, '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z'));
     }
 
+    private function dailyStandUpSince2023(array $alarm, array $extra = []) {
+        return array_merge([
+            'BEGIN:VEVENT',
+            'UID:e1',
+            'DTSTAMP:20230101T000000Z',
+            'DTSTART:20230102T090000Z',
+        ], $extra ?: ['DTEND:20230102T091500Z'], [
+            'RRULE:FREQ=DAILY',
+            'BEGIN:VALARM',
+        ], $alarm, [
+            'ACTION:DISPLAY',
+            'DESCRIPTION:x',
+            'END:VALARM',
+            'END:VEVENT',
+        ]);
+    }
+
+    function testValarmOnAnOldDailySeriesIsFoundInTheQueriedWeek() {
+        $vcal = $this->calendar($this->dailyStandUpSince2023(['TRIGGER:-PT15M']));
+
+        $this->assertTrue($this->validate($vcal, '2026-11-16T00:00:00Z', '2026-11-23T00:00:00Z'));
+        $this->assertTrue($this->validate($vcal, '2026-11-18T08:45:00Z', '2026-11-18T08:46:00Z'));
+        $this->assertFalse($this->validate($vcal, '2026-11-18T08:46:00Z', '2026-11-19T08:45:00Z'));
+    }
+
+    function testValarmWithALongPositiveOffsetOnAnEarlierInstance() {
+        // The reminder of the 1 November instance fires on 11 November
+        $vcal = $this->calendar($this->dailyStandUpSince2023(['TRIGGER:P10D']));
+
+        $this->assertTrue($this->validate($vcal, '2026-11-11T09:00:00Z', '2026-11-11T09:01:00Z'));
+        $this->assertFalse($this->validate($vcal, '2026-11-11T09:01:00Z', '2026-11-12T09:00:00Z'));
+    }
+
+    function testValarmRelatedToTheEndOfALongInstance() {
+        $vcal = $this->calendar($this->dailyStandUpSince2023(
+            ['TRIGGER;RELATED=END:PT0S'],
+            ['DTEND:20230112T090000Z']
+        ));
+
+        // Each instance ends ten days after it starts
+        $this->assertTrue($this->validate($vcal, '2026-11-11T09:00:00Z', '2026-11-11T09:01:00Z'));
+    }
+
+    function testValarmRepetitionOfAnEarlierInstance() {
+        // The fourth reminder of the 18 November instance fires on 21 November at 09:00Z
+        $vcal = $this->calendar($this->dailyStandUpSince2023(
+            ['TRIGGER:PT0S', 'DURATION:P1DT1H', 'REPEAT:3'],
+            ['DTEND:20230102T091500Z']
+        ));
+        $vcal->VEVENT->RRULE = 'FREQ=WEEKLY;BYDAY=WE';
+        $vcal->VEVENT->DTSTART = '20230104T090000Z';
+        $vcal->VEVENT->DTEND = '20230104T091500Z';
+
+        $this->assertTrue($this->validate($vcal, '2026-11-21T12:00:00Z', '2026-11-21T12:01:00Z'));
+        $this->assertFalse($this->validate($vcal, '2026-11-21T12:01:00Z', '2026-11-22T00:00:00Z'));
+    }
+
     function testValarmWithoutRangeBoundsMatches() {
         $vcal = $this->calendar(self::MASTER, self::OVERRIDE_WITHOUT_ALARM);
 

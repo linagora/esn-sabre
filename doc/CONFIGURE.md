@@ -72,7 +72,6 @@ of `config.json`.
 | `SABRE_IMPERSONATION_ENABLED` | `false` | Master switch for admin impersonation |
 | `KERBEROS_ENABLED` | `false` | Kerberos (SPNEGO) authentication; also configures Nginx at startup, so set it in the environment. See [Kerberos authentication](#kerberos-authentication) |
 | `KERBEROS_REALM_DOMAINS` | unset | Kerberos realm to mail domain mapping, e.g. `CORP.EXAMPLE.COM:example.com`. See [Kerberos authentication](#kerberos-authentication) |
-| `KERBEROS_LDAP_PRINCIPAL_FILTER` | `(uid={user})` | LDAP filter finding the directory entry of a Kerberos principal. See [Kerberos authentication](#kerberos-authentication) |
 | `SABRE_MIGRATE_ON_STARTUP` | `true` | Run database migrations in the background at startup; See [database migrations](storage/MONGO.md#database-migrations) |
 | `AUTO_PROVISION` | `true` | Create missing users on successful authentication |
 | `PRINCIPAL_PRIVACY` | `true` | Restrict DAV principal discovery |
@@ -334,8 +333,7 @@ authentication keep working alongside, so clients without a ticket still use the
 | `KERBEROS_ENABLED` | `false` | Enable Kerberos authentication. |
 | `KERBEROS_SERVICE_PRINCIPAL` | (required) | Service principal of the keytab, with its realm, as `klist -k` prints it: `HTTP/<host name the clients use>@REALM`, e.g. `HTTP/dav.example.com@CORP.EXAMPLE.COM`. |
 | `KERBEROS_KEYTAB` | `/etc/krb5.keytab` | Keytab holding the key of that service principal, readable by `www-data`. |
-| `KERBEROS_REALM_DOMAINS` | (required) | Comma separated `REALM:domain` pairs. Realms are case sensitive. |
-| `KERBEROS_LDAP_PRINCIPAL_FILTER` | `(uid={user})` | When `LDAP_SERVER` is set, the filter finding the directory entry of a principal. `{user}` is replaced by the principal name (`alice`), `{principal}` by the full principal (`alice@CORP.EXAMPLE.COM`), both escaped. E.g. `(sAMAccountName={user})` for Active Directory, `(krbPrincipalName={principal})` for FreeIPA. |
+| `KERBEROS_REALM_DOMAINS` | (required) | Comma separated `REALM:domain` pairs. Realms are case sensitive. Two realms cannot be mapped onto the same domain. |
 | `KERBEROS_LARGE_CLIENT_HEADER_BUFFERS` | `4 64k` | Nginx `large_client_header_buffers` once Kerberos is enabled. |
 
 All of them are environment variables read by `scripts/start.sh` when the container starts; an
@@ -359,17 +357,18 @@ How it works:
    never contacts the KDC, and does not need port 88 open to it.
  - The realm of the principal must be listed in `KERBEROS_REALM_DOMAINS`. Principals of a realm
    that is not listed, or with an instance (`HTTP/host@REALM`), are refused.
- - **With an LDAP directory** (`LDAP_SERVER` set), the directory tells which mailbox the principal
-   owns, as for Basic authentication: Sabre binds with `LDAP_ADMIN_DN` and searches `LDAP_BASE`
-   with `KERBEROS_LDAP_PRINCIPAL_FILTER`, ANDed with `LDAP_FILTER`. The principal is refused unless
-   exactly one entry matches, and the `mail` of that entry must be in the domain its realm maps to
-   and belong to an existing user. A directory that cannot be reached gets `503`.
- - **Without a directory**, the principal name is assumed to be the local part of the user's
-   primary address in the domain of its realm: `alice@CORP.EXAMPLE.COM` must be the user whose
-   primary address (the first address of its account) is `alice@example.com`. Secondary addresses
-   and aliases never match, so that a principal named after an alias (`sales@`) cannot sign in as
-   the user who holds it; an address that is the primary one of several users is refused. Only use
-   this mode when every principal name equals the primary mail local part of its owner.
+ - The principal is mapped the way James and Twake Mail map it, so that a ticket signs in as the
+   same user in Mail and Calendar: its realm is replaced with the domain of `KERBEROS_REALM_DOMAINS`.
+   `alice@CORP.EXAMPLE.COM` must be the user whose primary address (the first address of its
+   account) is `alice@example.com`. The principal name must therefore be the local part of the
+   primary address of its owner. Secondary addresses and aliases never match, so that a principal
+   named after an alias (`sales@`) cannot sign in as the user who holds it; an address that is the
+   primary one of several users is refused.
+ - The LDAP directory is not queried, even when `LDAP_SERVER` is set, and `LDAP_FILTER` does not
+   apply to Kerberos users.
+ - Kerberos names are case sensitive while addresses are not: as in James, a principal whose name is
+   not lower case (`Alice@CORP.EXAMPLE.COM`) is refused, so that two principals differing only by
+   case cannot sign in as the same user.
  - Users are not auto-provisioned.
  - Unauthenticated requests are challenged with `WWW-Authenticate: Negotiate` before `Basic`.
 
@@ -390,8 +389,7 @@ Operational notes:
    which must also forward the `Authorization` request header and every `WWW-Authenticate` response
    header unchanged.
  - A user disabled in the KDC keeps access until their ticket expires (10 hours by default in
-   Active Directory): Sabre never queries the KDC. Use `LDAP_FILTER` to exclude disabled directory
-   entries, as for Basic authentication.
+   Active Directory): Sabre queries neither the KDC nor the directory. Disable accounts in the KDC.
  - `KERBEROS_ENABLED=true` cannot be combined with `NGINX_AUTH_BASIC`.
 
 ## create the configuration file

@@ -296,6 +296,21 @@ class CalendarDataNormalizerTest extends TestCase {
         $this->assertSame(strtotime('20260114T081500Z'), $d['lastOccurence']);
     }
 
+    public function testUnexpandableRuleFallsBackToDtStartAndAnOpenEndedWindow(): void {
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            $d = $this->denormalize("BEGIN:VEVENT\r\nUID:bad\r\nDTSTAMP:20260101T000000Z\r\n"
+                . "DTSTART:20260601T090000Z\r\nDTEND:20260601T100000Z\r\n"
+                . "RRULE:FREQ=DAILY;COUNT=2\r\nEXDATE:20260601T090000Z,20260602T090000Z\r\nEND:VEVENT\r\n");
+        } finally {
+            ini_set('error_log', $log);
+        }
+
+        // Every instance is excluded: the iterator cannot be built
+        $this->assertSame(strtotime('20260601T090000Z'), $d['firstOccurence']);
+        $this->assertSame(strtotime(CalendarDataNormalizer::MAX_DATE), $d['lastOccurence']);
+    }
+
     private const PUBLIC_MASTER = "BEGIN:VEVENT\r\nUID:c\r\nDTSTAMP:20250101T000000Z\r\n"
         . "DTSTART:20250101T100000Z\r\nDTEND:20250101T110000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\nCLASS:PUBLIC\r\nEND:VEVENT\r\n";
 

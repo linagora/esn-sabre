@@ -100,4 +100,61 @@ class RealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->plugin->createMessage('topic', $data);
         $this->plugin->publishMessages();
     }
+
+    function testPublishMessagesConvertsASharedComponentToJcalOnceForTheBatch() {
+        $event = new CountingVCalendar(['VEVENT' => ['UID' => 'shared', 'SUMMARY' => 'Stand-up']]);
+        $other = new CountingVCalendar(['VEVENT' => ['UID' => 'other', 'SUMMARY' => 'Sanitised']]);
+        $this->plugin->expects($this->any())->method('buildData')->willReturnArgument(0);
+
+        $published = [];
+        $this->publisher->expects($this->exactly(3))->method('publish')
+            ->willReturnCallback(function($topic, $payload) use (&$published) {
+                $published[] = $payload;
+            });
+
+        $this->plugin->createMessage('alarm', ['event' => $event, 'old_event' => $event]);
+        $this->plugin->createMessage('subscriber', ['event' => $event]);
+        $this->plugin->createMessage('invitee', ['event' => $other, 'old_event' => $event]);
+        $this->plugin->publishMessages();
+
+        $this->assertSame(1, $event->jsonSerializeCalls);
+        $this->assertSame(1, $other->jsonSerializeCalls);
+        $this->assertSame(json_encode(['event' => $event, 'old_event' => $event, 'connectedUser' => null]), $published[0]);
+        $this->assertSame(json_encode(['event' => $other, 'old_event' => $event, 'connectedUser' => null]), $published[2]);
+        $this->assertStringContainsString('Sanitised', $published[2]);
+        $this->assertStringNotContainsString('Sanitised', $published[1]);
+    }
+
+    function testPublishMessagesBuildsEveryMessageBeforeConvertingSharedComponents() {
+        $event = new CountingVCalendar(['VEVENT' => ['UID' => 'shared']]);
+        $this->plugin->expects($this->any())->method('buildData')
+            ->willReturnCallback(function($data) {
+                if (isset($data['complete'])) {
+                    $data['event']->PRODID = 'completed-by-buildData';
+                }
+                return $data;
+            });
+
+        $published = [];
+        $this->publisher->method('publish')
+            ->willReturnCallback(function($topic, $payload) use (&$published) {
+                $published[] = $payload;
+            });
+
+        $this->plugin->createMessage('first', ['event' => $event]);
+        $this->plugin->createMessage('second', ['event' => $event, 'complete' => true]);
+        $this->plugin->publishMessages();
+
+        $this->assertStringContainsString('completed-by-buildData', $published[0]);
+        $this->assertStringContainsString('completed-by-buildData', $published[1]);
+    }
+}
+
+class CountingVCalendar extends \Sabre\VObject\Component\VCalendar {
+    public $jsonSerializeCalls = 0;
+
+    function jsonSerialize(): array {
+        $this->jsonSerializeCalls++;
+        return parent::jsonSerialize();
+    }
 }

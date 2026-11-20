@@ -16,7 +16,8 @@ use Sabre\VObject\Component\VEvent;
  * instances, whose reminders may fall in the range, are never looked at.
  * Here such an instance is skipped instead, and the search stops once the
  * instances start too late for any relative trigger to fall before the end of
- * the range.
+ * the range. The instances that end too early for any relative trigger to fall
+ * after the start of the range are passed over without being materialised.
  */
 class CalendarQueryValidator extends \Sabre\CalDAV\CalendarQueryValidator {
 
@@ -76,20 +77,34 @@ class CalendarQueryValidator extends \Sabre\CalDAV\CalendarQueryValidator {
         $maxLeadSeconds = max(array_merge([0], array_map(fn($alarm) => $this->triggerLeadSeconds($alarm), $relativeAlarms)));
         $limit = $end->getTimestamp() + $maxLeadSeconds + self::TRIGGER_LEAD_SLACK_SECONDS;
 
-        return $this->anyInstanceAlarmInTimeRange(new VObject\Recur\EventIterator($master->parent, $uid), $start, $end, $limit);
+        // Likewise a relative trigger, repetitions included, is at most this
+        // long after the start of its instance: an instance starting before
+        // $from cannot trigger after the start of the range.
+        $maxLagSeconds = $this->maxTriggerLagSeconds($this->eventsOfSeries($master->parent, $uid), $relativeAlarms);
+        $from = $maxLagSeconds === null
+            ? PHP_INT_MIN
+            : $start->getTimestamp() - $maxLagSeconds - self::TRIGGER_LEAD_SLACK_SECONDS;
+
+        return $this->anyInstanceAlarmInTimeRange(new VObject\Recur\EventIterator($master->parent, $uid), $start, $end, $from, $limit);
     }
 
     /**
-     * Whether a relative alarm of an instance starting before $limit triggers in [$start, $end).
+     * Whether a relative alarm of an instance starting in [$from, $limit] triggers in [$start, $end).
      *
      * @param VObject\Recur\EventIterator $it
      * @param \DateTimeInterface $start
      * @param \DateTimeInterface $end
+     * @param int $from
      * @param int $limit
      * @return bool
      */
-    private function anyInstanceAlarmInTimeRange(VObject\Recur\EventIterator $it, $start, $end, $limit) {
-        for (; $it->valid() && $it->getDtStart()->getTimestamp() <= $limit; $it->next()) {
+    private function anyInstanceAlarmInTimeRange(VObject\Recur\EventIterator $it, $start, $end, $from, $limit) {
+        for (; $it->valid() && ($instanceStart = $it->getDtStart()->getTimestamp()) <= $limit; $it->next()) {
+            if ($instanceStart < $from) {
+                // Neither cloned nor evaluated: it still counts against the
+                // iterator's Settings::$maxRecurrences.
+                continue;
+            }
             $relativeAlarms = array_filter(
                 $this->alarmsOf([$it->getEventObject()]),
                 fn($alarm) => $this->hasRelativeTrigger($alarm)
@@ -173,5 +188,67 @@ class CalendarQueryValidator extends \Sabre\CalDAV\CalendarQueryValidator {
         $epoch = new DateTimeImmutable('@0');
 
         return max(0, -$epoch->add($duration)->getTimestamp());
+    }
+
+    /**
+     * How long after the start of its instance a relative alarm of the series
+     * fires at the latest: the longest instance (a trigger may be related to
+     * the end), plus the largest positive offset and repetition span. Null
+     * when a value cannot be read, so that no instance is passed over and the
+     * evaluation fails as it would without the bound.
+     *
+     * @param VEvent[] $events the master and its overrides
+     * @param VAlarm[] $relativeAlarms
+     * @return int|null
+     */
+    private function maxTriggerLagSeconds(array $events, array $relativeAlarms) {
+        try {
+            $maxLength = max(array_merge([0], array_map(fn($event) => $this->lengthSeconds($event), $events)));
+            $maxAlarmLag = max(array_merge([0], array_map(fn($alarm) => $this->triggerLagSeconds($alarm), $relativeAlarms)));
+        } catch (\Exception $e) {
+            return null;
+        }
+
+        return $maxLength + $maxAlarmLag;
+    }
+
+    /**
+     * The length of $event as EventIterator reads it, a day for a date
+     * without an end.
+     */
+    private function lengthSeconds(VEvent $event) {
+        if (!isset($event->DTSTART)) {
+            return 0;
+        }
+        if (isset($event->DTEND)) {
+            return max(0, $event->DTEND->getDateTime()->getTimestamp() - $event->DTSTART->getDateTime()->getTimestamp());
+        }
+        if (isset($event->DURATION)) {
+            return max(0, $this->durationSeconds((string) $event->DURATION));
+        }
+
+        return $event->DTSTART->hasTime() ? 0 : 86400;
+    }
+
+    /**
+     * How long after its anchor a relative alarm fires at the latest, 0 when
+     * it fires before it: its positive offset, plus its REPEAT x DURATION.
+     */
+    private function triggerLagSeconds(VAlarm $alarm) {
+        $lag = max(0, $this->durationSeconds((string) $alarm->TRIGGER));
+
+        if (isset($alarm->DURATION)) {
+            // Same reading as VAlarm::isInTimeRange().
+            $repeat = (string) $alarm->REPEAT;
+            $lag += max(0, ((int) ($repeat ?: 1)) * $this->durationSeconds((string) $alarm->DURATION));
+        }
+
+        return $lag;
+    }
+
+    private function durationSeconds($duration) {
+        $epoch = new DateTimeImmutable('@0');
+
+        return $epoch->add(VObject\DateTimeParser::parseDuration($duration))->getTimestamp();
     }
 }

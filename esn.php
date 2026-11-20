@@ -92,7 +92,7 @@ if (principalPrivacyEnabled()) {
     $principalBackend = new ESN\DAVACL\PrincipalBackend\PrivatePrincipalBackend($principalBackend, currentPrincipalProvider($server));
 }
 
-$schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 56;
+$schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 7;
 $calendarBackend = new ESN\CalDAV\Backend\Esn($sabreDb, $principalBackend, $schedulingObjectTTLInDays);
 $calendarRoot = new ESN\CalDAV\CalendarRoot($principalBackend, $calendarBackend, $esnDb);
 

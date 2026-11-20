@@ -31,3 +31,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Local source mounts a newer start.sh, so keep its nginx template in sync.
 COPY docker/config/default.conf.template /etc/nginx/sites-available/default.template
+COPY docker/config/kerberos.conf.template /etc/nginx/kerberos.conf.template

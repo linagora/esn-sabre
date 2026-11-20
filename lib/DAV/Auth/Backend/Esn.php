@@ -467,25 +467,33 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         } catch(LdapUnavailableException $e) {
             // Not a credential problem: let it surface as a 503
             throw $e;
+        } catch(KerberosRejectedException $e) {
+            throw new \Sabre\DAV\Exception\Forbidden($this->failureMessage($e));
         } catch(AuthException $e) {
-            if($this->debug)
-                return [false, $e->getMessage()];
-            // clear exception message returned to user
-            return [false, "Authentification failure"];
+            return [false, $this->failureMessage($e)];
         } catch(\Throwable $e) {
-            $msg = $e->getMessage();
             $this->server->getLogger()->error(
                 'An unexpected error happened when check',
-                ['error' => $msg]
+                ['error' => $e->getMessage()]
             );
-            if($this->debug)
-                return [false, $msg];
-            // never leak internal error texts to the client
-            return [false, "Authentification failure"];
+            return [false, $this->failureMessage($e)];
         }
     }
 
+    /**
+     * The reason of an authentication failure in debug mode only: never leak
+     * internal error texts, or which users and realms exist, to the client.
+     */
+    private function failureMessage(\Throwable $e): string {
+        return $this->debug ? $e->getMessage() : 'Authentification failure';
+    }
+
     private function authenticateRequest(\Sabre\HTTP\RequestInterface $request, \Sabre\HTTP\ResponseInterface $response): AuthTenant {
+        $kerberosPrincipal = $this->getKerberosPrincipal($request);
+        if ($kerberosPrincipal !== null) {
+            return $this->checkKerberos($kerberosPrincipal);
+        }
+
         $bearer = $this->getBearerToken($request);
         if ($bearer) {
             return $this->checkJWT($bearer);
@@ -497,6 +505,79 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         }
 
         return $this->checkBasicAuth($request, $response);
+    }
+
+    private function kerberosEnabled(): bool {
+        return Env::getBoolean('KERBEROS_ENABLED', false);
+    }
+
+    /**
+     * The Kerberos principal nginx authenticated, or null when there is none.
+     *
+     * nginx validates the SPNEGO ticket against its keytab and hands the
+     * principal over as the KRB5_PRINCIPAL FastCGI parameter, which is only set
+     * in the location that runs auth_gss. A FastCGI parameter cannot be forged
+     * by the client: its own headers only ever reach PHP as HTTP_*.
+     *
+     * The Authorization header cannot be used to cross-check it: once the
+     * ticket is accepted, the nginx module replaces it with a bogus Basic one,
+     * which nginx then blanks.
+     *
+     * See docker/config/kerberos.conf.template.
+     */
+    private function getKerberosPrincipal(\Sabre\HTTP\RequestInterface $request): ?string {
+        if (!$this->kerberosEnabled()) {
+            return null;
+        }
+        $principal = $request->getRawServerValue('KRB5_PRINCIPAL');
+        return ($principal === null || $principal === '') ? null : $principal;
+    }
+
+    private function checkKerberos(string $principal): AuthTenant {
+        $email = $this->kerberosPrincipalToEmail($principal);
+        $tenant = $this->principalBackend->getAuthTenantByEmail($email);
+        if (!$tenant) {
+            error_log("checkKerberos: no user found for principal '$principal' ($email)");
+            throw new KerberosRejectedException('checkKerberos: no user found');
+        }
+        return $tenant;
+    }
+
+    /**
+     * "alice@CORP.COM" -> "alice@mycompany.com", following KERBEROS_REALM_DOMAINS
+     * ("CORP.COM:mycompany.com,OTHER.COM:other.com"). Realms are case sensitive.
+     */
+    private function kerberosPrincipalToEmail(string $principal): string {
+        // A user principal: "user@REALM", not a service one ("HTTP/host@REALM").
+        if (!preg_match('/^([^@\/]+)@([^@]+)$/', $principal, $parts)) {
+            error_log("checkKerberos: unsupported principal '$principal'");
+            throw new KerberosRejectedException('checkKerberos: unsupported principal');
+        }
+        [, $user, $realm] = $parts;
+
+        $domains = $this->kerberosRealmDomains();
+        if (!isset($domains[$realm])) {
+            error_log("checkKerberos: realm '$realm' is not allowed for principal '$principal'");
+            throw new KerberosRejectedException('checkKerberos: realm not allowed');
+        }
+
+        $email = strtolower($user) . '@' . $domains[$realm];
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            error_log("checkKerberos: principal '$principal' does not map to a valid email");
+            throw new KerberosRejectedException('checkKerberos: invalid email');
+        }
+        return $email;
+    }
+
+    private function kerberosRealmDomains(): array {
+        $domains = [];
+        foreach (explode(',', (string) Env::getString('KERBEROS_REALM_DOMAINS')) as $entry) {
+            // "REALM:domain", malformed entries are skipped
+            if (preg_match('/^([^:]+):(.+)$/', trim($entry), $pair)) {
+                $domains[$pair[1]] = strtolower($pair[2]);
+            }
+        }
+        return $domains;
     }
 
     private function getBearerToken(\Sabre\HTTP\RequestInterface $request) {
@@ -590,5 +671,20 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             $response
         );
         $auth->requireLogin();
+
+        if ($this->kerberosEnabled()) {
+            if (preg_match('/^Negotiate\s/i', (string) $request->getHeader('Authorization'))) {
+                // nginx sends Negotiate requests to auth_gss, they never reach PHP
+                // with their header: nginx runs without Kerberos. Offering Negotiate
+                // again would make the client resend its ticket forever.
+                error_log('KERBEROS_ENABLED is set but nginx did not handle a Negotiate request: restart the container with KERBEROS_ENABLED=true in its environment');
+                return;
+            }
+            // Negotiate first, so that clients holding a ticket prefer it over Basic.
+            $response->setHeader('WWW-Authenticate', array_merge(
+                ['Negotiate'],
+                $response->getHeaderAsArray('WWW-Authenticate')
+            ));
+        }
     }
 }

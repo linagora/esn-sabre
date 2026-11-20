@@ -252,8 +252,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $body = null;
 
         if ($node instanceof AddressBook) {
-            $jsonData = json_decode($request->getBodyAsString(), true);
-            $properties = $node->getProperties($jsonData['properties']);
+            $properties = $node->getProperties($this->requestedProperties($request));
 
             if (isset($properties['acl'])) {
                 $properties['acl'] = $this->filterAclForCurrentPrincipal($properties['acl']);
@@ -265,6 +264,37 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         return $this->send($code, $body);
+    }
+
+    /**
+     * Reads the property names listed in the JSON PROPFIND body.
+     *
+     * @throws BadRequest when the body is not a JSON object with a 'properties' array of strings
+     */
+    private function requestedProperties($request): array {
+        $jsonData = json_decode($request->getBodyAsString(), true);
+        $properties = is_array($jsonData) ? ($jsonData['properties'] ?? null) : null;
+
+        if (!is_array($properties) || !array_is_list($properties) || array_filter($properties, 'is_string') !== $properties) {
+            throw new BadRequest("A JSON body with a 'properties' array of strings is required");
+        }
+
+        return $properties;
+    }
+
+    /**
+     * Reads the properties to update from the JSON PROPPATCH body.
+     *
+     * @throws BadRequest when the body is not a JSON object
+     */
+    private function propertiesToPatch($request): object {
+        $jsonData = json_decode($request->getBodyAsString());
+
+        if (!is_object($jsonData)) {
+            throw new BadRequest('A JSON object body is required');
+        }
+
+        return $jsonData;
     }
 
     /**
@@ -300,7 +330,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
             list($code, $body) = $this->changeAddressBookProperties(
                 $path,
                 $node,
-                json_decode($request->getBodyAsString())
+                $this->propertiesToPatch($request)
             );
         }
 

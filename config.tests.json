@@ -29,7 +29,7 @@
         "serverSelectionTimeoutMS": 30000
       }
     },
-    "schedulingObjectTTLInDays": 56
+    "schedulingObjectTTLInDays": 7
   },
   "esn": {
     "apiRoot": "http://localhost:8080",

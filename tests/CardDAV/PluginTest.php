@@ -130,6 +130,52 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals('book1', $jsonResponse['uri']);
     }
 
+    #[DataProvider('invalidPropFindBodies')]
+    function testJsonPropFindOnAddressBookWithInvalidBodyIsBadRequest(string $body) {
+        $response = $this->jsonRequestOnBook1('PROPFIND', $body);
+
+        $this->assertEquals(400, $response->status);
+    }
+
+    static function invalidPropFindBodies(): array {
+        return [
+            'no body' => [''],
+            'malformed JSON' => ['{x'],
+            'JSON scalar' => ['42'],
+            'missing properties' => ['{}'],
+            'properties not an array' => ['{"properties": "uri"}'],
+            'properties not a list' => ['{"properties": {"a": "uri"}}'],
+            'non string property' => ['{"properties": ["uri", 1]}'],
+        ];
+    }
+
+    #[DataProvider('invalidPropPatchBodies')]
+    function testJsonPropPatchOnAddressBookWithInvalidBodyIsBadRequest(string $body) {
+        $response = $this->jsonRequestOnBook1('PROPPATCH', $body);
+
+        $this->assertEquals(400, $response->status);
+    }
+
+    static function invalidPropPatchBodies(): array {
+        return [
+            'no body' => [''],
+            'malformed JSON' => ['{x'],
+            'JSON array' => ['["dav:name"]'],
+        ];
+    }
+
+    private function jsonRequestOnBook1(string $method, string $body) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => $method,
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f/book1.json',
+        ));
+        $request->setBody($body);
+
+        return $this->request($request);
+    }
+
     function testPropFindAclOfAddressBook() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'PROPFIND',

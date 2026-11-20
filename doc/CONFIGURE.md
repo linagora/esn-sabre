@@ -70,6 +70,8 @@ of `config.json`.
 | `SABRE_ADMIN_LOGIN` | unset — impersonation unavailable | Admin login used for impersonation |
 | `SABRE_ADMIN_PASSWORD` | unset — impersonation unavailable | Admin password used for impersonation |
 | `SABRE_IMPERSONATION_ENABLED` | `false` | Master switch for admin impersonation |
+| `KERBEROS_ENABLED` | `false` | Kerberos (SPNEGO) authentication; also configures Nginx at startup, so set it in the environment. See [Kerberos authentication](#kerberos-authentication) |
+| `KERBEROS_REALM_DOMAINS` | unset | Kerberos realm to mail domain mapping, e.g. `CORP.EXAMPLE.COM:example.com`. See [Kerberos authentication](#kerberos-authentication) |
 | `SABRE_MIGRATE_ON_STARTUP` | `true` | Run database migrations in the background at startup; See [database migrations](storage/MONGO.md#database-migrations) |
 | `AUTO_PROVISION` | `true` | Create missing users on successful authentication |
 | `PRINCIPAL_PRIVACY` | `true` | Restrict DAV principal discovery |
@@ -270,7 +272,7 @@ publishes its status page. As for the Nginx settings, these are environment vari
 |-------------------------------|------------------|------------------------------------------------------------------------------------------|
 | `PHP_FPM_SLOWLOG_TIMEOUT`     | `5s`             | A request running longer than this is reported as slow (`request_slowlog_timeout`). A number with an optional `s`, `m`, `h` or `d` unit (no unit means seconds). `0`, `off`, `false` or `disabled` turns the slow log off. |
 | `PHP_FPM_SLOWLOG_TRACE_DEPTH` | `20`             | Depth of the PHP backtrace written for a slow request (`request_slowlog_trace_depth`).   |
-| `PHP_FPM_STATUS_LISTEN`       | `127.0.0.1:8081` | Address where Nginx serves the FPM `/status` and `/ping` pages (`[address:]port`). `off`, `false` or `disabled` stops Nginx from serving them. |
+| `PHP_FPM_STATUS_LISTEN`       | `127.0.0.1:8081` with `SABRE_ENV=dev`, else `off` | Address where Nginx serves the FPM `/status` and `/ping` pages (`[address:]port`). Set it explicitly to enable them in production (a monitoring probe, on a private port). `off`, `false` or `disabled` turns them off: Nginx does not serve them and FPM does not answer them. |
 
 Each slow request writes a line to the container log (stderr), naming the worker, the script and the
 request:
@@ -292,10 +294,14 @@ backtrace is missing and `slow requests` stays at `0`. To get them, add the capa
 **The status page answers even when the pool is full.** FPM serves `/status` and `/ping` from a
 dedicated pool (`pm.status_listen = 127.0.0.1:9001`), not from the 96 workers that run Sabre. A
 monitoring probe therefore keeps getting an answer while every worker is busy, which is exactly when
-it matters. Nginx serves these pages on their own port, never on port 80. The full view
-(`/status?full`) shows the URI of each running request, so by default the port is only reachable from
-inside the container. To scrape it from outside, set `PHP_FPM_STATUS_LISTEN=8081` and keep that port
-off the public network (do not route it through the ingress):
+it matters. Nginx serves these pages on their own port, never on port 80: the public server answers
+`404` to `/status` and `/ping`. That block matters, because `pm.status_listen` reads the status URIs of
+the `www` pool, so they are set on `www` too and its workers would answer them on its socket, before
+`esn.php` and its authentication run. The full view
+(`/status?full`) shows the URI of each running request: the pages are a dev tool, on by default with
+`SABRE_ENV=dev` only, and even then the port is only reachable from inside the container. In
+production, or to scrape it from outside, set `PHP_FPM_STATUS_LISTEN` (here `8081`) and keep that
+port off the public network (do not route it through the ingress):
 
 ```bash
 docker run -d -p 8001:80 -p 127.0.0.1:8081:8081 \
@@ -313,6 +319,67 @@ curl http://127.0.0.1:8081/ping     # pong
 
 The rate-limiting and basic-authentication settings above are applied to the Nginx configuration
 by the container entrypoint, before PHP starts, so they have no `config.json` equivalent.
+
+## Kerberos authentication
+
+Clients holding a Kerberos ticket, typically desktop clients (Thunderbird, Evolution) on machines
+joined to an Active Directory or FreeIPA domain, can authenticate without a password through
+SPNEGO (`Authorization: Negotiate`, RFC 4559). Basic, Bearer and `TwakeCalendarToken`
+authentication keep working alongside, so clients without a ticket still use their password.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `KERBEROS_ENABLED` | `false` | Enable Kerberos authentication. |
+| `KERBEROS_SERVICE_PRINCIPAL` | (required) | Service principal of the keytab, with its realm, as `klist -k` prints it: `HTTP/<host name the clients use>@REALM`, e.g. `HTTP/dav.example.com@CORP.EXAMPLE.COM`. |
+| `KERBEROS_KEYTAB` | `/etc/krb5.keytab` | Keytab holding the key of that service principal, readable by `www-data`. |
+| `KERBEROS_REALM_DOMAINS` | (required) | Comma separated `REALM:domain` pairs. Realms are case sensitive. |
+| `KERBEROS_LARGE_CLIENT_HEADER_BUFFERS` | `4 64k` | Nginx `large_client_header_buffers` once Kerberos is enabled. |
+
+All of them are environment variables read by `scripts/start.sh` when the container starts; an
+invalid or missing value stops the container with an error that names it. For example:
+
+```yaml
+sabre_dav:
+  image: linagora/esn-sabre
+  environment:
+    - KERBEROS_ENABLED=true
+    - KERBEROS_SERVICE_PRINCIPAL=HTTP/dav.example.com@CORP.EXAMPLE.COM
+    - KERBEROS_KEYTAB=/etc/sabre/dav.keytab
+    - KERBEROS_REALM_DOMAINS=CORP.EXAMPLE.COM:example.com
+  volumes:
+    - ./dav.keytab:/etc/sabre/dav.keytab:ro   # owned by root:www-data (33), mode 0640
+```
+
+How it works:
+
+ - Nginx validates the ticket against the keytab (`ngx_http_auth_spnego_module`), offline: Sabre
+   never contacts the KDC, and does not need port 88 open to it.
+ - The principal is mapped to a mail address by lowercasing its name and replacing its realm with
+   the domain of `KERBEROS_REALM_DOMAINS`: `alice@CORP.EXAMPLE.COM` becomes `alice@example.com`,
+   which must be an existing user. Users are not auto-provisioned, and the LDAP directory is not
+   queried. Principals of a realm that is not listed, or with an instance (`HTTP/host@REALM`), are
+   refused.
+ - Unauthenticated requests are challenged with `WWW-Authenticate: Negotiate` before `Basic`.
+
+Operational notes:
+
+ - **The service principal must match the host name the clients connect to.** Clients ask the KDC
+   for a ticket for `HTTP/<host>`, after resolving CNAMEs. Behind a load balancer, use the public
+   host name, and the same keytab on every replica.
+ - **A rejected ticket gets `403`, not `401`**: a ticket the keytab cannot decrypt (wrong service
+   principal, key rotated since the keytab was exported) is refused by Nginx, and a valid ticket
+   whose principal does not map to a user is refused by Sabre. No challenge is sent, so that clients
+   do not resend the same ticket in a loop. When the key of the service principal changes (password
+   reset of its AD account, `ktadd` without `-norandkey`), every Kerberos user gets `403` until the
+   new keytab is deployed.
+ - **Tickets can be large.** Active Directory tickets carry the groups of the user, and Nginx answers
+   `400 Request Header Or Cookie Too Large` to an `Authorization` header that does not fit in
+   `KERBEROS_LARGE_CLIENT_HEADER_BUFFERS`. Raise the same limit on every proxy in front of Sabre,
+   which must also forward the `Authorization` request header and every `WWW-Authenticate` response
+   header unchanged.
+ - A user disabled in the directory keeps access until their ticket expires (10 hours by default in
+   Active Directory): Sabre does not query the KDC nor the directory.
+ - `KERBEROS_ENABLED=true` cannot be combined with `NGINX_AUTH_BASIC`.
 
 ## create the configuration file
 

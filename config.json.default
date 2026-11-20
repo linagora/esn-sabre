@@ -32,7 +32,7 @@
         "connectTimeoutMS": 10000
       }
     },
-    "schedulingObjectTTLInDays": 56
+    "schedulingObjectTTLInDays": 7
   },
   "esn": {
     "apiRoot": "http://esn_host:8080",
@@ -52,6 +52,8 @@
     "SABRE_ADMIN_LOGIN": "",
     "SABRE_ADMIN_PASSWORD": "",
     "SABRE_IMPERSONATION_ENABLED": false,
+    "KERBEROS_ENABLED": false,
+    "KERBEROS_REALM_DOMAINS": "",
     "SABRE_MIGRATE_ON_STARTUP": true,
     "AUTO_PROVISION": true,
     "PRINCIPAL_PRIVACY": true,

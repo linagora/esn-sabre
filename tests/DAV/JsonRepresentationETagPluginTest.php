@@ -6,12 +6,13 @@ namespace ESN\DAV;
 class JsonRepresentationETagPluginTest extends \PHPUnit\Framework\TestCase {
 
     const VCARD = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:c1\r\nFN:John Doe\r\nEND:VCARD\r\n";
+    const LAST_MODIFIED = 1767225600;
     const ICAL = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:test\r\nBEGIN:VEVENT\r\nUID:e1\r\nDTSTAMP:20260101T000000Z\r\nDTSTART:20260101T100000Z\r\nSUMMARY:Meeting\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
     private function prepareServer() {
         $server = new \Sabre\DAV\Server([
-            new \Sabre\DAV\SimpleFile('c1.vcf', self::VCARD, 'text/vcard'),
-            new \Sabre\DAV\SimpleFile('e1.ics', self::ICAL, 'text/calendar')
+            new JsonRepresentationETagPluginTestFile('c1.vcf', self::VCARD, 'text/vcard'),
+            new JsonRepresentationETagPluginTestFile('e1.ics', self::ICAL, 'text/calendar')
         ]);
         $server->sapi = new JsonRepresentationETagPluginTestSapiMock();
         $server->addPlugin(new \Sabre\CardDAV\Plugin());
@@ -111,6 +112,90 @@ class JsonRepresentationETagPluginTest extends \PHPUnit\Framework\TestCase {
             'Accept' => 'application/vcard+json',
             'If-None-Match' => JsonRepresentationETagPlugin::toJsonETag($this->storedETag('/c1.vcf'))
         ]);
+    }
+
+    function testJCardNotModifiedResponseCarriesTheJCardETag() {
+        $jCardETag = JsonRepresentationETagPlugin::toJsonETag($this->storedETag('/c1.vcf'));
+
+        $response = $this->request('GET', '/c1.vcf', [
+            'Accept' => 'application/vcard+json',
+            'If-None-Match' => $jCardETag
+        ]);
+
+        $this->assertEquals(304, $response->getStatus());
+        $this->assertEquals($jCardETag, $response->getHeader('ETag'));
+    }
+
+    function testJCalNotModifiedResponseCarriesTheJCalETag() {
+        $jCalETag = JsonRepresentationETagPlugin::toJsonETag($this->storedETag('/e1.ics'));
+
+        $response = $this->request('GET', '/e1.ics', [
+            'Accept' => 'application/calendar+json',
+            'If-None-Match' => $jCalETag
+        ]);
+
+        $this->assertEquals(304, $response->getStatus());
+        $this->assertEquals($jCalETag, $response->getHeader('ETag'));
+    }
+
+    function testJCardRequestWithAnUnmatchedETagIgnoresIfModifiedSince() {
+        $response = $this->request('GET', '/c1.vcf', [
+            'Accept' => 'application/vcard+json',
+            'If-None-Match' => '"other"',
+            'If-Modified-Since' => \Sabre\HTTP\toDate(new \DateTime('@' . self::LAST_MODIFIED))
+        ]);
+
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertStringStartsWith('application/vcard+json', $response->getHeader('Content-Type'));
+    }
+
+    function testJCalRequestWithAnUnmatchedETagIgnoresIfModifiedSince() {
+        $response = $this->request('GET', '/e1.ics', [
+            'Accept' => 'application/calendar+json',
+            'If-None-Match' => '"other"',
+            'If-Modified-Since' => \Sabre\HTTP\toDate(new \DateTime('@' . self::LAST_MODIFIED))
+        ]);
+
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertStringStartsWith('application/calendar+json', $response->getHeader('Content-Type'));
+    }
+
+    function testVCardRequestWithAnUnmatchedETagIgnoresIfModifiedSince() {
+        $response = $this->request('GET', '/c1.vcf', [
+            'Accept' => 'text/vcard',
+            'If-None-Match' => '"other"',
+            'If-Modified-Since' => \Sabre\HTTP\toDate(new \DateTime('@' . self::LAST_MODIFIED))
+        ]);
+
+        $this->assertEquals(200, $response->getStatus());
+    }
+
+    function testRequestPreferringXVCardIsNegotiatedAsText() {
+        $response = $this->request('GET', '/c1.vcf', [
+            'Accept' => 'text/x-vcard, application/vcard+json;q=0.9',
+            'If-None-Match' => $this->storedETag('/c1.vcf')
+        ]);
+
+        $this->assertEquals(304, $response->getStatus());
+        $this->assertEquals($this->storedETag('/c1.vcf'), $response->getHeader('ETag'));
+    }
+
+    function testJCardRequestWithAnyETagIsAnsweredNotModifiedWithTheJCardETag() {
+        $response = $this->request('GET', '/c1.vcf', [
+            'Accept' => 'application/vcard+json',
+            'If-None-Match' => '*'
+        ]);
+
+        $this->assertEquals(304, $response->getStatus());
+        $this->assertEquals(JsonRepresentationETagPlugin::toJsonETag($this->storedETag('/c1.vcf')), $response->getHeader('ETag'));
+    }
+
+}
+
+class JsonRepresentationETagPluginTestFile extends \Sabre\DAV\SimpleFile {
+
+    function getLastModified() {
+        return JsonRepresentationETagPluginTest::LAST_MODIFIED;
     }
 }
 

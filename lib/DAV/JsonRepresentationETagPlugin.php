@@ -2,6 +2,8 @@
 
 namespace ESN\DAV;
 
+use \Sabre\DAV\Exception\NotFound;
+use \Sabre\DAV\IFile;
 use \Sabre\DAV\Server;
 use \Sabre\DAV\ServerPlugin;
 use \Sabre\HTTP;
@@ -18,20 +20,32 @@ use \Sabre\HTTP\ResponseInterface;
  * reuse the text body as JSON.
  *
  * The JSON representation is sent with the stored ETag suffixed by
- * JSON_SUFFIX. On a GET asking for JSON, If-None-Match is translated back to
- * stored ETags before Sabre checks it: entries that are not JSON ETags can not
- * match and are dropped. The text representation keeps the stored ETag, the
- * one returned by PUT and PROPFIND, so that DAV clients are not affected.
+ * JSON_SUFFIX. When a GET negotiates JSON, the same way the CardDAV and CalDAV
+ * plugins do, this plugin evaluates If-None-Match against the JSON ETag:
+ * - on a match it answers 304 with the JSON ETag itself, as Sabre would answer
+ *   with the stored one;
+ * - otherwise it removes If-None-Match and If-Modified-Since, which a
+ *   recipient must ignore when If-None-Match is present (RFC 9110 13.1.3), so
+ *   that Sabre serves the representation.
+ * The text representation keeps the stored ETag and Sabre's precondition
+ * handling, so that DAV clients are not affected.
  */
 class JsonRepresentationETagPlugin extends ServerPlugin {
     const JSON_SUFFIX = '-json';
-    const JSON_CONTENT_TYPES = ['application/vcard+json', 'application/calendar+json'];
-    const NEGOTIABLE_CONTENT_TYPES = ['text/vcard', 'text/calendar', 'application/vcard+json', 'application/calendar+json'];
     const ANY_ETAG = '*';
+    const JSON_CONTENT_TYPES = ['application/vcard+json', 'application/calendar+json'];
+    // Offered in the order of Sabre\CardDAV\Plugin::negotiateVCard
+    const VCARD_CONTENT_TYPES = ['text/x-vcard', 'text/vcard', 'text/vcard; version=4.0', 'text/vcard; version=3.0', 'application/vcard+json'];
+    // Offered in the order of Sabre\CalDAV\Plugin::httpAfterGet
+    const ICALENDAR_CONTENT_TYPES = ['text/calendar', 'application/calendar+json'];
+
+    private $server;
 
     function initialize(Server $server) {
-        $server->on('beforeMethod:GET', [$this, 'translateIfNoneMatch']);
-        $server->on('beforeMethod:HEAD', [$this, 'translateIfNoneMatch']);
+        $this->server = $server;
+        // After ACL (20): the stored ETag must not be disclosed before the read privilege is checked
+        $server->on('beforeMethod:GET', [$this, 'evaluateIfNoneMatch']);
+        $server->on('beforeMethod:HEAD', [$this, 'evaluateIfNoneMatch']);
         // After the CalDAV and CardDAV plugins (100) converted the body
         $server->on('afterMethod:GET', [$this, 'tagJsonRepresentation'], 150);
     }
@@ -40,21 +54,31 @@ class JsonRepresentationETagPlugin extends ServerPlugin {
         return 'json-representation-etag';
     }
 
-    function translateIfNoneMatch(RequestInterface $request, ResponseInterface $response) {
+    function evaluateIfNoneMatch(RequestInterface $request, ResponseInterface $response) {
         $ifNoneMatch = $request->getHeader('If-None-Match');
+        $node = $ifNoneMatch ? $this->findFile($request->getPath()) : null;
+        $storedETag = $node ? $node->getETag() : null;
 
-        if (!$ifNoneMatch || $ifNoneMatch === self::ANY_ETAG || $this->isHeadSubRequest($request) || !$this->acceptsJson($request)) {
+        if (!$storedETag || !$this->negotiatesJson($request, $node->getContentType())) {
             return true;
         }
 
-        $storedETags = $this->toStoredETags($ifNoneMatch);
-        if (empty($storedETags)) {
+        $jsonETag = self::toJsonETag($storedETag);
+        if (!$this->matches($ifNoneMatch, $jsonETag)) {
             $request->removeHeader('If-None-Match');
-        } else {
-            $request->setHeader('If-None-Match', implode(', ', $storedETags));
+            $request->removeHeader('If-Modified-Since');
+
+            return true;
         }
 
-        return true;
+        if ($request->getMethod() !== 'GET') {
+            // Let Sabre answer as it does for a matching text ETag
+            $request->setHeader('If-None-Match', $storedETag);
+
+            return true;
+        }
+
+        return $this->notModified($response, $jsonETag);
     }
 
     function tagJsonRepresentation(RequestInterface $request, ResponseInterface $response) {
@@ -73,29 +97,35 @@ class JsonRepresentationETagPlugin extends ServerPlugin {
             : $etag . self::JSON_SUFFIX;
     }
 
-    private function toStoredETags(string $ifNoneMatch): array {
-        $jsonETags = array_filter(
-            array_map('trim', explode(',', $ifNoneMatch)),
-            fn($etag) => $this->isJsonETag($etag)
-        );
+    private function findFile(string $path): ?IFile {
+        try {
+            $node = $this->server->tree->getNodeForPath($path);
+        } catch (NotFound $e) {
+            return null;
+        }
 
-        return array_values(array_map(fn($etag) => $this->toStoredETag($etag), $jsonETags));
+        return $node instanceof IFile ? $node : null;
     }
 
-    private function isJsonETag(string $etag): bool {
-        return str_ends_with($etag, self::JSON_SUFFIX . '"') || str_ends_with($etag, self::JSON_SUFFIX);
-    }
-
-    private function toStoredETag(string $jsonETag): string {
-        return str_ends_with($jsonETag, '"')
-            ? substr($jsonETag, 0, -strlen(self::JSON_SUFFIX) - 1) . '"'
-            : substr($jsonETag, 0, -strlen(self::JSON_SUFFIX));
-    }
-
-    private function acceptsJson(RequestInterface $request): bool {
-        $negotiated = HTTP\negotiateContentType($request->getHeader('Accept'), self::NEGOTIABLE_CONTENT_TYPES);
+    private function negotiatesJson(RequestInterface $request, ?string $storedContentType): bool {
+        $offers = $this->negotiableContentTypes($storedContentType ?? '');
+        $negotiated = $offers ? HTTP\negotiateContentType($request->getHeader('Accept'), $offers) : null;
 
         return in_array($negotiated, self::JSON_CONTENT_TYPES, true);
+    }
+
+    // Mirrors the Content-Type checks of the CardDAV and CalDAV plugins before they convert the body
+    private function negotiableContentTypes(string $storedContentType): array {
+        if (str_contains($storedContentType, 'text/vcard')) {
+            return self::VCARD_CONTENT_TYPES;
+        }
+
+        return str_contains($storedContentType, 'text/calendar') ? self::ICALENDAR_CONTENT_TYPES : [];
+    }
+
+    private function matches(string $ifNoneMatch, string $etag): bool {
+        return $ifNoneMatch === self::ANY_ETAG
+            || in_array($etag, array_map('trim', explode(',', $ifNoneMatch)), true);
     }
 
     private function isJsonContentType(?string $contentType): bool {
@@ -108,8 +138,11 @@ class JsonRepresentationETagPlugin extends ServerPlugin {
         return in_array($mimeType, self::JSON_CONTENT_TYPES, true);
     }
 
-    // HEAD is answered by a GET sub-request carrying the already translated header
-    private function isHeadSubRequest(RequestInterface $request): bool {
-        return $request->getMethod() === 'GET' && $request->getHeader('X-Sabre-Original-Method') === 'HEAD';
+    private function notModified(ResponseInterface $response, string $jsonETag): bool {
+        $response->setStatus(304);
+        $response->setHeader('ETag', $jsonETag);
+        $this->server->sapi->sendResponse($response);
+
+        return false;
     }
 }

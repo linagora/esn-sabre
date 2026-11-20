@@ -2,6 +2,7 @@
 
 namespace ESN\JSON\CalDAV;
 
+use ESN\CalDAV\InvalidStoredRecurrence;
 use ESN\CalDAV\RecurrenceExpansionLimitExceeded;
 use ESN\Utils\Utils;
 use \Sabre\VObject,
@@ -407,6 +408,8 @@ class CalendarObjectHandler {
      *               - [400, null] if time-range parameters are invalid
      * @throws RecurrenceExpansionLimitExceeded (422) if the series generates too many
      *         occurrences before the time range to be expanded
+     * @throws InvalidStoredRecurrence (422) if vobject refuses the stored recurrence
+     *         (e.g. an RRULE with WKST=2)
      */
     public function expandEvent($nodePath, $node, $jsonData) {
         // Parse time-range parameters
@@ -536,6 +539,8 @@ class CalendarObjectHandler {
             return $vObject->expand($start, $end);
         } catch (VObject\Recur\MaxInstancesExceededException $e) {
             throw new RecurrenceExpansionLimitExceeded($e);
+        } catch (VObject\InvalidDataException $e) {
+            throw new InvalidStoredRecurrence($e);
         }
     }
 

@@ -3698,6 +3698,19 @@ END:VCALENDAR
         $this->assertStringContainsString('too many occurrences', $response->getBodyAsString());
     }
 
+    function testExpandEventWithInvalidStoredRRuleShouldAnswerUnprocessableContent() {
+        // Issue #872: a stored RRULE vobject cannot parse (WKST=2) must be answered explicitly instead of a 500
+        $ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:invalid-wkst\r\nDTSTAMP:20250101T000000Z\r\n"
+             . "DTSTART:20350101T100000Z\r\nDTEND:20350101T110000Z\r\nRRULE:FREQ=WEEKLY;COUNT=3;WKST=2\r\n"
+             . "END:VEVENT\r\nEND:VCALENDAR\r\n";
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'invalid-wkst.ics', $ics);
+
+        $response = $this->expandEventRequest('invalid-wkst.ics', '20350101T000000Z', '20350201T000000Z');
+
+        $this->assertEquals(422, $response->status);
+        $this->assertStringContainsString('Invalid value for WKST in RRULE: 2', $response->getBodyAsString());
+    }
+
     function testRemoveEventsOutsideTimeRangeShouldKeepEventWithoutDtstart() {
         // Issue #607: a VEVENT without DTSTART must not be dereferenced during post-filtering.
         // Such an object can neither be stored nor expanded, hence the post-filter is exercised directly.

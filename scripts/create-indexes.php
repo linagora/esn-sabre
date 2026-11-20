@@ -27,7 +27,7 @@ if (!$dbName) {
 }
 $db = $client->{$dbName};
 
-$schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 56;
+$schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 7;
 (new \ESN\CalDAV\Backend\Mongo($db, $schedulingObjectTTLInDays))->ensureIndexes();
 $carddavBackend = new \ESN\CardDAV\Backend\Mongo($db);
 $carddavBackend->ensureIndexes();

@@ -68,7 +68,12 @@ iTIP scheduling inbox objects (meeting invitations in transit).
 Key fields: `principaluri`, `uri`, `dateCreated`.
 
 **Class:** `CalDAV\Backend\DAO\SchedulingObjectDAO`  
-**Indexes:** TTL index on `{ dateCreated }` if `schedulingObjectTTLInDays` > 0 (configurable at construction)
+**Indexes:** `{ principaluri, uri }`, TTL index on `{ dateCreated }` if `schedulingObjectTTLInDays` > 0 (`database.schedulingObjectTTLInDays` in `config.json`, default `7` days)
+
+Nothing in Twake Calendar reads the scheduling inbox: the iTIP delivery already applied the change to the attendee
+calendar, the items are only kept for the RFC 6638 clients (Thunderbird, DAVx5...) that process it, and those sync far
+more often than weekly. When the configured TTL differs from the one of the existing index, startup updates the index in
+place with `collMod`, and MongoDB then removes the items older than the new TTL.
 
 ---
 
@@ -203,6 +208,10 @@ db.sharedaddressbooks.createIndex({ addressbookid: 1, share_href: 1 });
 db.sharedaddressbooks.createIndex({ principaluri: 1 });
 db.addressbooksubscriptions.createIndex({ principaluri: 1 });
 db.addressbooksubscriptions.createIndex({ source: 1 });
+db.schedulingobjects.createIndex({ principaluri: 1, uri: 1 });
+
+// Scheduling inbox TTL lowered from 56 to 7 days (createIndex would fail with IndexOptionsConflict)
+db.runCommand({ collMod: "schedulingobjects", index: { keyPattern: { dateCreated: 1 }, expireAfterSeconds: 7 * 86400 } });
 
 // Indexes made redundant by a compound index with the same prefix: they only slow writes down
 for (const [coll, key] of [["calendarobjects", { calendarid: 1 }], ["cards", { addressbookid: 1 }]]) {

@@ -75,11 +75,9 @@ class CalendarRoot extends \Sabre\DAV\Collection {
             $domainId = $this->authTenant?->domainId;
             if (!$domainId)
                 throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
-            if (!empty($res['domains'])) {
-                $userDomainIds = array_map(fn($d) => (string)$d['domain_id'], (array)$res['domains']);
-                if (!in_array($domainId, $userDomainIds, true)) {
-                    throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed');
-                }
+            $userDomainIds = array_map(fn($d) => (string)$d['domain_id'], (array)($res['domains'] ?? []));
+            if (!in_array($domainId, $userDomainIds, true)) {
+                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed');
             }
             $principal = [ 'uri' => self::USER_PREFIX . '/' . $name ];
             return new CalendarHome($this->caldavBackend, $principal);
@@ -90,10 +88,8 @@ class CalendarRoot extends \Sabre\DAV\Collection {
             $domainId = $this->authTenant?->domainId;
             if (!$domainId)
                 throw new \Sabre\DAV\Exception\Forbidden('Cross-domain calendar access is not allowed: null $authTenant');
-            if (isset($res['domain'])) {
-                if ((string)$res['domain'] !== $domainId) {
-                    throw new \Sabre\DAV\Exception\Forbidden('Cross-domain resource access is not allowed');
-                }
+            if (!isset($res['domain']) || (string)$res['domain'] !== $domainId) {
+                throw new \Sabre\DAV\Exception\Forbidden('Cross-domain resource access is not allowed');
             }
             $principal = [ 'uri' => self::RESOURCES_PREFIX . '/' . $name ];
             return new CalendarHome($this->caldavBackend, $principal);

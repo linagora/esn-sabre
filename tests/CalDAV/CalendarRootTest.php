@@ -95,7 +95,10 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testGetChild() {
-        $this->esndb->users->insertOne([ '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6') ]);
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId('54313fcc398fef406b0041b6'),
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)]]
+        ]);
         $this->esndb->team_calendars->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::TEAM_CALENDAR_ID),
             'domainId' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID),
@@ -130,6 +133,63 @@ class CalendarRootTest extends \PHPUnit\Framework\TestCase {
         ]);
 
         $this->root->getChild(self::OTHER_TEAM_CALENDAR_ID);
+    }
+
+    function testGetChildShouldRejectUserWithoutDomains() {
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
+        $this->esndb->users->insertOne([ '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID) ]);
+
+        $this->root->getChild(self::USER_ID);
+    }
+
+    function testGetChildShouldRejectUserWithEmptyDomains() {
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
+        $this->esndb->users->insertOne([ '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID), 'domains' => [] ]);
+
+        $this->root->getChild(self::USER_ID);
+    }
+
+    function testGetChildShouldRejectUserFromAnotherDomain() {
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID),
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(self::OTHER_DOMAIN_ID)]]
+        ]);
+
+        $this->root->getChild(self::USER_ID);
+    }
+
+    function testGetChildShouldReturnResourceOfSameDomain() {
+        $this->esndb->resources->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_ID),
+            'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
+        ]);
+
+        $resource = $this->root->getChild(self::RESOURCE_ID);
+
+        $this->assertEquals('principals/resources/' . self::RESOURCE_ID, $resource->getOwner());
+    }
+
+    function testGetChildShouldRejectResourceWithoutDomain() {
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
+        $this->esndb->resources->insertOne([ '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_ID) ]);
+
+        $this->root->getChild(self::RESOURCE_ID);
+    }
+
+    function testGetChildShouldRejectResourceFromAnotherDomain() {
+        $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+
+        $this->esndb->resources->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::OTHER_RESOURCE_ID),
+            'domain' => new \MongoDB\BSON\ObjectId(self::OTHER_DOMAIN_ID)
+        ]);
+
+        $this->root->getChild(self::OTHER_RESOURCE_ID);
     }
 
     function testGetChildNotFound() {

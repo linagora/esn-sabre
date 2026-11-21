@@ -767,6 +767,19 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         ], $result);
     }
 
+    function testGetChangesRefusesATokenTheServerNeverIssued() {
+        $backend = $this->getBackend();
+        $id = $backend->createCalendar('principals/user1/userID', 'bla', []);
+        $backend->createCalendarObject($id, "todo1.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+
+        foreach (['abc', '1abc', '-1', -1, '1.5', 1.5, ' 1'] as $syncToken) {
+            $this->assertNull($backend->getChangesForCalendar($id, $syncToken, 1), var_export($syncToken, true));
+        }
+
+        $this->assertEquals(['todo1.ics'], $backend->getChangesForCalendar($id, '1', 1)['added']);
+        $this->assertEquals(['todo1.ics'], $backend->getChangesForCalendar($id, 1, 1)['added']);
+    }
+
     function testCreateSubscriptions() {
         $props = [
             '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('http://example.org/cal.ics', false),

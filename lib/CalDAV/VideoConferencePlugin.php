@@ -20,6 +20,7 @@ use Sabre\VObject\Component\VCalendar;
 class VideoConferencePlugin extends ServerPlugin {
     private static string $VIDEOCONFERENCE_PROPERTY = 'X-OPENPAAS-VIDEOCONFERENCE';
     private static string $CONFERENCE_PROPERTY = 'CONFERENCE';
+    private static array $SCRIPT_SCHEMES = ['javascript', 'vbscript', 'data'];
     private ?TrustedUrlBase $trustedUrlBase;
 
     function __construct(?string $trustedUrlBase = null) {
@@ -50,6 +51,9 @@ class VideoConferencePlugin extends ServerPlugin {
         $modified = false;
         // Sabre's name repair can turn "..CONFERENCE" into a CONFERENCE that select() misses.
         RepairedNameIndex::refresh($vCal);
+        if ($this->removeScriptLinks($vCal)) {
+            $modified = true;
+        }
         if ($this->trustedUrlBase !== null) {
             foreach ($vCal->select('VEVENT') as $event) {
                 foreach ($event->select(self::$VIDEOCONFERENCE_PROPERTY) as $link) {
@@ -74,5 +78,37 @@ class VideoConferencePlugin extends ServerPlugin {
             $modified = true;
         }
         return $modified;
+    }
+
+    /**
+     * Whatever the trusted URL base, a link that runs a script or embeds a document when
+     * opened is never a conference to join: it is not stored, nor mirrored by
+     * VideoConferenceDecorator into a "Join video call" CONFERENCE. Other schemes are kept, as
+     * CONFERENCE also carries phone bridges (tel:) or chat rooms (xmpp:).
+     */
+    private function removeScriptLinks(VCalendar $vCal): bool {
+        $modified = false;
+        foreach ($vCal->select('VEVENT') as $event) {
+            foreach ([self::$VIDEOCONFERENCE_PROPERTY, self::$CONFERENCE_PROPERTY] as $name) {
+                foreach ($event->select($name) as $link) {
+                    if (in_array(self::schemeOf((string) $link), self::$SCRIPT_SCHEMES, true)) {
+                        $event->remove($link);
+                        $modified = true;
+                    }
+                }
+            }
+        }
+
+        return $modified;
+    }
+
+    /**
+     * The scheme a browser resolves: it ignores leading and trailing C0 controls and spaces,
+     * and every tab and newline, so "  Java\tScript:" still runs a script.
+     */
+    private static function schemeOf(string $url): ?string {
+        $url = str_replace(["\t", "\n", "\r"], '', trim($url, "\x00..\x20"));
+
+        return preg_match('/^([a-z][a-z0-9+.-]*):/i', $url, $matches) ? strtolower($matches[1]) : null;
     }
 }

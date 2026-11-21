@@ -153,6 +153,14 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 return $this->doImpersonation($impersonationResult);
         }
 
+        # '&' is the admin impersonation separator: any other login carrying
+        # it is malformed, and would otherwise reach the LDAP bind truncated
+        # by the username mode below (`alice@x&bob@x` binding as `alice`).
+        if (str_contains($user, '&')) {
+            error_log("Bad credentials for '$user': '&' is reserved to admin impersonation");
+            throw new AuthException("Bad credentials");
+        }
+
         if (Env::getString('LDAP_USERNAME_MODE') === 'username') {
             $user = explode('@', $user);
             $user = $user[0];

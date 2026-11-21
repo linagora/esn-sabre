@@ -74,6 +74,55 @@ class CalendarDataNormalizerTest extends TestCase {
         $this->normalizer->getDenormalizedData($this->eventWith($dateLines));
     }
 
+    function testUnlimitedRecurrencesShouldNotWalkADenseSeriesInstanceByInstance() {
+        $this->withUnlimitedRecurrences(function () {
+            $started = microtime(true);
+            $data = $this->normalizer->getDenormalizedData($this->eventWith([
+                'DTSTART:10150206T100000',
+                'RRULE:FREQ=HOURLY;COUNT=922337203685477583'
+            ]));
+
+            $this->assertLessThan(2, microtime(true) - $started);
+            $this->assertSame(strtotime('2038-01-01T00:00:00Z'), $data['lastOccurence']);
+        });
+    }
+
+    function testUnlimitedRecurrencesShouldBoundTheWalkOfASeriesWithSeveralRules() {
+        $this->withUnlimitedRecurrences(function () {
+            $started = microtime(true);
+            $data = $this->normalizer->getDenormalizedData($this->eventWith([
+                'DTSTART:10150206T100000Z',
+                'RRULE:FREQ=HOURLY;COUNT=922337203685477583',
+                'RRULE:FREQ=DAILY;COUNT=922337203685477583'
+            ]));
+
+            $this->assertLessThan(2, microtime(true) - $started);
+            $this->assertSame(strtotime('2038-01-01T00:00:00Z'), $data['lastOccurence']);
+        });
+    }
+
+    function testUnlimitedRecurrencesShouldStillEndACountBoundedSeriesAtItsLastInstance() {
+        $this->withUnlimitedRecurrences(function () {
+            $data = $this->normalizer->getDenormalizedData($this->eventWith([
+                'DTSTART:20260105T080000Z',
+                'DTEND:20260105T081500Z',
+                'RRULE:FREQ=DAILY;COUNT=10'
+            ]));
+
+            $this->assertSame(strtotime('2026-01-14T08:15:00Z'), $data['lastOccurence']);
+        });
+    }
+
+    private function withUnlimitedRecurrences(callable $test): void {
+        $previous = \Sabre\VObject\Settings::$maxRecurrences;
+        \Sabre\VObject\Settings::$maxRecurrences = -1;
+        try {
+            $test();
+        } finally {
+            \Sabre\VObject\Settings::$maxRecurrences = $previous;
+        }
+    }
+
     private function eventWith(array $dateLines): string {
         return implode("\r\n", array_merge([
             'BEGIN:VCALENDAR',

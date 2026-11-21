@@ -56,8 +56,8 @@ class PluginTest extends \ESN\DAV\ServerMock {
         });
 
         $this->assertEquals(207, $response->status);
-        // Sabre leaves the missing href out of the response
-        $this->assertEquals(20, substr_count($response->getBodyAsString(), '<d:response>'));
+        // The missing href gets its own 404 response (RFC 4791 section 7.9)
+        $this->assertEquals(21, substr_count($response->getBodyAsString(), '<d:response>'));
         // One lookup for the ACL check, one for the report itself, whatever the number of hrefs
         $this->assertLessThanOrEqual(2, $queries);
     }

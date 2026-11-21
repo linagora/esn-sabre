@@ -266,11 +266,31 @@ class AttendeeSchedulingObjectChangeGuard {
 
     private static function assertSameExplicitEvent($oldEvent, $newEvent, array $forbiddenProperties, \DateTimeZone $timeZone): void {
         foreach ($forbiddenProperties as $propertyName) {
-            if (CalendarObjectHelper::propertySignatures($oldEvent, $propertyName) !== CalendarObjectHelper::propertySignatures($newEvent, $propertyName)) {
+            if (self::organizerOwnedSignatures($oldEvent, $propertyName) !== self::organizerOwnedSignatures($newEvent, $propertyName)) {
                 throw new ForbiddenAttendeeSchedulingObjectChange($propertyName);
             }
         }
         self::assertSameResolvedBounds($oldEvent, $newEvent, $forbiddenProperties, $timeZone);
+    }
+
+    /**
+     * Property signatures without SCHEDULE-STATUS: the server writes it on the
+     * attendee's copy (the ORGANIZER after a reply) and ignores the value a
+     * client sends (RFC 6638 section 3.2.9), so a client not echoing it byte
+     * for byte changes nothing the organizer owns.
+     */
+    private static function organizerOwnedSignatures($event, string $propertyName): array {
+        $signatures = [];
+        foreach ($event->select($propertyName) as $property) {
+            if (isset($property['SCHEDULE-STATUS'])) {
+                $property = clone $property;
+                unset($property['SCHEDULE-STATUS']);
+            }
+            $signatures[] = $property->serialize();
+        }
+        sort($signatures);
+
+        return $signatures;
     }
 
     /**

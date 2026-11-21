@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV\Backend\Service;
 
+use ESN\CalDAV\RecurrenceExpansionLimit;
 use ESN\Utils\Utils;
 use ESN\Utils\VObjectCache;
 use \Sabre\DAV\Exception\BadRequest;
@@ -331,8 +332,8 @@ class CalendarDataNormalizer {
      *   (RFC 5545 3.3.10), and each one lasts as long as the master (EXDATE
      *   only removes instances). A day is added when UNTIL is a DATE or the
      *   times are floating or all-day, whose reading depends on a time zone.
-     * - COUNT above Settings::$maxRecurrences: the walk would give up at the
-     *   cap and fall back to MAX_DATE anyway.
+     * - COUNT above the walk budget (see walkBudget()): the walk would give
+     *   up and fall back to MAX_DATE anyway.
      *
      * @param VObject\Component $component
      * @param VObject\Recur\EventIterator $it rewound on the first instance
@@ -349,8 +350,7 @@ class CalendarDataNormalizer {
         $parts = array_change_key_case($component->RRULE->getParts(), CASE_UPPER);
 
         if (isset($parts['COUNT'])) {
-            $cap = VObject\Settings::$maxRecurrences;
-            return $cap !== -1 && (int) $parts['COUNT'] > $cap ? $maxDate->getTimeStamp() : null;
+            return (int) $parts['COUNT'] > $this->walkBudget() ? $maxDate->getTimeStamp() : null;
         }
 
         if (!isset($parts['UNTIL']) || !is_string($parts['UNTIL'])) {
@@ -376,18 +376,41 @@ class CalendarDataNormalizer {
      * Each instance contributes the later of its start and end, so that a
      * negative duration cannot hide the instances themselves.
      *
+     * The walk ends at MAX_DATE once it has spent its budget: the window is a
+     * hull and may end later than the last instance.
+     *
      * @param VObject\Recur\EventIterator $it
      * @param \DateTime $maxDate
      * @return int Last occurrence timestamp
      */
     private function findLastRecurrenceDate($it, $maxDate) {
         $end = max($it->getDtStart(), $it->getDtEnd());
+        $budget = $this->walkBudget();
 
-        while($it->valid() && $end < $maxDate) {
+        for ($steps = 0; $it->valid() && $end < $maxDate; $steps++) {
+            if ($steps === $budget) {
+                return $maxDate->getTimeStamp();
+            }
             $end = max($end, $it->getDtStart(), $it->getDtEnd());
             $it->next();
         }
 
         return $end->getTimeStamp();
+    }
+
+    /**
+     * How many instances the window computation may walk.
+     *
+     * A positive Settings::$maxRecurrences already stops the iterator. When
+     * the limit is disabled, the walk keeps its own bound, so that a dense
+     * series (FREQ=HOURLY from year 1015, FREQ=SECONDLY...) cannot hold the
+     * request for millions of instances up to MAX_DATE.
+     *
+     * @return int
+     */
+    private function walkBudget() {
+        $cap = VObject\Settings::$maxRecurrences;
+
+        return $cap > 0 ? $cap : RecurrenceExpansionLimit::DEFAULT_LIMIT;
     }
 }

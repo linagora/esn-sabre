@@ -221,6 +221,19 @@ class InlinePhotoPlugin extends ServerPlugin {
             return true;
         }
 
-        return stripos(ltrim((string) $photo->getValue()), 'data:') === 0;
+        $values = [(string) $photo->getValue()];
+        if ($photo instanceof VObject\Property\Binary) {
+            // A vCard 3.0 PHOTO without VALUE=URI is parsed as binary: a data: URI, not being base64, is only
+            // kept as the raw value.
+            $values[] = $photo->getRawMimeDirValue();
+        }
+
+        foreach ($values as $value) {
+            if (stripos(ltrim($value), 'data:') === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

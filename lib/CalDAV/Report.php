@@ -166,7 +166,13 @@ class Report {
 
         $result = [];
         foreach ($this->server->getPropertiesForMultiplePaths($paths, $report->properties) as $properties) {
-            $result[] = $this->renderBatchedProperties($properties, $report, $needsJson, $calendarTimeZone);
+            try {
+                $result[] = $this->renderBatchedProperties($properties, $report, $needsJson, $calendarTimeZone);
+            } catch (RecurrenceExpansionLimitExceeded | InvalidStoredRecurrence $e) {
+                // As the JSON API does: one object that cannot be expanded must
+                // not make the whole calendar fail. Log it and leave it out.
+                error_log('Report: skipping calendar object that cannot be expanded: ' . $e->getMessage());
+            }
         }
 
         return $result;
@@ -222,7 +228,7 @@ class Report {
         $vObject = Reader::read($properties[200][$calendarDataProp]);
 
         if ($report->expand) {
-            $vObject = $vObject->expand($report->expand['start'], $report->expand['end'], $calendarTimeZone);
+            $vObject = $this->expand($vObject, $report->expand, $calendarTimeZone);
         }
 
         $properties[200][$calendarDataProp] = $needsJson
@@ -233,6 +239,23 @@ class Report {
         $vObject->destroy();
 
         return $properties;
+    }
+
+    /**
+     * @throws RecurrenceExpansionLimitExceeded (422) if the series generates too many
+     *         occurrences before the requested range
+     * @throws InvalidStoredRecurrence (422) if vobject refuses the stored recurrence
+     */
+    private function expand($vObject, array $range, $calendarTimeZone) {
+        try {
+            return $vObject->expand($range['start'], $range['end'], $calendarTimeZone);
+        } catch (\Sabre\VObject\Recur\MaxInstancesExceededException $e) {
+            $vObject->destroy();
+            throw new RecurrenceExpansionLimitExceeded($e);
+        } catch (\Sabre\VObject\InvalidDataException $e) {
+            $vObject->destroy();
+            throw new InvalidStoredRecurrence($e);
+        }
     }
 
     /**

@@ -577,6 +577,44 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertNull($backend->findByUri('mailto:user@example.co', 'principals/users'));
     }
 
+    /**
+     * No mailbox is longer than 254 characters (RFC 5321 section 4.5.3.1.3): such an
+     * address is unknown, it must not be turned into a regex longer than MongoDB accepts.
+     */
+    function testFindByUriUserAddressLongerThanAnyMailboxIsUnknown() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertNull($backend->findByUri('mailto:' . self::overlongAddress(), 'principals/users'));
+    }
+
+    function testSearchUserPrincipalsWithAnAddressLongerThanAnyMailboxFindsNoAddressMatch() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertSame([], $backend->searchPrincipals('principals/users', [
+            '{http://sabredav.org/ns}email-address' => self::overlongAddress()
+        ]));
+        $this->assertSame(['principals/users/' . self::USER_ID], $backend->searchPrincipals('principals/users', [
+            '{DAV:}displayname' => 'first',
+            '{http://sabredav.org/ns}email-address' => self::overlongAddress()
+        ], 'anyof'));
+    }
+
+    function testResolvedUserPrincipalsShouldTreatAddressesLongerThanAnyMailboxAsUnknown() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $addresses = [self::overlongAddress(), 'usernolast@example.com'];
+
+        $principals = $backend->withUserPrincipalsResolved($addresses, fn() => array_map(
+            fn($address) => $backend->findByUri('mailto:' . $address, 'principals/users'),
+            $addresses
+        ));
+
+        $this->assertSame([null, 'principals/users/' . self::USER_WITH_NO_LASTNAME], $principals);
+    }
+
+    private static function overlongAddress(): string {
+        return str_repeat('a', 10000) . '@example.com';
+    }
+
     function testSearchUserPrincipalsAnyofKeepsAddressesStoredInAnotherCase() {
         $backend = new Mongo(self::$esndb, self::$tenant);
 

@@ -122,6 +122,49 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
         );
     }
 
+    public static function organizerScheduleStatusSpellings(): iterable {
+        $stored = 'ORGANIZER;SCHEDULE-STATUS=1.0:mailto:bob@example.org';
+        $plain = 'ORGANIZER:mailto:bob@example.org';
+        foreach (SeriesKind::cases() as $kind) {
+            yield "$kind->value / dropped from the master" => [$kind, $stored, $plain, $plain, $plain];
+            yield "$kind->value / added to the override" => [$kind, $stored, $plain, $stored, $stored];
+            yield "$kind->value / other status" => [$kind, $stored, $plain, 'ORGANIZER;SCHEDULE-STATUS=5.3:mailto:bob@example.org', $plain];
+        }
+    }
+
+    /**
+     * SCHEDULE-STATUS is set by the server, which ignores the value a client
+     * sends (RFC 6638 section 3.2.9): a client not echoing it is not changing
+     * the ORGANIZER.
+     */
+    #[DataProvider('organizerScheduleStatusSpellings')]
+    function testAttendeeCanAnswerWithoutEchoingTheOrganizerScheduleStatus(SeriesKind $kind, string $oldMasterOrganizer, string $oldOverrideOrganizer, string $newMasterOrganizer, string $newOverrideOrganizer) {
+        $answer = ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=DECLINED:mailto:alice@example.org'];
+
+        $this->assertAllowed(
+            self::calendar(self::master($kind, ['ORGANIZER' => $oldMasterOrganizer]), self::override($kind, self::OCCURRENCE, ['ORGANIZER' => $oldOverrideOrganizer])),
+            self::calendar(self::master($kind, ['ORGANIZER' => $newMasterOrganizer]), self::override($kind, self::OCCURRENCE, ['ORGANIZER' => $newOverrideOrganizer] + $answer))
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotChangeTheOrganizerAddressAlongWithItsScheduleStatus(SeriesKind $kind) {
+        $this->assertRefused(
+            self::calendar(self::master($kind, ['ORGANIZER' => 'ORGANIZER;SCHEDULE-STATUS=1.0:mailto:bob@example.org'])),
+            self::calendar(self::master($kind, ['ORGANIZER' => 'ORGANIZER:mailto:mallory@example.org'])),
+            'ORGANIZER'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    function testAttendeeCannotChangeOtherOrganizerParameters(SeriesKind $kind) {
+        $this->assertRefused(
+            self::calendar(self::master($kind, ['ORGANIZER' => 'ORGANIZER;SCHEDULE-STATUS=1.0:mailto:bob@example.org'])),
+            self::calendar(self::master($kind, ['ORGANIZER' => 'ORGANIZER;CN=Mallory:mailto:bob@example.org'])),
+            'ORGANIZER'
+        );
+    }
+
     #[DataProvider('seriesKinds')]
     function testAttendeeCanAnswerTheOnlyOccurrenceTheyAreInvitedTo(SeriesKind $kind) {
         $this->assertAllowed(

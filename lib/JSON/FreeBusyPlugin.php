@@ -158,7 +158,11 @@ class FreeBusyPlugin extends \ESN\JSON\BasePlugin {
             return null;
         }
 
-        $node = $this->server->tree->getNodeForPath('calendars/' . $userId);
+        try {
+            $node = $this->server->tree->getNodeForPath('calendars/' . $userId);
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            return null;
+        }
 
         return $node instanceof \Sabre\CalDAV\CalendarHome ? $node : null;
     }

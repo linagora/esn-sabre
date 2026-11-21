@@ -81,6 +81,78 @@ class MongoTest extends AbstractDatabaseTestBase {
         return new Mongo($this->db);
     }
 
+    function testChangesAreDatedForTheirExpiry() {
+        $this->backend->createCard($this->bookId, 'new.vcf', $this->dummyCard);
+
+        $change = $this->db->addressbookchanges->findOne(['uri' => 'new.vcf']);
+
+        $this->assertInstanceOf(\MongoDB\BSON\UTCDateTime::class, $change['date']);
+        $this->assertEqualsWithDelta(time(), $change['date']->toDateTime()->getTimestamp(), 60);
+    }
+
+    function testChangesExpireAfterTheConfiguredTTL() {
+        (new Mongo($this->db, 90))->ensureIndexes();
+
+        $ttl = array_values(array_filter(
+            iterator_to_array($this->db->addressbookchanges->listIndexes()),
+            fn ($index) => $index->getKey() === ['date' => 1]
+        ));
+        $this->assertCount(1, $ttl);
+        $this->assertSame(90 * 86400, $ttl[0]['expireAfterSeconds']);
+    }
+
+    function testChangesDoNotExpireWithoutTTL() {
+        $this->backend->ensureIndexes();
+
+        $keys = array_map(fn ($index) => $index->getKey(), iterator_to_array($this->db->addressbookchanges->listIndexes()));
+        $this->assertNotContains(['date' => 1], $keys);
+    }
+
+    function testSyncTokenOlderThanTheKeptChangesIsInvalid() {
+        $this->writeCards(['c1.vcf', 'c2.vcf', 'c3.vcf']);
+
+        // Expiry removed the changes of tokens 1 and 2
+        $this->db->addressbookchanges->deleteMany(['synctoken' => ['$lt' => 3]]);
+
+        $this->assertNull($this->backend->getChangesForAddressBook($this->bookId, 1, 1));
+        $this->assertNull($this->backend->getChangesForAddressBook($this->bookId, 2, 1));
+        $this->assertEquals(
+            ['syncToken' => 4, 'added' => ['c3.vcf'], 'modified' => [], 'deleted' => []],
+            $this->backend->getChangesForAddressBook($this->bookId, 3, 1)
+        );
+    }
+
+    function testSyncTokenIsInvalidWhenAllItsChangesExpired() {
+        $this->writeCards(['c1.vcf', 'c2.vcf']);
+
+        $this->db->addressbookchanges->deleteMany([]);
+
+        $this->assertNull($this->backend->getChangesForAddressBook($this->bookId, 1, 1));
+    }
+
+    function testCurrentSyncTokenStaysValidWhenAllChangesExpired() {
+        $this->writeCards(['c1.vcf', 'c2.vcf']);
+
+        $this->db->addressbookchanges->deleteMany([]);
+
+        $this->assertEquals(
+            ['syncToken' => 3, 'added' => [], 'modified' => [], 'deleted' => []],
+            $this->backend->getChangesForAddressBook($this->bookId, 3, 1)
+        );
+    }
+
+    function testDeleteAddressBookDeletesItsChanges() {
+        $this->writeCards(['c1.vcf']);
+
+        $this->backend->deleteAddressBook($this->bookId);
+
+        $this->assertSame(0, $this->db->addressbookchanges->countDocuments(['addressbookid' => new \MongoDB\BSON\ObjectId($this->bookId)]));
+    }
+
+    private function writeCards(array $uris) {
+        array_map(fn ($uri) => $this->backend->createCard($this->bookId, $uri, $this->dummyCard), $uris);
+    }
+
     function testGetMultipleCardsQueriesByBatches() {
         $backend = $this->getBackend();
         // Just over one batch

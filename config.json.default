@@ -32,7 +32,9 @@
         "connectTimeoutMS": 10000
       }
     },
-    "schedulingObjectTTLInDays": 7
+    "schedulingObjectTTLInDays": 7,
+    "calendarChangesTTLInDays": 90,
+    "addressBookChangesTTLInDays": 90
   },
   "esn": {
     "apiRoot": "http://esn_host:8080",

@@ -45,10 +45,17 @@ for it. A missing value is treated as `true`.
 ### `calendarchanges`
 Audit log of creates/updates/deletes on calendar objects, used for WebDAV sync (RFC 6578).
 
-Key fields: `calendarid`, `uri`, `synctoken`, `operation`.
+Key fields: `calendarid`, `uri`, `synctoken`, `operation`, `date`.
 
 **Class:** `CalDAV\Backend\DAO\CalendarChangeDAO`  
-**Indexes:** `{ calendarid, synctoken }`
+**Indexes:** `{ calendarid, synctoken }`, TTL index on `{ date }` if `calendarChangesTTLInDays` > 0 (default `90`)
+
+The log keeps the changes of the last `calendarChangesTTLInDays` days only, so that it grows with the data kept
+rather than with every write ever made. Sync tokens are dense per calendar (each change is logged with the token it
+increments): when the oldest change kept is newer than the sync token of a client, or no change is kept at all,
+changes were pruned and a `sync-collection` REPORT answers `403` `DAV:valid-sync-token` (RFC 6578 section 3.2). The
+client then resyncs from scratch. `0` disables expiry. MongoDB refuses to change the `expireAfterSeconds` of an
+existing index: to change the setting, drop the `date_1` index first, or change it with `collMod`.
 
 ---
 
@@ -123,10 +130,11 @@ Empty emails sort before non-empty emails in ascending order, and after them in 
 ### `addressbookchanges`
 Audit log for CardDAV sync (same pattern as `calendarchanges`).
 
-Key fields: `addressbookid`, `synctoken`.
+Key fields: `addressbookid`, `synctoken`, `date`.
 
 **Class:** `CardDAV\Backend\Mongo`  
-**Indexes:** `{ addressbookid, synctoken }`
+**Indexes:** `{ addressbookid, synctoken }`, TTL index on `{ date }` if `addressBookChangesTTLInDays` > 0 (default `90`),
+with the same expiry and `valid-sync-token` behaviour as `calendarchanges`.
 
 ---
 

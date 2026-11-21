@@ -28,8 +28,10 @@ if (!$dbName) {
 $db = $client->{$dbName};
 
 $schedulingObjectTTLInDays = $dbConfig['schedulingObjectTTLInDays'] ?? 7;
-(new \ESN\CalDAV\Backend\Mongo($db, $schedulingObjectTTLInDays))->ensureIndexes();
-$carddavBackend = new \ESN\CardDAV\Backend\Mongo($db);
+$calendarChangesTTLInDays = $dbConfig['calendarChangesTTLInDays'] ?? 90;
+$addressBookChangesTTLInDays = $dbConfig['addressBookChangesTTLInDays'] ?? 90;
+(new \ESN\CalDAV\Backend\Mongo($db, $schedulingObjectTTLInDays, $calendarChangesTTLInDays))->ensureIndexes();
+$carddavBackend = new \ESN\CardDAV\Backend\Mongo($db, $addressBookChangesTTLInDays);
 $carddavBackend->ensureIndexes();
 
 echo "MongoDB indexes created on database " . $dbName . "\n";

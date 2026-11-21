@@ -55,10 +55,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         'uri' => 1
     ];
 
-    function __construct(\MongoDB\Database $db) {
+    private $addressBookChangesTTLInDays;
+
+    function __construct(\MongoDB\Database $db, $addressBookChangesTTLInDays = 0) {
         $this->db = $db;
         $this->eventEmitter = new EventEmitter();
         $this->CharAPI = new \ESN\Utils\CharAPI();
+        $this->addressBookChangesTTLInDays = $addressBookChangesTTLInDays;
     }
 
     function getEventEmitter() {
@@ -296,7 +299,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $this->deleteSubscriptions($addressBook['principaluri'], $addressBook['uri']);
 
         $collection = $this->db->selectCollection($this->addressBookChangesTableName);
-        $collection->deleteMany([ '_id' => $mongoId ]);
+        $collection->deleteMany([ 'addressbookid' => $mongoId ]);
     }
 
     private function buildAddressBookPath($principalUri, $addressBookUri) {
@@ -577,6 +580,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         ];
 
         if ($syncToken) {
+            if ($this->wereChangesPruned($addressBookId, (int) $syncToken, (int) $currentToken)) {
+                // Sabre answers 403 DAV:valid-sync-token: the client resyncs from scratch (RFC 6578 section 3.2)
+                return null;
+            }
+
             $collection = $this->db->selectCollection($this->addressBookChangesTableName);
             $query = [
                 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
@@ -629,6 +637,23 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             $result['added'] = $added;
         }
         return $result;
+    }
+
+    /**
+     * Sync tokens are dense per address book: each change is logged with the token it increments. The log being
+     * expired oldest first, changes since $syncToken were pruned when the oldest kept one is newer, or none is kept.
+     */
+    private function wereChangesPruned($addressBookId, int $syncToken, int $currentToken): bool {
+        if ($syncToken >= $currentToken) {
+            return false;
+        }
+
+        $oldest = $this->db->selectCollection($this->addressBookChangesTableName)->findOne(
+            [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ],
+            [ 'projection' => [ 'synctoken' => 1 ], 'sort' => [ 'synctoken' => 1 ] ]
+        );
+
+        return !$oldest || (int) $oldest['synctoken'] > $syncToken;
     }
 
     function getSubscriptionsForUser($principalUri) {
@@ -1281,7 +1306,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'uri' => $objectUri,
             'synctoken' => $res['synctoken'],
             'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
-            'operation' => $operation
+            'operation' => $operation,
+            'date' => new \MongoDB\BSON\UTCDateTime()
         ];
         $changecollection->insertOne($obj);
 
@@ -1331,6 +1357,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         // Fasten retrieval of changes in addressbooks
         $addressBookChangeCollection = $this->db->selectCollection($this->addressBookChangesTableName);
         $addressBookChangeCollection->createIndex(array('addressbookid' => 1, 'synctoken' => 1));
+        // Bounds the change log: a client holding a token older than the oldest kept change resyncs from scratch
+        if ($this->addressBookChangesTTLInDays > 0) {
+            $addressBookChangeCollection->createIndex(
+                array('date' => 1),
+                array('expireAfterSeconds' => $this->addressBookChangesTTLInDays * 86400)
+            );
+        }
 
         // Also serves the queries on 'addressbookid' alone
         $cardsCollection = $this->db->selectCollection($this->cardsTableName);

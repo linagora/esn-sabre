@@ -157,6 +157,95 @@ class MongoTest extends AbstractDatabaseTestBase {
         $this->assertEqualsCanonicalizing(['single.ics', 'legacy.ics', 'weekly.ics'], $backend->calendarQuery($calendarId, $filters));
     }
 
+    function testChangesAreDatedForTheirExpiry() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        $backend->createCalendarObject($calendarId, 'event.ics', $this->event('event', "DTSTART;VALUE=DATE:20120101\r\n"));
+
+        $change = $this->changes()->findOne(['uri' => 'event.ics']);
+
+        $this->assertInstanceOf(\MongoDB\BSON\UTCDateTime::class, $change['date']);
+        $this->assertEqualsWithDelta(time(), $change['date']->toDateTime()->getTimestamp(), 60);
+    }
+
+    function testChangesExpireAfterTheConfiguredTTL() {
+        $db = (new \MongoDB\Client(ESN_MONGO_SABREURI))->{ESN_MONGO_SABREDB};
+        $db->drop();
+
+        (new Mongo($db, 0, 90))->ensureIndexes();
+
+        $ttl = array_values(array_filter(
+            iterator_to_array($this->changes()->listIndexes()),
+            fn ($index) => $index->getKey() === ['date' => 1]
+        ));
+        $this->assertCount(1, $ttl);
+        $this->assertSame(90 * 86400, $ttl[0]['expireAfterSeconds']);
+    }
+
+    function testChangesDoNotExpireWithoutTTL() {
+        $db = (new \MongoDB\Client(ESN_MONGO_SABREURI))->{ESN_MONGO_SABREDB};
+        $db->drop();
+
+        (new Mongo($db))->ensureIndexes();
+
+        $keys = array_map(fn ($index) => $index->getKey(), iterator_to_array($this->changes()->listIndexes()));
+        $this->assertNotContains(['date' => 1], $keys);
+    }
+
+    function testSyncTokenOlderThanTheKeptChangesIsInvalid() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        $this->writeEvents($backend, $calendarId, ['e1.ics', 'e2.ics', 'e3.ics']);
+
+        // Expiry removed the changes of tokens 1 and 2
+        $this->changes()->deleteMany(['synctoken' => ['$lt' => 3]]);
+
+        $this->assertNull($backend->getChangesForCalendar($calendarId, 1, 1));
+        $this->assertNull($backend->getChangesForCalendar($calendarId, 2, 1));
+        $this->assertEquals(
+            ['syncToken' => 4, 'added' => ['e3.ics'], 'modified' => [], 'deleted' => []],
+            $backend->getChangesForCalendar($calendarId, 3, 1)
+        );
+        $this->assertEqualsCanonicalizing(
+            ['e1.ics', 'e2.ics', 'e3.ics'],
+            $backend->getChangesForCalendar($calendarId, null, 1)['added']
+        );
+    }
+
+    function testSyncTokenIsInvalidWhenAllItsChangesExpired() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        $this->writeEvents($backend, $calendarId, ['e1.ics', 'e2.ics']);
+
+        $this->changes()->deleteMany([]);
+
+        $this->assertNull($backend->getChangesForCalendar($calendarId, 1, 1));
+    }
+
+    function testCurrentSyncTokenStaysValidWhenAllChangesExpired() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        $this->writeEvents($backend, $calendarId, ['e1.ics', 'e2.ics']);
+
+        $this->changes()->deleteMany([]);
+
+        $this->assertEquals(
+            ['syncToken' => 3, 'added' => [], 'modified' => [], 'deleted' => []],
+            $backend->getChangesForCalendar($calendarId, 3, 1)
+        );
+    }
+
+    private function writeEvents($backend, $calendarId, array $uris) {
+        array_map(
+            fn ($uri) => $backend->createCalendarObject($calendarId, $uri, $this->event($uri, "DTSTART;VALUE=DATE:20120101\r\n")),
+            $uris
+        );
+    }
+
+    private function changes() {
+        return (new \MongoDB\Client(ESN_MONGO_SABREURI))->{ESN_MONGO_SABREDB}->calendarchanges;
+    }
+
     private function event($uid, $dates) {
         return "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:" . $uid . "\r\n" . $dates . "END:VEVENT\r\nEND:VCALENDAR\r\n";
     }

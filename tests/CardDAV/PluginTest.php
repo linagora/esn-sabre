@@ -80,9 +80,9 @@ class PluginTest extends PluginTestBase {
         ));
 
         $response = $this->request($request);
-        $jsonResponse = json_decode($response->getBodyAsString(), true);
 
         $this->assertEquals(403, $response->status);
+        $this->assertStringContainsString('<s:message>Only technical users</s:message>', $response->getBodyAsString());
     }
 
     function testGETAddressBookHomesWithTechnicalUser() {
@@ -1018,7 +1018,7 @@ class PluginTest extends PluginTestBase {
 
     private function assertDomainMembersGuardRefused($response) {
         $this->assertEquals(403, $response->status);
-        $this->assertStringContainsString('Only technical users can modify domain-members addressbook', $response->getBodyAsString());
+        $this->assertStringContainsString('<s:message>Only technical users can modify domain-members addressbook</s:message>', $response->getBodyAsString());
     }
 
     static function domainMembersPathVariants() {

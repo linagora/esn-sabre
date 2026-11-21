@@ -146,6 +146,18 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
         $this->assertTrue($this->emitCalendarObjectChange('PUT', 'team/team1.ics', false, $data));
     }
 
+    function testPutOfAMeetingWhoseOverrideHasABlankOrganizerIntoATeamCalendarIsRefused() {
+        $data = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
+            . "BEGIN:VEVENT\r\nUID:series\r\nDTSTART:20260101T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\n"
+            . "ORGANIZER:mailto:writer@example.com\r\nATTENDEE:mailto:other@example.com\r\nEND:VEVENT\r\n"
+            . "BEGIN:VEVENT\r\nUID:series\r\nRECURRENCE-ID:20260102T100000Z\r\nDTSTART:20260102T110000Z\r\n"
+            . "ORGANIZER:\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+        $this->expectForbidden('All VEVENT components must share the same ORGANIZER property.');
+
+        $this->emitCalendarObjectChange('PUT', 'team/new.ics', true, $data);
+    }
+
     private function expectForbidden(string $message): void {
         $this->expectException(Forbidden::class);
         $this->expectExceptionMessage($message);

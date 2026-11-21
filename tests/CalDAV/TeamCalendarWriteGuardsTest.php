@@ -146,6 +146,66 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
         $this->assertTrue($this->emitCalendarObjectChange('PUT', 'team/team1.ics', false, $data));
     }
 
+    public static function overrideOrganizersDifferingFromTheMaster(): array {
+        return [
+            'empty' => [''],
+            'spaces' => ['   '],
+            'trailing space' => ['mailto:writer@example.com '],
+            'leading space' => [' mailto:writer@example.com']
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('overrideOrganizersDifferingFromTheMaster')]
+    function testPutOfAMeetingWhoseOverrideHasABlankOrganizerIntoATeamCalendarIsRefused(string $organizer) {
+        $data = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
+            . "BEGIN:VEVENT\r\nUID:series\r\nDTSTART:20260101T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\n"
+            . "ORGANIZER:mailto:writer@example.com\r\nATTENDEE:mailto:other@example.com\r\nEND:VEVENT\r\n"
+            . "BEGIN:VEVENT\r\nUID:series\r\nRECURRENCE-ID:20260102T100000Z\r\nDTSTART:20260102T110000Z\r\n"
+            . "ORGANIZER:" . $organizer . "\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+        $this->expectForbidden('All VEVENT components must share the same ORGANIZER property.');
+
+        $this->emitCalendarObjectChange('PUT', 'team/new.ics', true, $data);
+    }
+
+    function testPutOfAMeetingWhoseOverrideHasNoOrganizerIntoATeamCalendarIsAccepted() {
+        $data = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
+            . "BEGIN:VEVENT\r\nUID:series\r\nDTSTART:20260101T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\n"
+            . "ORGANIZER:mailto:writer@example.com\r\nATTENDEE:mailto:other@example.com\r\nEND:VEVENT\r\n"
+            . "BEGIN:VEVENT\r\nUID:series\r\nRECURRENCE-ID:20260102T100000Z\r\nDTSTART:20260102T110000Z\r\n"
+            . "END:VEVENT\r\nEND:VCALENDAR\r\n";
+
+        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'team/new.ics', true, $data));
+    }
+
+    private function seriesWithOrganizers(string $master, string $override): string {
+        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"
+            . "BEGIN:VEVENT\r\nUID:series\r\nDTSTART:20260101T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\n"
+            . "ORGANIZER:" . $master . "\r\nEND:VEVENT\r\n"
+            . "BEGIN:VEVENT\r\nUID:series\r\nRECURRENCE-ID:20260102T100000Z\r\nDTSTART:20260102T110000Z\r\n"
+            . "ORGANIZER:" . $override . "\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('blankOrganizers')]
+    function testPutOfAnEventWhoseEveryOrganizerIsTheSameBlankIntoATeamCalendarIsAccepted(string $organizer) {
+        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'team/new.ics', true,
+            $this->seriesWithOrganizers($organizer, $organizer)));
+    }
+
+    function testPutOfAnEventMixingDifferentBlankOrganizersIntoATeamCalendarIsRefused() {
+        // The iTIP broker compares them untrimmed.
+        $this->expectForbidden('All VEVENT components must share the same ORGANIZER property.');
+
+        $this->emitCalendarObjectChange('PUT', 'team/new.ics', true, $this->seriesWithOrganizers('', '   '));
+    }
+
+    function testOrganizersAcceptedForATeamCalendarAreAcceptedByTheITipBroker() {
+        $data = $this->seriesWithOrganizers('mailto:writer@example.com', 'MAILTO:WRITER@example.com');
+
+        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'team/new.ics', true, $data));
+        $this->assertIsArray((new \Sabre\VObject\ITip\Broker())->parseEvent(Reader::read($data), 'mailto:writer@example.com'));
+    }
+
     private function expectForbidden(string $message): void {
         $this->expectException(Forbidden::class);
         $this->expectExceptionMessage($message);

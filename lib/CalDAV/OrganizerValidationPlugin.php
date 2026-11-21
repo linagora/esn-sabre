@@ -99,23 +99,29 @@ class OrganizerValidationPlugin extends ServerPlugin {
             return null;
         }
 
+        // Compared untrimmed, as the scheduling plugin and the iTIP broker
+        // compare them: a blank ORGANIZER next to a named one, or a value that
+        // only differs by surrounding spaces, is a different value.
         if (count(array_unique($organizerValues)) > 1) {
             throw new Forbidden('All VEVENT components must share the same ORGANIZER property.');
         }
 
-        return reset($organizerValues);
+        // Only blank ORGANIZERs: nobody is named.
+        $organizer = trim(reset($organizerValues));
+
+        return $organizer === '' ? null : $organizer;
     }
 
     private function collectOrganizerValues(array $vevents): array {
         $organizerValues = [];
         foreach ($vevents as $vevent) {
-            // A blank ORGANIZER names nobody: handle it as a missing one.
+            // A blank ORGANIZER names nobody: an ATTENDEE needs a real one.
             $organizer = isset($vevent->ORGANIZER) ? trim((string) $vevent->ORGANIZER) : '';
             if (isset($vevent->ATTENDEE) && $organizer === '') {
                 throw new Forbidden('A VEVENT with ATTENDEE properties must also have an ORGANIZER.');
             }
-            if ($organizer !== '') {
-                $organizerValues[] = strtolower($organizer);
+            if (isset($vevent->ORGANIZER)) {
+                $organizerValues[] = strtolower((string) $vevent->ORGANIZER);
             }
         }
         return $organizerValues;

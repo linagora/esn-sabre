@@ -378,7 +378,7 @@ A dav:addressbook object, with an additional member "id" which specifies the id 
 **Status Codes:**
 
 - 201 Created: New address book has been created
-- 400 Bad Request: Missing keys in the request object
+- 400 Bad Request: Missing keys in the request object, or `dav:name`, `carddav:description`, `type` or `state` is not a string
 
 
 ## GET /addressbooks/{addressbookHomeId}/{addressbookId}.json

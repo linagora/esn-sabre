@@ -356,6 +356,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
             $jsonData = json_decode($request->getBodyAsString());
+            $this->assertTextProperties($jsonData, ['dav:name', 'carddav:description', 'type', 'state']);
             $issetdef = $this->propertyOrDefault($jsonData);
 
             if ($issetdef('openpaas:source')) {
@@ -637,6 +638,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $propnameMap['state'] = '{http://open-paas.org/contacts}state';
         }
 
+        $this->assertTextProperties($jsonData, array_keys($propnameMap));
+
         $davProps = [];
         foreach ($jsonData as $jsonProp => $value) {
             if (isset($propnameMap[$jsonProp])) {
@@ -647,6 +650,20 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $result = $this->server->updateProperties($nodePath, $davProps);
 
         return [$this->statusCodeFromUpdateResult($result), null];
+    }
+
+    /**
+     * These address book properties are stored as given: any other value than a string, e.g. an array, would make the
+     * XML serialization of every PROPFIND listing the address book fail.
+     *
+     * @throws BadRequest when one of the given properties is set to neither a string nor null
+     */
+    private function assertTextProperties($jsonData, array $names): void {
+        foreach ($names as $name) {
+            if (isset($jsonData->{$name}) && !is_string($jsonData->{$name})) {
+                throw new BadRequest($name . ' must be a string');
+            }
+        }
     }
 
     private function statusCodeFromUpdateResult($result): int {

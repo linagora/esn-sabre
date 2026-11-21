@@ -161,7 +161,18 @@ class PluginTest extends PluginTestBase {
             'no body' => [''],
             'malformed JSON' => ['{x'],
             'JSON array' => ['["dav:name"]'],
+            'array name' => ['{"dav:name":["x"]}'],
+            'object description' => ['{"carddav:description":{"a":1}}'],
+            'numeric name' => ['{"dav:name":1}'],
         ];
+    }
+
+    function testJsonPropPatchWithArrayNameDoesNotStoreIt() {
+        $displayName = $this->getAddressBookByUri('book1')['{DAV:}displayname'];
+
+        $this->jsonRequestOnBook1('PROPPATCH', '{"dav:name":["x"]}');
+
+        $this->assertSame($displayName, $this->getAddressBookByUri('book1')['{DAV:}displayname']);
     }
 
     private function jsonRequestOnBook1(string $method, string $body) {
@@ -846,6 +857,31 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals(new \MongoDB\Model\BSONArray(['dav:read']), $createdAddressBook['{DAV:}acl']);
         $this->assertEquals('social', $createdAddressBook['{http://open-paas.org/contacts}type']);
         $this->assertEquals('enabled', $createdAddressBook['{http://open-paas.org/contacts}state']);
+    }
+
+    #[DataProvider('nonStringAddressBookProperties')]
+    function testCreateAddressBookWithNonStringPropertyIsBadRequest(array $properties) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json',
+        ));
+
+        $request->setBody(json_encode(['id' => 'ID'] + $properties));
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount(3, $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']));
+    }
+
+    static function nonStringAddressBookProperties(): array {
+        return [
+            'array name' => [['dav:name' => ['x']]],
+            'object description' => [['carddav:description' => ['a' => 1]]],
+            'array type' => [['type' => ['user']]],
+            'numeric state' => [['state' => 1]],
+        ];
     }
 
     function testCreateAddressBookMissingId() {

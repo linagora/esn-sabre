@@ -622,6 +622,13 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals($cards[0]->data[1][0][3], 'b');
     }
 
+    function testGetContactsOffsetAcceptsIdSort() {
+        $response = $this->makeRequest('GET', '/addressbooks/' . $this->userTestId1 . '/book1.json?limit=2&offset=1&sort=_id');
+
+        $this->assertSame(200, $response->status);
+        $this->assertCount(2, json_decode($response->getBodyAsString())->{'_embedded'}->{'dav:item'});
+    }
+
     #[DataProvider('invalidOffsetPaginationParameters')]
     function testGetContactsRejectsInvalidOffsetPaginationParameters(string $query, string $expectedMessage) {
         $response = $this->makeRequest('GET', '/addressbooks/' . $this->userTestId1 . '/book1.json?' . $query);
@@ -636,7 +643,10 @@ class PluginTest extends PluginTestBase {
             'non-numeric offset' => ['limit=5&offset=abc', 'offset must be a non-negative integer'],
             'non-numeric limit' => ['limit=abc&offset=0', 'limit must be a non-negative integer'],
             'negative limit' => ['limit=-5&offset=0', 'limit must be a non-negative integer'],
-            'offset array' => ['limit=5&offset[]=1', 'offset must be a non-negative integer']
+            'offset array' => ['limit=5&offset[]=1', 'offset must be a non-negative integer'],
+            'unknown sort' => ['limit=5&offset=0&sort=tel', 'sort must be fn, email or _id'],
+            'unknown sort without offset' => ['sort=carddata', 'sort must be fn, email or _id'],
+            'sort array' => ['limit=5&offset=0&sort[]=fn', 'sort must be fn, email or _id']
         ];
     }
 

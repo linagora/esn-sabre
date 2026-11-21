@@ -95,9 +95,12 @@ class OrganizerValidationPlugin extends ServerPlugin {
     private function extractOrganizerUri(array $vevents): ?string {
         $organizerValues = $this->collectOrganizerValues($vevents);
 
-        if (empty($organizerValues)) {
+        // Only blank ORGANIZERs name nobody: handle them as missing ones.
+        if (empty(array_filter($organizerValues, fn(string $organizer) => $organizer !== ''))) {
             return null;
         }
+
+        // A blank ORGANIZER next to a non-blank one differs from it, as the scheduling plugin sees it.
 
         if (count(array_unique($organizerValues)) > 1) {
             throw new Forbidden('All VEVENT components must share the same ORGANIZER property.');
@@ -106,15 +109,18 @@ class OrganizerValidationPlugin extends ServerPlugin {
         return reset($organizerValues);
     }
 
+    /**
+     * Returns the ORGANIZER of every VEVENT that has one, blank ones included.
+     */
     private function collectOrganizerValues(array $vevents): array {
         $organizerValues = [];
         foreach ($vevents as $vevent) {
-            // A blank ORGANIZER names nobody: handle it as a missing one.
+            // A blank ORGANIZER names nobody: handle it as a missing one for the ATTENDEE rule.
             $organizer = isset($vevent->ORGANIZER) ? trim((string) $vevent->ORGANIZER) : '';
             if (isset($vevent->ATTENDEE) && $organizer === '') {
                 throw new Forbidden('A VEVENT with ATTENDEE properties must also have an ORGANIZER.');
             }
-            if ($organizer !== '') {
+            if (isset($vevent->ORGANIZER)) {
                 $organizerValues[] = strtolower($organizer);
             }
         }

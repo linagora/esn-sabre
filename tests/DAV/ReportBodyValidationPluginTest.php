@@ -233,6 +233,41 @@ class ReportBodyValidationPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(400, $server->httpResponse->getStatus());
     }
 
+    static function emptyPropBodies(): array {
+        $set = '<D:prop></D:prop><D:set><D:prop></D:prop></D:set>';
+        $mkcalendar = '<C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">' . $set . '</C:mkcalendar>';
+
+        return [
+            'PROPPATCH' => ['PROPPATCH', '<D:propertyupdate xmlns:D="DAV:">' . $set . '</D:propertyupdate>'],
+            'MKCOL' => ['MKCOL', '<D:mkcol xmlns:D="DAV:">' . $set . '</D:mkcol>'],
+            'MKCALENDAR' => ['MKCALENDAR', $mkcalendar],
+            'PROPFIND with a mkcol root' => ['PROPFIND', '<D:mkcol xmlns:D="DAV:">' . $set . '</D:mkcol>'],
+            'PROPFIND with a multistatus root' => ['PROPFIND', '<D:multistatus xmlns:D="DAV:"><D:prop></D:prop><D:prop></D:prop></D:multistatus>'],
+            'PROPFIND with a mkcalendar root' => ['PROPFIND', $mkcalendar],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('emptyPropBodies')]
+    function testWellFormedBodyWithEmptyPropTerminates($method, $body) {
+        // Sabre's {DAV:}prop deserialiser looped forever on these bodies.
+        set_time_limit(5);
+        $response = $this->request($method, $body, ['Depth' => '0']);
+        set_time_limit(0);
+
+        // A 4xx, or 501 for MKCALENDAR on this server without CalDAV.
+        $this->assertNotEquals(500, $response->getStatus());
+    }
+
+    function testEmptyPropWithEndTagDeserialisesAsEmpty() {
+        $server = $this->prepareServer();
+
+        $result = $server->xml->expect('{DAV:}propertyupdate',
+            '<D:propertyupdate xmlns:D="DAV:"><D:set><D:prop></D:prop></D:set>'
+            . '<D:set><D:prop><D:displayname>x</D:displayname></D:prop></D:set></D:propertyupdate>');
+
+        $this->assertSame(['{DAV:}displayname' => 'x'], $result->properties);
+    }
+
     function testWellFormedPropfindBodyShouldStillBeHandled() {
         $response = $this->request('PROPFIND', '<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:propfind>', ['Depth' => '0']);
 

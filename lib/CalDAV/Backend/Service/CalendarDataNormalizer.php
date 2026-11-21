@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV\Backend\Service;
 
+use ESN\CalDAV\RecurrenceExpansionLimit;
 use ESN\Utils\Utils;
 use ESN\Utils\VObjectCache;
 use \Sabre\DAV\Exception\BadRequest;
@@ -20,6 +21,14 @@ use \Sabre\VObject\Property\ICalendar\DateTime as DateTimeProperty;
  */
 class CalendarDataNormalizer {
     const MAX_DATE = '2038-01-01';
+
+    /**
+     * Instances walked at most to find the end of a series, whatever
+     * Settings::$maxRecurrences says: a negative SABRE_MAX_RECURRENCES lifts
+     * the iterator's cap, and a dense series (e.g. hourly from year 1015)
+     * would otherwise be walked instance by instance up to MAX_DATE.
+     */
+    const WALK_BUDGET = RecurrenceExpansionLimit::DEFAULT_LIMIT;
 
     /** @var VObjectCache */
     private $vObjectCache;
@@ -331,8 +340,8 @@ class CalendarDataNormalizer {
      *   (RFC 5545 3.3.10), and each one lasts as long as the master (EXDATE
      *   only removes instances). A day is added when UNTIL is a DATE or the
      *   times are floating or all-day, whose reading depends on a time zone.
-     * - COUNT above Settings::$maxRecurrences: the walk would give up at the
-     *   cap and fall back to MAX_DATE anyway.
+     * - COUNT above Settings::$maxRecurrences or WALK_BUDGET: the walk would
+     *   give up and fall back to MAX_DATE anyway.
      *
      * @param VObject\Component $component
      * @param VObject\Recur\EventIterator $it rewound on the first instance
@@ -349,8 +358,7 @@ class CalendarDataNormalizer {
         $parts = array_change_key_case($component->RRULE->getParts(), CASE_UPPER);
 
         if (isset($parts['COUNT'])) {
-            $cap = VObject\Settings::$maxRecurrences;
-            return $cap !== -1 && (int) $parts['COUNT'] > $cap ? $maxDate->getTimeStamp() : null;
+            return (int) $parts['COUNT'] > $this->walkLimit() ? $maxDate->getTimeStamp() : null;
         }
 
         if (!isset($parts['UNTIL']) || !is_string($parts['UNTIL'])) {
@@ -371,10 +379,23 @@ class CalendarDataNormalizer {
     }
 
     /**
+     * The number of instances a walk may visit before giving up.
+     *
+     * @return int
+     */
+    private function walkLimit() {
+        $cap = VObject\Settings::$maxRecurrences;
+
+        return $cap === RecurrenceExpansionLimit::UNLIMITED ? self::WALK_BUDGET : min($cap, self::WALK_BUDGET);
+    }
+
+    /**
      * Find the last recurrence date by iterating through occurrences
      *
      * Each instance contributes the later of its start and end, so that a
-     * negative duration cannot hide the instances themselves.
+     * negative duration cannot hide the instances themselves. Past
+     * WALK_BUDGET instances the walk gives up on MAX_DATE, which a window
+     * (a hull, see recurrenceRuleBound) may always end at.
      *
      * @param VObject\Recur\EventIterator $it
      * @param \DateTime $maxDate
@@ -382,8 +403,12 @@ class CalendarDataNormalizer {
      */
     private function findLastRecurrenceDate($it, $maxDate) {
         $end = max($it->getDtStart(), $it->getDtEnd());
+        $steps = 0;
 
         while($it->valid() && $end < $maxDate) {
+            if ($steps++ >= self::WALK_BUDGET) {
+                return $maxDate->getTimeStamp();
+            }
             $end = max($end, $it->getDtStart(), $it->getDtEnd());
             $it->next();
         }

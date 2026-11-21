@@ -271,6 +271,70 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     /**
+     * Sabre's calendar-multiget leaves an href that names no object out of the
+     * multistatus (Server::getPropertiesForMultiplePaths skips it), while RFC
+     * 4791 section 7.9 wants a 404 response for it: without one, a client
+     * cannot tell a deleted object from an answer that was dropped.
+     *
+     * The stock report is kept; the entries it hands to the multistatus are
+     * captured and, when an href is missing among them, the multistatus is
+     * written again with a 404 response for each missing href.
+     *
+     * @param \Sabre\CalDAV\Xml\Request\CalendarMultiGetReport $report
+     * @return void
+     */
+    function calendarMultiGetReport($report) {
+        $entries = [];
+        $capture = function (&$fileProperties) use (&$entries) {
+            $entries = $fileProperties;
+        };
+
+        $this->server->on('beforeMultiStatus', $capture, 1000);
+        try {
+            parent::calendarMultiGetReport($report);
+        } finally {
+            $this->server->removeListener('beforeMultiStatus', $capture);
+        }
+
+        $found = [];
+        foreach ($entries as $entry) {
+            $found[trim($entry['href'], '/')] = true;
+        }
+
+        $missingPaths = [];
+        foreach ($report->hrefs as $href) {
+            $path = trim($this->server->calculateUri($href), '/');
+            if (!isset($found[$path])) {
+                $missingPaths[$path] = $path;
+            }
+        }
+
+        if (!$missingPaths) {
+            return;
+        }
+
+        $prefer = $this->server->getHTTPPrefer();
+        $responses = [];
+        foreach ($entries as $entry) {
+            $href = $entry['href'];
+            unset($entry['href']);
+            if ('minimal' === $prefer['return']) {
+                unset($entry[404]);
+            }
+            $responses[] = new \Sabre\DAV\Xml\Element\Response(ltrim($href, '/'), $entry);
+        }
+        foreach ($missingPaths as $path) {
+            $responses[] = new \Sabre\DAV\Xml\Element\Response($path, [], 404);
+        }
+
+        $this->server->httpResponse->setBody($this->server->xml->write(
+            '{DAV:}multistatus',
+            new \Sabre\DAV\Xml\Response\MultiStatus($responses),
+            $this->server->getBaseUri()
+        ));
+    }
+
+    /**
      * Handles the free-busy-query REPORT without reading the busy events one
      * at a time, see {@see FreeBusyQueryReport}.
      *

@@ -42,6 +42,7 @@ class InlinePhotoPluginTest extends TestCase {
                 "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nPHOTO:data:image/jpeg;base64,dGVzdA==\r\nEND:VCARD\r\n"
             ],
             'vCard 3.0 VALUE=URI data: URI' => [self::vcard('PHOTO;VALUE=URI:data:image/jpeg;base64,dGVzdA==')],
+            'vCard 3.0 data: URI without VALUE' => [self::vcard('PHOTO:data:image/png;base64,iVBORw0KGgo=')],
             'uppercase DATA: URI' => [
                 "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nPHOTO:DATA:image/jpeg;base64,dGVzdA==\r\nEND:VCARD\r\n"
             ],

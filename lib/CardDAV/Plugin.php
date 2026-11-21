@@ -133,7 +133,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         // Only technical users can modify domain-members addressbook
         if ($this->authTenant?->tenantType !== TenantType::Technical)
-            throw new Forbidden('Only technical users can modify domain-members addressbook'.json_encode($this->authTenant));
+            throw new Forbidden('Only technical users can modify domain-members addressbook');
     }
 
     private function isDomainMembersPath($path): bool {
@@ -207,7 +207,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
     private function listAddressBookHomes($node): array {
         if ($this->authTenant?->tenantType !== TenantType::Technical)
-            throw new Forbidden('Only technical users'.json_encode($this->authTenant));
+            throw new Forbidden('Only technical users');
 
         $children = [];
 

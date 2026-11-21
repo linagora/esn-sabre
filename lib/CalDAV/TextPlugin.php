@@ -104,22 +104,25 @@ class TextPlugin extends \ESN\JSON\BasePlugin {
             return "";
         }
 
-        $allVcal = [];
-        $baseUri = $this->server->getBaseUri();
+        $calendarData = [];
         $props = [ '{' . self::NS_CALDAV . '}calendar-data', '{DAV:}getetag' ];
 
         foreach ($paths as $path) {
             list($properties) = $this->server->getPropertiesForPath($parentNodePath . '/' . $path, $props);
 
-            $allVcal[] = VObject\Reader::read($properties[200]['{' . self::NS_CALDAV . '}calendar-data']);
+            $calendarData[] = $properties[200]['{' . self::NS_CALDAV . '}calendar-data'];
         }
 
-        $vcal = array_shift($allVcal);
-    
-        foreach($allVcal as $cal) {
-            foreach($cal->VEVENT as $vevent) {
-                $vcal->add($vevent);
-            }
+        // The components are merged as by the ICS export, which keeps the
+        // VTIMEZONEs the objects use, each definition of a TZID under a TZID
+        // of its own; the properties of the first object's VCALENDAR are kept.
+        $merged = (new ICSExportPlugin())->mergeObjects([], $calendarData);
+        $vcal = VObject\Reader::read($calendarData[0]);
+        foreach ($vcal->getComponents() as $component) {
+            $vcal->remove($component);
+        }
+        foreach ($merged->getComponents() as $component) {
+            $vcal->add($component);
         }
 
         return $vcal->serialize();

@@ -26,6 +26,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
  - Add the missing MongoDB indexes: `calendarinstances { calendarid, share_href }` (the sharees and public right lookups of a calendar were collection scans), `sharedaddressbooks { addressbookid, share_href }` and `{ principaluri }`, `addressbooksubscriptions { principaluri }` and `{ source }`. Drop the redundant `calendarobjects { calendarid }` and `cards { addressbookid }`, covered by the `{ calendarid, uri }` and `{ addressbookid, uri }` indexes.
 
    Upgrade: the new indexes are created at startup. To drop the redundant ones, or if index creation fails at startup, run the `mongosh` script from [doc/storage/MONGO.md](doc/storage/MONGO.md#index-creation).
+ - Real-time notifications convert each shared event to jCal once per write instead of once per message, which speeds up writes on events with many attendees or subscribers (#860)
+ - A VALARM time-range `calendar-query` no longer evaluates every past instance of a long-running recurring event, only those whose reminders can fall in the range (#861)
+ - Saving a recurring event bounded by an `UNTIL` no longer walks all its instances to store its time window, which for a long series also hit the recurrence limit and logged an error (#862, #863)
+ - The calendar ICS export resolves a time zone definition only when its text has not been seen yet in the export, which speeds up the export of large calendars (#864)
 
 ### Changes
 
@@ -47,6 +51,87 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
  - A JSON calendar ACL request whose `public_right` is not a string (e.g. `[]` or `{}`) is answered `400` instead of `500` (#816)
  - A team calendar event with a blank or falsy `ORGANIZER` (empty, `0`) is now refused when it has attendees, instead of being accepted and sending invitations with an empty organizer (#817)
  - An ACL request whose ACE principal `<D:href>` is falsy (e.g. `0`) is answered `400` instead of `500` (#818)
+ - The single event JSON REPORT answers `422` with the parser message instead of `500` when a stored recurrence rule cannot be expanded, e.g. an RRULE with `WKST=2` delivered through iTIP (#873)
+ - A browser or proxy cache no longer serves the vCard or iCalendar text for a jCard or jCal request on the same card or event: responses now `Vary` on `Accept`, jCard and jCal carry their own `ETag`, and `If-None-Match` is evaluated against it (#854)
+ - Saving a recurring event bounded by a `COUNT` no longer holds the request for tens of seconds or more when `SABRE_MAX_RECURRENCES` is negative: the computation of its stored time window is now bounded
+
+### Security
+
+ - Fix users enumerating the event UIDs stored in someone else's calendars through the JSON REPORT on a calendar home: the `uid` must now be a non-empty string (`400` otherwise), and an event the user cannot read answers `404` like a missing one (#821)
+ - Fix a team calendar member taking over another member's personal event: an organizer handover is no longer accepted from a copy of the event in a team calendar that reuses its UID (#819)
+ - Stop serving the source of a calendar subscription to a subscriber who can no longer read it: a sharee whose share was revoked or declined, or a former team calendar member, no longer reads the source through an existing subscription (GET, calendar-query, multiget, sync-collection, JSON REPORT) (#820, #824, #825)
+ - Fix a small well-formed XML body with an empty `<D:prop></D:prop>` (PROPPATCH, MKCOL, ...) holding a PHP worker forever
+
+## [2.5.0.6] - 2026-11-19
+
+### New Features
+
+ - ISSUE-483 Authenticate with Kerberos (#829)
+
+### Performance
+
+ - Scheduling resolves the e-mail addresses of all the recipients of an operation together instead of one lookup per address (#851)
+
+### Bug Fixes
+
+ - The technical user used by the side service (resource participation, auto-accept, exports, reindexing) now reads PRIVATE and CONFIDENTIAL events in full instead of sanitized "Busy" events, so resource attendees are no longer missing and exports and the search index hold the real events (#853)
+ - Answer 400 instead of 500 to a JSON PROPFIND or PROPPATCH on an address book with a missing or invalid body (#855)
+
+### Security
+
+ - The PHP-FPM status page (`/status`, `/ping`) is now only enabled in development by default, so it is no longer answered anonymously on the public port 80, where it exposed the URI and user of every request under way across tenants (#856)
+
+## [2.5.0.5] - 2026-11-18
+
+### New Features
+
+ - ISSUE-844 The PHP-FPM pool logs slow requests to the container log (`executing too slow`, by default after `PHP_FPM_SLOWLOG_TIMEOUT=5s`; `off` disables it). The backtrace and the `slow requests` counter need the `SYS_PTRACE` capability. A dedicated pool serves the FPM `/status` and `/ping` pages, so they still answer when every worker is busy. Nginx serves them on `PHP_FPM_STATUS_LISTEN` (default `127.0.0.1:8081`, never port 80). See [doc/CONFIGURE.md](doc/CONFIGURE.md#php-fpm-slow-log-and-status-page) (#844)
+ - ISSUE-437 Expose video conference links through the standard RFC 7986 `CONFERENCE` property — events carrying `X-OPENPAAS-VIDEOCONFERENCE` are decorated upon `PUT` (and upon iTIP delivery) so that external clients (Apple Calendar, iOS, Outlook, ...) display a join button. `X-OPENPAAS-VIDEOCONFERENCE` is kept for Twake clients, and is conversely derived from the `CONFERENCE` property of events created by external clients (#437)
+ - Every runtime setting can now be configured from `config.json` instead of the process environment. The `environment` section of `config.json` takes precedence, the process environment is still honoured as a fallback, and the built-in default applies last, so existing deployments keep working untouched. `scripts/generate_config.sh` materializes the whole section, `config.json.default` lists every key with its default value, and [doc/CONFIGURE.md](doc/CONFIGURE.md) documents all of them.
+ - Nginx rate limiting: `X-Forwarded-For` is trusted by default to key the limit on the client IP; `NGINX_TRUSTED_PROXIES` can restrict which peers may supply it, `NGINX_TRUSTED_CLIENTS_CIDR` exempts trusted clients such as the Twake Calendar side service, `NGINX_RATE_LIMIT=off` disables rate limiting, and `NGINX_RATE_LIMIT_STATUS` sets the rejection status. Invalid values stop the container at startup. See [doc/CONFIGURE.md](doc/CONFIGURE.md#nginx-rate-limiting)
+ - ISSUE-536 The recurrence expansion limit is configurable through `SABRE_MAX_RECURRENCES` (default `3500`, negative disables it), so that long-running recurring series still return their occurrences in recent time ranges. See [doc/CONFIGURE.md](doc/CONFIGURE.md#recurrence-expansion) (#536)
+ - ISSUE-425 Auto-provision users upon a DAV request — when an LDAP or impersonated user authenticates successfully but has no entry in the `users` collection yet, the entry is created on the fly (following the twake-calendar-side-service document format) instead of returning a `401`. Gated by the `AUTO_PROVISION` env var (default `true`). Needed upon migrations (#425)
+
+### Performance
+
+ - ISSUE-869 The scheduling inbox items (`schedulingobjects`, a full copy of the event per invitation and meeting update received) now expire after 7 days instead of 56 by default (`database.schedulingObjectTTLInDays`), an estimated 10% of the MongoDB data. Startup applies a changed TTL to the existing index with `collMod`, instead of failing on `IndexOptionsConflict`. Add the missing `schedulingobjects { principaluri, uri }` index: the inbox item lookups and deletions were collection scans (#869)
+ - ISSUE-842 A request on one event no longer reads it from MongoDB once per `nodeExists` check (ACL check, `PUT` create-or-update choice, every realtime message): the existence check now resolves the node through the tree cache. A `GET` of an event goes from 2 `calendarobjects` reads down to 1, a `PUT` update from 4 down to 1 (#842)
+ - Listing a calendar (PROPFIND `Depth: 1`, `sync-collection`, `calendar-multiget`) no longer reads the calendar sharing state from MongoDB once per event: the child ACL is computed once per listing. On a 3000 event calendar, a PROPFIND `Depth: 1` goes from 21014 MongoDB commands (~5 s) down to 21 (~50 ms).
+ - Same for address books: listing the cards of an address book no longer reads its public right and sharees once per card, and checking that a card exists no longer computes its ACL. On a 3000 card address book, a PROPFIND `Depth: 1` goes from 6018 MongoDB commands down to 20, an `addressbook-multiget` of 500 cards from 2508 down to 510.
+ - The read access check of `calendar-multiget` and `addressbook-multiget` REPORTs looks up the requested hrefs in one query per collection instead of one query per href. A `calendar-multiget` of 500 events goes from 4004 MongoDB commands (~1 s) down to 20 (~60 ms), an `addressbook-multiget` of 500 cards down to 14.
+ - Multi-get lookups of calendar objects and cards query at most 512 URIs at a time, so that a request carrying thousands of hrefs does not turn into a single query that could hit the database timeout.
+ - MongoDB indexes are created once when the container starts (`scripts/create-indexes.php`) instead of on every HTTP request, which sent 14 `createIndexes` commands per request. The `SHOULD_CREATE_INDEX` setting is removed.
+ - Add the missing MongoDB indexes: `calendarinstances { calendarid, share_href }` (the sharees and public right lookups of a calendar were collection scans), `sharedaddressbooks { addressbookid, share_href }` and `{ principaluri }`, `addressbooksubscriptions { principaluri }` and `{ source }`. Drop the redundant `calendarobjects { calendarid }` and `cards { addressbookid }`, covered by the `{ calendarid, uri }` and `{ addressbookid, uri }` indexes.
+
+   Upgrade: the new indexes are created at startup. To drop the redundant ones, or if index creation fails at startup, run the `mongosh` script from [doc/storage/MONGO.md](doc/storage/MONGO.md#index-creation).
+ - Resolving a user principal no longer reads every user of the domain to list the members of its group principals, which nothing used (#836)
+ - ISSUE-837 A time-range `calendar-query` with a start and an end no longer parses every row: single events (no `RRULE` nor `RDATE`) are answered from the stored occurrence window, and only recurring events are filtered further (#840)
+ - ISSUE-835 The default address books and calendar of a user are provisioned once per principal (remembered for an hour in APCu) instead of listing the user's address books and calendars on every authenticated request (#841)
+ - ISSUE-843 A free-busy query (`REPORT free-busy-query`) reads the events of the calendar with the time-range query instead of one MongoDB read per busy event (#846)
+ - Looking up users by e-mail address uses the `accounts.emails` index, falling back to the case-insensitive search only when nothing matches exactly (#848)
+
+### Changes
+
+ - **Behaviour change**: MongoDB index creation at container startup is retried (`MONGO_INDEX_CREATION_ATTEMPTS`, default `30`, every `MONGO_INDEX_CREATION_RETRY_DELAY` seconds, default `2`) and the container refuses to start when it still fails, instead of starting silently without any index, where every query is a collection scan. Set `MONGO_INDEX_CREATION_REQUIRED=false` to start anyway (with an `ERROR` log). See [doc/storage/MONGO.md](doc/storage/MONGO.md#index-creation) (#834)
+ - **Behaviour change**: an LDAP infrastructure failure during Basic authentication (server down or unreachable, timeout, server busy/unavailable, service account bind failure, failing search) is now answered `503 Service Unavailable` instead of `401`, so that an outage is no longer mistaken for bad credentials. Only an answer of the directory about the credentials keeps returning `401`. LDAP operations now time out after `LDAP_TIMEOUT` seconds (default `5`) instead of hanging
+ - **Behaviour change**: requests rejected by the Nginx rate limit are now answered `429 Too Many Requests` with `Retry-After: 1` and the CORS headers, instead of `503 Service Unavailable`. Clients and monitoring that treat 503 as a rate-limit signal must be updated, or set `NGINX_RATE_LIMIT_STATUS=503` to keep the previous status
+
+### Bug Fixes
+
+ - The bulk free/busy route (`POST /calendars/freebusy`) accepts an optional `timezone` (IANA identifier, `400` when unknown) in which floating dates and times are read. All-day events used to be reported busy from UTC midnight to UTC midnight, so that a booking page offered the first hours of a Paris owner's day off (linagora/twake-calendar-side-service#1200). Without `timezone`, UTC is used as before
+ - Sharees (read, read-write, administration) can read the owner's calendar again (`calendarserver:delegatedsource`, e.g. `REPORT /calendars/{ownerId}/{calendarId}.json`): since #411 enforces `{DAV:}read` on JSON REPORTs, they got `403`. The owner's calendar and its events now grant `{DAV:}read`, and only read, to these sharees. PRIVATE / CONFIDENTIAL events stay anonymized for them. Free-busy sharees, declined and revoked shares and other users still get `403`
+ - Deleting a calendar now deletes its events. They were left behind in `calendarobjects` because the deletion filtered on an `ObjectId` while the calendar id is stored as a string there. Existing orphans can be listed with `db.calendarobjects.aggregate([{ $lookup: { from: "calendars", let: { id: "$calendarid" }, pipeline: [{ $match: { $expr: { $eq: [{ $toString: "$_id" }, "$$id"] } } }], as: "c" } }, { $match: { c: [] } }, { $count: "orphans" }])`.
+ - ISSUE-699 Expanding a single event over a time range (`REPORT` with `match.start` / `match.end` on an event) is answered `422` instead of `500` when the series generates more occurrences than `SABRE_MAX_RECURRENCES` before reaching the range, e.g. an open-ended daily event that started more than ten years before (#699)
+ - ISSUE-404 Fix duplicated `DAV`/`X-Sabre-Version` headers in DAV responses — the nginx capability headers are now only emitted for the OPTIONS short-circuit, letting Sabre emit them once (with consistent casing) for proxied responses (#404)
+ - ISSUE-800 ACL, MKCOL, MKCALENDAR and XML POST requests whose body holds a `<D:principal>` with an empty or blank `<D:href>` are answered `400` instead of `500` (#803)
+ - ISSUE-801 Tighten the attendee-change guard on scheduling: an attendee can no longer move every occurrence of an event by rewriting only the `VTIMEZONE` definition (`X-LIC-LOCATION` or its observances) behind a `TZID`; the resolved start and end instants are now compared (#802)
+ - ISSUE-799 A new answer of a participant whose stored e-mail address contains upper-case letters is now propagated to the future overrides of the series (#804)
+ - ISSUE-807 Updating a calendar object without any `VEVENT` (e.g. a task) no longer fails with a `500` (#808)
+ - A JSON calendar ACL request whose `public_right` is not a string (e.g. `[]` or `{}`) is answered `400` instead of `500` (#816)
+ - A team calendar event with a blank or falsy `ORGANIZER` (empty, `0`) is now refused when it has attendees, instead of being accepted and sending invitations with an empty organizer (#817)
+ - An ACL request whose ACE principal `<D:href>` is falsy (e.g. `0`) is answered `400` instead of `500` (#818)
+ - ISSUE-763 PROPFIND and PROPPATCH requests whose well-formed XML body misses an element or attribute (empty `propertyupdate`, `comp-filter` without name, `CS:share` without `href`, text `supported-calendar-component-set`) are answered `400` instead of `500` (#832)
+ - ISSUE-831 A resource named `.` or `..` (once percent-decoded, e.g. `PUT .../book/%2E`) is refused: such a card was listed back as `.../book/.`, which clients resolve to the address book itself, so deleting it deleted the whole address book (#833)
 
 ### Security
 

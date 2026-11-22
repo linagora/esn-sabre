@@ -1030,6 +1030,39 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         }
     }
 
+    static function localPartAmpersandLogins() {
+        return [
+            'impersonation enabled' => ['r&d@example.com', 'true', 'username'],
+            'impersonation disabled' => ['r&d@example.com', 'false', 'username'],
+            'email mode' => ['r&d@example.com', 'true', 'email'],
+            'no domain' => ['r&d', 'true', 'username'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('localPartAmpersandLogins')]
+    function testLoginWithAnAmpersandInItsLocalPartReachesTheLdapBind(string $login, string $impersonationEnabled, string $usernameMode) {
+        putenv('SABRE_IMPERSONATION_ENABLED=' . $impersonationEnabled);
+        putenv('LDAP_USERNAME_MODE=' . $usernameMode);
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        $GLOBALS['__ldap_bind_calls'] = 0;
+
+        try {
+            $esnauth = new EsnMock('http://localhost:8080/');
+            $request = new \Sabre\HTTP\Request('GET', '/', [
+                'Authorization' => 'Basic ' . base64_encode($login . ':secret'),
+            ]);
+
+            [$rv, $msg] = $esnauth->check($request, new \Sabre\HTTP\Response());
+
+            $this->assertNotEquals('Bad credentials', $msg);
+            $this->assertGreaterThan(0, $GLOBALS['__ldap_bind_calls']);
+        } finally {
+            $this->resetLdapMock();
+            putenv('LDAP_USERNAME_MODE');
+            putenv('SABRE_IMPERSONATION_ENABLED=false');
+        }
+    }
+
     private bool $ldapServerOverridden = false;
     private string|false $originalLdapServer = false;
 

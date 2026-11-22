@@ -166,10 +166,14 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 return $this->doImpersonation($impersonationResult);
         }
 
-        # '&' is the admin impersonation separator: any other login carrying
-        # it is malformed, and would otherwise reach the LDAP bind truncated
-        # by the username mode below (`alice@x&bob@x` binding as `alice`).
-        if (str_contains($user, '&')) {
+        # '&' is the admin impersonation separator: `<admin>&...` is never an
+        # LDAP login, even with impersonation disabled. A domain never holds
+        # '&' either, so a login with '&' after its '@' is that syntax used
+        # by someone else (`alice@x&bob@x`), which the username mode below
+        # would otherwise truncate and bind as `alice`. An '&' in the local
+        # part (`r&d@example.com`, RFC 5322) is a plain address.
+        $at = strpos($user, '@');
+        if (($at !== false && strpos($user, '&', $at) !== false) || $this->hasAdminImpersonationPrefix($user)) {
             error_log("Bad credentials for '$user': '&' is reserved to admin impersonation");
             throw new AuthException("Bad credentials");
         }
@@ -319,6 +323,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         }
 
         return [$adminLogin, $adminPassword];
+    }
+
+    private function hasAdminImpersonationPrefix(string $username): bool {
+        $adminCredential = $this->getAdminCredential();
+
+        return $adminCredential !== null && str_starts_with($username, $adminCredential[0] . '&');
     }
 
     private function attemptAdminImpersonation(string $username, string $password): ?string {

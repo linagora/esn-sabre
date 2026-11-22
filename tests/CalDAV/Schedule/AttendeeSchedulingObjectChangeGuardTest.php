@@ -911,13 +911,15 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
 
     #[DataProvider('seriesKinds')]
     public function testAMasterTurnedIntoAnOverrideKeepsTheOrganizerExclusions(SeriesKind $kind): void {
-        $exdate = str_replace('RECURRENCE-ID', 'EXDATE', self::recurrenceIdLine($kind, self::OCCURRENCE));
+        $exdate = self::exdateLine($kind, self::OCCURRENCE);
+        $other = self::exdateLine($kind, self::addDays(self::OCCURRENCE, 1));
+        $old = self::calendar(self::master($kind, ['EXDATE' => $exdate]));
+        $override = fn(array $changes) => self::calendar(self::master($kind,
+            ['RECURRENCE-ID' => self::recurrenceIdLine($kind, self::SERIES_START)] + $changes));
 
-        $this->assertRefused(
-            self::calendar(self::master($kind, ['EXDATE' => $exdate])),
-            self::calendar(self::master($kind, ['RECURRENCE-ID' => self::recurrenceIdLine($kind, self::SERIES_START)])),
-            'DTSTART'
-        );
+        $this->assertRefused($old, $override([]), 'DTSTART');
+        // Excluding more, in other lines, only removes instances
+        $this->assertAllowed($old, $override(['EXDATE' => $other, 'EXDATE-2' => $exdate]));
     }
 
     #[DataProvider('seriesKinds')]
@@ -927,6 +929,35 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
 
         $this->assertRefused(self::calendar($first, $last), self::calendar($first), 'DTSTART');
         $this->assertRefused(self::calendar($first, $last), self::calendar($last), 'DTSTART');
+    }
+
+    #[DataProvider('seriesKinds')]
+    public function testDroppingEveryOrganizerMasterKeepsTheOverrides(SeriesKind $kind): void {
+        $answered = self::override($kind, self::OCCURRENCE, ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org']);
+
+        $this->assertAllowed(
+            self::calendar(self::master($kind), self::master($kind, ['SUMMARY' => 'SUMMARY:Second']), self::override($kind, self::OCCURRENCE)),
+            self::calendar($answered)
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    public function testCopiesOfTheSameMasterMayBeMerged(SeriesKind $kind): void {
+        $this->assertAllowed(
+            self::calendar(self::master($kind), self::master($kind)),
+            self::calendar(self::master($kind, ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org']))
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    public function testOneOfTheCopiesOfTheSameMasterMayBeAnswered(SeriesKind $kind): void {
+        $old = self::calendar(self::master($kind), self::master($kind));
+        $answered = self::master($kind, ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org']);
+
+        $this->assertAllowed($old, self::calendar($answered, self::master($kind)));
+        $this->assertAllowed($old, self::calendar(self::master($kind), $answered));
+        // An organizer-owned change still makes another series
+        $this->assertRefused($old, self::calendar($answered, self::master($kind, ['SUMMARY' => 'SUMMARY:Rewritten'])), 'DTSTART');
     }
 
     #[DataProvider('seriesKinds')]

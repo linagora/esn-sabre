@@ -881,4 +881,85 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
 
         $this->addToAssertionCount(1);
     }
+
+    // GHSA-wv3w-xq76-fc47: a copy without master whose override carries an RRULE is expanded by EventIterator
+    #[DataProvider('seriesKinds')]
+    public function testRecurringOverrideWithoutMasterIsRefused(SeriesKind $kind): void {
+        $movedOverride = self::override($kind, self::OCCURRENCE, ['SUMMARY' => 'SUMMARY:Moved by organizer']);
+
+        $this->assertRefused(
+            self::calendar(self::master($kind), $movedOverride),
+            self::calendar(self::override($kind, self::OCCURRENCE, [
+                'SUMMARY' => 'SUMMARY:Moved by organizer',
+                'RRULE' => 'RRULE:FREQ=DAILY;COUNT=5',
+            ])),
+            'DTSTART'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    public function testAMasterTurnedIntoAnOverrideMayNotChangeItsRecurrence(SeriesKind $kind): void {
+        $this->assertRefused(
+            self::calendar(self::master($kind)),
+            self::calendar(self::master($kind, [
+                'RECURRENCE-ID' => self::recurrenceIdLine($kind, self::SERIES_START),
+                'RRULE' => 'RRULE:FREQ=DAILY;COUNT=60',
+            ])),
+            'DTSTART'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    public function testAnInvitationToOneOccurrenceCanStillBeAnswered(SeriesKind $kind): void {
+        $occurrence = self::override($kind, self::OCCURRENCE);
+
+        $this->assertAllowed(
+            self::calendar($occurrence),
+            self::calendar(self::override($kind, self::OCCURRENCE, [
+                'ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org',
+            ]))
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    public function testAnOrganizerSentRecurringOverrideWithoutMasterCanBeAnsweredButNotRewritten(SeriesKind $kind): void {
+        $promoted = self::override($kind, self::OCCURRENCE, ['RRULE' => 'RRULE:FREQ=DAILY;COUNT=5']);
+        $old = self::calendar($promoted);
+
+        $this->assertAllowed($old, self::calendar(self::override($kind, self::OCCURRENCE, [
+            'RRULE' => 'RRULE:FREQ=DAILY;COUNT=5',
+            'ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org',
+        ])));
+        $this->assertRefused($old, self::calendar(self::override($kind, self::OCCURRENCE, [
+            'RRULE' => 'RRULE:FREQ=DAILY;COUNT=9',
+        ])), 'DTSTART');
+        $this->assertRefused($old, self::calendar(self::override($kind, self::OCCURRENCE, [
+            'RRULE' => 'RRULE:FREQ=DAILY;COUNT=5',
+            'SUMMARY' => 'SUMMARY:Rewritten',
+        ])), 'SUMMARY');
+    }
+
+    #[DataProvider('seriesKinds')]
+    public function testASecondMasterIsRefused(SeriesKind $kind): void {
+        // EventIterator expands the last VEVENT without RECURRENCE-ID
+        $this->assertRefused(
+            self::calendar(self::master($kind)),
+            self::calendar(self::master($kind), self::master($kind, ['SUMMARY' => 'SUMMARY:Rewritten'])),
+            'DTSTART'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    public function testOrganizerSentMastersCanBeAnsweredButNotRewritten(SeriesKind $kind): void {
+        $old = self::calendar(self::master($kind), self::master($kind, ['SUMMARY' => 'SUMMARY:Second']));
+
+        $this->assertAllowed($old, self::calendar(
+            self::master($kind, ['ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org']),
+            self::master($kind, ['SUMMARY' => 'SUMMARY:Second', 'ATTENDEE-ALICE' => 'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@example.org'])
+        ));
+        $this->assertRefused($old, self::calendar(
+            self::master($kind),
+            self::master($kind, ['SUMMARY' => 'SUMMARY:Rewritten'])
+        ), 'SUMMARY');
+    }
 }

@@ -33,6 +33,8 @@ class AttendeeSchedulingObjectChangeGuard {
         $oldEvents = self::indexEvents($oldObject, $timeZone);
         $newEvents = self::indexEvents($newObject, $timeZone);
 
+        self::assertSameMasters($oldObject, $newObject, $forbiddenProperties, $timeZone);
+        self::assertNoRecurrenceAddedToAnOverride($oldMaster, $oldEvents, $newEvents, $timeZone);
         self::assertSameMaster($oldMaster, $newMaster, $forbiddenProperties, $timeZone);
         self::assertNoOccurrenceAdded($oldMaster, $newMaster, $oldEvents, $newEvents, $timeZone, $forbiddenProperties);
 
@@ -108,6 +110,101 @@ class AttendeeSchedulingObjectChangeGuard {
         $start = $master ? $master->DTSTART : null;
 
         return $start instanceof \Sabre\VObject\Property\ICalendar\DateTime ? $start->isFloating() : null;
+    }
+
+    /**
+     * Several VEVENTs without RECURRENCE-ID are read differently: EventIterator
+     * (reports, free/busy, JSON API) expands the last one, the scheduling and
+     * the stored occurrence window take the first one. Each of them must then
+     * keep the organizer's fields and recurrence, in the organizer's order, and
+     * the attendee may not add one.
+     *
+     * @throws ForbiddenAttendeeSchedulingObjectChange
+     */
+    private static function assertSameMasters(VCalendar $oldObject, VCalendar $newObject, array $forbiddenProperties, \DateTimeZone $timeZone): void {
+        $newMasters = self::mastersOf($newObject);
+        if (count($newMasters) < 2) {
+            return;
+        }
+
+        $oldMasters = self::mastersOf($oldObject);
+        if (count($oldMasters) !== count($newMasters)) {
+            throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
+        }
+        foreach ($newMasters as $position => $newMaster) {
+            self::assertSameSeriesEvent($oldMasters[$position], $newMaster, $forbiddenProperties, $timeZone);
+        }
+    }
+
+    /**
+     * An override describes one instance. EventIterator does not expand an
+     * RRULE / RDATE / EXRULE an override carries, but the stored occurrence
+     * window does (#697), and so may other readers of the copy, the
+     * attendee's delegates' clients among them (GHSA-wv3w-xq76-fc47): an
+     * override may only carry the recurrence the organizer gave the VEVENT
+     * that describes the same instance in the old copy, the override or the
+     * master turned into an override.
+     *
+     * @throws ForbiddenAttendeeSchedulingObjectChange
+     */
+    private static function assertNoRecurrenceAddedToAnOverride($oldMaster, array $oldEvents, array $newEvents, \DateTimeZone $timeZone): void {
+        foreach ($newEvents as $key => $overrides) {
+            foreach ($overrides as $position => $override) {
+                if (!self::generatesInstances($override)) {
+                    continue;
+                }
+
+                $organizerEvent = self::counterpart($oldEvents[$key] ?? [], $position)
+                    ?? ($oldMaster && self::firstInstanceKey($oldMaster, $timeZone) === $key ? $oldMaster : null);
+                if (!$organizerEvent || !self::hasSameRecurrence($organizerEvent, $override)) {
+                    throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
+                }
+            }
+        }
+    }
+
+    private static function firstInstanceKey($master, \DateTimeZone $timeZone): ?string {
+        try {
+            return 'at:' . $master->DTSTART->getDateTime($timeZone)->getTimestamp();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private static function hasSameRecurrence($oldEvent, $newEvent): bool {
+        foreach (['RRULE', 'RDATE', 'EXRULE'] as $propertyName) {
+            if (CalendarObjectHelper::propertySignatures($oldEvent, $propertyName) !== CalendarObjectHelper::propertySignatures($newEvent, $propertyName)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function mastersOf(VCalendar $calendarObject): array {
+        return array_values(array_filter(
+            $calendarObject->select('VEVENT'),
+            fn($vevent): bool => !isset($vevent->{'RECURRENCE-ID'})
+        ));
+    }
+
+    private static function generatesInstances($vevent): bool {
+        return isset($vevent->RRULE) || isset($vevent->RDATE) || isset($vevent->EXRULE);
+    }
+
+    /**
+     * The same fields, length and recurrence: the instances a VEVENT generates
+     * are then the organizer's.
+     *
+     * @throws ForbiddenAttendeeSchedulingObjectChange
+     */
+    private static function assertSameSeriesEvent($oldEvent, $newEvent, array $forbiddenProperties, \DateTimeZone $timeZone): void {
+        self::assertSameExplicitEvent($oldEvent, $newEvent, $forbiddenProperties, $timeZone);
+        self::assertSameDuration($oldEvent, $newEvent, $timeZone);
+        if (!self::hasSameRecurrence($oldEvent, $newEvent)
+            || CalendarObjectHelper::propertySignatures($oldEvent, 'EXDATE') !== CalendarObjectHelper::propertySignatures($newEvent, 'EXDATE')) {
+            throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
+        }
     }
 
     private static function assertSameMaster($oldMaster, $newMaster, array $forbiddenProperties, \DateTimeZone $timeZone): void {

@@ -48,7 +48,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
             return true;
         }
 
-        $paths = isset($report->hrefs) ? $report->hrefs : [$path];
+        // Decoded and made relative to the base URI as the report itself reads
+        // them: a raw href (`a%20b.ics`, or under a base URI other than "/")
+        // names no node, and its object would be served without this check.
+        $paths = isset($report->hrefs) ? array_map([$this->server, 'calculateUri'], $report->hrefs) : [$path];
         foreach ($this->findExistingPaths($paths) as $existingPath) {
             // Some REPORT handlers synthesize responses directly, bypassing propFind ACL checks.
             $aclPlugin->checkPrivileges($existingPath, self::REPORT_READ_PRIVILEGES[$reportName], \Sabre\DAVACL\Plugin::R_PARENT);

@@ -74,6 +74,16 @@ class PluginTest extends \ESN\DAV\ServerMock {
         $this->assertEquals(403, $response->status);
     }
 
+    function testMultigetOfAPercentEncodedHrefOfAnUnreadableCalendarIsForbidden() {
+        $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'a b.ics', $this->caldavCalendarObjects['event1.ics']);
+
+        $response = $this->multiget('/calendars/54b64eadf6d7d8e41d263e0e/calendar2/', [
+            '/calendars/54b64eadf6d7d8e41d263e0e/calendar2/a%20b.ics',
+        ]);
+
+        $this->assertEquals(403, $response->status);
+    }
+
     function testMultigetMixingReadableAndUnreadableCalendarsIsForbidden() {
         $this->caldavBackend->createCalendarObject($this->calUser2['id'], 'event1.ics', $this->caldavCalendarObjects['event1.ics']);
 

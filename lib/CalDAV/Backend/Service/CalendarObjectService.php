@@ -297,10 +297,16 @@ class CalendarObjectService {
      *
      * @param array $calendarId [calendarId, instanceId]
      * @param array $filters CalDAV filters
+     * @param bool $callerExpandsTimeRange The caller expands each object over the
+     *             time range of the filters, and drops one without occurrence in
+     *             it (CalendarObjectHandler::normalizeCalendarObject): when the
+     *             filters hold nothing but that VEVENT time range, an object with
+     *             a master VEVENT is not matched here as well. One holding only
+     *             overrides still is, as the caller does not check it.
      * @return array Array of objects with 'uri', 'calendardata', and 'etag' keys
      */
-    public function calendarQueryWithAllData($calendarId, array $filters) {
-        return $this->executeCalendarQuery($calendarId, $filters, true);
+    public function calendarQueryWithAllData($calendarId, array $filters, $callerExpandsTimeRange = false) {
+        return $this->executeCalendarQuery($calendarId, $filters, true, $callerExpandsTimeRange);
     }
 
     /**
@@ -311,15 +317,19 @@ class CalendarObjectService {
      * @param bool $returnFullData If true, yields full data; if false, yields uri only
      * @return \Generator Yields calendar objects
      */
-    private function executeCalendarQuery($calendarId, array $filters, $returnFullData) {
+    private function executeCalendarQuery($calendarId, array $filters, $returnFullData, $callerExpandsTimeRange = false) {
         $calendarId = $calendarId[0];
 
-        list($query, $projection, $requirePostFilter, $exactForSingleEvents) =
+        list($query, $projection, $requirePostFilter, $exactForSingleEvents, $timeRange) =
             $this->buildQueryFromFilters($calendarId, $filters, $returnFullData);
+
+        // $exactForSingleEvents: the VEVENT time range is the only filter the post-filter checks
+        $expandedByCaller = $callerExpandsTimeRange && $exactForSingleEvents
+            && !empty($timeRange['start']) && !empty($timeRange['end']);
 
         foreach ($this->calendarObjectDAO->findWithQuery($query, $projection) as $row) {
             $rowRequiresPostFilter = $requirePostFilter && !($exactForSingleEvents && $this->isSingleEvent($row));
-            $result = $this->processQueryResult($row, $filters, $rowRequiresPostFilter, $returnFullData);
+            $result = $this->processQueryResult($row, $filters, $rowRequiresPostFilter, $returnFullData, $expandedByCaller);
 
             if ($result !== null) {
                 yield $result;
@@ -333,7 +343,7 @@ class CalendarObjectService {
      * @param string $calendarId
      * @param array $filters
      * @param bool $returnFullData
-     * @return array [query, projection, requirePostFilter, exactForSingleEvents]
+     * @return array [query, projection, requirePostFilter, exactForSingleEvents, timeRange]
      */
     private function buildQueryFromFilters($calendarId, array $filters, $returnFullData) {
         $query = ['calendarid' => $calendarId];
@@ -372,7 +382,7 @@ class CalendarObjectService {
 
         $projection = $this->buildProjection($requirePostFilter, $returnFullData);
 
-        return [$query, $projection, $requirePostFilter, $exactForSingleEvents];
+        return [$query, $projection, $requirePostFilter, $exactForSingleEvents, $timeRange];
     }
 
     /**
@@ -465,15 +475,17 @@ class CalendarObjectService {
      * @param array $filters CalDAV filters
      * @param bool $requirePostFilter Whether post-filtering is needed
      * @param bool $returnFullData Whether to return full data
+     * @param bool $expandedByCaller The caller expands the object over the only filter, its VEVENT time range
      * @return array|null Processed result or null if filtered out
      */
-    private function processQueryResult($row, $filters, $requirePostFilter, $returnFullData) {
+    private function processQueryResult($row, $filters, $requirePostFilter, $returnFullData, $expandedByCaller = false) {
         $vObject = null;
 
         if ($requirePostFilter) {
             $vObject = VObject\Reader::read($row['calendardata']);
 
-            if (!$this->validateFilterForObjectWithVObject($vObject, $filters)) {
+            $matchedByExpansion = $expandedByCaller && \ESN\Utils\Utils::hasMasterEvent($vObject);
+            if (!$matchedByExpansion && !$this->validateFilterForObjectWithVObject($vObject, $filters)) {
                 $vObject->destroy();
                 return null;
             }

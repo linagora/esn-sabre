@@ -392,6 +392,25 @@ class Utils {
         return $clonedProperty;
     }
 
+    /**
+     * Whether the calendar holds a VEVENT without RECURRENCE-ID: a series or a
+     * single event, rather than only overrides of a series stored elsewhere.
+     * VCalendar::expand() is authoritative for such a calendar: it yields
+     * exactly the occurrences of the range, and nothing when none falls in it.
+     *
+     * @param \Sabre\VObject\Component\VCalendar $vCalendar
+     * @return bool
+     */
+    static function hasMasterEvent($vCalendar) {
+        foreach ($vCalendar->select('VEVENT') as $vevent) {
+            if (!isset($vevent->{'RECURRENCE-ID'})) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     static function isHiddenPrivateEvent($vevent, $node, $userPrincipal) {
         return self::isPrivateClassification((string) $vevent->CLASS)
             && self::hidesPrivateEventsFrom($node, $userPrincipal);

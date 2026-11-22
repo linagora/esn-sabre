@@ -376,8 +376,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     /**
-     * Each invitee gets its own copy of the original event, sanitised for that
-     * invitee only, so that sanitising never leaks from one invitee to the next.
+     * An invitee from whom something is hidden gets its own copy of the
+     * original event, sanitised for that invitee only, so that sanitising
+     * never leaks from one invitee to the next. The others share the original
+     * event, which hidePrivateEventInfoForUser() never modifies.
      */
     private function buildInviteeMessage($dataMessage, $principal, array $inviteeCalendar, $objectUri): array {
         list(, $eventCalendar) = $inviteeCalendar;

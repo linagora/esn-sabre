@@ -778,6 +778,11 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
             $this->assertNull($backend->getChangesForCalendar($id, $syncToken, 1), var_export($syncToken, true));
         }
         $this->assertEquals([], $backend->getChangesForCalendar($id, (string) $currentToken, 1)['added']);
+        // A JSON number written 1.0 is decoded as a float
+        $this->assertEquals(['todo1.ics'], $backend->getChangesForCalendar($id, 1.0, 1)['added']);
+        $this->assertNull($backend->getChangesForCalendar($id, (float) ($currentToken + 1), 1));
+        $this->assertNull($backend->getChangesForCalendar($id, INF, 1));
+        $this->assertNull($backend->getChangesForCalendar($id, 1e30, 1));
 
         $this->assertEquals(['todo1.ics'], $backend->getChangesForCalendar($id, '1', 1)['added']);
         $this->assertEquals(['todo1.ics'], $backend->getChangesForCalendar($id, 1, 1)['added']);

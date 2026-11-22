@@ -82,7 +82,9 @@ class Report {
         $result = [];
         foreach ($this->server->getPropertiesForMultiplePaths($paths, $report->properties) as $uri => $properties) {
             $calendarTimeZone = null;
-            if ($report->expand) {
+            // As the stock report: the calendar's time zone is only read for an
+            // object whose calendar-data is expanded.
+            if ($report->expand && isset($properties[200][$calendarDataProp])) {
                 list($calendarPath) = \Sabre\Uri\split($uri);
                 $calendarTimeZone = $timeZones[$calendarPath] ??= $this->resolveCalendarTimeZone($calendarPath);
             }

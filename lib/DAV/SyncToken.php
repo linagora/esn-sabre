@@ -19,6 +19,11 @@ final class SyncToken {
      * @return bool
      */
     static function isIssued($syncToken, $currentToken) {
+        // A JSON number written 5.0 is decoded as a float: the integer it holds.
+        if (is_float($syncToken) && is_finite($syncToken) && $syncToken >= 0 && floor($syncToken) === $syncToken
+            && $syncToken < PHP_INT_MAX) {
+            $syncToken = (int) $syncToken;
+        }
         if (!is_int($syncToken) && !is_string($syncToken)) {
             return false;
         }

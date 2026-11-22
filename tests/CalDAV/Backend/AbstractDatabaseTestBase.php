@@ -772,9 +772,12 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         $id = $backend->createCalendar('principals/user1/userID', 'bla', []);
         $backend->createCalendarObject($id, "todo1.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
 
-        foreach (['abc', '1abc', '-1', -1, '1.5', 1.5, ' 1'] as $syncToken) {
+        $currentToken = $backend->getChangesForCalendar($id, null, 1)['syncToken'];
+        foreach (['abc', '1abc', '-1', -1, '1.5', 1.5, ' 1', true, [1],
+                  (string) ($currentToken + 1), '999999', '99999999999999999999999'] as $syncToken) {
             $this->assertNull($backend->getChangesForCalendar($id, $syncToken, 1), var_export($syncToken, true));
         }
+        $this->assertEquals([], $backend->getChangesForCalendar($id, (string) $currentToken, 1)['added']);
 
         $this->assertEquals(['todo1.ics'], $backend->getChangesForCalendar($id, '1', 1)['added']);
         $this->assertEquals(['todo1.ics'], $backend->getChangesForCalendar($id, 1, 1)['added']);

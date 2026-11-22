@@ -56,3 +56,24 @@ WARNING containing their ID.
 When upgrading from a version without version `2`, a single startup runs versions `2` to `5` back to back, during
 the rollout: set `SABRE_MIGRATE_ON_STARTUP=false` until every replica runs the new code, then run
 `php scripts/migrate-database.php`. The same holds for any migration that repairs a field the access checks rely on.
+
+## Version 6 — Index the time-ranges by the end of the events
+
+Upgrades database version `5` to `6`. Builds the `{ calendarid, componenttype, lastoccurence, firstoccurence }` index
+of `calendarobjects` (see [MONGO.md](MONGO.md#calendarobjects)), so that a time-range query scans from the start of
+the range rather than every past event of the calendar. The former `{ …, firstoccurence, lastoccurence }` index is
+kept: it still serves the ranges given an end only, and the older replicas of a rolling upgrade keep creating it.
+
+It is built by this migration, in the background, and not by the index creation of `scripts/start.sh`: on a large
+collection the build can last longer than the socket timeout of the MongoDB driver (`socketTimeoutMS`, 5 minutes by
+default), and a failing index creation keeps the container from starting. Until it is built, time-range queries use
+the former index, as before. A socket timeout leaves the build running on the server: the migration then asks again,
+which waits for that same build, up to 288 times (a day at the default timeout).
+
+To build it ahead of the upgrade, at a quiet time, run in `mongosh` on the Sabre database:
+
+```js
+db.calendarobjects.createIndex({ calendarid: 1, componenttype: 1, lastoccurence: 1, firstoccurence: 1 })
+```
+
+The migration then finds it built and only saves version `6`.

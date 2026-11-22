@@ -117,15 +117,17 @@ class AttendeeSchedulingObjectChangeGuard {
      * (reports, free/busy, JSON API) expands the last one, the scheduling and
      * the stored occurrence window take the first one. Each of them must then
      * keep the organizer's fields and recurrence, in the organizer's order, and
-     * the attendee may neither add nor drop one.
+     * the attendee may neither add one nor keep only some of them, which would
+     * choose the series readers expand. Dropping them all only removes
+     * instances, and copies of the same master count once: a client merging
+     * them reads the same series.
      *
      * @throws ForbiddenAttendeeSchedulingObjectChange
      */
     private static function assertSameMasters(VCalendar $oldObject, VCalendar $newObject, array $forbiddenProperties, \DateTimeZone $timeZone): void {
-        $newMasters = self::mastersOf($newObject);
-        $oldMasters = self::mastersOf($oldObject);
-        // Dropping some of the organizer's masters would choose which one readers expand.
-        if (count($newMasters) < 2 && count($oldMasters) < 2) {
+        $newMasters = self::distinct(self::mastersOf($newObject), $forbiddenProperties, $timeZone);
+        $oldMasters = self::distinct(self::mastersOf($oldObject), $forbiddenProperties, $timeZone);
+        if (!$newMasters || (count($newMasters) < 2 && count($oldMasters) < 2)) {
             return;
         }
 
@@ -157,7 +159,7 @@ class AttendeeSchedulingObjectChangeGuard {
 
                 $organizerEvent = self::counterpart($oldEvents[$key] ?? [], $position)
                     ?? ($oldMaster && self::firstInstanceKey($oldMaster, $timeZone) === $key ? $oldMaster : null);
-                if (!$organizerEvent || !self::hasSameRecurrence($organizerEvent, $override)) {
+                if (!$organizerEvent || !self::hasSameRecurrence($organizerEvent, $override, $timeZone)) {
                     throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
                 }
             }
@@ -173,17 +175,56 @@ class AttendeeSchedulingObjectChangeGuard {
     }
 
     /**
-     * EXDATE included: without it, the same RRULE brings back the occurrences
-     * the organizer cancelled.
+     * The same RRULE / RDATE / EXRULE, and every instant the organizer
+     * excluded still excluded: without it, the same RRULE brings back the
+     * occurrences the organizer cancelled. Excluding more only removes
+     * instances, and the EXDATEs may be written another way.
      */
-    private static function hasSameRecurrence($oldEvent, $newEvent): bool {
-        foreach (['RRULE', 'RDATE', 'EXRULE', 'EXDATE'] as $propertyName) {
+    private static function hasSameRecurrence($oldEvent, $newEvent, \DateTimeZone $timeZone): bool {
+        foreach (['RRULE', 'RDATE', 'EXRULE'] as $propertyName) {
             if (CalendarObjectHelper::propertySignatures($oldEvent, $propertyName) !== CalendarObjectHelper::propertySignatures($newEvent, $propertyName)) {
                 return false;
             }
         }
 
-        return true;
+        try {
+            return !array_diff(self::excludedOccurrenceKeys($oldEvent, $timeZone), self::excludedOccurrenceKeys($newEvent, $timeZone));
+        } catch (\Throwable) {
+            // Fail closed: exclusions we cannot read are only kept when written alike.
+            return CalendarObjectHelper::propertySignatures($oldEvent, 'EXDATE') === CalendarObjectHelper::propertySignatures($newEvent, 'EXDATE');
+        }
+    }
+
+    /**
+     * The VEVENTs once each, copies of the same organizer-owned content left
+     * out: an attendee answering one copy (PARTSTAT, VALARM...) leaves it the
+     * same series as the others.
+     */
+    private static function distinct(array $vevents, array $forbiddenProperties, \DateTimeZone $timeZone): array {
+        $distinct = [];
+        foreach ($vevents as $vevent) {
+            $distinct[self::organizerOwnedKey($vevent, $forbiddenProperties, $timeZone)] ??= $vevent;
+        }
+
+        return array_values($distinct);
+    }
+
+    /**
+     * What assertSameSeriesEvent() compares: the forbidden properties, the
+     * resolved bounds, the length and the recurrence, exclusions included.
+     */
+    private static function organizerOwnedKey($vevent, array $forbiddenProperties, \DateTimeZone $timeZone): string {
+        $content = [];
+        foreach ($forbiddenProperties as $propertyName) {
+            $content[$propertyName] = self::organizerOwnedSignatures($vevent, $propertyName);
+        }
+        $content['bounds'] = self::resolvedBounds($vevent, $timeZone);
+        $content['duration'] = self::duration($vevent, $timeZone);
+        foreach (['RRULE', 'RDATE', 'EXRULE', 'EXDATE'] as $propertyName) {
+            $content[$propertyName] = CalendarObjectHelper::propertySignatures($vevent, $propertyName);
+        }
+
+        return serialize($content);
     }
 
     private static function mastersOf(VCalendar $calendarObject): array {
@@ -206,7 +247,7 @@ class AttendeeSchedulingObjectChangeGuard {
     private static function assertSameSeriesEvent($oldEvent, $newEvent, array $forbiddenProperties, \DateTimeZone $timeZone): void {
         self::assertSameExplicitEvent($oldEvent, $newEvent, $forbiddenProperties, $timeZone);
         self::assertSameDuration($oldEvent, $newEvent, $timeZone);
-        if (!self::hasSameRecurrence($oldEvent, $newEvent)) {
+        if (!self::hasSameRecurrence($oldEvent, $newEvent, $timeZone)) {
             throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
         }
     }

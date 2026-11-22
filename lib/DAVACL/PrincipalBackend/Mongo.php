@@ -744,7 +744,6 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
             'id' => (string)$obj['_id'],
             '{DAV:}displayname' => isset($obj['name']) ? $obj['name'] : "",
             'administrators' => $this->getAdministratorsForGroup($principalUri),
-            'members' => $this->getGroupMemberSet($principalUri)
         ];
     }
 

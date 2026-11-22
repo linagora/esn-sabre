@@ -57,6 +57,6 @@ class AddressBookRoot extends \Sabre\DAV\Collection {
             return new \ESN\CardDAV\AddressBookHome($this->addrbookBackend, $principal);
         }
 
-        return new \ESN\CardDAV\GroupAddressBookHome($this->addrbookBackend, $principal);
+        return new \ESN\CardDAV\GroupAddressBookHome($this->addrbookBackend, $principal, $this->principalBackend);
     }
 }

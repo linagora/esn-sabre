@@ -281,6 +281,72 @@ class MongoTest extends AbstractDatabaseTestBase {
         return (new \MongoDB\Client(ESN_MONGO_SABREURI))->{ESN_MONGO_SABREDB};
     }
 
+    private function weekFilters(array $propFilters = []) {
+        return [
+            'name' => 'VCALENDAR',
+            'comp-filters' => [[
+                'name' => 'VEVENT',
+                'comp-filters' => [],
+                'prop-filters' => $propFilters,
+                'is-not-defined' => false,
+                'time-range' => ['start' => new \DateTime('20350101T000000Z'), 'end' => new \DateTime('20350108T000000Z')],
+            ]],
+            'prop-filters' => [],
+            'is-not-defined' => false,
+            'time-range' => null,
+        ];
+    }
+
+    private function storeSeriesWithoutInstanceInTheWeek($backend) {
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        $backend->createCalendarObject($calendarId, 'weekly.ics', $this->event('weekly', "DTSTART:20341225T090000Z\r\nDTEND:20341225T100000Z\r\nRRULE:FREQ=WEEKLY;COUNT=3\r\n"));
+        // Its occurrence hull overlaps the week, none of its instances does
+        $backend->createCalendarObject($calendarId, 'monthly.ics', $this->event('monthly', "DTSTART:20341215T090000Z\r\nDTEND:20341215T100000Z\r\nRRULE:FREQ=MONTHLY;COUNT=3\r\n"));
+        // Only an override, moved out of the week, of a series stored elsewhere
+        $backend->createCalendarObject($calendarId, 'override.ics', "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:override\r\n"
+            . "RECURRENCE-ID:20350102T090000Z\r\nDTSTART:20350120T090000Z\r\nDTEND:20350120T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+
+        return $calendarId;
+    }
+
+    private function urisOf($objects) {
+        $uris = [];
+        foreach ($objects as $object) {
+            $this->assertNotNull($object['vObject'], 'the caller gets the parsed object');
+            $uris[] = $object['uri'];
+        }
+        sort($uris);
+
+        return $uris;
+    }
+
+    function testACallerExpandingTheWeekGetsTheSeriesUnmatched() {
+        $backend = $this->getBackend();
+        $calendarId = $this->storeSeriesWithoutInstanceInTheWeek($backend);
+
+        // The caller's expansion drops the monthly series: the backend does not match it first
+        $this->assertSame(['monthly.ics', 'weekly.ics'], $this->urisOf($backend->calendarQueryWithAllData($calendarId, $this->weekFilters(), true)));
+        $this->assertSame(['weekly.ics'], $this->urisOf($backend->calendarQueryWithAllData($calendarId, $this->weekFilters())));
+    }
+
+    function testAnObjectWithoutMasterIsStillMatchedForACallerExpandingTheWeek() {
+        $backend = $this->getBackend();
+        $calendarId = $this->storeSeriesWithoutInstanceInTheWeek($backend);
+
+        $this->assertNotContains('override.ics', $this->urisOf($backend->calendarQueryWithAllData($calendarId, $this->weekFilters(), true)));
+    }
+
+    function testOtherFiltersAreStillMatchedForACallerExpandingTheWeek() {
+        $backend = $this->getBackend();
+        $calendarId = $this->storeSeriesWithoutInstanceInTheWeek($backend);
+        $filters = $this->weekFilters([[
+            'name' => 'UID', 'is-not-defined' => false, 'param-filters' => [], 'time-range' => null,
+            'text-match' => ['negate-condition' => false, 'collation' => 'i;octet', 'value' => 'weekly'],
+        ]]);
+
+        $this->assertSame(['weekly.ics'], $this->urisOf($backend->calendarQueryWithAllData($calendarId, $filters, true)));
+    }
+
     private function event($uid, $dates) {
         return "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:" . $uid . "\r\n" . $dates . "END:VEVENT\r\nEND:VCALENDAR\r\n";
     }

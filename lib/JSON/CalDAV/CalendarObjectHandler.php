@@ -512,7 +512,7 @@ class CalendarObjectHandler {
         // the expand() method returns an empty VCALENDAR with no VEVENT.
         // This happens when a user is invited to only one occurrence of a recurring event.
         // In this case, we use the original unexpanded object and normalize it.
-        if (!$this->hasMasterEvent($vObject)) {
+        if (!Utils::hasMasterEvent($vObject)) {
             $this->normalizeEventsWithoutMaster($vObject);
 
             return $vObject;
@@ -542,16 +542,6 @@ class CalendarObjectHandler {
         } catch (VObject\InvalidDataException $e) {
             throw new InvalidStoredRecurrence($e);
         }
-    }
-
-    private function hasMasterEvent($vObject) {
-        foreach ($vObject->select('VEVENT') as $vevent) {
-            if (!isset($vevent->{'RECURRENCE-ID'})) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private function hasNoOccurrenceInRange($vObject, $hadMasterEvent, $timeRange) {
@@ -632,7 +622,10 @@ class CalendarObjectHandler {
         $propertyList = [];
         $backend = $parentNode->getBackend();
         $id = $parentNode->getFullCalendarId();
-        foreach ($backend->calendarQueryWithAllData($id, $filters) as $calendarObject) {
+        // Each object is expanded over the range below, which drops a series
+        // without occurrence in it: the backend need not match it first.
+        $expandsTimeRange = $timeRange[0] && $timeRange[1];
+        foreach ($backend->calendarQueryWithAllData($id, $filters, $expandsTimeRange) as $calendarObject) {
             try {
                 // Use pre-parsed VObject if available (from requirePostFilter), otherwise parse now
                 $vObject = $calendarObject['vObject'] ?? VObject\Reader::read($calendarObject['calendardata']);
@@ -679,7 +672,7 @@ class CalendarObjectHandler {
      */
     private function normalizeCalendarObject($vObject, $parentNode, $timeRange) {
         [$start, $end] = $timeRange;
-        $hadMasterEvent = $this->hasMasterEvent($vObject);
+        $hadMasterEvent = Utils::hasMasterEvent($vObject);
         $expanded = $this->expandAndNormalizeVObject($vObject, $start, $end);
         if ($expanded !== $vObject) {
             // The row's own object, used nowhere else: free its cyclic tree now

@@ -37,6 +37,8 @@ class SyncCollectionReportTest extends \ESN\DAV\ServerMock {
             'non-numeric suffix' => ['http://sabre.io/ns/sync/abc'],
             'negative suffix' => ['http://sabre.io/ns/sync/-1'],
             'decimal suffix' => ['http://sabre.io/ns/sync/1.5'],
+            'above the current token' => ['http://sabre.io/ns/sync/999999'],
+            'too long for an integer' => ['http://sabre.io/ns/sync/99999999999999999999999'],
         ];
     }
 

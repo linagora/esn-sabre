@@ -3419,8 +3419,10 @@ END:VCALENDAR
         $this->assertFalse(isset($deletedItem->data));
     }
 
-    function testSyncTokenFutureToken() {
-        // Test with future sync-token (should return empty list, not error)
+    function testSyncTokenFutureTokenReturns400() {
+        // A token above the current one was never issued (a restored database,
+        // another collection's token): the client must resync, not be told
+        // that nothing changed.
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'REPORT',
             'HTTP_CONTENT_TYPE' => 'application/json',
@@ -3428,21 +3430,9 @@ END:VCALENDAR
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
         ));
 
-        // Use a very high token number in the future
         $request->setBody(json_encode(['sync-token' => 'http://sabre.io/ns/sync/999999999']));
-        $response = $this->request($request);
 
-        // Should return 207 with empty changes (future token is valid, just no changes yet)
-        $this->assertEquals(207, $response->status);
-
-        $jsonResponse = json_decode($response->getBodyAsString());
-        $items = $jsonResponse->_embedded->{'dav:item'};
-
-        // Should return empty list for future token
-        $this->assertCount(0, $items);
-
-        // Should still return a sync-token
-        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+        $this->assertEquals(400, $this->request($request)->status);
     }
 
     function testSyncTokenUrlFormat() {
@@ -3471,6 +3461,8 @@ END:VCALENDAR
             'negative string' => ['-1'],
             'decimal number' => [1.5],
             'non-numeric URL suffix' => ['http://sabre.io/ns/sync/abc'],
+            'above the current token' => [999999],
+            'too long for an integer' => ['99999999999999999999999'],
         ];
     }
 
@@ -3953,14 +3945,29 @@ END:VCALENDAR
     }
 
     function testAddressBookSyncTokenNoUpdate() {
-        // A future sync-token: no changes happened since, expect an empty list.
-        $response = $this->addressBookSyncTokenRequest('http://sabre.io/ns/sync/999999999');
+        $syncToken = json_decode($this->addressBookSyncTokenRequest('')->getBodyAsString())->{'sync-token'};
+
+        $response = $this->addressBookSyncTokenRequest($syncToken);
 
         $this->assertEquals(207, $response->status);
 
         $jsonResponse = json_decode($response->getBodyAsString());
         $this->assertCount(0, $jsonResponse->_embedded->{'dav:item'});
-        $this->assertTrue(isset($jsonResponse->{'sync-token'}));
+        $this->assertEquals($syncToken, $jsonResponse->{'sync-token'});
+    }
+
+    public static function neverIssuedAddressBookSyncTokens(): array {
+        return [
+            'negative number' => [-1],
+            'above the current token' => ['http://sabre.io/ns/sync/999999999'],
+            'too long for an integer' => ['99999999999999999999999'],
+            'non-numeric URL suffix' => ['http://sabre.io/ns/sync/abc'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('neverIssuedAddressBookSyncTokens')]
+    function testAddressBookSyncTokenNeverIssuedReturns400($syncToken) {
+        $this->assertEquals(400, $this->addressBookSyncTokenRequest($syncToken)->status);
     }
 
     function testAddressBookSyncTokenUrlFormat() {

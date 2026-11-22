@@ -346,6 +346,22 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         ], $result);
     }
 
+    function testGetChangesRefusesATokenTheServerNeverIssued() {
+        $backend = $this->backend;
+        $id = $backend->createAddressBook('principals/users/user1', 'bla', []);
+        $backend->createCard($id, "card1.ics", $this->dummyCard);
+        $currentToken = $backend->getChangesForAddressBook($id, null, 1)['syncToken'];
+
+        foreach (['abc', '1abc', '-1', -1, '1.5', 1.5, ' 1', true, [1],
+                  (string) ($currentToken + 1), '999999', '99999999999999999999999'] as $syncToken) {
+            $this->assertNull($backend->getChangesForAddressBook($id, $syncToken, 1), var_export($syncToken, true));
+        }
+
+        $this->assertEquals(['card1.ics'], $backend->getChangesForAddressBook($id, '1', 1)['added']);
+        $this->assertEquals(['card1.ics'], $backend->getChangesForAddressBook($id, 1, 1)['added']);
+        $this->assertEquals([], $backend->getChangesForAddressBook($id, (string) $currentToken, 1)['added']);
+    }
+
     public function testDecapitalizeFn() {
         $backend = $this->backend;
         $id = $backend->createAddressBook(

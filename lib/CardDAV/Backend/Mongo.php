@@ -580,6 +580,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         if (!$res || is_null($res['synctoken'])) return null;
         $currentToken = $res['synctoken'];
 
+        if ($syncToken && !\ESN\DAV\SyncToken::isIssued($syncToken, $currentToken)) return null;
+
         if ($syncToken) {
             $changes = $this->getChangesSince($addressBookId, $syncToken, $currentToken, $limit);
 

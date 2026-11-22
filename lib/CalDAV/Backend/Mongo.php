@@ -235,15 +235,13 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
 
         $calendarId = $calendarId[0];
 
-        // The server only issues non-negative integers: anything else would
-        // be read as 0 by the change lookup, and list every change.
-        if ($syncToken && !ctype_digit((string) $syncToken)) return null;
-
         // Current synctoken
         $row = $this->calendarDAO->getSyncToken($calendarId);
         if (!$row || is_null($row['synctoken'])) return null;
 
         $currentToken = $row['synctoken'];
+
+        if ($syncToken && !\ESN\DAV\SyncToken::isIssued($syncToken, $currentToken)) return null;
 
         if ($syncToken) {
             $changes = $this->getChangesSince($calendarId, $syncToken, $currentToken, $limit);

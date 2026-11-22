@@ -350,6 +350,21 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(2, $queries);
     }
 
+    function testDomainPrincipalByPathShouldNotReadTheDomainMembers() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $queries = \ESN\DAV\MongoFindCounter::count('users', function () use ($backend) {
+            $principal = $backend->getPrincipalByPath('principals/domains/' . self::DOMAIN_ID);
+            $this->assertArrayNotHasKey('members', $principal);
+        });
+
+        // The ACL plugin resolves the domains of the caller on every request:
+        // listing every user of the domain is left to the group address books.
+        $this->assertEquals(0, $queries);
+        $this->assertEqualsCanonicalizing(self::$domainMembers,
+            $backend->getGroupMemberSet('principals/domains/' . self::DOMAIN_ID));
+    }
+
     function testDomainPrincipalsByPrefix() {
         $backend = new Mongo(self::$esndb, self::$tenant);
 
@@ -364,8 +379,7 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
             'groupPrincipals' => [],
             'administrators' => [
                 'principals/users/' . self::USER_DOMAIN_ADMIN_ID
-            ],
-            'members' => self::$domainMembers
+            ]
         ];
 
         $this->assertEquals($expected, $principals[0]);

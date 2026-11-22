@@ -67,4 +67,52 @@ class GroupAddressBookHomeTest extends \PHPUnit\Framework\TestCase {
         ];
         $this->assertEquals($children[0]->getACL(), $expectACL);
     }
+
+    private function memberSetBackend(array $members) {
+        return new class($members) extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend {
+            public $groupMemberSetCalls = [];
+            private $members;
+            function __construct($members) { $this->members = $members; }
+            function getGroupMemberSet($principal) { $this->groupMemberSetCalls[] = $principal; return $this->members; }
+            function getPrincipalsByPrefix($prefixPath) { return []; }
+            function getPrincipalByPath($path) { return null; }
+            function updatePrincipal($path, \Sabre\DAV\PropPatch $propPatch) {}
+            function searchPrincipals($prefixPath, array $searchProperties, $test = 'allof') { return []; }
+            function getGroupMembership($principal) { return []; }
+            function setGroupMemberSet($principal, array $members) {}
+        };
+    }
+
+    function testMembersAreAskedToThePrincipalBackendOnlyWhenTheAddressBooksAreListed() {
+        $this->carddavBackend->createAddressBook('principals/domains/' . self::DOMAIN_ID, 'GAB', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
+        $principalBackend = $this->memberSetBackend(['principals/users/' . self::USER_ID]);
+        $home = new GroupAddressBookHome($this->carddavBackend, [
+            'uri' => 'principals/domains/' . self::DOMAIN_ID,
+            'administrators' => [ 'principals/users/' . self::ADMINISTRATOR_ID ],
+        ], $principalBackend);
+
+        $home->getACL();
+        $this->assertSame([], $principalBackend->groupMemberSetCalls);
+
+        $children = $home->getChildren();
+        $home->getChildren();
+        $this->assertSame(['principals/domains/' . self::DOMAIN_ID], $principalBackend->groupMemberSetCalls);
+        $this->assertContains([
+            'privilege' => '{DAV:}read',
+            'principal' => 'principals/users/' . self::USER_ID,
+            'protected' => true
+        ], $children[0]->getACL());
+    }
+
+    function testWithoutMembersNoMemberIsGrantedTheAddressBooks() {
+        $this->carddavBackend->createAddressBook('principals/domains/' . self::DOMAIN_ID, 'GAB', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
+        $home = new GroupAddressBookHome($this->carddavBackend, [
+            'uri' => 'principals/domains/' . self::DOMAIN_ID,
+            'administrators' => [ 'principals/users/' . self::ADMINISTRATOR_ID ],
+        ]);
+
+        $principals = array_column($home->getChildren()[0]->getACL(), 'principal');
+        $this->assertNotContains('principals/users/' . self::USER_ID, $principals);
+        $this->assertContains('principals/users/' . self::ADMINISTRATOR_ID, $principals);
+    }
 }

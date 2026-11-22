@@ -297,6 +297,8 @@ Tenant isolation obeys these invariants:
   domain name, calendar home, address-book home, or distinguishable status.
 - Resource and team-calendar domain fields are enforced as strictly as user
   domain membership.
+- A user without `domains`, or a resource without `domain`, belongs to no
+  tenant: it is refused like a record of another domain.
 - A missing `AuthTenant` fails closed and never disables domain filtering.
 - Cache keys and deduplication keys are tenant-qualified.
 - Scheduling payloads that cross domain boundaries remain subject to identity

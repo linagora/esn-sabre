@@ -126,7 +126,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
             $obj = $this->attachResourceDomain($obj);
         } else if ($type == 'team-calendars') {
             $this->assertTeamCalendarBelongsToDomain($obj, $domainId);
-        } else if ($type == 'users' && !empty($obj['domains'])) {
+        } else if ($type == 'users') {
             $this->assertUserBelongsToDomain($obj, $domainId);
 
             $domainIds = array_column((array) $obj['domains'], 'domain_id');
@@ -159,7 +159,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
     private function assertUserBelongsToDomain($obj, string $domainId): void {
         $userDomainIds = array_map(
             fn($d) => (string)$d['domain_id'],
-            (array)$obj['domains']
+            (array)($obj['domains'] ?? [])
         );
 
         if (!in_array($domainId, $userDomainIds, true)) {

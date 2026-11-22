@@ -25,6 +25,9 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     const OTHER_RESOURCE_ID = '82113fcc398fef406b0041ba';
     const TEAM_CALENDAR_ID = '82113fcc398fef406b0041b8';
     const OTHER_TEAM_CALENDAR_ID = '82113fcc398fef406b0041b9';
+    const USER_WITHOUT_DOMAINS_ID = '54313fcc398fef406b0041c4';
+    const USER_FROM_OTHER_DOMAIN_ID = '54313fcc398fef406b0041c5';
+    const RESOURCE_WITHOUT_DOMAIN_ID = '82113fcc398fef406b0041bb';
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
     const OTHER_DOMAIN_ID = '5a095e2c46b72521d03f6d76';
 
@@ -408,6 +411,52 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
 
         $backend = new Mongo(self::$esndb, self::$tenant);
         $backend->getPrincipalByPath('principals/resources/' . self::OTHER_RESOURCE_ID);
+    }
+
+    function testResourcePrincipalShouldRejectResourceWithoutDomain() {
+        $this->assertPrincipalForbidden(
+            'resources',
+            [ '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_WITHOUT_DOMAIN_ID), 'name' => 'no domain' ],
+            'principals/resources/' . self::RESOURCE_WITHOUT_DOMAIN_ID
+        );
+    }
+
+    function testUserPrincipalShouldRejectUserWithoutDomains() {
+        $this->assertPrincipalForbidden(
+            'users',
+            [ '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITHOUT_DOMAINS_ID), 'firstname' => 'no domain' ],
+            'principals/users/' . self::USER_WITHOUT_DOMAINS_ID
+        );
+    }
+
+    function testUserPrincipalShouldRejectUserWithEmptyDomains() {
+        $this->assertPrincipalForbidden(
+            'users',
+            [ '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITHOUT_DOMAINS_ID), 'domains' => [] ],
+            'principals/users/' . self::USER_WITHOUT_DOMAINS_ID
+        );
+    }
+
+    function testUserPrincipalShouldRejectCrossDomainAccess() {
+        $this->assertPrincipalForbidden(
+            'users',
+            [
+                '_id' => new \MongoDB\BSON\ObjectId(self::USER_FROM_OTHER_DOMAIN_ID),
+                'domains' => [ [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::OTHER_DOMAIN_ID) ] ]
+            ],
+            'principals/users/' . self::USER_FROM_OTHER_DOMAIN_ID
+        );
+    }
+
+    private function assertPrincipalForbidden(string $collection, array $document, string $path): void {
+        self::$esndb->{$collection}->insertOne($document);
+        try {
+            $backend = new Mongo(self::$esndb, self::$tenant);
+            $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+            $backend->getPrincipalByPath($path);
+        } finally {
+            self::$esndb->{$collection}->deleteOne([ '_id' => $document['_id'] ]);
+        }
     }
 
     function testTeamCalendarPrincipalsByPrefix() {

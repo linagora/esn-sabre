@@ -117,17 +117,18 @@ class AttendeeSchedulingObjectChangeGuard {
      * (reports, free/busy, JSON API) expands the last one, the scheduling and
      * the stored occurrence window take the first one. Each of them must then
      * keep the organizer's fields and recurrence, in the organizer's order, and
-     * the attendee may not add one.
+     * the attendee may neither add nor drop one.
      *
      * @throws ForbiddenAttendeeSchedulingObjectChange
      */
     private static function assertSameMasters(VCalendar $oldObject, VCalendar $newObject, array $forbiddenProperties, \DateTimeZone $timeZone): void {
         $newMasters = self::mastersOf($newObject);
-        if (count($newMasters) < 2) {
+        $oldMasters = self::mastersOf($oldObject);
+        // Dropping some of the organizer's masters would choose which one readers expand.
+        if (count($newMasters) < 2 && count($oldMasters) < 2) {
             return;
         }
 
-        $oldMasters = self::mastersOf($oldObject);
         if (count($oldMasters) !== count($newMasters)) {
             throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
         }
@@ -171,8 +172,12 @@ class AttendeeSchedulingObjectChangeGuard {
         }
     }
 
+    /**
+     * EXDATE included: without it, the same RRULE brings back the occurrences
+     * the organizer cancelled.
+     */
     private static function hasSameRecurrence($oldEvent, $newEvent): bool {
-        foreach (['RRULE', 'RDATE', 'EXRULE'] as $propertyName) {
+        foreach (['RRULE', 'RDATE', 'EXRULE', 'EXDATE'] as $propertyName) {
             if (CalendarObjectHelper::propertySignatures($oldEvent, $propertyName) !== CalendarObjectHelper::propertySignatures($newEvent, $propertyName)) {
                 return false;
             }
@@ -201,8 +206,7 @@ class AttendeeSchedulingObjectChangeGuard {
     private static function assertSameSeriesEvent($oldEvent, $newEvent, array $forbiddenProperties, \DateTimeZone $timeZone): void {
         self::assertSameExplicitEvent($oldEvent, $newEvent, $forbiddenProperties, $timeZone);
         self::assertSameDuration($oldEvent, $newEvent, $timeZone);
-        if (!self::hasSameRecurrence($oldEvent, $newEvent)
-            || CalendarObjectHelper::propertySignatures($oldEvent, 'EXDATE') !== CalendarObjectHelper::propertySignatures($newEvent, 'EXDATE')) {
+        if (!self::hasSameRecurrence($oldEvent, $newEvent)) {
             throw new ForbiddenAttendeeSchedulingObjectChange('DTSTART');
         }
     }

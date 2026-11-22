@@ -28,8 +28,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
      * Group principals already built during this request, by URI.
      *
      * They deliberately leave out the group members: listing them reads every user of the
-     * domain, which only the group address book home needs, and it gets them from the group
-     * principal itself (see domainToPrincipal).
+     * domain, which only the group address book home needs: it asks getGroupMemberSet() for
+     * them when it lists its address books (see GroupAddressBookHome::getMembers()), and the
+     * domain principal does not carry them either.
      */
     private array $groupPrincipals = [];
 

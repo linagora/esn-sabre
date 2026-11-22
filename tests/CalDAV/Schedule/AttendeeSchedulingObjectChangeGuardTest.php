@@ -910,6 +910,26 @@ class AttendeeSchedulingObjectChangeGuardTest extends \PHPUnit\Framework\TestCas
     }
 
     #[DataProvider('seriesKinds')]
+    public function testAMasterTurnedIntoAnOverrideKeepsTheOrganizerExclusions(SeriesKind $kind): void {
+        $exdate = str_replace('RECURRENCE-ID', 'EXDATE', self::recurrenceIdLine($kind, self::OCCURRENCE));
+
+        $this->assertRefused(
+            self::calendar(self::master($kind, ['EXDATE' => $exdate])),
+            self::calendar(self::master($kind, ['RECURRENCE-ID' => self::recurrenceIdLine($kind, self::SERIES_START)])),
+            'DTSTART'
+        );
+    }
+
+    #[DataProvider('seriesKinds')]
+    public function testDroppingOneOfTheOrganizerMastersIsRefused(SeriesKind $kind): void {
+        $first = self::master($kind);
+        $last = self::master($kind, ['SUMMARY' => 'SUMMARY:Second']);
+
+        $this->assertRefused(self::calendar($first, $last), self::calendar($first), 'DTSTART');
+        $this->assertRefused(self::calendar($first, $last), self::calendar($last), 'DTSTART');
+    }
+
+    #[DataProvider('seriesKinds')]
     public function testAnInvitationToOneOccurrenceCanStillBeAnswered(SeriesKind $kind): void {
         $occurrence = self::override($kind, self::OCCURRENCE);
 

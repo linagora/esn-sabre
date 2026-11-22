@@ -215,7 +215,7 @@ $server->addPlugin($binaryAttachmentPlugin);
 $server->addPlugin(new ESN\CalDAV\OrganizerValidationPlugin());
 
 // CardDAV support
-$carddavPlugin = new Sabre\CardDAV\Plugin();
+$carddavPlugin = new ESN\CardDAV\CardDAVPlugin();
 $server->addPlugin($carddavPlugin);
 
 $carddavJsonPlugin = new ESN\CardDAV\Plugin();

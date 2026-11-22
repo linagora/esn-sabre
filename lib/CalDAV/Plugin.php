@@ -271,104 +271,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
     }
 
     /**
-     * Sabre's calendar-multiget leaves an href that names no object out of the
-     * multistatus (Server::getPropertiesForMultiplePaths skips it), while RFC
-     * 4791 section 7.9 wants a 404 response for it: without one, a client
-     * cannot tell a deleted object from an answer that was dropped.
-     *
-     * The stock report is kept; the entries it hands to the multistatus are
-     * captured and, when an href is missing among them, the multistatus is
-     * written again with a 404 response for each missing href.
+     * Answers 404 for an href of a calendar-multiget that names no object
+     * (RFC 4791 section 7.9), see {@see \ESN\DAV\MultiGetMissingHrefs}.
      *
      * @param \Sabre\CalDAV\Xml\Request\CalendarMultiGetReport $report
      * @return void
      */
     function calendarMultiGetReport($report) {
-        $entries = $this->captureMultiStatusEntries(function () use ($report) {
+        \ESN\DAV\MultiGetMissingHrefs::run($this->server, $report->hrefs, function () use ($report) {
             parent::calendarMultiGetReport($report);
         });
-
-        $missingPaths = $this->missingPaths($report->hrefs, $entries);
-        if (!$missingPaths) {
-            return;
-        }
-
-        $this->writeMultiStatus(array_merge(
-            $this->foundResponses($entries),
-            $this->notFoundResponses($missingPaths)
-        ));
-    }
-
-    /**
-     * Runs the given report and returns the entries it handed to the
-     * multistatus.
-     *
-     * @param callable $report
-     * @return array
-     */
-    private function captureMultiStatusEntries(callable $report) {
-        $entries = [];
-        $capture = function (&$fileProperties) use (&$entries) {
-            $entries = $fileProperties;
-        };
-
-        $this->server->on('beforeMultiStatus', $capture, 1000);
-        try {
-            $report();
-        } finally {
-            $this->server->removeListener('beforeMultiStatus', $capture);
-        }
-
-        return $entries;
-    }
-
-    /**
-     * @param string[] $hrefs the requested hrefs
-     * @param array $entries the multistatus entries
-     * @return string[] the paths of the requested hrefs absent from the entries
-     */
-    private function missingPaths(array $hrefs, array $entries) {
-        $found = array_flip(array_map(fn($entry) => trim($entry['href'], '/'), $entries));
-        $paths = array_map(fn($href) => trim($this->server->calculateUri($href), '/'), $hrefs);
-
-        return array_values(array_unique(array_filter($paths, fn($path) => !isset($found[$path]))));
-    }
-
-    /**
-     * @param array $entries the multistatus entries
-     * @return \Sabre\DAV\Xml\Element\Response[]
-     */
-    private function foundResponses(array $entries) {
-        $minimal = 'minimal' === $this->server->getHTTPPrefer()['return'];
-
-        return array_map(function ($entry) use ($minimal) {
-            $href = $entry['href'];
-            unset($entry['href']);
-            if ($minimal) {
-                unset($entry[404]);
-            }
-            return new \Sabre\DAV\Xml\Element\Response(ltrim($href, '/'), $entry);
-        }, $entries);
-    }
-
-    /**
-     * @param string[] $paths
-     * @return \Sabre\DAV\Xml\Element\Response[]
-     */
-    private function notFoundResponses(array $paths) {
-        return array_map(fn($path) => new \Sabre\DAV\Xml\Element\Response($path, [], 404), $paths);
-    }
-
-    /**
-     * @param \Sabre\DAV\Xml\Element\Response[] $responses
-     * @return void
-     */
-    private function writeMultiStatus(array $responses) {
-        $this->server->httpResponse->setBody($this->server->xml->write(
-            '{DAV:}multistatus',
-            new \Sabre\DAV\Xml\Response\MultiStatus($responses),
-            $this->server->getBaseUri()
-        ));
     }
 
     /**

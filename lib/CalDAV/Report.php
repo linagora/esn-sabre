@@ -8,9 +8,9 @@ use Sabre\DAV\Server;
 use Sabre\VObject\Reader;
 
 /**
- * Holds the ESN specific calendar-query REPORT overrides so that they are
- * isolated from the rest of the MongoDB CalDAV Plugin. The Plugin simply
- * delegates its report handling to this class.
+ * Holds the ESN specific calendar-query and calendar-multiget REPORT overrides
+ * so that they are isolated from the rest of the MongoDB CalDAV Plugin. The
+ * Plugin simply delegates its report handling to this class.
  */
 class Report {
     const NS_CALDAV = \Sabre\CalDAV\Plugin::NS_CALDAV;
@@ -60,6 +60,44 @@ class Report {
         }
 
         $this->sendMultiStatus($this->buildCalendarQueryReportResult($report, $path, $node));
+    }
+
+    /**
+     * This function handles the calendar-multiget REPORT, as the stock Sabre
+     * implementation does, but renders the calendar-data as calendar-query
+     * does: an object that cannot be expanded (too many occurrences, a
+     * recurrence vobject refuses) no longer fails the whole multistatus with
+     * a 500. Its response is kept, with its calendar-data in a 422 propstat:
+     * leaving the href out would read as a deleted object.
+     *
+     * @param \Sabre\CalDAV\Xml\Request\CalendarMultiGetReport $report
+     * @return void
+     */
+    function calendarMultiGetReport($report) {
+        $calendarDataProp = '{' . self::NS_CALDAV . '}calendar-data';
+        $needsJson = $report->contentType === 'application/calendar+json';
+        $paths = array_map([$this->server, 'calculateUri'], $report->hrefs);
+
+        $timeZones = [];
+        $result = [];
+        foreach ($this->server->getPropertiesForMultiplePaths($paths, $report->properties) as $uri => $properties) {
+            $calendarTimeZone = null;
+            if ($report->expand) {
+                list($calendarPath) = \Sabre\Uri\split($uri);
+                $calendarTimeZone = $timeZones[$calendarPath] ??= $this->resolveCalendarTimeZone($calendarPath);
+            }
+
+            try {
+                $result[] = $this->renderBatchedProperties($properties, $report, $needsJson, $calendarTimeZone);
+            } catch (RecurrenceExpansionLimitExceeded | InvalidStoredRecurrence $e) {
+                error_log('Report: calendar object that cannot be expanded in a multiget: ' . $e->getMessage());
+                unset($properties[200][$calendarDataProp]);
+                $properties[$e->getHTTPCode()][$calendarDataProp] = null;
+                $result[] = $properties;
+            }
+        }
+
+        $this->sendMultiStatus($result);
     }
 
     /**
@@ -248,7 +286,11 @@ class Report {
      */
     private function expand($vObject, array $range, $calendarTimeZone) {
         try {
-            return $vObject->expand($range['start'], $range['end'], $calendarTimeZone);
+            $expanded = $vObject->expand($range['start'], $range['end'], $calendarTimeZone);
+            // The parsed object is only read by the expansion: free its cyclic tree now.
+            $vObject->destroy();
+
+            return $expanded;
         } catch (\Sabre\VObject\Recur\MaxInstancesExceededException $e) {
             $vObject->destroy();
             throw new RecurrenceExpansionLimitExceeded($e);

@@ -70,6 +70,13 @@ outside_seq() {
   curl -s -o /dev/null -w '%{http_code}\n' "$@" "http://127.0.0.1:$port/rate-limit-test/[1-$count]"
 }
 
+# Prints the configuration nginx runs in container $1. Grep its captured output rather than piping
+# `nginx -T` into `grep -q`: grep exits at the first match, nginx -T may then die of SIGPIPE and,
+# with pipefail, the pipeline fails although the line was found.
+nginx_config() {
+  docker exec "$1" nginx -T 2>/dev/null
+}
+
 count() { grep -c "^$1\$" || true; }
 
 expect_count() {
@@ -102,7 +109,7 @@ cid=$(start) || { failed "container did not start"; exit 1; }
 codes=$(inside_burst "$cid" 300)
 expect_count "429 answers to 300 concurrent requests" "$(count 429 <<<"$codes")" -gt 0
 expect_count "503 answers to 300 concurrent requests" "$(count 503 <<<"$codes")" -eq 0
-docker exec "$cid" nginx -T 2>/dev/null | grep -q 'limit_req_status 429;' \
+grep -Fq 'limit_req_status 429;' <<<"$(nginx_config "$cid")" \
   && pass "limit_req_status 429 rendered" || failed "limit_req_status 429 not rendered"
 docker rm -f "$cid" >/dev/null
 
@@ -120,7 +127,7 @@ docker rm -f "$cid" >/dev/null
 echo "2. NGINX_RATE_LIMIT=off disables rate limiting"
 for value in off FALSE 0 Disabled; do
   cid=$(start -e NGINX_RATE_LIMIT=$value -e NGINX_RATE_BURST=5) || { failed "container did not start with $value"; continue; }
-  if docker exec "$cid" nginx -T 2>/dev/null | grep -Eq '^\s*limit_req(_zone)?\s'; then
+  if grep -Eq '^\s*limit_req(_zone)?\s' <<<"$(nginx_config "$cid")"; then
     failed "NGINX_RATE_LIMIT=$value: nginx -T still shows a limit_req directive"
   else
     pass "NGINX_RATE_LIMIT=$value: no limit_req directive in nginx -T"
@@ -150,10 +157,10 @@ for ip in 198.51.100.1 198.51.100.2 198.51.100.3; do
   codes+=$(outside_seq "$cid" 6 -H "X-Forwarded-For: $ip")$'\n'
 done
 expect_count "default: forwarded IPs from any peer get separate buckets" "$(count 429 <<<"$codes")" -eq 0
-nginx_config=$(docker exec "$cid" nginx -T 2>/dev/null)
-grep -Fq 'set_real_ip_from 0.0.0.0/0;' <<<"$nginx_config" \
+rendered_config=$(nginx_config "$cid")
+grep -Fq 'set_real_ip_from 0.0.0.0/0;' <<<"$rendered_config" \
   && pass "IPv4 peers trusted by default" || failed "IPv4 peers not trusted by default"
-grep -Fq 'set_real_ip_from ::/0;' <<<"$nginx_config" \
+grep -Fq 'set_real_ip_from ::/0;' <<<"$rendered_config" \
   && pass "IPv6 peers trusted by default" || failed "IPv6 peers not trusted by default"
 docker rm -f "$cid" >/dev/null
 

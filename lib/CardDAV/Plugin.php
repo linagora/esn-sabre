@@ -688,7 +688,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $offset = $this->nonNegativeIntegerParameter($queryParams, 'offset');
         $limit = $this->nonNegativeIntegerParameter($queryParams, 'limit');
         $search = isset($queryParams['search']) ? $queryParams['search'] : null;
-        $sort = isset($queryParams['sort']) ? $queryParams['sort'] : null;
+        // An empty sort (`sort=`) is no sort, as it always was.
+        $sort = isset($queryParams['sort']) && $queryParams['sort'] !== '' ? $queryParams['sort'] : null;
         // The sort names a stored field: only the full name, email and _id ones are meant to be sorted on.
         if ($sort !== null && !in_array($sort, ContactSort::OFFSET_LISTING_SORTS, true)) {
             throw new BadRequest('sort must be fn, email or _id');

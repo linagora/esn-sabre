@@ -629,6 +629,20 @@ class PluginTest extends PluginTestBase {
         $this->assertCount(2, json_decode($response->getBodyAsString())->{'_embedded'}->{'dav:item'});
     }
 
+    function testGetContactsTreatsAnEmptySortAsNoSort() {
+        $path = '/addressbooks/' . $this->userTestId1 . '/book1.json';
+        $hrefs = function ($response) {
+            $this->assertSame(200, $response->status);
+
+            return array_map(fn($item) => basename($item->{'_links'}->self->href),
+                json_decode($response->getBodyAsString())->{'_embedded'}->{'dav:item'});
+        };
+
+        $this->assertSame($hrefs($this->makeRequest('GET', $path . '?limit=2&offset=0')),
+            $hrefs($this->makeRequest('GET', $path . '?limit=2&offset=0&sort=')));
+        $this->assertSame($hrefs($this->makeRequest('GET', $path)), $hrefs($this->makeRequest('GET', $path . '?sort=')));
+    }
+
     #[DataProvider('invalidOffsetPaginationParameters')]
     function testGetContactsRejectsInvalidOffsetPaginationParameters(string $query, string $expectedMessage) {
         $response = $this->makeRequest('GET', '/addressbooks/' . $this->userTestId1 . '/book1.json?' . $query);

@@ -278,7 +278,7 @@ class Plugin extends \Sabre\CalDAV\Plugin {
      * @return void
      */
     function calendarMultiGetReport($report) {
-        \ESN\DAV\MultiGetMissingHrefs::run($this->server, $report->hrefs, function () use ($report) {
+        \ESN\DAV\MultiGetMissingHrefs::run($this->server, $report, function () use ($report) {
             (new Report($this->server))->calendarMultiGetReport($report);
         });
     }

@@ -459,7 +459,7 @@ END:VCALENDAR'
             $caldavPlugin = new \ESN\CalDAV\Plugin();
             $this->server->addPlugin($caldavPlugin);
 
-            $carddavPlugin = new \Sabre\CardDAV\Plugin();
+            $carddavPlugin = new \ESN\CardDAV\CardDAVPlugin();
             $this->server->addPlugin($carddavPlugin);
 
             $this->carddavPlugin = new \ESN\CardDAV\Plugin();

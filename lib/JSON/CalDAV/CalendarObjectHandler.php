@@ -680,15 +680,25 @@ class CalendarObjectHandler {
     private function normalizeCalendarObject($vObject, $parentNode, $timeRange) {
         [$start, $end] = $timeRange;
         $hadMasterEvent = $this->hasMasterEvent($vObject);
-        $vObject = $this->expandAndNormalizeVObject($vObject, $start, $end);
-
-        if ($this->hasNoOccurrenceInRange($vObject, $hadMasterEvent, $timeRange)) {
+        $expanded = $this->expandAndNormalizeVObject($vObject, $start, $end);
+        if ($expanded !== $vObject) {
+            // The row's own object, used nowhere else: free its cyclic tree now
+            // rather than leave it to the cycle collector.
             $vObject->destroy();
+        }
+
+        if ($this->hasNoOccurrenceInRange($expanded, $hadMasterEvent, $timeRange)) {
+            $expanded->destroy();
 
             return null;
         }
 
-        return Utils::hidePrivateEventInfoForUser($vObject, $parentNode, $this->currentUser);
+        $sanitized = Utils::hidePrivateEventInfoForUser($expanded, $parentNode, $this->currentUser);
+        if ($sanitized !== $expanded) {
+            $expanded->destroy();
+        }
+
+        return $sanitized;
     }
 
     private function logMalformedCalendarObject($exception) {

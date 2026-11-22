@@ -242,8 +242,10 @@ class PrivateEventPlugin extends ServerPlugin {
         $sanitizedCalendar = Utils::hidePrivateEventInfoForUser($vCalendar, $calendar, $currentUser);
         $result = $sanitizedCalendar->serialize();
 
+        if ($sanitizedCalendar !== $vCalendar) {
+            $sanitizedCalendar->destroy();
+        }
         $vCalendar->destroy();
-        $sanitizedCalendar->destroy();
 
         return $result;
     }

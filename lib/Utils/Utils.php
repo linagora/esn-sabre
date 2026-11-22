@@ -204,21 +204,50 @@ class Utils {
         return json_encode($value, JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
     }
 
+    /**
+     * The calendar as this user may read it: each PRIVATE / CONFIDENTIAL
+     * component (see privacyComponents(): events, tasks, journals) the user may
+     * not read in full is replaced by a "Busy" one rebuilt from an allowlist.
+     *
+     * The input is never modified. When nothing is hidden it is returned as is
+     * (copying it would only cost time and memory): callers that must not
+     * share it with another reader compare the result with the input. When
+     * something is hidden the result is a new calendar of its own: the other
+     * children are cloned, and the hidden components are rebuilt straight from
+     * the input, never cloned first. As before, these components come after
+     * the other children, in their original order.
+     *
+     * @param \Sabre\VObject\Component\VCalendar $vCalendar
+     * @param mixed $parentNode The calendar (or calendar object) the events are read through
+     * @param string|null $userPrincipal
+     * @return \Sabre\VObject\Component\VCalendar
+     */
     static function hidePrivateEventInfoForUser($vCalendar, $parentNode, $userPrincipal) {
-        // Clone the entire VCalendar once to avoid multiple serializations
-        $clonedCalendar = self::safeCloneVObject($vCalendar);
-
-        list($events, $hasSanitizedEvent) = self::sanitizePrivateEvents(
-            $clonedCalendar,
-            $parentNode,
-            $userPrincipal
-        );
-
-        if ($hasSanitizedEvent) {
-            self::replaceCalendarEvents($clonedCalendar, $events);
+        $events = self::privacyComponents($vCalendar);
+        $hidden = self::hiddenPrivateEvents($events, $parentNode, $userPrincipal);
+        if (!$hidden) {
+            return $vCalendar;
         }
 
-        return $clonedCalendar;
+        $eventIds = [];
+        foreach ($events as $event) {
+            $eventIds[spl_object_id($event)] = true;
+        }
+
+        // An empty calendar without default properties, as cloneVCalendar() builds it
+        $result = new \Sabre\VObject\Component\VCalendar([], false);
+        foreach ($vCalendar->children() as $child) {
+            if (!isset($eventIds[spl_object_id($child)])) {
+                $result->add(@clone $child);
+            }
+        }
+        foreach ($events as $event) {
+            $result->add(isset($hidden[spl_object_id($event)])
+                ? self::createSanitizedPrivateEvent($result, $event)
+                : @clone $event);
+        }
+
+        return $result;
     }
 
     /**
@@ -282,30 +311,29 @@ class Utils {
         return false;
     }
 
-    private static function sanitizePrivateEvents($vCalendar, $parentNode, $userPrincipal) {
-        $components = [];
-        $hasSanitizedEvent = false;
+    /**
+     * @return array spl_object_id => true, for each of these events hidden from the user
+     */
+    private static function hiddenPrivateEvents(array $events, $parentNode, $userPrincipal) {
+        $hidden = [];
+        // Whether the calendar hides its private events from the user does not
+        // depend on the event: asked once, and only if one is private.
+        $hides = null;
 
-        foreach (self::privacyComponents($vCalendar) as $component) {
-            $sanitized = self::isHiddenPrivateEvent($component, $parentNode, $userPrincipal)
-                ? self::createSanitizedPrivateEvent($vCalendar, $component)
-                : $component;
-            $components[] = $sanitized;
-            $hasSanitizedEvent = $hasSanitizedEvent || $sanitized !== $component;
+        foreach ($events as $event) {
+            if (!self::isPrivateClassification((string) $event->CLASS)) {
+                continue;
+            }
+
+            $hides ??= self::hidesPrivateEventsFrom($parentNode, $userPrincipal);
+            if (!$hides) {
+                return [];
+            }
+
+            $hidden[spl_object_id($event)] = true;
         }
 
-        return [$components, $hasSanitizedEvent];
-    }
-
-    private static function replaceCalendarEvents($vCalendar, $components) {
-        // Removed by name, not one by one: select() would otherwise keep the keys of the removed components
-        $names = array_unique(array_map(fn ($component) => $component->name, self::privacyComponents($vCalendar)));
-        foreach ($names as $name) {
-            $vCalendar->remove($name);
-        }
-        foreach ($components as $component) {
-            $vCalendar->add($component);
-        }
+        return $hidden;
     }
 
     private static function createSanitizedPrivateEvent($vCalendar, $vevent, bool $freeBusy = false) {

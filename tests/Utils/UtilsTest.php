@@ -785,4 +785,128 @@ ICS;
         $this->assertSame('Busy', (string) $reparsed->VEVENT->SUMMARY);
         $this->assertSame('PERIOD', (string) $reparsed->VEVENT->RRULE['VALUE']);
     }
+
+    private function countingOwnerNode($owner) {
+        return new class($owner) {
+            public $calls = 0;
+            private $owner;
+            public function __construct($owner) { $this->owner = $owner; }
+            public function getOwner() { $this->calls++; return $this->owner; }
+        };
+    }
+
+    private function ownerLookupsOfOneHidesCheck($userPrincipal) {
+        $node = $this->countingOwnerNode('principals/users/owner');
+        Utils::hidesPrivateEventsFrom($node, $userPrincipal);
+
+        return $node->calls;
+    }
+
+    private function calendarWithTwoPrivateEventsAndAPublicOne() {
+        return \Sabre\VObject\Reader::read(join("\r\n", [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Test//EN',
+            'BEGIN:VEVENT',
+            'UID:series',
+            'DTSTART;TZID=Europe/Paris:20350105T100000',
+            'RRULE:FREQ=WEEKLY',
+            'SUMMARY:Secret series',
+            'DESCRIPTION:Secret details',
+            'CLASS:PRIVATE',
+            'BEGIN:VALARM',
+            'ACTION:DISPLAY',
+            'TRIGGER:-PT5M',
+            'DESCRIPTION:Secret alarm',
+            'END:VALARM',
+            'END:VEVENT',
+            'BEGIN:VTIMEZONE',
+            'TZID:Europe/Paris',
+            'BEGIN:STANDARD',
+            'DTSTART:19701025T030000',
+            'TZOFFSETFROM:+0200',
+            'TZOFFSETTO:+0100',
+            'END:STANDARD',
+            'END:VTIMEZONE',
+            'BEGIN:VEVENT',
+            'UID:series',
+            'RECURRENCE-ID;TZID=Europe/Paris:20350112T100000',
+            'DTSTART;TZID=Europe/Paris:20350112T110000',
+            'SUMMARY:Secret override',
+            'CLASS:CONFIDENTIAL',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:public',
+            'DTSTART:20350106T100000Z',
+            'SUMMARY:Public meeting',
+            'END:VEVENT',
+            'BEGIN:VTODO',
+            'UID:todo',
+            'SUMMARY:A task',
+            'END:VTODO',
+            'END:VCALENDAR',
+            ''
+        ]));
+    }
+
+    function testHidePrivateEventInfoForUserReturnsTheInputWhenNothingIsHidden() {
+        $vcalendar = $this->calendarWithTwoPrivateEventsAndAPublicOne();
+        $before = $vcalendar->serialize();
+        $node = $this->countingOwnerNode('principals/users/owner');
+
+        $result = Utils::hidePrivateEventInfoForUser($vcalendar, $node, 'principals/users/owner');
+
+        $this->assertSame($vcalendar, $result);
+        $this->assertSame($before, $vcalendar->serialize());
+        $this->assertSame($this->ownerLookupsOfOneHidesCheck('principals/users/owner'), $node->calls,
+            'whether the calendar hides its private events is asked once');
+    }
+
+    function testHidePrivateEventInfoForUserDoesNotAskTheNodeWithoutAPrivateEvent() {
+        $vcalendar = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:a\r\n"
+            . "DTSTART:20350106T100000Z\r\nSUMMARY:Public\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        $node = $this->countingOwnerNode('principals/users/owner');
+
+        $this->assertSame($vcalendar, Utils::hidePrivateEventInfoForUser($vcalendar, $node, 'principals/users/other'));
+        $this->assertSame(0, $node->calls);
+    }
+
+    function testHidePrivateEventInfoForUserBuildsASeparateCalendarAndKeepsTheInputWhenHiding() {
+        $vcalendar = $this->calendarWithTwoPrivateEventsAndAPublicOne();
+        $before = $vcalendar->serialize();
+        $node = $this->countingOwnerNode('principals/users/owner');
+
+        $result = Utils::hidePrivateEventInfoForUser($vcalendar, $node, 'principals/users/other');
+
+        $this->assertNotSame($vcalendar, $result);
+        $this->assertSame($before, $vcalendar->serialize(), 'the input is never modified');
+        $this->assertSame($this->ownerLookupsOfOneHidesCheck('principals/users/other'), $node->calls);
+
+        // The other children first, then the events and tasks (privacyComponents()), each in its original order
+        $this->assertSame(['VERSION', 'PRODID', 'VTIMEZONE', 'VEVENT', 'VEVENT', 'VEVENT', 'VTODO'],
+            array_map(function ($child) { return $child->name; }, $result->children()));
+
+        $events = $result->select('VEVENT');
+        $this->assertSame('Busy', (string) $events[0]->SUMMARY);
+        $this->assertFalse(isset($events[0]->DESCRIPTION));
+        $this->assertFalse(isset($events[0]->VALARM));
+        $this->assertSame('FREQ=WEEKLY', (string) $events[0]->RRULE);
+        $this->assertSame('Busy', (string) $events[1]->SUMMARY);
+        $this->assertSame('PRIVATE', (string) $events[1]->CLASS);
+        $this->assertSame('20350112T100000', (string) $events[1]->{'RECURRENCE-ID'});
+        $this->assertSame('Public meeting', (string) $events[2]->SUMMARY);
+        $this->assertSame('A task', (string) $result->VTODO->SUMMARY);
+
+        // Every node of the result belongs to it, none to the input
+        foreach ($result->children() as $child) {
+            $this->assertSame($result, $child->parent);
+            $this->assertNotContains($child, $vcalendar->children());
+        }
+        $this->assertSame('Europe/Paris', $events[0]->DTSTART->getDateTime()->getTimezone()->getName());
+
+        // Destroying the input leaves the result whole
+        $vcalendar->destroy();
+        $this->assertStringContainsString('SUMMARY:Public meeting', $result->serialize());
+        $this->assertStringContainsString('TZID:Europe/Paris', $result->serialize());
+    }
 }

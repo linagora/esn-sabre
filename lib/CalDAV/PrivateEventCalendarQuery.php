@@ -104,7 +104,9 @@ class PrivateEventCalendarQuery {
             // Same leniency as the backend: a malformed object does not fail the whole REPORT
             return false;
         } finally {
-            $sanitized->destroy();
+            if ($sanitized !== $vObject) {
+                $sanitized->destroy();
+            }
             $vObject->destroy();
         }
     }

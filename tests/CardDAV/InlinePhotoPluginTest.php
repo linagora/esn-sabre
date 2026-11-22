@@ -333,4 +333,18 @@ class InlinePhotoPluginTest extends TestCase {
         $this->assertStringNotContainsString('evil.test', $data);
         $this->assertStringNotContainsString('PHOTO', $data);
     }
+
+    // GHSA-367w-28fg-25w2: ".PHOTO.PHOTO" is serialised back as "PHOTO.PHOTO", the PHOTO property of group PHOTO
+    function testTrustedBaseFiltersPhotoHiddenBehindAnEmptyGroup() {
+        $plugin = new InlinePhotoPlugin(InlinePhotoPlugin::MODE_FILTER, 'https://{fdqn}-drive.linagora.com');
+        $data = self::vcard("PHOTO;VALUE=URI:https://evil.test/a.jpg\r\n" .
+            '.PHOTO.PHOTO;VALUE=URI:https://evil.test/b.jpg');
+        $modified = false;
+
+        $this->invokeProcess($plugin, $data, $modified);
+
+        $card = VObject\Reader::read($data);
+        $card->validate(VObject\Node::PROFILE_CARDDAV | VObject\Node::REPAIR);
+        $this->assertCount(0, $card->select('PHOTO'));
+    }
 }

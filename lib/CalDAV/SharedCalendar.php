@@ -23,6 +23,13 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
      */
     private $invites = null;
 
+    /**
+     * Public right of this calendar, read once per node: the ACL of the calendar and of each of
+     * its objects is built from it. null is a right too (not public), hence the flag.
+     */
+    private $publicRight = null;
+    private $publicRightLoaded = false;
+
     function __construct(\Sabre\CalDAV\SharedCalendar $sharedCalendar) {
         parent::__construct($sharedCalendar->caldavBackend, $sharedCalendar->calendarInfo);
     }
@@ -148,8 +155,8 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     }
 
     private function updateAclWithPublicRight($acl) {
-        if ($this->isPublic()) {
-            $public_right = $this->getPublicRight();
+        $public_right = $this->getPublicRight();
+        if (self::isSupportedPublicRight($public_right)) {
             $index = array_search('{DAV:}authenticated', array_column($acl, 'principal'));
             if ($index !== false) {
                 $acl[$index]['privilege'] = $public_right;
@@ -181,9 +188,12 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
     }
 
     function getPublicRight() {
+        if (!$this->publicRightLoaded) {
+            $this->publicRight = $this->caldavBackend->getCalendarPublicRight($this->calendarInfo['id']);
+            $this->publicRightLoaded = true;
+        }
 
-        return $this->caldavBackend->getCalendarPublicRight($this->calendarInfo['id']);
-
+        return $this->publicRight;
     }
 
     /**
@@ -275,7 +285,9 @@ class SharedCalendar extends \Sabre\CalDAV\SharedCalendar {
         $calendarInfo['principaluri'] = $this->calendarInfo['principaluri'];
         $calendarInfo['uri'] = $this->calendarInfo['uri'];
 
+        $this->publicRightLoaded = false;
         $this->caldavBackend->saveCalendarPublicRight($this->calendarInfo['id'], $privilege, $calendarInfo);
+        $this->publicRightLoaded = false;
 
     }
 

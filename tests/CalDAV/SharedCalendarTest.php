@@ -853,6 +853,53 @@ class SharedCalendarTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($perChildACL, [$backend->getInvitesCalls, $backend->getCalendarPublicRightCalls]);
     }
 
+    public static function publicRights(): array {
+        return ['not public' => [null], 'read' => ['{DAV:}read'], 'write' => ['{DAV:}write']];
+    }
+
+    #[DataProvider('publicRights')]
+    function testThePublicRightIsReadOncePerNode($publicRight) {
+        list($sharedCalendar, $backend) = $this->sharedCalendarWithObjects([
+            'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+            'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED,
+        ], [], $publicRight, 0);
+        $backend->resetCounters();
+
+        $acl = $sharedCalendar->getACL();
+        $this->assertEquals($acl, $sharedCalendar->getACL());
+        $sharedCalendar->getChildACL();
+        $this->assertSame($publicRight, $sharedCalendar->getPublicRight());
+        $this->assertSame($publicRight !== null, $sharedCalendar->isPublic());
+
+        $this->assertEquals(1, $backend->getCalendarPublicRightCalls);
+    }
+
+    function testTheSavedPublicRightIsReadAgain() {
+        list($sharedCalendar, $backend) = $this->sharedCalendarWithObjects([
+            'principaluri' => 'principals/users/54b64eadf6d7d8e41d263e0f',
+            'share-access' => \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED,
+        ], [], null, 0);
+        $before = array_column($sharedCalendar->getACL(), 'privilege', 'principal');
+        $this->assertArrayNotHasKey('{DAV:}authenticated', array_filter($before, fn($p) => $p === '{DAV:}write'));
+
+        $sharedCalendar->savePublicRight('{DAV:}write');
+
+        $this->assertSame('{DAV:}write', $sharedCalendar->getPublicRight());
+        $this->assertContains([
+            'privilege' => '{DAV:}write',
+            'principal' => '{DAV:}authenticated',
+            'protected' => true,
+        ], $sharedCalendar->getACL());
+
+        $sharedCalendar->savePublicRight('');
+        $this->assertFalse($sharedCalendar->isPublic());
+        $this->assertNotContains([
+            'privilege' => '{DAV:}write',
+            'principal' => '{DAV:}authenticated',
+            'protected' => true,
+        ], $sharedCalendar->getACL());
+    }
+
     function testListingAnEmptyCalendarDoesNotComputeTheChildACL() {
         list($sharedCalendar, $backend) = $this->sharedCalendarWithObjects([
             'principaluri' => 'principals/team-calendars/64b64eadf6d7d8e41d263e0f',
@@ -916,6 +963,10 @@ class CountingBackendMock extends SimpleBackendMock {
         $this->getCalendarPublicRightCalls++;
 
         return $this->publicRight;
+    }
+
+    function saveCalendarPublicRight($calendarId, $privilege, $calendarInfo) {
+        $this->publicRight = $privilege;
     }
 }
 

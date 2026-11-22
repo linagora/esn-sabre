@@ -14,10 +14,14 @@ use \Sabre\HTTP\ResponseInterface;
  * makes them heuristically cacheable (RFC 9111 4.2.2). Without these headers a
  * browser may serve one user's cached calendar object to a later request
  * issued with another user's credentials.
+ *
+ * Calendar objects and cards are converted to jCal / jCard according to the
+ * Accept header: Vary lists it so that a cache never answers one format with
+ * the other.
  */
 class PrivateCachePlugin extends ServerPlugin {
     const CACHE_CONTROL = 'private, no-cache';
-    const VARY = 'Authorization';
+    const VARY = 'Authorization, Accept';
 
     function initialize(Server $server) {
         // Runs first so that handlers short-circuiting the request (JSON API,

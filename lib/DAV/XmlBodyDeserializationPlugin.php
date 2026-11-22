@@ -30,6 +30,12 @@ use \Sabre\Xml\ParseException;
  * We deserialise the body once ourselves, before any handler, and turn these
  * failures into 400. Bodies that are not well-formed XML are not parsed at
  * all, and parse errors are left to the handlers, which already deal with them.
+ *
+ * Sabre's `{DAV:}prop` deserialiser loops forever on some well-formed bodies
+ * (see ESN\DAV\Xml\Element\Prop). The request roots that use it are mapped
+ * to ESN subclasses that use a hardened one instead. This also covers the
+ * handlers' own parsing (CorePlugin's PROPPATCH, MKCOL, MKCALENDAR), which
+ * reads the same element map.
  */
 #[\AllowDynamicProperties]
 class XmlBodyDeserializationPlugin extends ServerPlugin {
@@ -42,6 +48,14 @@ class XmlBodyDeserializationPlugin extends ServerPlugin {
     // Methods whose handlers only read an XML body when the Content-Type says so.
     const XML_CONTENT_TYPE_METHODS = ['MKCOL', 'POST'];
 
+    // Roots whose Sabre deserialiser maps `{DAV:}prop` to Sabre's looping Prop.
+    const HARDENED_ROOTS = [
+        '{DAV:}propertyupdate' => \ESN\DAV\Xml\Request\PropPatch::class,
+        '{DAV:}mkcol' => \ESN\DAV\Xml\Request\MkCol::class,
+        '{DAV:}multistatus' => \ESN\DAV\Xml\Response\MultiStatus::class,
+        '{urn:ietf:params:xml:ns:caldav}mkcalendar' => \ESN\CalDAV\Xml\Request\MkCalendar::class,
+    ];
+
     protected $server;
 
     function getPluginName() {
@@ -50,12 +64,17 @@ class XmlBodyDeserializationPlugin extends ServerPlugin {
 
     function initialize(Server $server) {
         $this->server = $server;
+        $this->useHardenedRoots();
         foreach (['PROPFIND', 'PROPPATCH', 'MKCOL', 'MKCALENDAR', 'ACL', 'POST'] as $method) {
             $server->on('method:' . $method, [$this, 'assertDeserializableBody'], self::PRIORITY);
         }
     }
 
     function assertDeserializableBody(RequestInterface $request, ResponseInterface $response) {
+        // Again here, before any handler parses: a plugin added after this one
+        // (e.g. \Sabre\CalDAV\Plugin) may have mapped a root back to Sabre's.
+        $this->useHardenedRoots();
+
         if (!$this->hasXmlBody($request)) {
             return;
         }
@@ -105,6 +124,12 @@ class XmlBodyDeserializationPlugin extends ServerPlugin {
             if (!is_string($ace['principal'] ?? null) || '' === $ace['principal']) {
                 throw new BadRequest('The ACL request body contains an ACE whose principal has no usable href');
             }
+        }
+    }
+
+    private function useHardenedRoots(): void {
+        foreach (self::HARDENED_ROOTS as $root => $class) {
+            $this->server->xml->elementMap[$root] = $class;
         }
     }
 

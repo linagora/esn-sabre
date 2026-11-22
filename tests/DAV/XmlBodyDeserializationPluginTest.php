@@ -160,4 +160,23 @@ class XmlBodyDeserializationPluginTest extends \PHPUnit\Framework\TestCase {
         // Sabre's handler ran: the in-memory root collection refuses new children.
         $this->assertEquals(403, $response->getStatus());
     }
+
+    function testPropRootsUseTheHardenedDeserialiserWhateverThePluginOrder() {
+        $server = $this->prepareServer();
+        // A plugin added later maps a root back to Sabre's class.
+        $server->addPlugin(new class extends \Sabre\DAV\ServerPlugin {
+            function initialize(\Sabre\DAV\Server $server) {
+                $server->xml->elementMap['{urn:ietf:params:xml:ns:caldav}mkcalendar'] = \Sabre\CalDAV\Xml\Request\MkCalendar::class;
+            }
+        });
+        $server->httpRequest = new \Sabre\HTTP\Request('MKCALENDAR', '/new', ['Content-Type' => 'application/xml'],
+            '<C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop/></D:set></C:mkcalendar>');
+        $server->exec();
+        $map = $server->xml->elementMap;
+
+        $this->assertSame(\ESN\DAV\Xml\Request\PropPatch::class, $map['{DAV:}propertyupdate']);
+        $this->assertSame(\ESN\DAV\Xml\Request\MkCol::class, $map['{DAV:}mkcol']);
+        $this->assertSame(\ESN\DAV\Xml\Response\MultiStatus::class, $map['{DAV:}multistatus']);
+        $this->assertSame(\ESN\CalDAV\Xml\Request\MkCalendar::class, $map['{urn:ietf:params:xml:ns:caldav}mkcalendar']);
+    }
 }

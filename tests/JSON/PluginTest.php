@@ -3452,6 +3452,28 @@ END:VCALENDAR
         $this->assertTrue(isset($jsonResponse->{'sync-token'}));
     }
 
+    public static function neverIssuedSyncTokens(): array {
+        return [
+            'negative number' => [-1],
+            'negative string' => ['-1'],
+            'decimal number' => [1.5],
+            'non-numeric URL suffix' => ['http://sabre.io/ns/sync/abc'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('neverIssuedSyncTokens')]
+    function testSyncTokenNeverIssuedReturns400($syncToken) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'REPORT',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/calendar1.json',
+        ));
+        $request->setBody(json_encode(['sync-token' => $syncToken]));
+
+        $this->assertEquals(400, $this->request($request)->status);
+    }
+
     function testSyncTokenUrlFormatWithTrailingSlash() {
         // Test that sync-token with trailing slash is handled correctly
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
@@ -3696,6 +3718,19 @@ END:VCALENDAR
 
         $this->assertEquals(422, $response->status);
         $this->assertStringContainsString('too many occurrences', $response->getBodyAsString());
+    }
+
+    function testExpandEventWithInvalidStoredRRuleShouldAnswerUnprocessableContent() {
+        // Issue #872: a stored RRULE vobject cannot parse (WKST=2) must be answered explicitly instead of a 500
+        $ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:invalid-wkst\r\nDTSTAMP:20250101T000000Z\r\n"
+             . "DTSTART:20350101T100000Z\r\nDTEND:20350101T110000Z\r\nRRULE:FREQ=WEEKLY;COUNT=3;WKST=2\r\n"
+             . "END:VEVENT\r\nEND:VCALENDAR\r\n";
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'invalid-wkst.ics', $ics);
+
+        $response = $this->expandEventRequest('invalid-wkst.ics', '20350101T000000Z', '20350201T000000Z');
+
+        $this->assertEquals(422, $response->status);
+        $this->assertStringContainsString('Invalid value for WKST in RRULE: 2', $response->getBodyAsString());
     }
 
     function testRemoveEventsOutsideTimeRangeShouldKeepEventWithoutDtstart() {

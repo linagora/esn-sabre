@@ -133,7 +133,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         // Only technical users can modify domain-members addressbook
         if ($this->authTenant?->tenantType !== TenantType::Technical)
-            throw new Forbidden('Only technical users can modify domain-members addressbook'.json_encode($this->authTenant));
+            throw new Forbidden('Only technical users can modify domain-members addressbook');
     }
 
     private function isDomainMembersPath($path): bool {
@@ -207,7 +207,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
     private function listAddressBookHomes($node): array {
         if ($this->authTenant?->tenantType !== TenantType::Technical)
-            throw new Forbidden('Only technical users'.json_encode($this->authTenant));
+            throw new Forbidden('Only technical users');
 
         $children = [];
 
@@ -356,6 +356,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
         if ($node instanceof \Sabre\CardDAV\AddressBookHome) {
             $jsonData = json_decode($request->getBodyAsString());
+            $this->assertTextProperties($jsonData, ['dav:name', 'carddav:description', 'type', 'state']);
             $issetdef = $this->propertyOrDefault($jsonData);
 
             if ($issetdef('openpaas:source')) {
@@ -637,6 +638,8 @@ class Plugin extends \ESN\JSON\BasePlugin {
             $propnameMap['state'] = '{http://open-paas.org/contacts}state';
         }
 
+        $this->assertTextProperties($jsonData, array_keys($propnameMap));
+
         $davProps = [];
         foreach ($jsonData as $jsonProp => $value) {
             if (isset($propnameMap[$jsonProp])) {
@@ -647,6 +650,20 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $result = $this->server->updateProperties($nodePath, $davProps);
 
         return [$this->statusCodeFromUpdateResult($result), null];
+    }
+
+    /**
+     * These address book properties are stored as given: any other value than a string, e.g. an array, would make the
+     * XML serialization of every PROPFIND listing the address book fail.
+     *
+     * @throws BadRequest when one of the given properties is set to neither a string nor null
+     */
+    private function assertTextProperties($jsonData, array $names): void {
+        foreach ($names as $name) {
+            if (isset($jsonData->{$name}) && !is_string($jsonData->{$name})) {
+                throw new BadRequest($name . ' must be a string');
+            }
+        }
     }
 
     private function statusCodeFromUpdateResult($result): int {
@@ -672,6 +689,10 @@ class Plugin extends \ESN\JSON\BasePlugin {
         $limit = $this->nonNegativeIntegerParameter($queryParams, 'limit');
         $search = isset($queryParams['search']) ? $queryParams['search'] : null;
         $sort = isset($queryParams['sort']) ? $queryParams['sort'] : null;
+        // The sort names a stored field: only the full name, email and _id ones are meant to be sorted on.
+        if ($sort !== null && !in_array($sort, ContactSort::OFFSET_LISTING_SORTS, true)) {
+            throw new BadRequest('sort must be fn, email or _id');
+        }
         $modifiedBefore = isset($queryParams['modifiedBefore']) ? (int)$queryParams['modifiedBefore'] : 0;
 
         $filters = null;

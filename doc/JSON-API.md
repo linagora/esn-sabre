@@ -378,7 +378,7 @@ A dav:addressbook object, with an additional member "id" which specifies the id 
 **Status Codes:**
 
 - 201 Created: New address book has been created
-- 400 Bad Request: Missing keys in the request object
+- 400 Bad Request: Missing keys in the request object, or `dav:name`, `carddav:description`, `type` or `state` is not a string
 
 
 ## GET /addressbooks/{addressbookHomeId}/{addressbookId}.json
@@ -393,7 +393,7 @@ List all contacts in the address book.
 
 - offset: List offset for the contacts returned
 - limit: The number of contacts to be returned
-- sort: The column to sort by, e.g. "fn"
+- sort: The column to sort by, `fn`, `email` or `_id` (insertion order): any other value gets a 400
 - search: Case insensitive text the vCard of the returned contacts contains, matched literally (not as a pattern). A
   search shorter than `SABRE_CONTACT_SEARCH_MIN_LENGTH` characters (default 3, leading and trailing blanks excluded)
   returns no contact. A search that is not a single UTF-8 string, e.g. `search[]=...`, gets a 400.

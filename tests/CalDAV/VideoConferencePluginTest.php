@@ -45,6 +45,38 @@ class VideoConferencePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame('https://evil.test/room', (string) $vCal->VEVENT->{'X-OPENPAAS-VIDEOCONFERENCE'});
     }
 
+    static function scriptLinks() {
+        return [
+            'javascript video link' => ['X-OPENPAAS-VIDEOCONFERENCE:javascript:alert(document.cookie)'],
+            'obfuscated javascript video link' => ['X-OPENPAAS-VIDEOCONFERENCE: JavaScript\t:alert(1)'],
+            'javascript conference' => ['CONFERENCE;VALUE=URI:javascript:alert(1)'],
+            'javascript video conference' => ['CONFERENCE;VALUE=URI;FEATURE=VIDEO:javascript:alert(1)'],
+            'vbscript conference' => ['CONFERENCE;VALUE=URI:vbscript:msgbox(1)'],
+            'data conference' => ['CONFERENCE;VALUE=URI:data:text/html,<script>alert(1)</script>'],
+        ];
+    }
+
+    #[DataProvider('scriptLinks')]
+    function testScriptLinksAreNeverStoredNorMirroredAsConference(string $scriptLink) {
+        foreach ([null, 'https://meet.linagora.com'] as $trustedBase) {
+            $vCal = Reader::read($this->eventIcs(str_replace('\t', "\t", $scriptLink)));
+
+            $modified = $this->emitCalendarObjectChange($vCal, $trustedBase);
+
+            $this->assertTrue($modified);
+            $this->assertCount(0, $vCal->VEVENT->select('CONFERENCE'));
+            $this->assertCount(0, $vCal->VEVENT->select('X-OPENPAAS-VIDEOCONFERENCE'));
+        }
+    }
+
+    function testUnconfiguredPluginKeepsAPhoneBridgeConference() {
+        $vCal = Reader::read($this->eventIcs('CONFERENCE;VALUE=URI;FEATURE=PHONE:tel:+33-1-23-45-67-89'));
+
+        $this->emitCalendarObjectChange($vCal);
+
+        $this->assertSame('tel:+33-1-23-45-67-89', (string) $vCal->VEVENT->CONFERENCE);
+    }
+
     static function unconfiguredVideoBases() {
         return [
             'missing key' => [[]],

@@ -17,6 +17,8 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
      * covers the attendee list of most events in a single query.
      */
     private const ADDRESS_LOOKUP_BATCH_SIZE = 50;
+    // RFC 5321 section 4.5.3.1.3: a path is at most 256 octets, angle brackets included.
+    private const MAX_ADDRESS_LENGTH = 254;
 
     protected $db;
     protected $collectionMap;
@@ -124,7 +126,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
             $obj = $this->attachResourceDomain($obj);
         } else if ($type == 'team-calendars') {
             $this->assertTeamCalendarBelongsToDomain($obj, $domainId);
-        } else if ($type == 'users' && !empty($obj['domains'])) {
+        } else if ($type == 'users') {
             $this->assertUserBelongsToDomain($obj, $domainId);
 
             $domainIds = array_column((array) $obj['domains'], 'domain_id');
@@ -157,7 +159,7 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
     private function assertUserBelongsToDomain($obj, string $domainId): void {
         $userDomainIds = array_map(
             fn($d) => (string)$d['domain_id'],
-            (array)$obj['domains']
+            (array)($obj['domains'] ?? [])
         );
 
         if (!in_array($domainId, $userDomainIds, true)) {
@@ -282,7 +284,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
             fn(string $address, array $emails) => $this->exactAddressRank($address, $emails)
         );
 
-        $unresolved = array_values(array_filter($addresses, fn(string $address) => $exactMatches[$address] === null));
+        $unresolved = array_values(array_filter(
+            $addresses,
+            fn(string $address) => $exactMatches[$address] === null && $this->canBeAMailbox($address)
+        ));
         if (empty($unresolved)) {
             return $exactMatches;
         }
@@ -953,7 +958,19 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
      * into explicit [xX] classes instead.
      */
     private function caseFoldedAddressMatch($value): array {
+        if (!$this->canBeAMailbox((string) $value)) {
+            return $this->exactAddressMatch($value);
+        }
+
         return [ '$elemMatch' => [ '$regex' => $this->caseFoldedAddressPattern((string) $value) ] ];
+    }
+
+    /**
+     * An address longer than any mailbox names nobody, and its case-folded pattern could
+     * exceed the regex length MongoDB accepts: it is only ever compared exactly.
+     */
+    private function canBeAMailbox(string $address): bool {
+        return strlen($address) <= self::MAX_ADDRESS_LENGTH;
     }
 
     private function caseFoldedAddressPattern(string $address): string {

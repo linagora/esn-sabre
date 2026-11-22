@@ -23,12 +23,12 @@ class PrivateCachePluginTest extends \PHPUnit\Framework\TestCase {
         return $server->sapi->response;
     }
 
-    function testGetResponseIsNotReusableAcrossCredentials() {
+    function testGetResponseIsNotReusableAcrossCredentialsNorFormats() {
         $response = $this->get($this->prepareServer());
 
         $this->assertEquals(200, $response->getStatus());
         $this->assertEquals('private, no-cache', $response->getHeader('Cache-Control'));
-        $this->assertEquals('Authorization', $response->getHeader('Vary'));
+        $this->assertEquals('Authorization, Accept', $response->getHeader('Vary'));
     }
 
     function testShortCircuitedResponseIsNotReusableAcrossCredentials() {
@@ -44,7 +44,7 @@ class PrivateCachePluginTest extends \PHPUnit\Framework\TestCase {
 
         $this->assertEquals('{}', $response->getBodyAsString());
         $this->assertEquals('private, no-cache', $response->getHeader('Cache-Control'));
-        $this->assertEquals('Authorization', $response->getHeader('Vary'));
+        $this->assertEquals('Authorization, Accept', $response->getHeader('Vary'));
     }
 }
 

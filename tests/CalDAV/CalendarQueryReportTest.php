@@ -566,4 +566,49 @@ class CalendarQueryReportTest extends \ESN\DAV\ServerMock {
         $this->assertNotNull($withoutData[$href]['etag']);
         $this->assertStringContainsString('UID:moved-first', $withData[$href]['calendar-data']);
     }
+    function testExpandedReportSkipsAnObjectThatCannotBeExpanded() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'every-second.ics', implode("\r\n", [
+            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN',
+            'BEGIN:VEVENT', 'UID:every-second',
+            'DTSTART:20261210T100000Z', 'DTEND:20261210T100001Z',
+            'RRULE:FREQ=SECONDLY',
+            'END:VEVENT', 'END:VCALENDAR', ''
+        ]));
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'weekly-meeting.ics', implode("\r\n", [
+            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN',
+            'BEGIN:VEVENT', 'UID:weekly-meeting',
+            'DTSTART:20261211T100000Z', 'DTEND:20261211T110000Z',
+            'SUMMARY:Meeting',
+            'END:VEVENT', 'END:VCALENDAR', ''
+        ]));
+
+        $response = $this->reportRequest('/calendars/54b64eadf6d7d8e41d263e0f/calendar1', $this->expandedWeekQuery());
+
+        $this->assertEquals(207, $response->status);
+        $items = $this->parseMultiStatus($response->getBodyAsString());
+        $this->assertArrayHasKey('/calendars/54b64eadf6d7d8e41d263e0f/calendar1/weekly-meeting.ics', $items);
+        $this->assertArrayNotHasKey('/calendars/54b64eadf6d7d8e41d263e0f/calendar1/every-second.ics', $items);
+    }
+
+    function testExpandedDepthZeroReportOnAnObjectThatCannotBeExpandedIsUnprocessable() {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'every-second.ics', implode("\r\n", [
+            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN',
+            'BEGIN:VEVENT', 'UID:every-second',
+            'DTSTART:20261210T100000Z', 'DTEND:20261210T100001Z',
+            'RRULE:FREQ=SECONDLY',
+            'END:VEVENT', 'END:VCALENDAR', ''
+        ]));
+
+        $response = $this->reportRequest('/calendars/54b64eadf6d7d8e41d263e0f/calendar1/every-second.ics', $this->expandedWeekQuery(), '0');
+
+        $this->assertEquals(422, $response->status);
+    }
+
+    private function expandedWeekQuery() {
+        return '<?xml version="1.0"?><c:calendar-query xmlns:d="DAV:" xmlns:c="' . self::CALDAV_NS . '">'
+            . '<d:prop><c:calendar-data><c:expand start="20261207T000000Z" end="20261214T000000Z"/></c:calendar-data></d:prop>'
+            . '<c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">'
+            . '<c:time-range start="20261207T000000Z" end="20261214T000000Z"/>'
+            . '</c:comp-filter></c:comp-filter></c:filter></c:calendar-query>';
+    }
 }

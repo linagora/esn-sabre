@@ -288,6 +288,66 @@ class CalendarDataNormalizerTest extends TestCase {
         $this->assertSame(strtotime(CalendarDataNormalizer::MAX_DATE), $d['lastOccurence']);
     }
 
+    public static function denseSeriesWithTheLimitDisabled(): array {
+        return [
+            'huge COUNT' => ['RRULE:FREQ=HOURLY;COUNT=922337203685477583'],
+            'two UNTIL rules' => ["RRULE:FREQ=HOURLY;UNTIL=20371231T000000\r\nRRULE:FREQ=HOURLY;UNTIL=20371231T000000"],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('denseSeriesWithTheLimitDisabled')]
+    public function testUnlimitedRecurrencesShouldNotWalkADenseSeriesInstanceByInstance(string $rule): void {
+        $cap = \Sabre\VObject\Settings::$maxRecurrences;
+        \Sabre\VObject\Settings::$maxRecurrences = -1;
+        try {
+            $started = microtime(true);
+            $d = $this->denormalize("BEGIN:VEVENT\r\nUID:dense\r\nDTSTAMP:20260101T000000Z\r\n"
+                . "DTSTART:10150206T100000\r\n" . $rule . "\r\nEND:VEVENT\r\n");
+
+            $this->assertLessThan(2, microtime(true) - $started);
+            $this->assertSame(strtotime(CalendarDataNormalizer::MAX_DATE), $d['lastOccurence']);
+        } finally {
+            \Sabre\VObject\Settings::$maxRecurrences = $cap;
+        }
+    }
+
+    public static function walkBudgetBoundary(): array {
+        // Two RRULEs: no COUNT shortcut, the instances are walked.
+        return [
+            'within the budget' => [3500, '20260422T000000Z'],
+            'beyond the budget' => [3501, CalendarDataNormalizer::MAX_DATE],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('walkBudgetBoundary')]
+    public function testUnlimitedRecurrencesWalkAtMostTheDefaultLimit(int $count, string $expectedEnd): void {
+        $cap = \Sabre\VObject\Settings::$maxRecurrences;
+        \Sabre\VObject\Settings::$maxRecurrences = -1;
+        try {
+            $rule = "RRULE:FREQ=HOURLY;COUNT=" . $count . "\r\n";
+            $d = $this->denormalize("BEGIN:VEVENT\r\nUID:edge\r\nDTSTAMP:20260101T000000Z\r\n"
+                . "DTSTART:20251127T040000Z\r\nDTEND:20251127T050000Z\r\n" . $rule . $rule . "END:VEVENT\r\n");
+
+            $this->assertSame(strtotime($expectedEnd), $d['lastOccurence']);
+        } finally {
+            \Sabre\VObject\Settings::$maxRecurrences = $cap;
+        }
+    }
+
+    public function testUnlimitedRecurrencesStillEndAShortSeriesAtItsLastInstance(): void {
+        $cap = \Sabre\VObject\Settings::$maxRecurrences;
+        \Sabre\VObject\Settings::$maxRecurrences = -1;
+        try {
+            $d = $this->denormalize("BEGIN:VEVENT\r\nUID:count\r\nDTSTAMP:20260101T000000Z\r\n"
+                . "DTSTART:20260105T080000Z\r\nDTEND:20260105T081500Z\r\n"
+                . "RRULE:FREQ=DAILY;COUNT=10\r\nEND:VEVENT\r\n");
+
+            $this->assertSame(strtotime('20260114T081500Z'), $d['lastOccurence']);
+        } finally {
+            \Sabre\VObject\Settings::$maxRecurrences = $cap;
+        }
+    }
+
     public function testCountWithinTheExpansionLimitStillEndsAtItsLastInstance(): void {
         $d = $this->assertWindowCoversEveryInstance("BEGIN:VEVENT\r\nUID:count\r\nDTSTAMP:20260101T000000Z\r\n"
             . "DTSTART:20260105T080000Z\r\nDTEND:20260105T081500Z\r\n"

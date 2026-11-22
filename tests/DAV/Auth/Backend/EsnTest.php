@@ -987,6 +987,40 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals('Bad credentials', $msg);
     }
 
+    static function nonAdminImpersonationLogins() {
+        return [
+            'user then other user' => ['alice@example.com&bob@example.com', 'true'],
+            'user then admin' => ['bob@example.com&admin', 'true'],
+            'impersonation disabled' => ['alice@example.com&bob@example.com', 'false'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonAdminImpersonationLogins')]
+    function testNonAdminLoginWithImpersonationSeparatorIsRejectedWithoutBinding(string $login, string $impersonationEnabled) {
+        putenv('SABRE_IMPERSONATION_ENABLED=' . $impersonationEnabled);
+        putenv('LDAP_USERNAME_MODE=username');
+        $GLOBALS['__ldap_mock_enabled'] = true;
+        $GLOBALS['__ldap_bind_calls'] = 0;
+
+        try {
+            $esnauth = new EsnMock('http://localhost:8080/');
+            $request = new \Sabre\HTTP\Request('GET', '/', [
+                'Authorization' => 'Basic ' . base64_encode($login . ':secret'),
+            ]);
+
+            [$rv, $msg] = $esnauth->check($request, new \Sabre\HTTP\Response());
+
+            $this->assertFalse($rv);
+            $this->assertEquals('Bad credentials', $msg);
+            $this->assertNull($esnauth->getCurrentPrincipal());
+            $this->assertEquals(0, $GLOBALS['__ldap_bind_calls']);
+        } finally {
+            $this->resetLdapMock();
+            putenv('LDAP_USERNAME_MODE');
+            putenv('SABRE_IMPERSONATION_ENABLED=false');
+        }
+    }
+
     protected function tearDown(): void {
         putenv('KERBEROS_ENABLED');
         putenv('KERBEROS_REALM_DOMAINS');

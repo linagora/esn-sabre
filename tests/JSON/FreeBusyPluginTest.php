@@ -480,6 +480,17 @@ END:VCALENDAR
         $this->assertEquals(self::USER1_ID, $body->users[0]->id);
     }
 
+    function testFreeBusyShouldSkipAnUnknownUser() {
+        $jsonResponse = $this->requestFreeBusy([
+            'start' => '20120101T000000Z',
+            'end' => '20150101T000000Z',
+            'users' => [self::USER1_ID, '000000000000000000000000']
+        ]);
+
+        $this->assertCount(1, $jsonResponse->users);
+        $this->assertEquals(self::USER1_ID, $jsonResponse->users[0]->id);
+    }
+
     function testFreeBusyShouldGiveAnEndToAnEventWithNeitherDtendNorDuration() {
         $this->caldavBackend->createCalendarObject($this->cal['id'], 'no-end.ics',
             'BEGIN:VCALENDAR

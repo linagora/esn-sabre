@@ -124,6 +124,9 @@ $server->addPlugin(new ESN\DAV\VObjectCachePlugin($calendarBackend->getVObjectCa
 // Responses hold per-principal data: forbid browsers from reusing them across credentials.
 $server->addPlugin(new ESN\DAV\PrivateCachePlugin());
 
+// jCard / jCal bodies get their own ETag: a conditional GET must not answer one format with the other.
+$server->addPlugin(new ESN\DAV\JsonRepresentationETagPlugin());
+
 // Refuse "." and ".." as resource names: clients resolve them to the parent collection.
 $server->addPlugin(new ESN\DAV\DotSegmentNameGuardPlugin());
 
@@ -155,7 +158,7 @@ $authPlugin = new Sabre\DAV\Auth\Plugin($authBackend);
 $authPlugin->autoRequireLogin = true;
 $server->addPlugin($authPlugin);
 
-$aclPlugin = new Sabre\DAVACL\Plugin();
+$aclPlugin = new ESN\DAVACL\CalendarHomeListingAclPlugin();
 $aclPlugin->allowUnauthenticatedAccess = false;
 $aclPlugin->principalCollectionSet = [
     PRINCIPALS_USERS,

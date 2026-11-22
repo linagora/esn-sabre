@@ -223,7 +223,7 @@ ICS);
                     'emails' => [$aliceEmail]
                 ]
             ],
-            'domains' => []
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId($this->domainId)]]
         ];
         $this->esndb->users->insertOne($aliceUser);
 

@@ -185,6 +185,7 @@ Expansion always starts from the first occurrence (`DTSTART`), whatever the requ
 
 - Default: `3500`. Unset, empty, `0` or non-numeric values are treated as `3500`.
 - Set to a negative value to disable the limit. Expansion then remains bounded by year 2100.
+  This bounds dates, not cost: a dense series (`FREQ=HOURLY` started centuries ago, `FREQ=SECONDLY`...) may still generate millions of occurrences. The time window stored for each event is computed from at most 3500 occurrences of each VEVENT; beyond that the event is treated as running until 2038. Other expansions have no such bound.
 - This limit protects the server against events crafted to recur many times: raise it with care.
 
 ## Nginx request body limit

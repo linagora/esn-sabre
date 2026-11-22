@@ -25,6 +25,9 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
     const OTHER_RESOURCE_ID = '82113fcc398fef406b0041ba';
     const TEAM_CALENDAR_ID = '82113fcc398fef406b0041b8';
     const OTHER_TEAM_CALENDAR_ID = '82113fcc398fef406b0041b9';
+    const USER_WITHOUT_DOMAINS_ID = '54313fcc398fef406b0041c4';
+    const USER_FROM_OTHER_DOMAIN_ID = '54313fcc398fef406b0041c5';
+    const RESOURCE_WITHOUT_DOMAIN_ID = '82113fcc398fef406b0041bb';
     const DOMAIN_ID = '5a095e2c46b72521d03f6d75';
     const OTHER_DOMAIN_ID = '5a095e2c46b72521d03f6d76';
 
@@ -410,6 +413,52 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $backend->getPrincipalByPath('principals/resources/' . self::OTHER_RESOURCE_ID);
     }
 
+    function testResourcePrincipalShouldRejectResourceWithoutDomain() {
+        $this->assertPrincipalForbidden(
+            'resources',
+            [ '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_WITHOUT_DOMAIN_ID), 'name' => 'no domain' ],
+            'principals/resources/' . self::RESOURCE_WITHOUT_DOMAIN_ID
+        );
+    }
+
+    function testUserPrincipalShouldRejectUserWithoutDomains() {
+        $this->assertPrincipalForbidden(
+            'users',
+            [ '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITHOUT_DOMAINS_ID), 'firstname' => 'no domain' ],
+            'principals/users/' . self::USER_WITHOUT_DOMAINS_ID
+        );
+    }
+
+    function testUserPrincipalShouldRejectUserWithEmptyDomains() {
+        $this->assertPrincipalForbidden(
+            'users',
+            [ '_id' => new \MongoDB\BSON\ObjectId(self::USER_WITHOUT_DOMAINS_ID), 'domains' => [] ],
+            'principals/users/' . self::USER_WITHOUT_DOMAINS_ID
+        );
+    }
+
+    function testUserPrincipalShouldRejectCrossDomainAccess() {
+        $this->assertPrincipalForbidden(
+            'users',
+            [
+                '_id' => new \MongoDB\BSON\ObjectId(self::USER_FROM_OTHER_DOMAIN_ID),
+                'domains' => [ [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::OTHER_DOMAIN_ID) ] ]
+            ],
+            'principals/users/' . self::USER_FROM_OTHER_DOMAIN_ID
+        );
+    }
+
+    private function assertPrincipalForbidden(string $collection, array $document, string $path): void {
+        self::$esndb->{$collection}->insertOne($document);
+        try {
+            $backend = new Mongo(self::$esndb, self::$tenant);
+            $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
+            $backend->getPrincipalByPath($path);
+        } finally {
+            self::$esndb->{$collection}->deleteOne([ '_id' => $document['_id'] ]);
+        }
+    }
+
     function testTeamCalendarPrincipalsByPrefix() {
         $backend = new Mongo(self::$esndb, self::$tenant);
 
@@ -575,6 +624,44 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertNull($backend->findByUri("mailto:u\u{017F}er@example.com", 'principals/users'));
         $this->assertNull($backend->findByUri("mailto:admin@example.com\n", 'principals/users'));
         $this->assertNull($backend->findByUri('mailto:user@example.co', 'principals/users'));
+    }
+
+    /**
+     * No mailbox is longer than 254 characters (RFC 5321 section 4.5.3.1.3): such an
+     * address is unknown, it must not be turned into a regex longer than MongoDB accepts.
+     */
+    function testFindByUriUserAddressLongerThanAnyMailboxIsUnknown() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertNull($backend->findByUri('mailto:' . self::overlongAddress(), 'principals/users'));
+    }
+
+    function testSearchUserPrincipalsWithAnAddressLongerThanAnyMailboxFindsNoAddressMatch() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        $this->assertSame([], $backend->searchPrincipals('principals/users', [
+            '{http://sabredav.org/ns}email-address' => self::overlongAddress()
+        ]));
+        $this->assertSame(['principals/users/' . self::USER_ID], $backend->searchPrincipals('principals/users', [
+            '{DAV:}displayname' => 'first',
+            '{http://sabredav.org/ns}email-address' => self::overlongAddress()
+        ], 'anyof'));
+    }
+
+    function testResolvedUserPrincipalsShouldTreatAddressesLongerThanAnyMailboxAsUnknown() {
+        $backend = new Mongo(self::$esndb, self::$tenant);
+        $addresses = [self::overlongAddress(), 'usernolast@example.com'];
+
+        $principals = $backend->withUserPrincipalsResolved($addresses, fn() => array_map(
+            fn($address) => $backend->findByUri('mailto:' . $address, 'principals/users'),
+            $addresses
+        ));
+
+        $this->assertSame([null, 'principals/users/' . self::USER_WITH_NO_LASTNAME], $principals);
+    }
+
+    private static function overlongAddress(): string {
+        return str_repeat('a', 10000) . '@example.com';
     }
 
     function testSearchUserPrincipalsAnyofKeepsAddressesStoredInAnotherCase() {

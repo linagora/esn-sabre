@@ -80,9 +80,9 @@ class PluginTest extends PluginTestBase {
         ));
 
         $response = $this->request($request);
-        $jsonResponse = json_decode($response->getBodyAsString(), true);
 
         $this->assertEquals(403, $response->status);
+        $this->assertStringContainsString('<s:message>Only technical users</s:message>', $response->getBodyAsString());
     }
 
     function testGETAddressBookHomesWithTechnicalUser() {
@@ -161,7 +161,18 @@ class PluginTest extends PluginTestBase {
             'no body' => [''],
             'malformed JSON' => ['{x'],
             'JSON array' => ['["dav:name"]'],
+            'array name' => ['{"dav:name":["x"]}'],
+            'object description' => ['{"carddav:description":{"a":1}}'],
+            'numeric name' => ['{"dav:name":1}'],
         ];
+    }
+
+    function testJsonPropPatchWithArrayNameDoesNotStoreIt() {
+        $displayName = $this->getAddressBookByUri('book1')['{DAV:}displayname'];
+
+        $this->jsonRequestOnBook1('PROPPATCH', '{"dav:name":["x"]}');
+
+        $this->assertSame($displayName, $this->getAddressBookByUri('book1')['{DAV:}displayname']);
     }
 
     private function jsonRequestOnBook1(string $method, string $body) {
@@ -611,6 +622,13 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals($cards[0]->data[1][0][3], 'b');
     }
 
+    function testGetContactsOffsetAcceptsIdSort() {
+        $response = $this->makeRequest('GET', '/addressbooks/' . $this->userTestId1 . '/book1.json?limit=2&offset=1&sort=_id');
+
+        $this->assertSame(200, $response->status);
+        $this->assertCount(2, json_decode($response->getBodyAsString())->{'_embedded'}->{'dav:item'});
+    }
+
     #[DataProvider('invalidOffsetPaginationParameters')]
     function testGetContactsRejectsInvalidOffsetPaginationParameters(string $query, string $expectedMessage) {
         $response = $this->makeRequest('GET', '/addressbooks/' . $this->userTestId1 . '/book1.json?' . $query);
@@ -625,7 +643,10 @@ class PluginTest extends PluginTestBase {
             'non-numeric offset' => ['limit=5&offset=abc', 'offset must be a non-negative integer'],
             'non-numeric limit' => ['limit=abc&offset=0', 'limit must be a non-negative integer'],
             'negative limit' => ['limit=-5&offset=0', 'limit must be a non-negative integer'],
-            'offset array' => ['limit=5&offset[]=1', 'offset must be a non-negative integer']
+            'offset array' => ['limit=5&offset[]=1', 'offset must be a non-negative integer'],
+            'unknown sort' => ['limit=5&offset=0&sort=tel', 'sort must be fn, email or _id'],
+            'unknown sort without offset' => ['sort=carddata', 'sort must be fn, email or _id'],
+            'sort array' => ['limit=5&offset=0&sort[]=fn', 'sort must be fn, email or _id']
         ];
     }
 
@@ -848,6 +869,31 @@ class PluginTest extends PluginTestBase {
         $this->assertEquals('enabled', $createdAddressBook['{http://open-paas.org/contacts}state']);
     }
 
+    #[DataProvider('nonStringAddressBookProperties')]
+    function testCreateAddressBookWithNonStringPropertyIsBadRequest(array $properties) {
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/addressbooks/54b64eadf6d7d8e41d263e0f.json',
+        ));
+
+        $request->setBody(json_encode(['id' => 'ID'] + $properties));
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount(3, $this->carddavBackend->getAddressBooksForUser($this->carddavAddressBook['principaluri']));
+    }
+
+    static function nonStringAddressBookProperties(): array {
+        return [
+            'array name' => [['dav:name' => ['x']]],
+            'object description' => [['carddav:description' => ['a' => 1]]],
+            'array type' => [['type' => ['user']]],
+            'numeric state' => [['state' => 1]],
+        ];
+    }
+
     function testCreateAddressBookMissingId() {
         $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
             'REQUEST_METHOD'    => 'POST',
@@ -972,7 +1018,7 @@ class PluginTest extends PluginTestBase {
 
     private function assertDomainMembersGuardRefused($response) {
         $this->assertEquals(403, $response->status);
-        $this->assertStringContainsString('Only technical users can modify domain-members addressbook', $response->getBodyAsString());
+        $this->assertStringContainsString('<s:message>Only technical users can modify domain-members addressbook</s:message>', $response->getBodyAsString());
     }
 
     static function domainMembersPathVariants() {

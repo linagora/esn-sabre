@@ -37,7 +37,12 @@ for it. A missing value is treated as `true`.
 **Class:** `CalDAV\Backend\DAO\CalendarObjectDAO`  
 **Indexes:**
 - `{ calendarid, uri }` — also serves `{ calendarid }` alone
-- `{ calendarid, componenttype, firstoccurence, lastoccurence }` — time-range queries
+- `{ calendarid, componenttype, firstoccurence, lastoccurence }` and `{ calendarid, componenttype, lastoccurence,
+  firstoccurence }` — time-range queries. MongoDB bounds the scan by the first ranged field only: with
+  `lastoccurence` first, a range with a start scans from it, instead of every past event of the calendar; with
+  `firstoccurence` first, a range given an end only (a CalDAV `calendar-query` or `free-busy-query` may omit the start;
+  the JSON REPORTs always send both) scans up to it. The query planner picks the one examining fewer keys. The second
+  one is built by [migration 6](MIGRATIONS.md#version-6--index-the-time-ranges-by-the-end-of-the-events), not at startup.
 - `{ uid }`
 
 ---

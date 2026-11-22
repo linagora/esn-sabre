@@ -62,18 +62,43 @@ class CalendarObjectDAO extends BaseDAO {
         return $this->find($query, $options);
     }
 
+    /**
+     * A time-range query bounds both fields (lastoccurence > start, firstoccurence < end), and MongoDB
+     * bounds the scan by the first ranged field of the index only. With lastoccurence first, the scan
+     * starts at the start of the range and covers what ends after it (the range, the future events and
+     * the open-ended series), instead of every past event of the calendar.
+     *
+     * Built by migration 6 (Version0006CreateTimeRangeByEndIndex), in the background, not here: on a
+     * large collection the build outlasts the startup index creation. The query planner uses it once it
+     * exists.
+     */
+    const TIME_RANGE_BY_END_INDEX_KEY = [
+        'calendarid' => 1,
+        'componenttype' => 1,
+        'lastoccurence' => 1,
+        'firstoccurence' => 1
+    ];
+
+    /**
+     * Kept next to the one above: until migration 6 has built it, it is the only time-range index, the
+     * replicas still on an older version create it at startup, and it bounds the time-ranges given an
+     * end only (a CalDAV calendar-query or free-busy-query may omit the start), which the index above
+     * cannot. The planner picks, per query shape, the one examining fewer keys.
+     */
+    const TIME_RANGE_BY_START_INDEX_KEY = [
+        'calendarid' => 1,
+        'componenttype' => 1,
+        'firstoccurence' => 1,
+        'lastoccurence' => 1
+    ];
+
     public function ensureIndexes() {
         // Compound index for getMultipleCalendarObjects and getCalendarObject, also serves the queries on
         // 'calendarid' alone
         $this->createIndex(['calendarid' => 1, 'uri' => 1]);
 
-        // Compound index for calendarQuery with time-range filters
-        $this->createIndex([
-            'calendarid' => 1,
-            'componenttype' => 1,
-            'firstoccurence' => 1,
-            'lastoccurence' => 1
-        ]);
+        // Compound index for calendarQuery with time-range filters, see TIME_RANGE_BY_END_INDEX_KEY too
+        $this->createIndex(self::TIME_RANGE_BY_START_INDEX_KEY);
 
         // Index for getCalendarObjectByUID and getDuplicateCalendarObjects
         $this->createIndex(['uid' => 1]);

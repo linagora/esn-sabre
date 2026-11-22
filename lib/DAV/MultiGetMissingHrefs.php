@@ -15,18 +15,27 @@ use Sabre\DAV\Xml\Response\MultiStatus;
  *
  * The stock report is kept; the entries it hands to the multistatus are
  * captured and, when an href is missing among them, the multistatus is written
- * again with a 404 response for each missing href. Nothing changes, and no
- * lookup is added, when every href exists.
+ * again with a 404 response for each missing href. Nothing changes when every
+ * href exists, and no lookup is added but that of each parent collection,
+ * which the tree caches for the stock report.
+ *
+ * The stock report would also fail as a whole, with a 404, for an href whose
+ * parent collection does not exist (or does not look its children up in one
+ * query, and lacks that child): Tree::getMultipleNodes() throws NotFound for
+ * it. Such hrefs are left out of the report beforehand, and answered 404 too.
  */
 class MultiGetMissingHrefs {
 
     /**
      * @param Server   $server
-     * @param string[] $hrefs  the hrefs of the report
-     * @param callable $report runs the stock report
+     * @param object   $request the parsed multiget REPORT, whose hrefs the stock report reads
+     * @param callable $report  runs the stock report on $request
      * @return void
      */
-    static function run(Server $server, array $hrefs, callable $report) {
+    static function run(Server $server, $request, callable $report) {
+        $hrefs = $request->hrefs;
+        $request->hrefs = self::hrefsTheTreeServes($server, $hrefs);
+
         $entries = [];
         $capture = function (&$fileProperties) use (&$entries) {
             $entries = $fileProperties;
@@ -37,6 +46,7 @@ class MultiGetMissingHrefs {
             $report();
         } finally {
             $server->removeListener('beforeMultiStatus', $capture);
+            $request->hrefs = $hrefs;
         }
 
         $found = [];
@@ -75,5 +85,42 @@ class MultiGetMissingHrefs {
             new MultiStatus($responses),
             $server->getBaseUri()
         ));
+    }
+
+    /**
+     * The hrefs for which Tree::getMultipleNodes() does not throw NotFound: those
+     * of an existing collection supporting multi-get, and the existing children
+     * of another collection.
+     *
+     * @param Server   $server
+     * @param string[] $hrefs
+     * @return string[]
+     */
+    private static function hrefsTheTreeServes(Server $server, array $hrefs) {
+        $parents = [];
+        $served = [];
+        foreach ($hrefs as $href) {
+            $path = $server->calculateUri($href);
+            list($parent) = \Sabre\Uri\split($path);
+            if (!array_key_exists($parent, $parents)) {
+                $parents[$parent] = self::parentNode($server, $parent);
+            }
+
+            $parentNode = $parents[$parent];
+            if ($parentNode instanceof \Sabre\DAV\IMultiGet
+                || ($parentNode !== null && $server->tree->nodeExists($path))) {
+                $served[] = $href;
+            }
+        }
+
+        return $served;
+    }
+
+    private static function parentNode(Server $server, $path) {
+        try {
+            return $server->tree->getNodeForPath($path);
+        } catch (\Sabre\DAV\Exception\NotFound $e) {
+            return null;
+        }
     }
 }

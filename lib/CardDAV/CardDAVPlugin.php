@@ -15,7 +15,7 @@ class CardDAVPlugin extends \Sabre\CardDAV\Plugin {
      * @return void
      */
     function addressbookMultiGetReport($report) {
-        MultiGetMissingHrefs::run($this->server, $report->hrefs, function () use ($report) {
+        MultiGetMissingHrefs::run($this->server, $report, function () use ($report) {
             parent::addressbookMultiGetReport($report);
         });
     }

@@ -91,4 +91,15 @@ class AddressBookMultiGetReportTest extends \ESN\DAV\ServerMock {
         $this->assertEquals([self::BOOK . 'card1', self::BOOK . 'card2'],
             array_keys($this->parseMultiStatus($response->getBodyAsString())));
     }
+
+    function testHrefOfAnUnknownAddressBookGetsA404ResponseWithoutFailingTheOthers() {
+        $unknown = '/addressbooks/54b64eadf6d7d8e41d263e0f/deleted-book/card.vcf';
+        $response = $this->multiget([self::BOOK . 'card1', $unknown]);
+
+        $this->assertEquals(207, $response->status);
+        $responses = $this->parseMultiStatus($response->getBodyAsString());
+        $this->assertCount(2, $responses);
+        $this->assertNotEmpty($responses[self::BOOK . 'card1'][1]);
+        $this->assertEquals(['HTTP/1.1 404 Not Found', null, null], $responses[$unknown]);
+    }
 }

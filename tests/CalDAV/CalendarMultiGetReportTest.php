@@ -160,4 +160,23 @@ class CalendarMultiGetReportTest extends \ESN\DAV\ServerMock {
         $jcal = json_decode((string) $xml->xpath('//c:calendar-data')[0], true);
         $this->assertSame('vcalendar', $jcal[0]);
     }
+
+    function testHrefOfAnUnknownCalendarGetsA404ResponseWithoutFailingTheOthers() {
+        $unknown = '/calendars/54b64eadf6d7d8e41d263e0f/deleted-calendar/event.ics';
+        $response = $this->multiget([self::CALENDAR . 'event1.ics', $unknown]);
+
+        $this->assertEquals(207, $response->status);
+        $responses = $this->parseMultiStatus($response->getBodyAsString());
+        $this->assertCount(2, $responses);
+        $this->assertNotEmpty($responses[self::CALENDAR . 'event1.ics'][1]);
+        $this->assertEquals(['HTTP/1.1 404 Not Found', null], $responses[$unknown]);
+    }
+
+    function testUnknownChildOfACollectionWithoutMultiGetGetsA404Response() {
+        $unknown = '/calendars/54b64eadf6d7d8e41d263e0f/unknown-calendar';
+        $response = $this->multiget([self::CALENDAR . 'event1.ics', $unknown]);
+
+        $this->assertEquals(207, $response->status);
+        $this->assertEquals(['HTTP/1.1 404 Not Found', null], $this->parseMultiStatus($response->getBodyAsString())[$unknown]);
+    }
 }

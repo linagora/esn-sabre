@@ -8,8 +8,9 @@ use MongoDB\Database;
 use Psr\Log\LoggerInterface;
 
 /**
- * The `calendarchanges` and `addressbookchanges` logs expire through a TTL index on their `date` field. Rows written
- * before that field existed have none and would be kept forever: date them from the creation time of their `_id`.
+ * The `calendarchanges` and `addressbookchanges` logs are pruned on their `date` field (scripts/prune-change-logs.php).
+ * Rows written before that field existed have none and would be kept forever: date them from the creation time of
+ * their `_id`.
  */
 class Version0004BackfillChangeDates implements Migration
 {

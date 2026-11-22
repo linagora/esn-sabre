@@ -36,9 +36,9 @@ concurrent DAV writes keep their value. Objects with invalid data are skipped wi
 ## Version 4 — Date the change logs
 
 Upgrades database version `3` to `4`. The `calendarchanges` and `addressbookchanges` rows written before they carried
-a `date` get one, taken from the creation time of their `_id`, so that the TTL index on `date`
-(`calendarChangesTTLInDays` and `addressBookChangesTTLInDays`, see [MONGO.md](MONGO.md)) also expires them. Without
-it they would be kept forever. Rows older than the TTL are removed by MongoDB shortly after the migration; clients
-holding a sync token older than the oldest change kept get a `403` `DAV:valid-sync-token` and resync from scratch.
+a `date` get one, taken from the creation time of their `_id`, so that `scripts/prune-change-logs.php`
+(`calendarChangesRetentionInDays` and `addressBookChangesRetentionInDays`, see [MONGO.md](MONGO.md#calendarchanges))
+also prunes them. Without it they would be kept forever. Rows older than the retention are deleted by the next pruning
+run; clients holding a sync token below the pruned one get a `403` `DAV:valid-sync-token` and resync from scratch.
 
 Each collection is updated by a single server-side `updateMany`, only on rows without a `date`.

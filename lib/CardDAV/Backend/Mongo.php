@@ -3,6 +3,7 @@
 namespace ESN\CardDAV\Backend;
 
 use Sabre\Event\EventEmitter;
+use ESN\DAV\ChangeLog\ChangeLog;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 use ESN\DAV\SortOrder;
 use ESN\CardDAV\ContactFilters;
@@ -55,13 +56,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         'uri' => 1
     ];
 
-    private $addressBookChangesTTLInDays;
-
-    function __construct(\MongoDB\Database $db, $addressBookChangesTTLInDays = 0) {
+    function __construct(\MongoDB\Database $db) {
         $this->db = $db;
         $this->eventEmitter = new EventEmitter();
         $this->CharAPI = new \ESN\Utils\CharAPI();
-        $this->addressBookChangesTTLInDays = $addressBookChangesTTLInDays;
     }
 
     function getEventEmitter() {
@@ -580,11 +578,6 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         ];
 
         if ($syncToken) {
-            if ($this->wereChangesPruned($addressBookId, (int) $syncToken, (int) $currentToken)) {
-                // Sabre answers 403 DAV:valid-sync-token: the client resyncs from scratch (RFC 6578 section 3.2)
-                return null;
-            }
-
             $collection = $this->db->selectCollection($this->addressBookChangesTableName);
             $query = [
                 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
@@ -625,6 +618,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                         break;
                 }
             }
+
+            if ($this->wereChangesPruned($addressBookId, (int) $syncToken)) {
+                // Sabre answers 403 DAV:valid-sync-token: the client resyncs from scratch (RFC 6578 section 3.2)
+                return null;
+            }
         } else {
             // No synctoken supplied, this is the initial sync.
             $collection = $this->db->selectCollection($this->cardsTableName);
@@ -640,20 +638,15 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     }
 
     /**
-     * Sync tokens are dense per address book: each change is logged with the token it increments. The log being
-     * expired oldest first, changes since $syncToken were pruned when the oldest kept one is newer, or none is kept.
+     * Read after the changes, see ChangeLog::wasPrunedSince().
      */
-    private function wereChangesPruned($addressBookId, int $syncToken, int $currentToken): bool {
-        if ($syncToken >= $currentToken) {
-            return false;
-        }
-
-        $oldest = $this->db->selectCollection($this->addressBookChangesTableName)->findOne(
-            [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ],
-            [ 'projection' => [ 'synctoken' => 1 ], 'sort' => [ 'synctoken' => 1 ] ]
+    private function wereChangesPruned($addressBookId, int $syncToken): bool {
+        $addressBook = $this->db->selectCollection($this->addressBooksTableName)->findOne(
+            [ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ],
+            [ 'projection' => [ ChangeLog::PRUNED_SYNC_TOKEN => 1 ] ]
         );
 
-        return !$oldest || (int) $oldest['synctoken'] > $syncToken;
+        return ChangeLog::wasPrunedSince($addressBook, $syncToken);
     }
 
     function getSubscriptionsForUser($principalUri) {
@@ -1357,13 +1350,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         // Fasten retrieval of changes in addressbooks
         $addressBookChangeCollection = $this->db->selectCollection($this->addressBookChangesTableName);
         $addressBookChangeCollection->createIndex(array('addressbookid' => 1, 'synctoken' => 1));
-        // Bounds the change log: a client holding a token older than the oldest kept change resyncs from scratch
-        if ($this->addressBookChangesTTLInDays > 0) {
-            $addressBookChangeCollection->createIndex(
-                array('date' => 1),
-                array('expireAfterSeconds' => $this->addressBookChangesTTLInDays * 86400)
-            );
-        }
+        // Serves the expired changes lookup of scripts/prune-change-logs.php
+        $addressBookChangeCollection->createIndex(array('date' => 1));
 
         // Also serves the queries on 'addressbookid' alone
         $cardsCollection = $this->db->selectCollection($this->cardsTableName);

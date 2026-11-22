@@ -48,14 +48,22 @@ Audit log of creates/updates/deletes on calendar objects, used for WebDAV sync (
 Key fields: `calendarid`, `uri`, `synctoken`, `operation`, `date`.
 
 **Class:** `CalDAV\Backend\DAO\CalendarChangeDAO`  
-**Indexes:** `{ calendarid, synctoken }`, TTL index on `{ date }` if `calendarChangesTTLInDays` > 0 (default `90`)
+**Indexes:** `{ calendarid, synctoken }`, `{ date }`
 
-The log keeps the changes of the last `calendarChangesTTLInDays` days only, so that it grows with the data kept
-rather than with every write ever made. Sync tokens are dense per calendar (each change is logged with the token it
-increments): when the oldest change kept is newer than the sync token of a client, or no change is kept at all,
-changes were pruned and a `sync-collection` REPORT answers `403` `DAV:valid-sync-token` (RFC 6578 section 3.2). The
-client then resyncs from scratch. `0` disables expiry. MongoDB refuses to change the `expireAfterSeconds` of an
-existing index: to change the setting, drop the `date_1` index first, or change it with `collMod`.
+The log keeps the changes of the last `calendarChangesRetentionInDays` days only (`database` section of `config.json`,
+default `90`, `0` disables pruning), so that it grows with the data kept rather than with every write ever made.
+`scripts/prune-change-logs.php` deletes the older changes. `scripts/start.sh` runs it in the background at startup,
+unless `SABRE_PRUNE_CHANGES_ON_STARTUP=false`; it is safe to also run it periodically (cron, Kubernetes CronJob), even
+under DAV traffic.
+
+Changes are pruned by sync token, not by date: a writer reads the calendar token, logs its change, then increments, so
+a stalled writer can date its change after a higher token. For each calendar having changes older than the retention,
+the script computes `X = 1 + max(synctoken)` of those changes, raises the calendar's `prunedsynctoken` watermark to `X`
+(`$max`, never lowered) and only then deletes the changes whose token is below `X`.
+
+A `sync-collection` REPORT reads the changes first, then the watermark: a sync token below `prunedsynctoken` answers
+`403` `DAV:valid-sync-token` (RFC 6578 section 3.2) and the client resyncs from scratch. As the watermark is raised
+before any deletion, a token not below it proves that no change the client needed was deleted.
 
 ---
 
@@ -133,8 +141,10 @@ Audit log for CardDAV sync (same pattern as `calendarchanges`).
 Key fields: `addressbookid`, `synctoken`, `date`.
 
 **Class:** `CardDAV\Backend\Mongo`  
-**Indexes:** `{ addressbookid, synctoken }`, TTL index on `{ date }` if `addressBookChangesTTLInDays` > 0 (default `90`),
-with the same expiry and `valid-sync-token` behaviour as `calendarchanges`.
+**Indexes:** `{ addressbookid, synctoken }`, `{ date }`
+
+Pruned like `calendarchanges`, after `addressBookChangesRetentionInDays` days (default `90`), with the watermark in the
+`prunedsynctoken` field of the address book.
 
 ---
 
@@ -217,6 +227,8 @@ db.sharedaddressbooks.createIndex({ principaluri: 1 });
 db.addressbooksubscriptions.createIndex({ principaluri: 1 });
 db.addressbooksubscriptions.createIndex({ source: 1 });
 db.schedulingobjects.createIndex({ principaluri: 1, uri: 1 });
+db.calendarchanges.createIndex({ date: 1 });
+db.addressbookchanges.createIndex({ date: 1 });
 
 // Scheduling inbox TTL lowered from 56 to 7 days (createIndex would fail with IndexOptionsConflict)
 db.runCommand({ collMod: "schedulingobjects", index: { keyPattern: { dateCreated: 1 }, expireAfterSeconds: 7 * 86400 } });

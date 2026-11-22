@@ -30,8 +30,8 @@
       }
     },
     "schedulingObjectTTLInDays": 7,
-    "calendarChangesTTLInDays": 90,
-    "addressBookChangesTTLInDays": 90
+    "calendarChangesRetentionInDays": 90,
+    "addressBookChangesRetentionInDays": 90
   },
   "esn": {
     "apiRoot": "http://localhost:8080",

@@ -16,6 +16,7 @@ use ESN\CalDAV\Backend\Service\SubscriptionService;
 use ESN\CalDAV\Backend\Service\SchedulingService;
 use ESN\CalDAV\Backend\Service\CalendarService;
 use ESN\CalDAV\Backend\Service\CalendarObjectService;
+use ESN\DAV\ChangeLog\ChangeLog;
 use ESN\Utils\VObjectCache;
 
 #[\AllowDynamicProperties]
@@ -64,7 +65,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
     const MAX_DATE = '2038-01-01';
     const RESOURCE_CALENDAR_PUBLIC_PRIVILEGE = '{DAV:}read';
 
-    function __construct(\MongoDB\Database $db, $schedulingObjectTTLInDays = 0, $calendarChangesTTLInDays = 0) {
+    function __construct(\MongoDB\Database $db, $schedulingObjectTTLInDays = 0) {
         $this->db = $db;
         $this->eventEmitter = new EventEmitter();
         $this->schedulingObjectTTLInDays = $schedulingObjectTTLInDays;
@@ -73,7 +74,7 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $this->calendarDAO = new CalendarDAO($db);
         $this->calendarInstanceDAO = new CalendarInstanceDAO($db);
         $this->calendarObjectDAO = new CalendarObjectDAO($db);
-        $this->calendarChangeDAO = new CalendarChangeDAO($db, $calendarChangesTTLInDays);
+        $this->calendarChangeDAO = new CalendarChangeDAO($db);
         $this->schedulingObjectDAO = new SchedulingObjectDAO($db, $schedulingObjectTTLInDays);
         $this->calendarSubscriptionDAO = new CalendarSubscriptionDAO($db);
 
@@ -245,15 +246,14 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $currentToken = $row['synctoken'];
 
         if ($syncToken) {
-            if ($this->wereChangesPruned($calendarId, (int) $syncToken, (int) $currentToken)) {
+            $changes = $this->getChangesSince($calendarId, $syncToken, $currentToken, $limit);
+
+            if (ChangeLog::wasPrunedSince($this->calendarDAO->getPrunedSyncToken($calendarId), (int) $syncToken)) {
                 // Sabre answers 403 DAV:valid-sync-token: the client resyncs from scratch (RFC 6578 section 3.2)
                 return null;
             }
 
-            return array_merge(
-                ['syncToken' => $currentToken],
-                $this->getChangesSince($calendarId, $syncToken, $currentToken, $limit)
-            );
+            return array_merge(['syncToken' => $currentToken], $changes);
         }
 
         return [
@@ -262,20 +262,6 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
             'modified' => [],
             'deleted' => []
         ];
-    }
-
-    /**
-     * Sync tokens are dense per calendar: each change is logged with the token it increments. The log being expired
-     * oldest first, changes since $syncToken were pruned when the oldest kept one is newer, or when none is kept.
-     */
-    private function wereChangesPruned($calendarId, int $syncToken, int $currentToken): bool {
-        if ($syncToken >= $currentToken) {
-            return false;
-        }
-
-        $oldestSyncToken = $this->calendarChangeDAO->findOldestSyncToken($calendarId);
-
-        return $oldestSyncToken === null || $oldestSyncToken > $syncToken;
     }
 
     /**

@@ -281,5 +281,7 @@ fi
 
 # Run migrations in the background so DAV startup does not wait; keep stdout/stderr for operational logs.
 php /var/www/scripts/migrate-database.php --on-startup /var/www/config.json < /dev/null &
+# Same for the sync change logs: delete the changes older than their retention. See doc/storage/MONGO.md § "calendarchanges".
+php /var/www/scripts/prune-change-logs.php --on-startup /var/www/config.json < /dev/null &
 
 /usr/bin/supervisord

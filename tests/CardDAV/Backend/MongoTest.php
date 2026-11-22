@@ -6,6 +6,8 @@ use \Sabre\DAV\Sharing\Plugin as SPlugin;
 use ESN\CardDAV\ContactCursor;
 use ESN\CardDAV\ContactSort;
 use ESN\CardDAV\ContactsPage;
+use ESN\DAV\ChangeLog\ChangeLog;
+use ESN\DAV\ChangeLog\ChangeLogPruner;
 use ESN\DAV\SortOrder;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -81,7 +83,7 @@ class MongoTest extends AbstractDatabaseTestBase {
         return new Mongo($this->db);
     }
 
-    function testChangesAreDatedForTheirExpiry() {
+    function testChangesAreDatedForTheirPruning() {
         $this->backend->createCard($this->bookId, 'new.vcf', $this->dummyCard);
 
         $change = $this->db->addressbookchanges->findOne(['uri' => 'new.vcf']);
@@ -90,29 +92,24 @@ class MongoTest extends AbstractDatabaseTestBase {
         $this->assertEqualsWithDelta(time(), $change['date']->toDateTime()->getTimestamp(), 60);
     }
 
-    function testChangesExpireAfterTheConfiguredTTL() {
-        (new Mongo($this->db, 90))->ensureIndexes();
+    function testChangesAreIndexedByDateWithoutExpiry() {
+        $this->backend->ensureIndexes();
 
-        $ttl = array_values(array_filter(
+        $dateIndexes = array_values(array_filter(
             iterator_to_array($this->db->addressbookchanges->listIndexes()),
             fn ($index) => $index->getKey() === ['date' => 1]
         ));
-        $this->assertCount(1, $ttl);
-        $this->assertSame(90 * 86400, $ttl[0]['expireAfterSeconds']);
+        $this->assertCount(1, $dateIndexes);
+        $this->assertFalse($dateIndexes[0]->isTtl());
     }
 
-    function testChangesDoNotExpireWithoutTTL() {
-        $this->backend->ensureIndexes();
-
-        $keys = array_map(fn ($index) => $index->getKey(), iterator_to_array($this->db->addressbookchanges->listIndexes()));
-        $this->assertNotContains(['date' => 1], $keys);
-    }
-
-    function testSyncTokenOlderThanTheKeptChangesIsInvalid() {
+    function testSyncTokenBelowThePrunedSyncTokenIsInvalid() {
         $this->writeCards(['c1.vcf', 'c2.vcf', 'c3.vcf']);
 
-        // Expiry removed the changes of tokens 1 and 2
-        $this->db->addressbookchanges->deleteMany(['synctoken' => ['$lt' => 3]]);
+        $this->db->addressbooks->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($this->bookId)],
+            ['$set' => [ChangeLog::PRUNED_SYNC_TOKEN => 3]]
+        );
 
         $this->assertNull($this->backend->getChangesForAddressBook($this->bookId, 1, 1));
         $this->assertNull($this->backend->getChangesForAddressBook($this->bookId, 2, 1));
@@ -122,21 +119,18 @@ class MongoTest extends AbstractDatabaseTestBase {
         );
     }
 
-    function testSyncTokenIsInvalidWhenAllItsChangesExpired() {
-        $this->writeCards(['c1.vcf', 'c2.vcf']);
+    function testPruningInvalidatesTheSyncTokensOfThePrunedChangesOnly() {
+        $this->writeCards(['c1.vcf', 'c2.vcf', 'c3.vcf']);
+        $this->db->addressbookchanges->updateMany(
+            ['uri' => ['$in' => ['c1.vcf', 'c2.vcf']]],
+            ['$set' => ['date' => new \MongoDB\BSON\UTCDateTime((time() - 100 * 86400) * 1000)]]
+        );
 
-        $this->db->addressbookchanges->deleteMany([]);
+        (new ChangeLogPruner($this->db, new \Psr\Log\NullLogger()))->prune(ChangeLog::addressBooks(), 90);
 
-        $this->assertNull($this->backend->getChangesForAddressBook($this->bookId, 1, 1));
-    }
-
-    function testCurrentSyncTokenStaysValidWhenAllChangesExpired() {
-        $this->writeCards(['c1.vcf', 'c2.vcf']);
-
-        $this->db->addressbookchanges->deleteMany([]);
-
+        $this->assertNull($this->backend->getChangesForAddressBook($this->bookId, 2, 1));
         $this->assertEquals(
-            ['syncToken' => 3, 'added' => [], 'modified' => [], 'deleted' => []],
+            ['syncToken' => 4, 'added' => ['c3.vcf'], 'modified' => [], 'deleted' => []],
             $this->backend->getChangesForAddressBook($this->bookId, 3, 1)
         );
     }

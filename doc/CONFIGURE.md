@@ -73,6 +73,7 @@ of `config.json`.
 | `KERBEROS_ENABLED` | `false` | Kerberos (SPNEGO) authentication; also configures Nginx at startup, so set it in the environment. See [Kerberos authentication](#kerberos-authentication) |
 | `KERBEROS_REALM_DOMAINS` | unset | Kerberos realm to mail domain mapping, e.g. `CORP.EXAMPLE.COM:example.com`. See [Kerberos authentication](#kerberos-authentication) |
 | `SABRE_MIGRATE_ON_STARTUP` | `true` | Run database migrations in the background at startup; See [database migrations](storage/MONGO.md#database-migrations) |
+| `SABRE_PRUNE_CHANGES_ON_STARTUP` | `true` | Delete the sync changes older than their retention in the background at startup; See [`calendarchanges`](storage/MONGO.md#calendarchanges) |
 | `AUTO_PROVISION` | `true` | Create missing users on successful authentication |
 | `PRINCIPAL_PRIVACY` | `true` | Restrict DAV principal discovery |
 | `TRUSTED_VIDEO_URL_BASE` | unset | Keep only video conference URLs at this base; unset leaves links untouched |

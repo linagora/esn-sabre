@@ -18,11 +18,26 @@ class ExportedTimezones {
     private $definitions = [];
 
     /**
+     * TZID => [name of the zone it resolves to => TZID its first definition is exported under]
+     *
+     * @var array
+     */
+    private $byZone = [];
+
+    /**
      * Every TZID exported so far, as keys.
      *
      * @var array
      */
     private $usedTzids = [];
+
+    /**
+     * TZID => the "-N" suffix to try first for its next definition. Every
+     * smaller suffix is taken: $usedTzids only grows.
+     *
+     * @var array
+     */
+    private $nextSuffix = [];
 
     /**
      * @var VObject\Component[]
@@ -59,6 +74,9 @@ class ExportedTimezones {
 
         $this->components[] = $timezone;
         $this->definitions[$tzid][$serialized] = [$exportedTzid, $resolvedName];
+        if ($resolvedName !== null) {
+            $this->byZone[$tzid][$resolvedName] ??= $exportedTzid;
+        }
         $this->usedTzids[$exportedTzid] = true;
 
         return $exportedTzid;
@@ -85,28 +103,31 @@ class ExportedTimezones {
         }
 
         // Clients write their own definition of the same well-known zone.
-        foreach ($this->definitions[$tzid] ?? [] as [$exportedTzid, $exportedName]) {
-            if ($exportedName === $resolvedName) {
-                return $exportedTzid;
-            }
-        }
-
-        return null;
+        return $this->byZone[$tzid][$resolvedName] ?? null;
     }
 
     /**
      * $tzid, or $tzid followed by the first free "-N" suffix.
      *
+     * The probe starts where the previous definition of $tzid stopped, rather
+     * than from 2 again, so that n definitions of one TZID cost n probes, not
+     * n²/2. A suffix that another object uses as its own TZID is still skipped.
+     *
      * @param string $tzid
      * @return string
      */
     private function uniqueTzid($tzid) {
-        $candidate = $tzid;
-        for ($suffix = 2; isset($this->usedTzids[$candidate]); $suffix++) {
-            $candidate = $tzid . '-' . $suffix;
+        if (!isset($this->usedTzids[$tzid])) {
+            return $tzid;
         }
 
-        return $candidate;
+        $suffix = $this->nextSuffix[$tzid] ?? 2;
+        while (isset($this->usedTzids[$tzid . '-' . $suffix])) {
+            $suffix++;
+        }
+        $this->nextSuffix[$tzid] = $suffix + 1;
+
+        return $tzid . '-' . $suffix;
     }
 
     /**

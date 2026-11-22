@@ -39,7 +39,10 @@ class ICSExportPlugin extends \Sabre\CalDAV\ICSExportPlugin {
             // named like a component is not one.
             $components = $nodeComp->getComponents();
             $renamedTzids = $this->exportTimezones($components, $timezones);
-            $objects = array_merge($objects, $this->exportedObjects($components, $renamedTzids));
+            // Appended one by one: array_merge() would copy the growing list for every object.
+            foreach ($this->exportedObjects($components, $renamedTzids) as $object) {
+                $objects[] = $object;
+            }
 
             // Destroy circular references to PHP will GC the object.
             $nodeComp->destroy();

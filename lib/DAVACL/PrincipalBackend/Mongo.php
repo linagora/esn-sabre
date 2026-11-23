@@ -481,6 +481,40 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
                 }
             }
         }
+        return $this->authTenantInMailDomain($user, $email, $tenantType);
+    }
+
+    /**
+     * The user whose primary address is $email: the first address of its first
+     * account, or its stored preferredEmail. Unlike getAuthTenantByEmail,
+     * secondary addresses and aliases never match.
+     *
+     * Null when no user holds it, or when several do: an ambiguous address
+     * cannot identify anyone.
+     */
+    function getAuthTenantByPrimaryEmail(string $email): ?AuthTenant {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+
+        // Domain names are stored lower-case: compare the whole address case-insensitively.
+        $email = strtolower($email);
+        $users = $this->db->users->find(
+            [ '$or' => [ [ 'accounts.0.emails.0' => $email ], [ 'preferredEmail' => $email ] ] ],
+            [ 'projection' => [ '_id' => 1, 'domains' => 1 ], 'limit' => 2 ]
+        )->toArray();
+
+        if (count($users) > 1) {
+            error_log("getAuthTenantByPrimaryEmail: several users have '$email' as primary address");
+            return null;
+        }
+        return empty($users) ? null : $this->authTenantInMailDomain($users[0], $email, TenantType::User);
+    }
+
+    /**
+     * The tenant of $user, provided its domain is the one of $email.
+     */
+    private function authTenantInMailDomain($user, string $email, TenantType $tenantType): ?AuthTenant {
         if (!isset($user['domains'][0]['domain_id'])) {
             return null;
         }

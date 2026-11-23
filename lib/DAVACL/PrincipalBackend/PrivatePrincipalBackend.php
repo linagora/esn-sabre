@@ -59,6 +59,10 @@ class PrivatePrincipalBackend extends AbstractBackend implements BatchUserPrinci
         return $this->principalBackend->getAuthTenantByEmail($email, $tenantType ?? TenantType::User);
     }
 
+    function getAuthTenantByPrimaryEmail(string $email): ?AuthTenant {
+        return $this->principalBackend->getAuthTenantByPrimaryEmail($email);
+    }
+
     function getAuthTenantByResourceEmail($email, ?TenantType $tenantType = null): ?AuthTenant {
         return $this->principalBackend->getAuthTenantByResourceEmail($email, $tenantType ?? TenantType::Resources);
     }

@@ -135,6 +135,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
 ### Security
 
+ - Fix a Kerberos principal signing in as the user who holds the address made of its name, even as an alias or a secondary address: with an LDAP directory, the principal is now resolved to the `mail` of its single directory entry (`KERBEROS_LDAP_PRINCIPAL_FILTER`, default `(uid={user})`, ANDed with `LDAP_FILTER`); without one, the address must be the primary address of exactly one user. As in James, a principal whose name is not lower case, and a `KERBEROS_REALM_DOMAINS` that maps two realms onto the same domain, are now refused. See [doc/CONFIGURE.md](doc/CONFIGURE.md#kerberos-authentication) (#859)
  - Fix users enumerating the event UIDs stored in someone else's calendars through the JSON REPORT on a calendar home: the `uid` must now be a non-empty string (`400` otherwise), and an event the user cannot read answers `404` like a missing one (#821)
  - Fix a team calendar member taking over another member's personal event: an organizer handover is no longer accepted from a copy of the event in a team calendar that reuses its UID (#819)
  - Stop serving the source of a calendar subscription to a subscriber who can no longer read it: a sharee whose share was revoked or declined, or a former team calendar member, no longer reads the source through an existing subscription (GET, calendar-query, multiget, sync-collection, JSON REPORT) (#820, #824, #825)

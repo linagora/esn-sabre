@@ -22,6 +22,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     protected $principalBackend;
     protected $server;
     protected bool $debug;
+    protected LdapDirectory $directory;
 
     /**
      * Authentication Realm.
@@ -42,6 +43,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         $this->principalBackend = $principalBackend;
         $this->server = $server;
         $this->debug = $debug;
+        $this->directory = new LdapDirectory();
 
         if (!is_null($realm)) {
             $this->realm = $realm;
@@ -167,7 +169,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         }
 
         $entries = $this->authenticateLdapUser($user, $password);
-        $mail = $this->getMailFromLdapEntries($entries, $username, $user);
+        $mail = $this->directory->mailOf($entries, $username, $user);
 
         return $this->getAuthTenantByEmail($mail);
     }
@@ -183,12 +185,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             throw new AuthException("Bad credentials");
         }
 
-        if (!$this->ldapConfigured()) {
+        if (!$this->directory->configured()) {
             error_log('LDAP_SERVER is not set: LDAP authentication is disabled');
             throw new AuthException('LDAP authentication is disabled');
         }
 
-        $ldapCon = $this->openLdapConnection();
+        $ldapCon = $this->directory->open();
         try {
             # Try to authenticate
             $safeUser = ldap_escape($user, '', 0);
@@ -201,7 +203,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             if (!$ldapBind) {
                 $code = ldap_errno($ldapCon);
                 $msg  = ldap_error($ldapCon);
-                if ($this->isLdapUnavailableError($code)) {
+                if ($this->directory->isUnavailableError($code)) {
                     error_log("LDAP unavailable while binding '$user': [$code] '$msg'");
                     throw new LdapUnavailableException('LDAP server unavailable');
                 }
@@ -209,13 +211,13 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 throw new AuthException("Bad credentials");
             }
 
-            $this->bindLdapAdmin($ldapCon);
+            $this->directory->bindAdmin($ldapCon);
 
             # Get real mail
             if ($ldapFilter !== null) {
-                $entries = $this->searchLdap($ldapCon, $ldapBase, "(& (uid=$safeUser) " . $ldapFilter . ')');
+                $entries = $this->directory->search($ldapCon, $ldapBase, "(& (uid=$safeUser) " . $ldapFilter . ')');
             } else {
-                $entries = $this->searchLdap($ldapCon, $ldapBase, "(uid=$safeUser)");
+                $entries = $this->directory->search($ldapCon, $ldapBase, "(uid=$safeUser)");
             }
         }
         finally {
@@ -223,95 +225,6 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         }
 
         return $entries;
-    }
-
-    private function ldapConfigured(): bool {
-        return (bool) Env::getString('LDAP_SERVER');
-    }
-
-    private function openLdapConnection() {
-        try {
-            $ldapCon = ldap_connect(Env::getString('LDAP_SERVER'));
-        } catch (\ErrorException $e) {
-            $ldapCon = false;
-        }
-        if (!$ldapCon) {
-            error_log('Unable to connect to LDAP server');
-            throw new LdapUnavailableException('LDAP server unavailable');
-        }
-
-        $timeout = Env::getInteger('LDAP_TIMEOUT', 5);
-        ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
-        ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
-        ldap_set_option($ldapCon, LDAP_OPT_NETWORK_TIMEOUT, $timeout);
-        ldap_set_option($ldapCon, LDAP_OPT_TIMEOUT, $timeout);
-
-        return $ldapCon;
-    }
-
-    /**
-     * Negative codes are client-side failures (server down, timeout, connect
-     * error...), 51/52 are the server reporting itself busy or unavailable.
-     * Anything else is the directory answering about the credentials.
-     */
-    private function isLdapUnavailableError(int $code): bool {
-        return $code < 0 || $code === 51 || $code === 52;
-    }
-
-    /**
-     * The service account is ours, not the user's: any failure is an
-     * infrastructure problem.
-     */
-    private function bindLdapAdmin($ldapCon) {
-        try {
-            $ldapBind = ldap_bind($ldapCon, Env::getString('LDAP_ADMIN_DN'), Env::getString('LDAP_ADMIN_PASSWORD'));
-        } catch (\ErrorException $e) {
-            $ldapBind = false;
-        }
-        if (!$ldapBind) {
-            $code = ldap_errno($ldapCon);
-            $msg  = ldap_error($ldapCon);
-            error_log("LDAP admin bind failed: [$code] '$msg'");
-            throw new LdapUnavailableException('LDAP server unavailable');
-        }
-    }
-
-    private function searchLdap($ldapCon, $base, $filter): array {
-        try {
-            $searchResult = ldap_search($ldapCon, $base, $filter);
-            $entries = $searchResult === false ? false : ldap_get_entries($ldapCon, $searchResult);
-        } catch (\ErrorException $e) {
-            $entries = false;
-        }
-        if ($entries === false) {
-            $code = ldap_errno($ldapCon);
-            $msg  = ldap_error($ldapCon);
-            error_log("LDAP search '$filter' failed: [$code] '$msg'");
-            throw new LdapUnavailableException('LDAP server unavailable');
-        }
-
-        return $entries;
-    }
-
-    private function getMailFromLdapEntries($entries, $username, $user) {
-        if ($entries['count'] == 0) {
-            error_log("Unable to find $username which is valid for auth!");
-            throw new  AuthException("Unable to find $username which is valid for auth");
-        }
-        if ($entries['count'] > 1) {
-            error_log("More than one entry for $user");
-        }
-        if (empty($entries[0]['mail'][0]) || !is_string($entries[0]['mail'][0])) {
-            error_log("$user has no mail attribute");
-            throw new  AuthException("$user has no mail attribute");
-        }
-        $mail = $entries[0]['mail'][0];
-        if(!filter_var($mail, FILTER_VALIDATE_EMAIL)) {
-            error_log("validateUserPass: $user has incorrect mail attribute $mail");
-            throw new  AuthException("$user has incorrect mail attribute");
-        }
-
-        return $mail;
     }
 
     private function getAuthTenantByEmail($mail): AuthTenant {
@@ -361,26 +274,16 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
      * LDAP directory and read its content (firstname, lastname).
      */
     private function findLdapEntryByEmail(string $email): ?array {
-        $ldapBase = Env::getString('LDAP_BASE');
         $ldapFilter = Env::getString('LDAP_FILTER');
 
-        if (!$this->ldapConfigured()) {
+        if (!$this->directory->configured()) {
             return null;
         }
 
-        $ldapCon = $this->openLdapConnection();
-        try {
-            $this->bindLdapAdmin($ldapCon);
-
-            $safeEmail = ldap_escape($email, '', 0);
-            if ($ldapFilter !== null) {
-                $entries = $this->searchLdap($ldapCon, $ldapBase, "(& (mail=$safeEmail) " . $ldapFilter . ')');
-            } else {
-                $entries = $this->searchLdap($ldapCon, $ldapBase, "(mail=$safeEmail)");
-            }
-        } finally {
-            ldap_close($ldapCon);
-        }
+        $safeEmail = ldap_escape($email, '', 0);
+        $entries = $this->directory->searchAsAdmin($ldapFilter !== null
+            ? "(& (mail=$safeEmail) " . $ldapFilter . ')'
+            : "(mail=$safeEmail)");
 
         if ($entries['count'] == 0) {
             return null;
@@ -542,50 +445,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     }
 
     private function checkKerberos(string $principal): AuthTenant {
-        $email = $this->kerberosPrincipalToEmail($principal);
-        $tenant = $this->principalBackend->getAuthTenantByEmail($email);
-        if (!$tenant) {
-            error_log("checkKerberos: no user found for principal '$principal' ($email)");
-            throw new KerberosRejectedException('checkKerberos: no user found');
-        }
-        return $tenant;
-    }
-
-    /**
-     * "alice@CORP.COM" -> "alice@mycompany.com", following KERBEROS_REALM_DOMAINS
-     * ("CORP.COM:mycompany.com,OTHER.COM:other.com"). Realms are case sensitive.
-     */
-    private function kerberosPrincipalToEmail(string $principal): string {
-        // A user principal: "user@REALM", not a service one ("HTTP/host@REALM").
-        if (!preg_match('/^([^@\/]+)@([^@]+)$/', $principal, $parts)) {
-            error_log("checkKerberos: unsupported principal '$principal'");
-            throw new KerberosRejectedException('checkKerberos: unsupported principal');
-        }
-        [, $user, $realm] = $parts;
-
-        $domains = $this->kerberosRealmDomains();
-        if (!isset($domains[$realm])) {
-            error_log("checkKerberos: realm '$realm' is not allowed for principal '$principal'");
-            throw new KerberosRejectedException('checkKerberos: realm not allowed');
-        }
-
-        $email = strtolower($user) . '@' . $domains[$realm];
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            error_log("checkKerberos: principal '$principal' does not map to a valid email");
-            throw new KerberosRejectedException('checkKerberos: invalid email');
-        }
-        return $email;
-    }
-
-    private function kerberosRealmDomains(): array {
-        $domains = [];
-        foreach (explode(',', (string) Env::getString('KERBEROS_REALM_DOMAINS')) as $entry) {
-            // "REALM:domain", malformed entries are skipped
-            if (preg_match('/^([^:]+):(.+)$/', trim($entry), $pair)) {
-                $domains[$pair[1]] = strtolower($pair[2]);
-            }
-        }
-        return $domains;
+        return (new KerberosPrincipalResolver($this->principalBackend, $this->directory))->resolve($principal);
     }
 
     private function getBearerToken(\Sabre\HTTP\RequestInterface $request) {

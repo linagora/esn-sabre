@@ -133,6 +133,10 @@ render_rate_limit
 source "$(dirname "${BASH_SOURCE[0]}")/kerberos.sh"
 render_kerberos
 
+# CORS credentials: depends on whether Kerberos is enabled.
+source "$(dirname "${BASH_SOURCE[0]}")/cors.sh"
+render_cors
+
 # CalDAV clients embed file bytes as Base64 in the request body. Deployments
 # that accept attachments can raise this limit without changing Nginx's default.
 NGINX_CLIENT_MAX_BODY_SIZE=${NGINX_CLIENT_MAX_BODY_SIZE:-1m}

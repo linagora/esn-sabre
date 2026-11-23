@@ -343,15 +343,15 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 continue;
             }
 
-            // A free/busy sharee cannot read the events of the calendar: it only learns when they take place
-            $inviteeData = (int) $user->access === \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY
-                ? ($freeBusyMessage ??= $this->reduceToFreeBusy($dataMessage))
-                : $dataMessage;
+            // A free/busy sharee cannot read the events of the calendar: it only learns when they take place.
+            // Its copy is already reduced: hiding its (PRIVATE) skeleton again would drop TRANSP and STATUS.
+            $inviteeMessage = (int) $user->access === \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY
+                ? $this->withInviteeEventPath(
+                    $freeBusyMessage ??= $this->reduceToFreeBusy($dataMessage),
+                    $user->principal, $inviteeCalendar, $options['objectUri'])
+                : $this->buildInviteeMessage($dataMessage, $user->principal, $inviteeCalendar, $options['objectUri']);
 
-            $this->createMessage(
-                $this->EVENT_TOPICS['EVENT_'.$options['action']],
-                $this->buildInviteeMessage($inviteeData, $user->principal, $inviteeCalendar, $options['objectUri'])
-            );
+            $this->createMessage($this->EVENT_TOPICS['EVENT_'.$options['action']], $inviteeMessage);
         }
     }
 
@@ -375,7 +375,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
      * invitee only, so that sanitising never leaks from one invitee to the next.
      */
     private function buildInviteeMessage($dataMessage, $principal, array $inviteeCalendar, $objectUri): array {
-        list($calendarUri, $eventCalendar) = $inviteeCalendar;
+        list(, $eventCalendar) = $inviteeCalendar;
 
         $event = $dataMessage['event'];
         $dataMessage['event'] = Utils::hidePrivateEventInfoForUser($event, $eventCalendar, $principal);
@@ -389,7 +389,12 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             && $this->hasHiddenPrivateEvent($dataMessage['old_event'], $eventCalendar, $principal)) {
             $dataMessage['old_event'] = Utils::hidePrivateEventInfoForUser($dataMessage['old_event'], $eventCalendar, $principal);
         }
-        $dataMessage['eventPath'] = Utils::objectPathFromUri($principal, $calendarUri, $objectUri);
+
+        return $this->withInviteeEventPath($dataMessage, $principal, $inviteeCalendar, $objectUri);
+    }
+
+    private function withInviteeEventPath(array $dataMessage, $principal, array $inviteeCalendar, $objectUri): array {
+        $dataMessage['eventPath'] = Utils::objectPathFromUri($principal, $inviteeCalendar[0], $objectUri);
 
         return $dataMessage;
     }

@@ -39,7 +39,8 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     function __construct($apiroot, ?string $realm = null, $principalBackend, $server, bool $debug = false) {
         $this->apiroot = $apiroot;
-        $this->httpClient = new HTTP\Client();
+        // The introspection request carries the caller's technical token: never forward it through a redirect.
+        $this->httpClient = new \ESN\DAV\NoRedirectHttpClient();
         $this->principalBackend = $principalBackend;
         $this->server = $server;
         $this->debug = $debug;
@@ -79,7 +80,13 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     # </Added>
 
     private function decodeResponse($response): AuthTenant {
-        if ($response->getStatus() != 200)
+        $status = $response->getStatus();
+        if ($status >= 300 && $status < 400) {
+            // Redirects are not followed, so that the caller's credential stays on apiroot: point apiroot at the target
+            error_log("decodeResponse: ESN API answered $status, redirects are not followed; check apiroot (Location: "
+                . json_encode($response->getHeader('Location')) . ")");
+        }
+        if ($status != 200)
             throw new AuthException('decodeResponse(): bad status code');
 
         $user = json_decode($response->getBodyAsString());

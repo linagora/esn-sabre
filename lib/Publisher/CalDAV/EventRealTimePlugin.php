@@ -166,7 +166,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             'event' => VObject\Reader::read($eventNode->get())
         ];
 
-        $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+        $this->notifySubscribers($calendar, $dataMessage, $options);
         $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
         $this->publishMessages();
 
@@ -244,7 +244,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $this->cancelOrphanedAlarmOnUidChange($action, $old_event, $event, $calendarPathObject);
 
         $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_'.$action], $dataMessage);
-        $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+        $this->notifySubscribers($calendar, $dataMessage, $options);
         $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
     }
 
@@ -309,7 +309,17 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         return $oldUid && $newUid && $oldUid !== $newUid;
     }
 
-    private function notifySubscribers($subscribers, $dataMessage, $options) {
+    private function notifySubscribers($calendar, $dataMessage, $options) {
+        $subscribers = $calendar->getSubscribers();
+        if (!$subscribers) {
+            return;
+        }
+        // Subscribers read the calendar through its public right: with free/busy only, the events are reduced alike
+        if (method_exists($calendar, 'getPublicRight')
+            && $calendar->getPublicRight() === '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}read-free-busy') {
+            $dataMessage = $this->reduceToFreeBusy($dataMessage);
+        }
+
         foreach($subscribers as $subscriber) {
             $dataMessage['eventPath'] = Utils::objectPathFromUri($subscriber['principaluri'],  $subscriber['uri'], $options['objectUri']);
             $dataMessage['eventSourcePath'] = '/' . $options['eventSourcePath'];
@@ -319,6 +329,9 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     private function notifyInvites($invites, $dataMessage, $options) {
+        // Reduced once, on the first free/busy sharee, for all of them
+        $freeBusyMessage = null;
+
         foreach($invites as $user) {
             if($user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
                 continue;
@@ -330,11 +343,31 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 continue;
             }
 
-            $this->createMessage(
-                $this->EVENT_TOPICS['EVENT_'.$options['action']],
-                $this->buildInviteeMessage($dataMessage, $user->principal, $inviteeCalendar, $options['objectUri'])
-            );
+            // A free/busy sharee cannot read the events of the calendar: it only learns when they take place.
+            // Its copy is already reduced: hiding its (PRIVATE) skeleton again would drop TRANSP and STATUS.
+            $inviteeMessage = (int) $user->access === \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY
+                ? $this->withInviteeEventPath(
+                    $freeBusyMessage ??= $this->reduceToFreeBusy($dataMessage),
+                    $user->principal, $inviteeCalendar, $options['objectUri'])
+                : $this->buildInviteeMessage($dataMessage, $user->principal, $inviteeCalendar, $options['objectUri']);
+
+            $this->createMessage($this->EVENT_TOPICS['EVENT_'.$options['action']], $inviteeMessage);
         }
+    }
+
+    /**
+     * Reduces every copy of the event the message carries (event, rawEvent, old_event) to its free/busy skeleton.
+     */
+    private function reduceToFreeBusy(array $dataMessage): array {
+        $dataMessage['event'] = $this->ensureRequiredFields(Utils::reduceEventsToFreeBusy($dataMessage['event']));
+        if (isset($dataMessage['rawEvent'])) {
+            $dataMessage['rawEvent'] = $dataMessage['event']->serialize();
+        }
+        if (isset($dataMessage['old_event'])) {
+            $dataMessage['old_event'] = Utils::reduceEventsToFreeBusy($dataMessage['old_event']);
+        }
+
+        return $dataMessage;
     }
 
     /**
@@ -342,7 +375,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
      * invitee only, so that sanitising never leaks from one invitee to the next.
      */
     private function buildInviteeMessage($dataMessage, $principal, array $inviteeCalendar, $objectUri): array {
-        list($calendarUri, $eventCalendar) = $inviteeCalendar;
+        list(, $eventCalendar) = $inviteeCalendar;
 
         $event = $dataMessage['event'];
         $dataMessage['event'] = Utils::hidePrivateEventInfoForUser($event, $eventCalendar, $principal);
@@ -356,7 +389,12 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             && $this->hasHiddenPrivateEvent($dataMessage['old_event'], $eventCalendar, $principal)) {
             $dataMessage['old_event'] = Utils::hidePrivateEventInfoForUser($dataMessage['old_event'], $eventCalendar, $principal);
         }
-        $dataMessage['eventPath'] = Utils::objectPathFromUri($principal, $calendarUri, $objectUri);
+
+        return $this->withInviteeEventPath($dataMessage, $principal, $inviteeCalendar, $objectUri);
+    }
+
+    private function withInviteeEventPath(array $dataMessage, $principal, array $inviteeCalendar, $objectUri): array {
+        $dataMessage['eventPath'] = Utils::objectPathFromUri($principal, $inviteeCalendar[0], $objectUri);
 
         return $dataMessage;
     }
@@ -458,7 +496,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             'calendarUri' => $calendarUri
         ];
 
-        $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+        $this->notifySubscribers($calendar, $dataMessage, $options);
 
         $this->notifyAlarm($iTipMessage, $dataMessage);
 

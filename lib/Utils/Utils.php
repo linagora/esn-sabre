@@ -221,6 +221,33 @@ class Utils {
         return $clonedCalendar;
     }
 
+    /**
+     * A copy of the calendar reduced to what free/busy exposes: the times, recurrence, transparency and status of its
+     * events, whatever their classification. Every other component (VTODO, VJOURNAL, X- components) and every
+     * calendar property but VERSION, PRODID and CALSCALE are dropped; the time zones are kept to read the times.
+     */
+    static function reduceEventsToFreeBusy($vCalendar) {
+        $clonedCalendar = self::safeCloneVObject($vCalendar);
+
+        $events = [];
+        foreach ($clonedCalendar->select('VEVENT') as $vevent) {
+            $events[] = self::createSanitizedPrivateEvent($clonedCalendar, $vevent, true);
+        }
+        foreach ($clonedCalendar->children() as $child) {
+            $kept = $child instanceof \Sabre\VObject\Component
+                ? $child->name === 'VTIMEZONE'
+                : in_array($child->name, ['VERSION', 'PRODID', 'CALSCALE'], true);
+            if (!$kept) {
+                $clonedCalendar->remove($child);
+            }
+        }
+        foreach ($events as $event) {
+            $clonedCalendar->add($event);
+        }
+
+        return $clonedCalendar;
+    }
+
     private static function sanitizePrivateEvents($vCalendar, $parentNode, $userPrincipal) {
         $events = [];
         $hasSanitizedEvent = false;
@@ -243,7 +270,7 @@ class Utils {
         }
     }
 
-    private static function createSanitizedPrivateEvent($vCalendar, $vevent) {
+    private static function createSanitizedPrivateEvent($vCalendar, $vevent, bool $freeBusy = false) {
         $sanitizedEvent = $vCalendar->createComponent('VEVENT', [], false);
 
         // Rebuild from an allowlist so nested components such as VALARM and
@@ -260,6 +287,12 @@ class Utils {
             'EXDATE' => ['VALUE', 'TZID'],
             'RECURRENCE-ID' => ['VALUE', 'TZID', 'RANGE']
         ];
+        if ($freeBusy) {
+            // What a free-busy query reads: who organizes the event is not part of it, whether it blocks time is
+            unset($allowedProperties['ORGANIZER']);
+            $allowedProperties['TRANSP'] = [];
+            $allowedProperties['STATUS'] = [];
+        }
 
         foreach ($allowedProperties as $propertyName => $parameterNames) {
             foreach ($vevent->select($propertyName) as $property) {

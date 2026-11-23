@@ -98,6 +98,12 @@ class LdapDirectory {
      * The mail of the first entry, which must be a valid address.
      */
     function mailOf($entries, $username, $user): string {
+        $entry = $this->firstEntry($entries, $username, $user);
+
+        return $this->validMail($entry['mail'][0] ?? null, $user);
+    }
+
+    private function firstEntry($entries, $username, $user) {
         if ($entries['count'] == 0) {
             error_log("Unable to find $username which is valid for auth!");
             throw new  AuthException("Unable to find $username which is valid for auth");
@@ -105,12 +111,16 @@ class LdapDirectory {
         if ($entries['count'] > 1) {
             error_log("More than one entry for $user");
         }
-        if (empty($entries[0]['mail'][0]) || !is_string($entries[0]['mail'][0])) {
+
+        return $entries[0];
+    }
+
+    private function validMail($mail, $user): string {
+        if (empty($mail) || !is_string($mail)) {
             error_log("$user has no mail attribute");
             throw new  AuthException("$user has no mail attribute");
         }
-        $mail = $entries[0]['mail'][0];
-        if(!filter_var($mail, FILTER_VALIDATE_EMAIL)) {
+        if (!filter_var($mail, FILTER_VALIDATE_EMAIL)) {
             error_log("validateUserPass: $user has incorrect mail attribute $mail");
             throw new  AuthException("$user has incorrect mail attribute");
         }

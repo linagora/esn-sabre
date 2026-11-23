@@ -570,71 +570,71 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         if (!$res || is_null($res['synctoken'])) return null;
         $currentToken = $res['synctoken'];
 
-        $result = [
-            'syncToken' => $currentToken,
-            'added'     => [],
-            'modified'  => [],
-            'deleted'   => [],
-        ];
-
         if ($syncToken) {
-            $collection = $this->db->selectCollection($this->addressBookChangesTableName);
-            $query = [
-                'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
-                'synctoken' => [ '$gte' => (int) $syncToken, '$lte' => (int) $currentToken ]
-            ];
-
-            $projection = [
-                'uri' => 1,
-                'operation' => 1
-            ];
-
-            $options = [
-                'projection' => $projection,
-                'sort' => [ 'synctoken' => 1 ]
-            ];
-
-            if ($limit > 0) $options['limit'] = $limit;
-
-            $res = $collection->find($query, $options);
-
-            // This loop ensures that any duplicates are overwritten, only the
-            // last change on a node is relevant.
-            $changes = [];
-            foreach ($res as $row) {
-                $changes[$row['uri']] = $row['operation'];
-            }
-
-            foreach($changes as $uri => $operation) {
-                switch($operation) {
-                    case 1:
-                        $result['added'][] = $uri;
-                        break;
-                    case 2:
-                        $result['modified'][] = $uri;
-                        break;
-                    case 3:
-                        $result['deleted'][] = $uri;
-                        break;
-                }
-            }
+            $changes = $this->getChangesSince($addressBookId, $syncToken, $currentToken, $limit);
 
             if ($this->wereChangesPruned($addressBookId, (int) $syncToken)) {
                 // Sabre answers 403 DAV:valid-sync-token: the client resyncs from scratch (RFC 6578 section 3.2)
                 return null;
             }
-        } else {
-            // No synctoken supplied, this is the initial sync.
-            $collection = $this->db->selectCollection($this->cardsTableName);
-            $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
 
-            $added = [];
-            foreach ($collection->find($query, [ 'projection' => [ 'uri' => 1 ] ]) as $row) {
-                $added[] = $row['uri'];
-            }
-            $result['added'] = $added;
+            return array_merge([ 'syncToken' => $currentToken ], $changes);
         }
-        return $result;
+
+        return [
+            'syncToken' => $currentToken,
+            'added'     => $this->getAllCardUris($addressBookId),
+            'modified'  => [],
+            'deleted'   => [],
+        ];
+    }
+
+    private function getChangesSince($addressBookId, $syncToken, $currentToken, $limit) {
+        $collection = $this->db->selectCollection($this->addressBookChangesTableName);
+        $query = [
+            'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
+            'synctoken' => [ '$gte' => (int) $syncToken, '$lte' => (int) $currentToken ]
+        ];
+
+        $options = [
+            'projection' => [ 'uri' => 1, 'operation' => 1 ],
+            'sort' => [ 'synctoken' => 1 ]
+        ];
+
+        if ($limit > 0) $options['limit'] = $limit;
+
+        // Only the last change on a node is relevant: later rows overwrite earlier ones.
+        $lastOperationByUri = [];
+        foreach ($collection->find($query, $options) as $row) {
+            $lastOperationByUri[$row['uri']] = $row['operation'];
+        }
+
+        return $this->groupUrisByOperation($lastOperationByUri);
+    }
+
+    private function groupUrisByOperation(array $lastOperationByUri) {
+        $keyByOperation = [ 1 => 'added', 2 => 'modified', 3 => 'deleted' ];
+        $grouped = [ 'added' => [], 'modified' => [], 'deleted' => [] ];
+
+        foreach ($lastOperationByUri as $uri => $operation) {
+            if (isset($keyByOperation[$operation])) {
+                $grouped[$keyByOperation[$operation]][] = $uri;
+            }
+        }
+
+        return $grouped;
+    }
+
+    private function getAllCardUris($addressBookId) {
+        $collection = $this->db->selectCollection($this->cardsTableName);
+        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
+
+        $uris = [];
+        foreach ($collection->find($query, [ 'projection' => [ 'uri' => 1 ] ]) as $row) {
+            $uris[] = $row['uri'];
+        }
+
+        return $uris;
     }
 
     /**

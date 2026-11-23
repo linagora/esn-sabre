@@ -34,7 +34,7 @@
         "php": ">=8.4",
         "sabre/dav": "4.7.1",
         "sabre/vobject": "dev-linagora-waiting-merges-5.0.0#ca4ed8fbb64e583b2130634b59178b2e25307cdc",
-        "sabre/xml": "dev-linagora-waiting-merges-2.2#8335f379653ba5db881ee3c0ae8d79f8f464e03a",
+        "sabre/xml": "dev-linagora-waiting-merges-2.2#e18889b1bc2bbccecf87821b5b83799d54bb45ae",
         "mongodb/mongodb": "^2.5@stable",
         "monolog/monolog": "^3.12",
         "firebase/php-jwt": "^7.0"

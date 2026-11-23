@@ -79,7 +79,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     }
     # </Added>
 
-    private function decodeResponse($response): AuthTenant {
+    private function assertSuccessfulStatus($response): void {
         $status = $response->getStatus();
         if ($status >= 300 && $status < 400) {
             // Redirects are not followed, so that the caller's credential stays on apiroot: point apiroot at the target
@@ -88,6 +88,10 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         }
         if ($status != 200)
             throw new AuthException('decodeResponse(): bad status code');
+    }
+
+    private function decodeResponse($response): AuthTenant {
+        $this->assertSuccessfulStatus($response);
 
         $user = json_decode($response->getBodyAsString());
         if (!$user)

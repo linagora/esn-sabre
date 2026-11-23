@@ -2,6 +2,7 @@
 
 namespace ESN\CalDAV;
 
+use ESN\DAV\NoRedirectHttpClient;
 use Sabre\HTTP\Client;
 use Sabre\HTTP\Request;
 use Sabre\HTTP\ResponseInterface;
@@ -20,9 +21,7 @@ class AttachmentUploadClient {
         }
 
         // Never forward the user credential through an upstream redirect.
-        $this->client = $client ?? new class extends Client {
-            protected $maxRedirects = 0;
-        };
+        $this->client = $client ?? new NoRedirectHttpClient();
         $this->client->addCurlSetting(CURLOPT_CONNECTTIMEOUT, 5);
         $this->client->addCurlSetting(CURLOPT_TIMEOUT, 90);
     }

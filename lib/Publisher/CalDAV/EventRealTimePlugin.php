@@ -344,10 +344,31 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     private function buildInviteeMessage($dataMessage, $principal, array $inviteeCalendar, $objectUri): array {
         list($calendarUri, $eventCalendar) = $inviteeCalendar;
 
-        $dataMessage['event'] = Utils::hidePrivateEventInfoForUser($dataMessage['event'], $eventCalendar, $principal);
+        $event = $dataMessage['event'];
+        $dataMessage['event'] = Utils::hidePrivateEventInfoForUser($event, $eventCalendar, $principal);
+        // rawEvent holds the bytes as written: once the event is reduced it must be rebuilt from the reduced copy,
+        // carrying the fields buildData() adds to the published event
+        if (isset($dataMessage['rawEvent']) && $this->hasHiddenPrivateEvent($event, $eventCalendar, $principal)) {
+            $dataMessage['rawEvent'] = $this->ensureRequiredFields($dataMessage['event'])->serialize();
+        }
+        // The previous revision is only read from here on: it is copied only when one of its events is hidden
+        if (isset($dataMessage['old_event'])
+            && $this->hasHiddenPrivateEvent($dataMessage['old_event'], $eventCalendar, $principal)) {
+            $dataMessage['old_event'] = Utils::hidePrivateEventInfoForUser($dataMessage['old_event'], $eventCalendar, $principal);
+        }
         $dataMessage['eventPath'] = Utils::objectPathFromUri($principal, $calendarUri, $objectUri);
 
         return $dataMessage;
+    }
+
+    private function hasHiddenPrivateEvent($vCalendar, $eventCalendar, $principal): bool {
+        foreach ($vCalendar->select('VEVENT') as $vevent) {
+            if (Utils::isHiddenPrivateEvent($vevent, $eventCalendar, $principal)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

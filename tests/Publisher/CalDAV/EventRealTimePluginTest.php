@@ -571,6 +571,46 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(['/calendars/inv2/cal-inv2/e.ics'], $this->eventPaths($plugin));
     }
 
+    function testDelegateMessageOfAPrivateEventIsReducedInEveryEventField() {
+        $owner = 'principals/users/owner';
+        $backend = $this->createMock(\Sabre\CalDAV\Backend\BackendInterface::class);
+        $backend->method('getCalendarsForUser')->willReturnMap([
+            ['principals/users/inv1', [['id' => ['cal-id', 'i1'], 'uri' => 'cal-inv1']]],
+        ]);
+        $server = new \Sabre\DAV\Server([]);
+        $server->tree = $this->getMockBuilder('\Sabre\DAV\Tree')->disableOriginalConstructor()->getMock();
+        $server->tree->method('getNodeForPath')->willReturn(new class('cal', $owner) extends \Sabre\DAV\SimpleCollection {
+            function __construct($name, private string $owner) { parent::__construct($name); }
+            function getOwner() { return $this->owner; }
+        });
+        $plugin = new EventRealTimePlugin(new ClientMock(), $backend);
+        $plugin->initialize($server);
+
+        $private = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nCLASS:PRIVATE\r\nDTSTART:20160209T113000Z\r\nSUMMARY:Secret new\r\nDESCRIPTION:Secret description\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $old = str_replace('Secret new', 'Secret old', $private);
+        $dataMessage = [
+            'event' => \Sabre\VObject\Reader::read($private),
+            'rawEvent' => $private,
+            'old_event' => \Sabre\VObject\Reader::read($old),
+        ];
+        $options = ['calendarid' => 'cal-id', 'objectUri' => 'e.ics', 'action' => 'UPDATED'];
+
+        (new \ReflectionMethod(EventRealTimePlugin::class, 'notifyInvites'))->invoke($plugin, [
+            new \Sabre\DAV\Xml\Element\Sharee(['principal' => 'principals/users/inv1', 'access' => 2, 'inviteStatus' => 2]),
+        ], $dataMessage, $options);
+
+        $messages = $plugin->getMessages();
+        $this->assertCount(1, $messages);
+        $data = $messages[0]['data'];
+        foreach ([$data['event']->serialize(), $data['rawEvent'], $data['old_event']->serialize()] as $ics) {
+            $this->assertStringNotContainsString('Secret', $ics);
+        }
+        $this->assertStringContainsString('UID:e', $data['rawEvent']);
+        $this->assertStringContainsString('DTSTAMP:', $data['rawEvent']);
+        // The owner-side message keeps the event as written
+        $this->assertStringContainsString('Secret new', $dataMessage['rawEvent']);
+    }
+
     private function pluginWithCalendarsForUser(array $calendarsForUser) {
         $backend = $this->createMock(\Sabre\CalDAV\Backend\BackendInterface::class);
         $backend->method('getCalendarsForUser')->willReturnMap($calendarsForUser);

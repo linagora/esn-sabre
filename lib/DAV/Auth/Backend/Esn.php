@@ -22,6 +22,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     protected $principalBackend;
     protected $server;
     protected bool $debug;
+    protected LdapDirectory $directory;
 
     /**
      * Authentication Realm.
@@ -42,6 +43,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         $this->principalBackend = $principalBackend;
         $this->server = $server;
         $this->debug = $debug;
+        $this->directory = new LdapDirectory();
 
         if (!is_null($realm)) {
             $this->realm = $realm;
@@ -167,7 +169,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         }
 
         $entries = $this->authenticateLdapUser($user, $password);
-        $mail = $this->getMailFromLdapEntries($entries, $username, $user);
+        $mail = $this->directory->mailOf($entries, $username, $user);
 
         return $this->getAuthTenantByEmail($mail);
     }
@@ -183,12 +185,12 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             throw new AuthException("Bad credentials");
         }
 
-        if (!$this->ldapConfigured()) {
+        if (!$this->directory->configured()) {
             error_log('LDAP_SERVER is not set: LDAP authentication is disabled');
             throw new AuthException('LDAP authentication is disabled');
         }
 
-        $ldapCon = $this->openLdapConnection();
+        $ldapCon = $this->directory->open();
         try {
             # Try to authenticate
             $safeUser = ldap_escape($user, '', 0);
@@ -201,7 +203,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
             if (!$ldapBind) {
                 $code = ldap_errno($ldapCon);
                 $msg  = ldap_error($ldapCon);
-                if ($this->isLdapUnavailableError($code)) {
+                if ($this->directory->isUnavailableError($code)) {
                     error_log("LDAP unavailable while binding '$user': [$code] '$msg'");
                     throw new LdapUnavailableException('LDAP server unavailable');
                 }
@@ -209,13 +211,13 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
                 throw new AuthException("Bad credentials");
             }
 
-            $this->bindLdapAdmin($ldapCon);
+            $this->directory->bindAdmin($ldapCon);
 
             # Get real mail
             if ($ldapFilter !== null) {
-                $entries = $this->searchLdap($ldapCon, $ldapBase, "(& (uid=$safeUser) " . $ldapFilter . ')');
+                $entries = $this->directory->search($ldapCon, $ldapBase, "(& (uid=$safeUser) " . $ldapFilter . ')');
             } else {
-                $entries = $this->searchLdap($ldapCon, $ldapBase, "(uid=$safeUser)");
+                $entries = $this->directory->search($ldapCon, $ldapBase, "(uid=$safeUser)");
             }
         }
         finally {
@@ -223,95 +225,6 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
         }
 
         return $entries;
-    }
-
-    private function ldapConfigured(): bool {
-        return (bool) Env::getString('LDAP_SERVER');
-    }
-
-    private function openLdapConnection() {
-        try {
-            $ldapCon = ldap_connect(Env::getString('LDAP_SERVER'));
-        } catch (\ErrorException $e) {
-            $ldapCon = false;
-        }
-        if (!$ldapCon) {
-            error_log('Unable to connect to LDAP server');
-            throw new LdapUnavailableException('LDAP server unavailable');
-        }
-
-        $timeout = Env::getInteger('LDAP_TIMEOUT', 5);
-        ldap_set_option($ldapCon, LDAP_OPT_PROTOCOL_VERSION, 3);
-        ldap_set_option($ldapCon, LDAP_OPT_REFERRALS, 0);
-        ldap_set_option($ldapCon, LDAP_OPT_NETWORK_TIMEOUT, $timeout);
-        ldap_set_option($ldapCon, LDAP_OPT_TIMEOUT, $timeout);
-
-        return $ldapCon;
-    }
-
-    /**
-     * Negative codes are client-side failures (server down, timeout, connect
-     * error...), 51/52 are the server reporting itself busy or unavailable.
-     * Anything else is the directory answering about the credentials.
-     */
-    private function isLdapUnavailableError(int $code): bool {
-        return $code < 0 || $code === 51 || $code === 52;
-    }
-
-    /**
-     * The service account is ours, not the user's: any failure is an
-     * infrastructure problem.
-     */
-    private function bindLdapAdmin($ldapCon) {
-        try {
-            $ldapBind = ldap_bind($ldapCon, Env::getString('LDAP_ADMIN_DN'), Env::getString('LDAP_ADMIN_PASSWORD'));
-        } catch (\ErrorException $e) {
-            $ldapBind = false;
-        }
-        if (!$ldapBind) {
-            $code = ldap_errno($ldapCon);
-            $msg  = ldap_error($ldapCon);
-            error_log("LDAP admin bind failed: [$code] '$msg'");
-            throw new LdapUnavailableException('LDAP server unavailable');
-        }
-    }
-
-    private function searchLdap($ldapCon, $base, $filter): array {
-        try {
-            $searchResult = ldap_search($ldapCon, $base, $filter);
-            $entries = $searchResult === false ? false : ldap_get_entries($ldapCon, $searchResult);
-        } catch (\ErrorException $e) {
-            $entries = false;
-        }
-        if ($entries === false) {
-            $code = ldap_errno($ldapCon);
-            $msg  = ldap_error($ldapCon);
-            error_log("LDAP search '$filter' failed: [$code] '$msg'");
-            throw new LdapUnavailableException('LDAP server unavailable');
-        }
-
-        return $entries;
-    }
-
-    private function getMailFromLdapEntries($entries, $username, $user) {
-        if ($entries['count'] == 0) {
-            error_log("Unable to find $username which is valid for auth!");
-            throw new  AuthException("Unable to find $username which is valid for auth");
-        }
-        if ($entries['count'] > 1) {
-            error_log("More than one entry for $user");
-        }
-        if (empty($entries[0]['mail'][0]) || !is_string($entries[0]['mail'][0])) {
-            error_log("$user has no mail attribute");
-            throw new  AuthException("$user has no mail attribute");
-        }
-        $mail = $entries[0]['mail'][0];
-        if(!filter_var($mail, FILTER_VALIDATE_EMAIL)) {
-            error_log("validateUserPass: $user has incorrect mail attribute $mail");
-            throw new  AuthException("$user has incorrect mail attribute");
-        }
-
-        return $mail;
     }
 
     private function getAuthTenantByEmail($mail): AuthTenant {
@@ -361,26 +274,16 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
      * LDAP directory and read its content (firstname, lastname).
      */
     private function findLdapEntryByEmail(string $email): ?array {
-        $ldapBase = Env::getString('LDAP_BASE');
         $ldapFilter = Env::getString('LDAP_FILTER');
 
-        if (!$this->ldapConfigured()) {
+        if (!$this->directory->configured()) {
             return null;
         }
 
-        $ldapCon = $this->openLdapConnection();
-        try {
-            $this->bindLdapAdmin($ldapCon);
-
-            $safeEmail = ldap_escape($email, '', 0);
-            if ($ldapFilter !== null) {
-                $entries = $this->searchLdap($ldapCon, $ldapBase, "(& (mail=$safeEmail) " . $ldapFilter . ')');
-            } else {
-                $entries = $this->searchLdap($ldapCon, $ldapBase, "(mail=$safeEmail)");
-            }
-        } finally {
-            ldap_close($ldapCon);
-        }
+        $safeEmail = ldap_escape($email, '', 0);
+        $entries = $this->directory->searchAsAdmin($ldapFilter !== null
+            ? "(& (mail=$safeEmail) " . $ldapFilter . ')'
+            : "(mail=$safeEmail)");
 
         if ($entries['count'] == 0) {
             return null;
@@ -542,137 +445,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
     }
 
     private function checkKerberos(string $principal): AuthTenant {
-        $kerberosPrincipal = $this->parseKerberosPrincipal($principal);
-        $tenant = $this->ldapConfigured()
-            ? $this->kerberosTenantFromDirectory($kerberosPrincipal)
-            : $this->kerberosTenantFromPrimaryEmail($kerberosPrincipal);
-        if (!$tenant) {
-            error_log("checkKerberos: no user found for principal '$principal'");
-            throw new KerberosRejectedException('checkKerberos: no user found');
-        }
-        return $tenant;
-    }
-
-    /**
-     * "alice@CORP.COM" -> name "alice", in the domain KERBEROS_REALM_DOMAINS
-     * ("CORP.COM:mycompany.com,OTHER.COM:other.com") maps "CORP.COM" to.
-     * Realms are case sensitive.
-     */
-    private function parseKerberosPrincipal(string $principal): KerberosPrincipal {
-        // A user principal: "user@REALM", not a service one ("HTTP/host@REALM").
-        if (!preg_match('/^([^@\/]+)@([^@]+)$/', $principal, $parts)) {
-            error_log("checkKerberos: unsupported principal '$principal'");
-            throw new KerberosRejectedException('checkKerberos: unsupported principal');
-        }
-        [, $name, $realm] = $parts;
-        $this->assertCanonicalKerberosName($principal, $name);
-
-        $domains = $this->kerberosRealmDomains();
-        if (!isset($domains[$realm])) {
-            error_log("checkKerberos: realm '$realm' is not allowed for principal '$principal'");
-            throw new KerberosRejectedException('checkKerberos: realm not allowed');
-        }
-        return new KerberosPrincipal($principal, $name, $realm, $domains[$realm]);
-    }
-
-    /**
-     * Kerberos names are case sensitive, user addresses and directory matches
-     * usually are not: like James's CanonicalKerberosPrincipal, only lower-case
-     * names are accepted, so that "alice" and "Alice", two distinct principals,
-     * cannot sign in as the same user.
-     */
-    private function assertCanonicalKerberosName(string $principal, string $name): void {
-        if ($name !== strtolower($name)) {
-            error_log("checkKerberos: principal '$principal' has a name that is not lower case");
-            throw new KerberosRejectedException('checkKerberos: principal name not lower case');
-        }
-    }
-
-    /**
-     * Without a directory, the principal can only be assumed to own the address
-     * made of its name: it must be the primary address of exactly one user,
-     * never an alias or a secondary address that someone else holds.
-     */
-    private function kerberosTenantFromPrimaryEmail(KerberosPrincipal $kerberosPrincipal): ?AuthTenant {
-        $email = $kerberosPrincipal->assumedEmail();
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            error_log("checkKerberos: principal '$kerberosPrincipal' does not map to a valid email");
-            throw new KerberosRejectedException('checkKerberos: invalid email');
-        }
-        return $this->principalBackend->getAuthTenantByPrimaryEmail($email);
-    }
-
-    /**
-     * With a directory, it tells which mailbox the principal owns, as for Basic
-     * authentication: the mail of its single entry, which LDAP_FILTER must
-     * accept.
-     */
-    private function kerberosTenantFromDirectory(KerberosPrincipal $kerberosPrincipal): ?AuthTenant {
-        $mail = $this->kerberosMailFromDirectory($kerberosPrincipal);
-        if (!$kerberosPrincipal->isInDomain($mail)) {
-            error_log("checkKerberos: mail '$mail' of principal '$kerberosPrincipal' is not in domain '$kerberosPrincipal->domain'");
-            throw new KerberosRejectedException('checkKerberos: mail outside the realm domain');
-        }
-        return $this->principalBackend->getAuthTenantByEmail($mail);
-    }
-
-    private function kerberosMailFromDirectory(KerberosPrincipal $kerberosPrincipal): string {
-        $entries = $this->searchKerberosPrincipalInLdap($kerberosPrincipal);
-        if ($entries['count'] > 1) {
-            error_log("checkKerberos: several directory entries for principal '$kerberosPrincipal'");
-            throw new KerberosRejectedException('checkKerberos: no unique directory entry');
-        }
-        try {
-            return $this->getMailFromLdapEntries($entries, (string) $kerberosPrincipal, (string) $kerberosPrincipal);
-        } catch (AuthException $e) {
-            // A 401 would challenge the client again with the very same ticket
-            throw new KerberosRejectedException('checkKerberos: ' . $e->getMessage(), 0, $e);
-        }
-    }
-
-    private function searchKerberosPrincipalInLdap(KerberosPrincipal $kerberosPrincipal): array {
-        $filter = $this->kerberosLdapFilter($kerberosPrincipal);
-        $ldapCon = $this->openLdapConnection();
-        try {
-            $this->bindLdapAdmin($ldapCon);
-            return $this->searchLdap($ldapCon, Env::getString('LDAP_BASE'), $filter);
-        } finally {
-            ldap_close($ldapCon);
-        }
-    }
-
-    /**
-     * KERBEROS_LDAP_PRINCIPAL_FILTER with its {user} (principal name) and
-     * {principal} (full principal) placeholders escaped and filled in, ANDed
-     * with LDAP_FILTER.
-     */
-    private function kerberosLdapFilter(KerberosPrincipal $kerberosPrincipal): string {
-        $filter = strtr(Env::getString('KERBEROS_LDAP_PRINCIPAL_FILTER', '(uid={user})'), [
-            '{user}' => ldap_escape($kerberosPrincipal->name, '', LDAP_ESCAPE_FILTER),
-            '{principal}' => ldap_escape($kerberosPrincipal->principal, '', LDAP_ESCAPE_FILTER),
-        ]);
-        $ldapFilter = Env::getString('LDAP_FILTER');
-        return $ldapFilter === null ? $filter : "(& $filter $ldapFilter)";
-    }
-
-    /**
-     * KERBEROS_REALM_DOMAINS as realm => domain. Like James's RealmMapping, two
-     * realms mapped onto the same domain are refused: their principals of the
-     * same name would sign in as the same user.
-     */
-    private function kerberosRealmDomains(): array {
-        $domains = [];
-        foreach (explode(',', (string) Env::getString('KERBEROS_REALM_DOMAINS')) as $entry) {
-            // "REALM:domain", malformed entries are skipped
-            if (preg_match('/^([^:]+):(.+)$/', trim($entry), $pair)) {
-                $domains[$pair[1]] = strtolower($pair[2]);
-            }
-        }
-        if (count(array_unique($domains)) !== count($domains)) {
-            error_log('checkKerberos: KERBEROS_REALM_DOMAINS maps several realms onto the same domain');
-            throw new KerberosRejectedException('checkKerberos: several realms map to the same domain');
-        }
-        return $domains;
+        return (new KerberosPrincipalResolver($this->principalBackend, $this->directory))->resolve($principal);
     }
 
     private function getBearerToken(\Sabre\HTTP\RequestInterface $request) {

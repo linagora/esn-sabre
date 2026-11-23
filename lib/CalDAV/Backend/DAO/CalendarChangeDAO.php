@@ -39,7 +39,8 @@ class CalendarChangeDAO extends BaseDAO {
             'uri' => $objectUri,
             'synctoken' => $syncToken,
             'calendarid' => new \MongoDB\BSON\ObjectId($calendarId),
-            'operation' => $operation
+            'operation' => $operation,
+            'date' => new \MongoDB\BSON\UTCDateTime()
         ];
         return $this->insertOne($obj);
     }
@@ -49,5 +50,8 @@ class CalendarChangeDAO extends BaseDAO {
             'calendarid' => 1,
             'synctoken' => 1
         ]);
+
+        // Serves the expired changes lookup of scripts/prune-change-logs.php
+        $this->createIndex(['date' => 1]);
     }
 }

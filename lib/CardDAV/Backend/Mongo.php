@@ -3,6 +3,7 @@
 namespace ESN\CardDAV\Backend;
 
 use Sabre\Event\EventEmitter;
+use ESN\DAV\ChangeLog\ChangeLog;
 use ESN\DAV\Sharing\Plugin as SPlugin;
 use ESN\DAV\SortOrder;
 use ESN\CardDAV\ContactFilters;
@@ -296,7 +297,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $this->deleteSubscriptions($addressBook['principaluri'], $addressBook['uri']);
 
         $collection = $this->db->selectCollection($this->addressBookChangesTableName);
-        $collection->deleteMany([ '_id' => $mongoId ]);
+        $collection->deleteMany([ 'addressbookid' => $mongoId ]);
     }
 
     private function buildAddressBookPath($principalUri, $addressBookUri) {
@@ -569,66 +570,83 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         if (!$res || is_null($res['synctoken'])) return null;
         $currentToken = $res['synctoken'];
 
-        $result = [
+        if ($syncToken) {
+            $changes = $this->getChangesSince($addressBookId, $syncToken, $currentToken, $limit);
+
+            if ($this->wereChangesPruned($addressBookId, (int) $syncToken)) {
+                // Sabre answers 403 DAV:valid-sync-token: the client resyncs from scratch (RFC 6578 section 3.2)
+                return null;
+            }
+
+            return array_merge([ 'syncToken' => $currentToken ], $changes);
+        }
+
+        return [
             'syncToken' => $currentToken,
-            'added'     => [],
+            'added'     => $this->getAllCardUris($addressBookId),
             'modified'  => [],
             'deleted'   => [],
         ];
+    }
 
-        if ($syncToken) {
-            $collection = $this->db->selectCollection($this->addressBookChangesTableName);
-            $query = [
-                'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
-                'synctoken' => [ '$gte' => (int) $syncToken, '$lte' => (int) $currentToken ]
-            ];
+    private function getChangesSince($addressBookId, $syncToken, $currentToken, $limit) {
+        $collection = $this->db->selectCollection($this->addressBookChangesTableName);
+        $query = [
+            'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
+            'synctoken' => [ '$gte' => (int) $syncToken, '$lte' => (int) $currentToken ]
+        ];
 
-            $projection = [
-                'uri' => 1,
-                'operation' => 1
-            ];
+        $options = [
+            'projection' => [ 'uri' => 1, 'operation' => 1 ],
+            'sort' => [ 'synctoken' => 1 ]
+        ];
 
-            $options = [
-                'projection' => $projection,
-                'sort' => [ 'synctoken' => 1 ]
-            ];
+        if ($limit > 0) $options['limit'] = $limit;
 
-            if ($limit > 0) $options['limit'] = $limit;
-
-            $res = $collection->find($query, $options);
-
-            // This loop ensures that any duplicates are overwritten, only the
-            // last change on a node is relevant.
-            $changes = [];
-            foreach ($res as $row) {
-                $changes[$row['uri']] = $row['operation'];
-            }
-
-            foreach($changes as $uri => $operation) {
-                switch($operation) {
-                    case 1:
-                        $result['added'][] = $uri;
-                        break;
-                    case 2:
-                        $result['modified'][] = $uri;
-                        break;
-                    case 3:
-                        $result['deleted'][] = $uri;
-                        break;
-                }
-            }
-        } else {
-            // No synctoken supplied, this is the initial sync.
-            $collection = $this->db->selectCollection($this->cardsTableName);
-            $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
-
-            $added = [];
-            foreach ($collection->find($query, [ 'projection' => [ 'uri' => 1 ] ]) as $row) {
-                $added[] = $row['uri'];
-            }
-            $result['added'] = $added;
+        // Only the last change on a node is relevant: later rows overwrite earlier ones.
+        $lastOperationByUri = [];
+        foreach ($collection->find($query, $options) as $row) {
+            $lastOperationByUri[$row['uri']] = $row['operation'];
         }
-        return $result;
+
+        return $this->groupUrisByOperation($lastOperationByUri);
+    }
+
+    private function groupUrisByOperation(array $lastOperationByUri) {
+        $keyByOperation = [ 1 => 'added', 2 => 'modified', 3 => 'deleted' ];
+        $grouped = [ 'added' => [], 'modified' => [], 'deleted' => [] ];
+
+        foreach ($lastOperationByUri as $uri => $operation) {
+            if (isset($keyByOperation[$operation])) {
+                $grouped[$keyByOperation[$operation]][] = $uri;
+            }
+        }
+
+        return $grouped;
+    }
+
+    private function getAllCardUris($addressBookId) {
+        $collection = $this->db->selectCollection($this->cardsTableName);
+        $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
+
+        $uris = [];
+        foreach ($collection->find($query, [ 'projection' => [ 'uri' => 1 ] ]) as $row) {
+            $uris[] = $row['uri'];
+        }
+
+        return $uris;
+    }
+
+    /**
+     * Read after the changes, see ChangeLog::wasPrunedSince().
+     */
+    private function wereChangesPruned($addressBookId, int $syncToken): bool {
+        $addressBook = $this->db->selectCollection($this->addressBooksTableName)->findOne(
+            [ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ],
+            [ 'projection' => [ ChangeLog::PRUNED_SYNC_TOKEN => 1 ] ]
+        );
+
+        return ChangeLog::wasPrunedSince($addressBook, $syncToken);
     }
 
     function getSubscriptionsForUser($principalUri) {
@@ -1281,7 +1299,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'uri' => $objectUri,
             'synctoken' => $res['synctoken'],
             'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId),
-            'operation' => $operation
+            'operation' => $operation,
+            'date' => new \MongoDB\BSON\UTCDateTime()
         ];
         $changecollection->insertOne($obj);
 
@@ -1331,6 +1350,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         // Fasten retrieval of changes in addressbooks
         $addressBookChangeCollection = $this->db->selectCollection($this->addressBookChangesTableName);
         $addressBookChangeCollection->createIndex(array('addressbookid' => 1, 'synctoken' => 1));
+        // Serves the expired changes lookup of scripts/prune-change-logs.php
+        $addressBookChangeCollection->createIndex(array('date' => 1));
 
         // Also serves the queries on 'addressbookid' alone
         $cardsCollection = $this->db->selectCollection($this->cardsTableName);

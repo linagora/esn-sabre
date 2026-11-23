@@ -2,6 +2,8 @@
 
 namespace ESN\CalDAV\Backend\DAO;
 
+use ESN\DAV\ChangeLog\ChangeLog;
+
 class CalendarDAO extends BaseDAO {
     public function __construct(\MongoDB\Database $db, $collectionName = 'calendars') {
         parent::__construct($db, $collectionName);
@@ -26,6 +28,16 @@ class CalendarDAO extends BaseDAO {
         return $this->findOne(
             ['_id' => new \MongoDB\BSON\ObjectId($calendarId)],
             ['projection' => ['synctoken' => 1]]
+        );
+    }
+
+    /**
+     * The calendar with its prunedsynctoken watermark, see ESN\DAV\ChangeLog\ChangeLog.
+     */
+    public function getPrunedSyncToken($calendarId) {
+        return $this->findOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($calendarId)],
+            ['projection' => [ChangeLog::PRUNED_SYNC_TOKEN => 1]]
         );
     }
 

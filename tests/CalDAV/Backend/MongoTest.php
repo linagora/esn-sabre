@@ -2,6 +2,9 @@
 
 namespace ESN\CalDAV\Backend;
 
+use ESN\DAV\ChangeLog\ChangeLog;
+use ESN\DAV\ChangeLog\ChangeLogPruner;
+
 require_once 'AbstractDatabaseTestBase.php';
 require_once ESN_TEST_BASE . '/DAV/MongoFindCounter.php';
 
@@ -155,6 +158,111 @@ class MongoTest extends AbstractDatabaseTestBase {
 
         $this->assertEquals(['single.ics' => false, 'legacy.ics' => true, 'weekly.ics' => true], $parsed);
         $this->assertEqualsCanonicalizing(['single.ics', 'legacy.ics', 'weekly.ics'], $backend->calendarQuery($calendarId, $filters));
+    }
+
+    function testChangesAreDatedForTheirPruning() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        $backend->createCalendarObject($calendarId, 'event.ics', $this->event('event', "DTSTART;VALUE=DATE:20120101\r\n"));
+
+        $change = $this->changes()->findOne(['uri' => 'event.ics']);
+
+        $this->assertInstanceOf(\MongoDB\BSON\UTCDateTime::class, $change['date']);
+        $this->assertEqualsWithDelta(time(), $change['date']->toDateTime()->getTimestamp(), 60);
+    }
+
+    function testChangesAreIndexedByDateWithoutExpiry() {
+        $this->getBackend()->ensureIndexes();
+
+        $dateIndexes = array_values(array_filter(
+            iterator_to_array($this->changes()->listIndexes()),
+            fn ($index) => $index->getKey() === ['date' => 1]
+        ));
+        $this->assertCount(1, $dateIndexes);
+        $this->assertFalse($dateIndexes[0]->isTtl());
+    }
+
+    function testSyncTokenBelowThePrunedSyncTokenIsInvalid() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        $this->writeEvents($backend, $calendarId, ['e1.ics', 'e2.ics', 'e3.ics']);
+
+        $this->setPrunedSyncToken($calendarId, 3);
+
+        $this->assertNull($backend->getChangesForCalendar($calendarId, 1, 1));
+        $this->assertNull($backend->getChangesForCalendar($calendarId, 2, 1));
+        $this->assertEquals(
+            ['syncToken' => 4, 'added' => ['e3.ics'], 'modified' => [], 'deleted' => []],
+            $backend->getChangesForCalendar($calendarId, 3, 1)
+        );
+        $this->assertEqualsCanonicalizing(
+            ['e1.ics', 'e2.ics', 'e3.ics'],
+            $backend->getChangesForCalendar($calendarId, null, 1)['added']
+        );
+    }
+
+    function testSyncTokenStaysValidWithoutPrunedSyncToken() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        $this->writeEvents($backend, $calendarId, ['e1.ics', 'e2.ics']);
+
+        $this->assertEquals(
+            ['syncToken' => 3, 'added' => ['e1.ics', 'e2.ics'], 'modified' => [], 'deleted' => []],
+            $backend->getChangesForCalendar($calendarId, 1, 1)
+        );
+    }
+
+    function testPruningInvalidatesTheSyncTokensOfThePrunedChangesOnly() {
+        $backend = $this->getBackend();
+        $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);
+        $this->writeEvents($backend, $calendarId, ['e1.ics', 'e2.ics', 'e3.ics']);
+        $this->backdateChanges(['e1.ics', 'e2.ics'], 100);
+
+        $this->pruner()->prune(ChangeLog::calendars(), 90);
+
+        $this->assertSame(1, $this->changes()->countDocuments());
+        $this->assertNull($backend->getChangesForCalendar($calendarId, 2, 1));
+        $this->assertEquals(
+            ['syncToken' => 4, 'added' => ['e3.ics'], 'modified' => [], 'deleted' => []],
+            $backend->getChangesForCalendar($calendarId, 3, 1)
+        );
+        $this->assertEquals(
+            ['syncToken' => 4, 'added' => [], 'modified' => [], 'deleted' => []],
+            $backend->getChangesForCalendar($calendarId, 4, 1)
+        );
+    }
+
+    private function writeEvents($backend, $calendarId, array $uris) {
+        array_map(
+            fn ($uri) => $backend->createCalendarObject($calendarId, $uri, $this->event($uri, "DTSTART;VALUE=DATE:20120101\r\n")),
+            $uris
+        );
+    }
+
+    private function setPrunedSyncToken($calendarId, int $prunedSyncToken) {
+        $this->database()->calendars->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($calendarId[0])],
+            ['$set' => [ChangeLog::PRUNED_SYNC_TOKEN => $prunedSyncToken]]
+        );
+    }
+
+    private function backdateChanges(array $uris, int $days) {
+        $this->changes()->updateMany(
+            ['uri' => ['$in' => $uris]],
+            ['$set' => ['date' => new \MongoDB\BSON\UTCDateTime((time() - $days * 86400) * 1000)]]
+        );
+    }
+
+    private function pruner() {
+        return new ChangeLogPruner($this->database(), new \Psr\Log\NullLogger());
+    }
+
+    private function changes() {
+        return $this->database()->calendarchanges;
+    }
+
+    private function database() {
+        return (new \MongoDB\Client(ESN_MONGO_SABREURI))->{ESN_MONGO_SABREDB};
     }
 
     private function event($uid, $dates) {

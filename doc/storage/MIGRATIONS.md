@@ -32,3 +32,13 @@ time: single events skip the vobject post-filter and rely on them only, so bound
 Until an object is migrated it is treated as recurring: time-range queries stay correct, they only keep running the
 vobject post-filter on it. Each update checks that the payload is unchanged and the field still missing, so
 concurrent DAV writes keep their value. Objects with invalid data are skipped with a WARNING containing their ID.
+
+## Version 4 — Date the change logs
+
+Upgrades database version `3` to `4`. The `calendarchanges` and `addressbookchanges` rows written before they carried
+a `date` get one, taken from the creation time of their `_id`, so that `scripts/prune-change-logs.php`
+(`calendarChangesRetentionInDays` and `addressBookChangesRetentionInDays`, see [MONGO.md](MONGO.md#calendarchanges))
+also prunes them. Without it they would be kept forever. Rows older than the retention are deleted by the next pruning
+run; clients holding a sync token below the pruned one get a `403` `DAV:valid-sync-token` and resync from scratch.
+
+Each collection is updated by a single server-side `updateMany`, only on rows without a `date`.

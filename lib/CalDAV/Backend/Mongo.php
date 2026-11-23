@@ -16,6 +16,7 @@ use ESN\CalDAV\Backend\Service\SubscriptionService;
 use ESN\CalDAV\Backend\Service\SchedulingService;
 use ESN\CalDAV\Backend\Service\CalendarService;
 use ESN\CalDAV\Backend\Service\CalendarObjectService;
+use ESN\DAV\ChangeLog\ChangeLog;
 use ESN\Utils\VObjectCache;
 
 #[\AllowDynamicProperties]
@@ -245,10 +246,14 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $currentToken = $row['synctoken'];
 
         if ($syncToken) {
-            return array_merge(
-                ['syncToken' => $currentToken],
-                $this->getChangesSince($calendarId, $syncToken, $currentToken, $limit)
-            );
+            $changes = $this->getChangesSince($calendarId, $syncToken, $currentToken, $limit);
+
+            if (ChangeLog::wasPrunedSince($this->calendarDAO->getPrunedSyncToken($calendarId), (int) $syncToken)) {
+                // Sabre answers 403 DAV:valid-sync-token: the client resyncs from scratch (RFC 6578 section 3.2)
+                return null;
+            }
+
+            return array_merge(['syncToken' => $currentToken], $changes);
         }
 
         return [

@@ -29,7 +29,9 @@
         "serverSelectionTimeoutMS": 30000
       }
     },
-    "schedulingObjectTTLInDays": 7
+    "schedulingObjectTTLInDays": 7,
+    "calendarChangesRetentionInDays": 90,
+    "addressBookChangesRetentionInDays": 90
   },
   "esn": {
     "apiRoot": "http://localhost:8080",

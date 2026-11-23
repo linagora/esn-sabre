@@ -611,6 +611,89 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertStringContainsString('Secret new', $dataMessage['rawEvent']);
     }
 
+    public static function shareeAccesses(): array {
+        return [
+            'free/busy sharee' => [\ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY, false],
+            'read sharee' => [\ESN\DAV\Sharing\Plugin::ACCESS_READ, true],
+        ];
+    }
+
+    #[DataProvider('shareeAccesses')]
+    function testFreeBusyShareeOnlyLearnsWhenEventsTakePlace(int $access, bool $readsDetails) {
+        $backend = $this->createMock(\Sabre\CalDAV\Backend\BackendInterface::class);
+        $backend->method('getCalendarsForUser')->willReturnMap([
+            ['principals/users/inv1', [['id' => ['cal-id', 'i1'], 'uri' => 'cal-inv1']]],
+        ]);
+        $server = new \Sabre\DAV\Server([]);
+        $server->tree = $this->getMockBuilder('\Sabre\DAV\Tree')->disableOriginalConstructor()->getMock();
+        $server->tree->method('getNodeForPath')->willReturn(new class('cal') extends \Sabre\DAV\SimpleCollection {
+            function getOwner() { return 'principals/users/owner'; }
+        });
+        $plugin = new EventRealTimePlugin(new ClientMock(), $backend);
+        $plugin->initialize($server);
+
+        $event = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nDTSTART:20160209T113000Z\r\nDTEND:20160209T123000Z\r\n"
+            . "SUMMARY:Secret new\r\nDESCRIPTION:Secret description\r\nLOCATION:Secret room\r\n"
+            . "ORGANIZER:mailto:secret-organizer@example.org\r\nATTENDEE:mailto:secret-attendee@example.org\r\n"
+            . "TRANSP:TRANSPARENT\r\nSTATUS:CANCELLED\r\nEND:VEVENT\r\n"
+            . "BEGIN:VTODO\r\nUID:t\r\nSUMMARY:Secret task\r\nEND:VTODO\r\nEND:VCALENDAR\r\n";
+        $dataMessage = [
+            'event' => \Sabre\VObject\Reader::read($event),
+            'rawEvent' => $event,
+            'old_event' => \Sabre\VObject\Reader::read(str_replace('Secret new', 'Secret old', $event)),
+        ];
+        $options = ['calendarid' => 'cal-id', 'objectUri' => 'e.ics', 'action' => 'UPDATED'];
+
+        (new \ReflectionMethod(EventRealTimePlugin::class, 'notifyInvites'))->invoke($plugin, [
+            new \Sabre\DAV\Xml\Element\Sharee(['principal' => 'principals/users/inv1', 'access' => $access, 'inviteStatus' => 2]),
+        ], $dataMessage, $options);
+
+        $messages = $plugin->getMessages();
+        $this->assertCount(1, $messages);
+        $data = $messages[0]['data'];
+        foreach ([$data['event']->serialize(), $data['rawEvent'], $data['old_event']->serialize()] as $ics) {
+            $this->assertSame($readsDetails, str_contains($ics, 'Secret'), $ics);
+            $this->assertStringContainsString('DTSTART:20160209T113000Z', $ics);
+            $this->assertStringContainsString('UID:e', $ics);
+        }
+        if (!$readsDetails) {
+            $this->assertStringContainsString('DTSTAMP:', $data['rawEvent']);
+            // A free-busy query leaves transparent and cancelled events out: the skeleton says so too
+            $this->assertStringContainsString('TRANSP:TRANSPARENT', $data['rawEvent']);
+            $this->assertStringContainsString('STATUS:CANCELLED', $data['rawEvent']);
+        }
+        // The message of the owner and of the other sharees keeps the event as written
+        $this->assertStringContainsString('Secret new', $dataMessage['event']->serialize());
+    }
+
+    public static function publicRights(): array {
+        return [
+            'free/busy public calendar' => ['{urn:ietf:params:xml:ns:caldav}read-free-busy', false],
+            'readable public calendar' => ['{DAV:}read', true],
+        ];
+    }
+
+    #[DataProvider('publicRights')]
+    function testSubscribersOfAFreeBusyPublicCalendarOnlyLearnWhenEventsTakePlace(string $publicRight, bool $readsDetails) {
+        $plugin = $this->pluginWithCalendarsForUser([]);
+        $calendar = new class($publicRight) {
+            function __construct(private string $publicRight) {}
+            function getSubscribers() { return [['principaluri' => 'principals/users/sub', 'uri' => 'sub-cal']]; }
+            function getPublicRight() { return $this->publicRight; }
+        };
+        $event = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nDTSTART:20160209T113000Z\r\nSUMMARY:Secret\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $dataMessage = ['event' => \Sabre\VObject\Reader::read($event), 'rawEvent' => $event];
+        $options = ['objectUri' => 'e.ics', 'eventSourcePath' => 'calendars/owner/cal/e.ics', 'action' => 'CREATED'];
+
+        (new \ReflectionMethod(EventRealTimePlugin::class, 'notifySubscribers'))->invoke($plugin, $calendar, $dataMessage, $options);
+
+        $messages = $plugin->getMessages();
+        $this->assertCount(1, $messages);
+        $this->assertSame('/calendars/sub/sub-cal/e.ics', $messages[0]['data']['eventPath']);
+        $this->assertSame($readsDetails, str_contains($messages[0]['data']['event']->serialize(), 'Secret'));
+        $this->assertSame($readsDetails, str_contains($messages[0]['data']['rawEvent'], 'Secret'));
+    }
+
     private function pluginWithCalendarsForUser(array $calendarsForUser) {
         $backend = $this->createMock(\Sabre\CalDAV\Backend\BackendInterface::class);
         $backend->method('getCalendarsForUser')->willReturnMap($calendarsForUser);

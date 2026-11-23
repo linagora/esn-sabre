@@ -166,7 +166,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             'event' => VObject\Reader::read($eventNode->get())
         ];
 
-        $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+        $this->notifySubscribers($calendar, $dataMessage, $options);
         $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
         $this->publishMessages();
 
@@ -244,7 +244,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         $this->cancelOrphanedAlarmOnUidChange($action, $old_event, $event, $calendarPathObject);
 
         $this->createMessage($this->EVENT_TOPICS['EVENT_ALARM_'.$action], $dataMessage);
-        $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+        $this->notifySubscribers($calendar, $dataMessage, $options);
         $this->notifyInvites($calendar->getInvites(), $dataMessage, $options);
     }
 
@@ -309,7 +309,17 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         return $oldUid && $newUid && $oldUid !== $newUid;
     }
 
-    private function notifySubscribers($subscribers, $dataMessage, $options) {
+    private function notifySubscribers($calendar, $dataMessage, $options) {
+        $subscribers = $calendar->getSubscribers();
+        if (!$subscribers) {
+            return;
+        }
+        // Subscribers read the calendar through its public right: with free/busy only, the events are reduced alike
+        if (method_exists($calendar, 'getPublicRight')
+            && $calendar->getPublicRight() === '{' . \Sabre\CalDAV\Plugin::NS_CALDAV . '}read-free-busy') {
+            $dataMessage = $this->reduceToFreeBusy($dataMessage);
+        }
+
         foreach($subscribers as $subscriber) {
             $dataMessage['eventPath'] = Utils::objectPathFromUri($subscriber['principaluri'],  $subscriber['uri'], $options['objectUri']);
             $dataMessage['eventSourcePath'] = '/' . $options['eventSourcePath'];
@@ -319,6 +329,9 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     private function notifyInvites($invites, $dataMessage, $options) {
+        // Reduced once, on the first free/busy sharee, for all of them
+        $freeBusyMessage = null;
+
         foreach($invites as $user) {
             if($user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
                 continue;
@@ -330,11 +343,31 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
                 continue;
             }
 
+            // A free/busy sharee cannot read the events of the calendar: it only learns when they take place
+            $inviteeData = (int) $user->access === \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY
+                ? ($freeBusyMessage ??= $this->reduceToFreeBusy($dataMessage))
+                : $dataMessage;
+
             $this->createMessage(
                 $this->EVENT_TOPICS['EVENT_'.$options['action']],
-                $this->buildInviteeMessage($dataMessage, $user->principal, $inviteeCalendar, $options['objectUri'])
+                $this->buildInviteeMessage($inviteeData, $user->principal, $inviteeCalendar, $options['objectUri'])
             );
         }
+    }
+
+    /**
+     * Reduces every copy of the event the message carries (event, rawEvent, old_event) to its free/busy skeleton.
+     */
+    private function reduceToFreeBusy(array $dataMessage): array {
+        $dataMessage['event'] = $this->ensureRequiredFields(Utils::reduceEventsToFreeBusy($dataMessage['event']));
+        if (isset($dataMessage['rawEvent'])) {
+            $dataMessage['rawEvent'] = $dataMessage['event']->serialize();
+        }
+        if (isset($dataMessage['old_event'])) {
+            $dataMessage['old_event'] = Utils::reduceEventsToFreeBusy($dataMessage['old_event']);
+        }
+
+        return $dataMessage;
     }
 
     /**
@@ -458,7 +491,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             'calendarUri' => $calendarUri
         ];
 
-        $this->notifySubscribers($calendar->getSubscribers(), $dataMessage, $options);
+        $this->notifySubscribers($calendar, $dataMessage, $options);
 
         $this->notifyAlarm($iTipMessage, $dataMessage);
 

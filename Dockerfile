@@ -19,13 +19,14 @@ LABEL maintainer="Linagora Folks <openpaas@linagora.com>"
 
 ENV PHPVERSION=8.4
 
+# MongoDB PHP extension, bumped together with mongodb/mongodb in composer.json.
+ARG MONGODB_VERSION=2.5.5
+ARG MONGODB_SHA256=0eaf84ff709f73183d80597f31ff02937f6aefde01eb895a0aa19334a290cec0
+
 # Copy PHP configuration files first (these rarely change)
 ADD ./docker/config/20-apcu.ini /etc/php/${PHPVERSION}/fpm/conf.d/20-apcu.ini
 ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/fpm/conf.d/05-opcache.ini
 ADD ./docker/config/05-opcache.ini /etc/php/${PHPVERSION}/cli/conf.d/05-opcache.ini
-
-# Fix for CI environments with clock skew issues
-RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
 
 # Install runtime packages + build tools, compile mongodb extension, then remove build tools
 RUN apt-get update && \
@@ -56,14 +57,13 @@ RUN apt-get update && \
     make \
     pkg-config \
     git && \
-  # Download release archives directly to avoid PECL REST metadata lookups.
-  # Preserve the existing version preference and latest-release fallback.
-  ( (curl -fsSL --retry 3 https://github.com/mongodb/mongo-php-driver/releases/download/2.5.5/mongodb-2.5.5.tgz -o /tmp/mongodb.tgz && \
-    pecl install /tmp/mongodb.tgz) || \
-   (MONGODB_RELEASE_URL="$(curl -fsSL --retry 3 -o /dev/null -w '%{url_effective}' https://github.com/mongodb/mongo-php-driver/releases/latest)" && \
-    MONGODB_VERSION="${MONGODB_RELEASE_URL##*/}" && \
-    curl -fsSL --retry 3 "https://github.com/mongodb/mongo-php-driver/releases/download/${MONGODB_VERSION}/mongodb-${MONGODB_VERSION}.tgz" -o /tmp/mongodb.tgz && \
-    pecl install /tmp/mongodb.tgz) ) && \
+  # Download the release archive directly to avoid PECL REST metadata lookups.
+  # Pinned by SHA-256 (the digest GitHub publishes for the asset, identical to
+  # the PECL archive): a failed download or check fails the build rather than
+  # building another, unverified version of an extension every worker loads.
+  curl -fsSL --retry 3 --retry-all-errors "https://github.com/mongodb/mongo-php-driver/releases/download/${MONGODB_VERSION}/mongodb-${MONGODB_VERSION}.tgz" -o /tmp/mongodb.tgz && \
+  echo "${MONGODB_SHA256}  /tmp/mongodb.tgz" | sha256sum -c - && \
+  pecl install /tmp/mongodb.tgz && \
   rm -f /tmp/mongodb.tgz && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/fpm/php.ini && \
   echo "extension=mongodb.so" >> /etc/php/${PHPVERSION}/cli/php.ini && \
@@ -94,15 +94,12 @@ RUN sed -i "s/;date.timezone =.*/date.timezone = UTC/" /etc/php/${PHPVERSION}/fp
   sed -i "s/error_log = \/var\/log\/php${PHPVERSION}-fpm.log/error_log = \/proc\/self\/fd\/2/" /etc/php/${PHPVERSION}/fpm/php-fpm.conf && \
   sed -i "s/;catch_workers_output = yes/catch_workers_output = yes/" /etc/php/${PHPVERSION}/fpm/pool.d/www.conf
 
-# Set up Sabre DAV
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=bin --filename=composer
-
 # Set up Nginx (combine RUN commands)
 RUN ln -sf /dev/stderr /var/log/nginx/error.log && \
     ln -sf /dev/stdout /var/log/nginx/access.log
 
-# Copy composer from official image
-COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
+# Copy composer from the official image, pinned by digest
+COPY --from=composer:2.11.2@sha256:cd3a90dc5624c59a2f9ddf80dad08569f06416db31de519024f249d63bca554b /usr/bin/composer /usr/local/bin/composer
 
 WORKDIR /var/www
 

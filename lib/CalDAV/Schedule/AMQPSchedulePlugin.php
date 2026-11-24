@@ -1,6 +1,7 @@
 <?php
 namespace ESN\CalDAV\Schedule;
 
+use ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin;
 use ESN\DAV\VObjectCachePlugin;
 use ESN\Utils\Utils;
 use Sabre\CalDAV\ICalendarObject;
@@ -235,7 +236,7 @@ class AMQPSchedulePlugin extends Plugin {
     private function handleItipCounterLocalDelivery(ITip\Message $iTipMessage, RequestInterface $req): void {
         list($calendarPath,) = Utils::splitEventPath('/' . ltrim($req->getPath(), '/'));
         $calendarId = $calendarPath ? basename($calendarPath) : null;
-        $oldMessage = $this->resolveCounterOldMessage($iTipMessage, $req);
+        $oldMessage = $this->resolveCounterOldMessage($iTipMessage);
 
         // Keep synchronous delivery for ITIP path.
         parent::scheduleLocalDelivery($iTipMessage);
@@ -259,29 +260,69 @@ class AMQPSchedulePlugin extends Plugin {
         $this->publishLocalDelivery($payload);
     }
 
-    private function resolveCounterOldMessage(ITip\Message $iTipMessage, RequestInterface $req): ?string {
+    /**
+     * The previous revision is the organizer's copy when the organizer is local, in a calendar
+     * they own or in a Team Calendar they organize it from, otherwise the sender's own copy:
+     * the one ITipPlugin found naming the recipient as ORGANIZER. The request path is never
+     * read: the ITIP verb is accepted on any path and the tree applies no ACL, so reading it
+     * would mail any event of the tenant to an address the sender chooses.
+     */
+    private function resolveCounterOldMessage(ITip\Message $iTipMessage): ?string {
         $recipientPrincipal = Utils::getPrincipalByUri($iTipMessage->recipient, $this->server);
+        $oldMessage = $recipientPrincipal
+            ? $this->storedCopyOf($recipientPrincipal, $iTipMessage) ?? $this->teamCalendarCopyOf($recipientPrincipal, $iTipMessage)
+            : null;
+        if ($oldMessage !== null) {
+            return $oldMessage;
+        }
 
-        if ($recipientPrincipal) {
-            $result = Utils::getEventObjectFromAnotherPrincipalHome(
-                $recipientPrincipal,
-                $iTipMessage->uid,
-                $iTipMessage->method,
-                $this->server
-            );
-            if ($result) {
-                list(, $oldMessage) = $result;
-                if ($oldMessage !== null) {
-                    return $oldMessage;
-                }
-            }
+        $senderPrincipal = Utils::getPrincipalByUri($iTipMessage->sender, $this->server);
+        return $senderPrincipal ? $this->storedCopyOf($senderPrincipal, $iTipMessage) : null;
+    }
+
+    // The Team Calendar copy the recipient organizes, as ITipPlugin::findTeamCalendarOrganizers() finds it.
+    private function teamCalendarCopyOf(string $principalUri, ITip\Message $iTipMessage): ?string {
+        $plugin = $this->server->getPlugin(TeamCalendarSchedulingRecipientPlugin::PLUGIN_NAME);
+        if (!$plugin) {
+            return null;
         }
 
         try {
-            return $this->server->tree->getNodeForPath($req->getPath())->get();
-        } catch (\Exception $e) {
+            foreach ($plugin->findCalendarObjectPathsWithoutSchedulingRecipient('calendars/' . basename($principalUri), $iTipMessage->uid) as $path) {
+                $data = $this->server->tree->getNodeForPath($path)->get();
+                $data = is_resource($data) ? stream_get_contents($data) : $data;
+                if ($this->isOrganizedBy($data, $iTipMessage->recipient)) {
+                    return $data;
+                }
+            }
+        } catch (\Throwable $e) {
+            // Unreadable stored data (the vobject fork also throws Error): fall back to the sender's copy
             return null;
         }
+
+        return null;
+    }
+
+    private function isOrganizedBy(string $calendarData, string $address): bool {
+        $address = strtolower($address);
+        foreach ($this->vObjectCache()->read($calendarData)->select('VEVENT') as $vevent) {
+            if (isset($vevent->ORGANIZER) && strtolower((string) $vevent->ORGANIZER) === $address) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function storedCopyOf(string $principalUri, ITip\Message $iTipMessage): ?string {
+        $result = Utils::getEventObjectFromAnotherPrincipalHome(
+            $principalUri,
+            $iTipMessage->uid,
+            $iTipMessage->method,
+            $this->server
+        );
+
+        return $result ? $result[1] : null;
     }
 
     /**

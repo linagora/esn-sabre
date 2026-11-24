@@ -98,6 +98,22 @@ class MongoTest extends AbstractDatabaseTestBase {
         $this->assertSame([], $backend->findCalendarObjectsByUid('event-123', [$destination[0]], ['metadata.schedulingRecipientPrincipalUri' => 'principals/users/unknown']));
     }
 
+    function testFindCalendarObjectsByUidShouldReturnIdsInCreationOrderOnRequest() {
+        $backend = $this->getBackend();
+        $first = $backend->createCalendar('principals/users/bob', 'first', []);
+        $second = $backend->createCalendar('principals/users/bob', 'second', []);
+        $ics = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:event-123\r\nDTSTART;VALUE=DATE:20120101\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        $backend->createCalendarObject($second, 'older.ics', $ics);
+        $backend->createCalendarObject($first, 'newer.ics', $ics);
+        // Updating an object keeps the ObjectId it was created under
+        $backend->updateCalendarObject($second, 'older.ics', $ics);
+
+        $objects = $backend->findCalendarObjectsByUid('event-123', [$first[0], $second[0]], [], true);
+        usort($objects, fn($a, $b) => strcmp((string) $a['_id'], (string) $b['_id']));
+
+        $this->assertSame(['older.ics', 'newer.ics'], array_column($objects, 'uri'));
+    }
+
     function testSettingSchedulingRecipientOnMissingObjectShouldFail() {
         $backend = $this->getBackend();
         $calendarId = $backend->createCalendar('principals/users/alice', 'calendar', []);

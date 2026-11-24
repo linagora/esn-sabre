@@ -183,8 +183,8 @@ class Mongo extends \Sabre\CalDAV\Backend\AbstractBackend implements
         $this->calendarObjectService->setSchedulingRecipient($calendarId, $objectUri, $principalUri);
     }
 
-    function findCalendarObjectsByUid(string $uid, array $calendarIds, array $filters = []): array {
-        return $this->calendarObjectService->findByUid($uid, $calendarIds, $filters);
+    function findCalendarObjectsByUid(string $uid, array $calendarIds, array $filters = [], bool $withId = false): array {
+        return $this->calendarObjectService->findByUid($uid, $calendarIds, $filters, $withId);
     }
 
     function getMultipleCalendarObjects($calendarId, array $uris) {

@@ -351,9 +351,13 @@ class MobileRequestPluginTest extends \ESN\DAV\ServerMock {
         $sourceBookId = $this->carddavBackend->createAddressBook('principals/users/54b64eadf6d7d8e41d263e0e', 'sourceBook', ['{DAV:}displayname' => 'Source']);
         $this->carddavBackend->setPublishStatus(['id' => $sourceBookId], '{DAV:}read');
         $this->carddavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0f', 'arrayName', [
-            '{DAV:}displayname' => ['{http://example.com/ns}name' => 'n'],
             '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/54b64eadf6d7d8e41d263e0e/sourceBook', false)
         ]);
+        // As stored before display names were checked
+        $this->sabredb->addressbooksubscriptions->updateOne(
+            ['uri' => 'arrayName'],
+            ['$set' => ['displayname' => ['{http://example.com/ns}name' => 'n']]]
+        );
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'REQUEST_METHOD'    => 'PROPFIND',
             'HTTP_CONTENT_TYPE' => 'application/xml',

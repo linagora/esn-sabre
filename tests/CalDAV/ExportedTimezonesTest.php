@@ -87,6 +87,83 @@ class ExportedTimezonesTest extends \PHPUnit\Framework\TestCase {
         $this->assertCount(300, $timezones->components());
     }
 
+    function testARawTextAlreadySeenGivesTheSameTzidWithoutSerializing() {
+        $timezones = new ExportedTimezones();
+        $first = $this->vtimezone('Europe/Paris');
+        $second = $this->vtimezone('Europe/Paris');
+        // As ICSExportPlugin::rawTimezones() reads it: up to END:VTIMEZONE, without the line break
+        $raw = rtrim($first->serialize(), "\r\n");
+        $first->serializeCalls = 0;
+
+        $this->assertSame('Europe/Paris', $timezones->add($first, $raw));
+        $this->assertSame('Europe/Paris', $timezones->add($second, $raw));
+
+        $this->assertCount(1, $timezones->components());
+        $this->assertSame(1, $first->serializeCalls);
+        $this->assertSame(0, $second->serializeCalls);
+        $this->assertSame(0, $second->getTimeZoneCalls);
+    }
+
+    function testARawHitGivesWhatTheSerializedTextGives() {
+        $raws = [
+            $this->rawZone('Custom', '+0100'), $this->rawZone('Custom', '+0200'),
+            $this->rawZone('Custom', '+0100'), $this->rawZone('Custom-2', '+0300'),
+            $this->rawZone('Custom', '+0200'), $this->rawZone('Custom-2', '+0300'),
+        ];
+        $withRaw = new ExportedTimezones();
+        $withoutRaw = new ExportedTimezones();
+
+        foreach ($raws as $raw) {
+            $this->assertSame($withoutRaw->add($this->read($raw)), $withRaw->add($this->read($raw), $raw), $raw);
+        }
+        $this->assertSame(array_map([$this, 'serialized'], $withoutRaw->components()),
+            array_map([$this, 'serialized'], $withRaw->components()));
+    }
+
+    function testTwoRawTextsSerializedAlikeAreExportedOnce() {
+        $timezones = new ExportedTimezones();
+        $crlf = $this->rawZone('Custom', '+0100');
+        $lf = str_replace("\r\n", "\n", $crlf);
+        $folded = str_replace("TZOFFSETTO:+0100", "TZOFFSE\r\n TTO:+0100", $crlf);
+        $lowercase = str_replace("TZID:", "tzid:", $crlf);
+
+        foreach ([$crlf, $lf, $folded, $lowercase] as $raw) {
+            $this->assertSame('Custom', $timezones->add($this->read($raw), $raw), $raw);
+        }
+        $this->assertCount(1, $timezones->components());
+    }
+
+    function testAZoneMergedWithAnotherIsResolvedAgainInEachObject() {
+        // Without observances, a VTIMEZONE resolves to the zone of the next
+        // VTIMEZONE of its TZID in its object: the TZID it is exported under
+        // depends on that object, and its raw text is not remembered.
+        $bare = "BEGIN:VTIMEZONE\r\nTZID:Custom\r\nEND:VTIMEZONE";
+        $timezones = new ExportedTimezones();
+        $this->assertSame('Custom', $timezones->add($this->fixedZone('Custom', '+1000')));
+
+        $withAnother = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n" . $bare . "\r\n"
+            . $this->rawZone('Custom', '+1000') . "\r\nEND:VCALENDAR\r\n");
+        $this->assertSame('Custom', $timezones->add($withAnother->VTIMEZONE, $bare));
+
+        $this->assertSame('Custom-2', $timezones->add($this->read($bare), $bare));
+        $this->assertSame('Custom-2', $timezones->add($this->read($bare), $bare));
+        $this->assertCount(2, $timezones->components());
+    }
+
+    private function rawZone($tzid, $offset) {
+        return "BEGIN:VTIMEZONE\r\nTZID:$tzid\r\n"
+            . "BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:$offset\r\nTZOFFSETTO:$offset\r\n"
+            . "END:STANDARD\r\nEND:VTIMEZONE";
+    }
+
+    private function read($raw) {
+        return \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n$raw\r\nEND:VCALENDAR\r\n")->VTIMEZONE;
+    }
+
+    private function serialized($component) {
+        return $component->serialize();
+    }
+
     /**
      * A zone of a fixed offset, which resolves to that offset whatever its TZID.
      */
@@ -106,6 +183,12 @@ class ExportedTimezonesTest extends \PHPUnit\Framework\TestCase {
 
 class CountingVTimeZone extends VTimeZone {
     public $getTimeZoneCalls = 0;
+    public $serializeCalls = 0;
+
+    public function serialize(): string {
+        $this->serializeCalls++;
+        return parent::serialize();
+    }
 
     public function getTimeZone(): \DateTimeZone {
         $this->getTimeZoneCalls++;

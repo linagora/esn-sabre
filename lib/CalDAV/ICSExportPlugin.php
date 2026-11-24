@@ -20,6 +20,22 @@ class ICSExportPlugin extends \Sabre\CalDAV\ICSExportPlugin {
     const OBJECT_COMPONENTS = ['VEVENT', 'VTODO', 'VJOURNAL'];
 
     /**
+     * A line folded onto the next one that is, or may become once unfolded,
+     * a BEGIN or END line: shorter than "BEGIN:", or starting like one.
+     */
+    const FOLDED_DELIMITER = '/(?:\A|(?<=\n))(?:(?i:BEGIN:|END:)[^\n]*|[^\r\n]{0,5}\r*)\n[ \t]/';
+
+    /**
+     * A BEGIN:VTIMEZONE line, as the parser reads it (ignoring the case and the trailing CRs).
+     */
+    const VTIMEZONE_BEGIN = '/(?<=\n)BEGIN:VTIMEZONE\r*\n/i';
+
+    /**
+     * A VTIMEZONE, from its BEGIN line to the first END:VTIMEZONE line.
+     */
+    const VTIMEZONE_BLOCK = '/(?<=\n)BEGIN:VTIMEZONE\r*\n.*?(?<=\n)END:VTIMEZONE\r*(?=\n|\z)/is';
+
+    /**
      * Merges all calendar objects, and builds one big iCalendar blob.
      *
      * @param array $properties Some CalDAV properties
@@ -38,7 +54,10 @@ class ICSExportPlugin extends \Sabre\CalDAV\ICSExportPlugin {
             // getComponents(), not children(): a property of the VCALENDAR
             // named like a component is not one.
             $components = $nodeComp->getComponents();
-            $renamedTzids = $this->exportTimezones($components, $timezones);
+            $raws = $nodeComp instanceof VObject\Component\VCalendar
+                ? $this->rawTimezones($inputObject, $components)
+                : [];
+            $renamedTzids = $this->exportTimezones($components, $raws, $timezones);
             // Appended one by one: array_merge() would copy the growing list for every object.
             foreach ($this->exportedObjects($components, $renamedTzids) as $object) {
                 $objects[] = $object;
@@ -56,17 +75,52 @@ class ICSExportPlugin extends \Sabre\CalDAV\ICSExportPlugin {
     }
 
     /**
+     * The text of each VTIMEZONE of $components, in order, as read from
+     * $input. Empty when it cannot be told for sure which text is which
+     * VTIMEZONE: ExportedTimezones then serializes them.
+     *
+     * Once no BEGIN or END line is folded, every BEGIN:VTIMEZONE line of the
+     * document opens a VTIMEZONE. As many of them as top-level VTIMEZONEs
+     * means that none is nested in another component and that none follows
+     * the end of the document, which the parser ignores. The first
+     * END:VTIMEZONE line after each one then closes it.
+     *
+     * @param mixed $input The calendar data of the object
+     * @param VObject\Component[] $components The components read from it
+     * @return string[] Index of the VTIMEZONE among the VTIMEZONEs of $components => its text
+     */
+    private function rawTimezones($input, array $components) {
+        $count = 0;
+        foreach ($components as $component) {
+            if ($component->name === 'VTIMEZONE') {
+                $count++;
+            }
+        }
+
+        if ($count === 0
+            || !is_string($input)
+            || preg_match(self::FOLDED_DELIMITER, $input) !== 0
+            || preg_match_all(self::VTIMEZONE_BEGIN, $input) !== $count
+            || preg_match_all(self::VTIMEZONE_BLOCK, $input, $matches) !== $count) {
+            return [];
+        }
+
+        return $matches[0];
+    }
+
+    /**
      * Adds the time zones of one object to the export.
      *
      * @param VObject\Component[] $components The components of the object
+     * @param string[] $raws The text of each VTIMEZONE, see rawTimezones()
      * @param ExportedTimezones $timezones
      * @return array TZID in the object => TZID it is exported under, when they differ
      */
-    private function exportTimezones(array $components, ExportedTimezones $timezones) {
+    private function exportTimezones(array $components, array $raws, ExportedTimezones $timezones) {
         $renamedTzids = [];
-        foreach ($this->firstDefinitions($components) as $vtimezone) {
+        foreach ($this->firstDefinitions($components) as $index => $vtimezone) {
             $tzid = (string) $vtimezone->TZID;
-            $exportedTzid = $timezones->add($vtimezone);
+            $exportedTzid = $timezones->add($vtimezone, $raws[$index] ?? null);
             if ($exportedTzid !== $tzid) {
                 $renamedTzids[$tzid] = $exportedTzid;
             }
@@ -79,17 +133,25 @@ class ICSExportPlugin extends \Sabre\CalDAV\ICSExportPlugin {
      * The first VTIMEZONE of each TZID: the object itself reads its TZID with it.
      *
      * @param VObject\Component[] $components
-     * @return VObject\Component[]
+     * @return VObject\Component[] Index of the VTIMEZONE among the VTIMEZONEs of $components => VTIMEZONE
      */
     private function firstDefinitions(array $components) {
         $definitions = [];
+        $tzids = [];
+        $index = 0;
         foreach ($components as $component) {
-            if ($component->name === 'VTIMEZONE' && !isset($definitions[(string) $component->TZID])) {
-                $definitions[(string) $component->TZID] = $component;
+            if ($component->name !== 'VTIMEZONE') {
+                continue;
             }
+            $tzid = (string) $component->TZID;
+            if (!isset($tzids[$tzid])) {
+                $tzids[$tzid] = true;
+                $definitions[$index] = $component;
+            }
+            $index++;
         }
 
-        return array_values($definitions);
+        return $definitions;
     }
 
     /**

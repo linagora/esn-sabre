@@ -7,6 +7,11 @@
 # this internal location. auth_gss validates the ticket against the keytab,
 # offline, and the authenticated principal reaches PHP as the KRB5_PRINCIPAL
 # FastCGI parameter. A bad ticket is answered 403 here, PHP never runs.
+#
+# The browser answers the Negotiate challenge of any request, whichever page made
+# it: a request made by a web page whose origin is neither the DAV host's own nor
+# listed in CORS_ALLOWED_ORIGINS is refused before the ticket is used (see
+# $davserver_krb_cross_site in scripts/cors.sh).
 
 # Active Directory tickets carry the groups of the user (PAC) and easily exceed
 # the default 8k header buffer.
@@ -17,6 +22,12 @@ location = /__krb {
 
     # The rewrite left "location /" before its limit_req ran: apply it here.
     include /etc/nginx/snippets/rate_limit_location.conf;
+
+    # Withholding Access-Control-Allow-Credentials only hides the response: a
+    # CORS-simple POST (text/plain body, HTML form) would still run as the user.
+    if ($davserver_krb_cross_site) {
+        return 403 "Kerberos authentication refused for a cross-site request\n";
+    }
 
     auth_gss on;
     auth_gss_keytab ${KERBEROS_KEYTAB};

@@ -73,7 +73,7 @@ of `config.json`.
 | `KERBEROS_ENABLED` | `false` | Kerberos (SPNEGO) authentication; also configures Nginx at startup, so set it in the environment. See [Kerberos authentication](#kerberos-authentication) |
 | `KERBEROS_REALM_DOMAINS` | unset | Kerberos realm to mail domain mapping, e.g. `CORP.EXAMPLE.COM:example.com`. See [Kerberos authentication](#kerberos-authentication) |
 | `KERBEROS_LDAP_PRINCIPAL_FILTER` | `(uid={user})` | LDAP filter finding the directory entry of a Kerberos principal. See [Kerberos authentication](#kerberos-authentication) |
-| `CORS_ALLOWED_ORIGINS` | unset | Comma separated origins (e.g. `https://calendar.example.com`) that get `Access-Control-Allow-Credentials`. See [CORS](#cors) |
+| `CORS_ALLOWED_ORIGINS` | unset | Comma separated origins (e.g. `https://calendar.example.com`) that get `Access-Control-Allow-Credentials` and may send Kerberos requests. See [CORS](#cors) |
 | `SABRE_MIGRATE_ON_STARTUP` | `true` | Run database migrations in the background at startup; See [database migrations](storage/MONGO.md#database-migrations) |
 | `SABRE_PRUNE_CHANGES_ON_STARTUP` | `true` | Delete the sync changes older than their retention in the background at startup; See [`calendarchanges`](storage/MONGO.md#calendarchanges) |
 | `AUTO_PROVISION` | `true` | Create missing users on successful authentication |
@@ -333,8 +333,21 @@ ticket). Front-ends that send their own `Authorization` header (Bearer, Basic) d
 | Setting | `Access-Control-Allow-Credentials` |
 |---|---|
 | `CORS_ALLOWED_ORIGINS` unset, Kerberos disabled | sent to every origin, as before |
-| `CORS_ALLOWED_ORIGINS` unset, `KERBEROS_ENABLED=true` | sent to no origin: any web page could otherwise act with the visitor's Kerberos ticket |
+| `CORS_ALLOWED_ORIGINS` unset, `KERBEROS_ENABLED=true` | sent to no origin: any web page could otherwise read the responses of requests sent with the visitor's Kerberos ticket |
 | `CORS_ALLOWED_ORIGINS` set | sent to these origins only |
+
+These headers only decide what a web page may read, and which preflighted requests the browser sends. A
+CORS-simple request (a `POST` with a `text/plain` body, an HTML form) is sent anyway, and the browser
+answers the `Negotiate` challenge with the visitor's ticket. So with `KERBEROS_ENABLED=true` Nginx also
+refuses, with `403` and before the ticket is used, a `Negotiate` request:
+
+ - whose `Origin` is neither the DAV host's own (same host name as the `Host` header, any scheme or
+   port) nor listed in `CORS_ALLOWED_ORIGINS`, `Origin: null` included;
+ - without `Origin` but with `Sec-Fetch-Site: cross-site`, unless its method is `GET`, `HEAD` or `OPTIONS`.
+
+Desktop clients send no `Origin`, and front-ends sending their own `Authorization` header are not
+concerned. Behind a proxy that rewrites the `Host` header, list the public origin of the DAV host in
+`CORS_ALLOWED_ORIGINS` if web pages of that origin use Kerberos.
 
 `CORS_ALLOWED_ORIGINS` lists exact origins, comma separated, scheme and host (and port) without a path:
 `https://calendar.example.com,https://contacts.example.com`. It is applied to the Nginx configuration by

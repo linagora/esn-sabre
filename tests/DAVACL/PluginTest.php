@@ -142,4 +142,58 @@ class PluginTest extends \ESN\DAV\ServerMock {
         ];
         $this->assertNotEmpty(array_diff($hrefs, $known), 'the calendar delegated by user1 is listed');
     }
+    function testPROPFINDOfAnotherUserAddressBookHomeListsOnlyTheReadableAddressBooks() {
+        $victim = 'principals/users/54b64eadf6d7d8e41d263e0e';
+        $publishedId = $this->carddavBackend->createAddressBook($victim, 'published-book', ['{DAV:}displayname' => 'Published']);
+        $this->carddavBackend->setPublishStatus(['id' => $publishedId, 'principaluri' => $victim, 'uri' => 'published-book'], '{DAV:}read');
+        $this->carddavBackend->createAddressBook($victim, 'job-search', ['{DAV:}displayname' => 'Job search']);
+        $this->carddavBackend->setPublishStatus($this->carddavAddressBook, '{DAV:}read');
+        $this->carddavBackend->createSubscription($victim, 'lawyer-subscription', [
+            '{DAV:}displayname' => 'Lawyer',
+            '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/54b64eadf6d7d8e41d263e0f/book1')
+        ]);
+        $this->server->tree->markDirty('addressbooks');
+
+        $hrefs = $this->propfindHrefs('/addressbooks/54b64eadf6d7d8e41d263e0e/');
+
+        $this->assertContains('/addressbooks/54b64eadf6d7d8e41d263e0e/', $hrefs);
+        $this->assertContains('/addressbooks/54b64eadf6d7d8e41d263e0e/published-book/', $hrefs);
+        $this->assertNotContains('/addressbooks/54b64eadf6d7d8e41d263e0e/job-search/', $hrefs);
+        $this->assertNotContains('/addressbooks/54b64eadf6d7d8e41d263e0e/lawyer-subscription/', $hrefs);
+        $this->assertNotContains('/addressbooks/54b64eadf6d7d8e41d263e0e/contacts/', $hrefs);
+
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant('54b64eadf6d7d8e41d263e0e', SERVER_MOCK_DOMAIN_ID));
+        $ownHrefs = $this->propfindHrefs('/addressbooks/54b64eadf6d7d8e41d263e0e/');
+
+        $this->assertContains('/addressbooks/54b64eadf6d7d8e41d263e0e/published-book/', $ownHrefs);
+        $this->assertContains('/addressbooks/54b64eadf6d7d8e41d263e0e/job-search/', $ownHrefs);
+        $this->assertContains('/addressbooks/54b64eadf6d7d8e41d263e0e/lawyer-subscription/', $ownHrefs);
+    }
+
+    function testPROPFINDOfOwnAddressBookHomeListsASubscriptionWhoseSourceWasUnpublished() {
+        $owner = 'principals/users/54b64eadf6d7d8e41d263e0e';
+        $this->carddavBackend->createSubscription($owner, 'unpublished-subscription', [
+            '{DAV:}displayname' => 'Unpublished',
+            '{http://open-paas.org/contacts}source' => new \Sabre\DAV\Xml\Property\Href('addressbooks/54b64eadf6d7d8e41d263e0f/book1')
+        ]);
+        $this->server->tree->markDirty('addressbooks');
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant('54b64eadf6d7d8e41d263e0e', SERVER_MOCK_DOMAIN_ID));
+
+        $hrefs = $this->propfindHrefs('/addressbooks/54b64eadf6d7d8e41d263e0e/');
+
+        $this->assertContains('/addressbooks/54b64eadf6d7d8e41d263e0e/unpublished-subscription/', $hrefs);
+    }
+
+    function testPROPFINDOfOwnCalendarHomeListsASubscriptionWhoseSourceWasUnpublished() {
+        $this->caldavBackend->createSubscription('principals/users/54b64eadf6d7d8e41d263e0e', 'unpublished-subscription', [
+            '{DAV:}displayname' => 'Unpublished',
+            '{http://calendarserver.org/ns/}source' => new \Sabre\DAV\Xml\Property\Href('calendars/54b64eadf6d7d8e41d263e0f/calendar1')
+        ]);
+        $this->server->tree->markDirty('calendars');
+        $this->authBackend->setAuthTenant(new \ESN\Utils\AuthTenant('54b64eadf6d7d8e41d263e0e', SERVER_MOCK_DOMAIN_ID));
+
+        $hrefs = $this->propfindHrefs('/calendars/54b64eadf6d7d8e41d263e0e/');
+
+        $this->assertContains('/calendars/54b64eadf6d7d8e41d263e0e/unpublished-subscription/', $hrefs);
+    }
 }

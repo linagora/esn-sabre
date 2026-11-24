@@ -158,7 +158,7 @@ $authPlugin = new Sabre\DAV\Auth\Plugin($authBackend);
 $authPlugin->autoRequireLogin = true;
 $server->addPlugin($authPlugin);
 
-$aclPlugin = new ESN\DAVACL\CalendarHomeListingAclPlugin();
+$aclPlugin = new ESN\DAVACL\HomeListingAclPlugin();
 $aclPlugin->allowUnauthenticatedAccess = false;
 $aclPlugin->principalCollectionSet = [
     PRINCIPALS_USERS,

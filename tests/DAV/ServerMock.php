@@ -477,7 +477,7 @@ END:VCALENDAR'
             $authPlugin = new \ESN\DAV\Auth\PluginMock($this->authBackend);
             $this->server->addPlugin($authPlugin);
 
-            $aclPlugin = new \ESN\DAVACL\CalendarHomeListingAclPlugin();
+            $aclPlugin = new \ESN\DAVACL\HomeListingAclPlugin();
             $aclPlugin->principalCollectionSet = [
                 PRINCIPALS_USERS,
                 PRINCIPALS_RESOURCES,

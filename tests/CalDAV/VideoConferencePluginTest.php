@@ -164,6 +164,17 @@ class VideoConferencePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame('https://meet.linagora.com/room', (string) $stored->VEVENT->{'X-OPENPAAS-VIDEOCONFERENCE'});
     }
 
+    // GHSA-7f3v-466j-qf9g
+    function testAConferenceLeavingTheTrustedPathIsDropped() {
+        $vCal = Reader::read($this->eventIcs('CONFERENCE;VALUE=URI;FEATURE=VIDEO:http://files.example.com:8080/a/../o'));
+
+        $this->assertTrue($this->emitCalendarObjectChange($vCal, 'http://files.example.com:8080/a'));
+
+        $stored = Reader::read($vCal->serialize());
+        $this->assertCount(0, $stored->VEVENT->select('CONFERENCE'));
+        $this->assertCount(0, $stored->VEVENT->select('X-OPENPAAS-VIDEOCONFERENCE'));
+    }
+
     private function emitCalendarObjectChange($vCal, ?string $trustedBase = null): bool {
         if ($trustedBase !== null) {
             $this->server = new \Sabre\DAV\Server([]);

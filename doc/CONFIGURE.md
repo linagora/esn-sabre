@@ -340,6 +340,19 @@ ticket). Front-ends that send their own `Authorization` header (Bearer, Basic) d
 `https://calendar.example.com,https://contacts.example.com`. It is applied to the Nginx configuration by
 `scripts/start.sh` when the container starts.
 
+## JWT authentication
+
+The legacy OpenPaaS `Authorization: Bearer <JWT>` path verifies RS256 tokens with the public key
+mounted at `/var/www/config/esn.key.pub`: mount there the public key of the side service
+(`jwt.key.public`). The image ships no key: without this file, Bearer tokens are refused and the
+other authentication methods keep working.
+
+```bash
+docker run -d -p 8001:80 \
+  -v /path/to/jwt_publickey:/var/www/config/esn.key.pub:ro \
+  linagora/esn-sabre
+```
+
 ## Kerberos authentication
 
 Clients holding a Kerberos ticket, typically desktop clients (Thunderbird, Evolution) on machines

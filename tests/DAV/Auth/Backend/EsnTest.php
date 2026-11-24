@@ -316,6 +316,35 @@ class EsnTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(['principals/users/' . self::USER_ID], $authNotificationResult);
     }
 
+    function testAuthenticationFailsWithJWTWhenNoPublicKeyIsMounted() {
+        $authNotificationResult = [];
+        $esnauth = new EsnMock('http://localhost:8080/');
+        $esnauth->setPublicKeyFile(ESN_TEMPDIR . 'missing-esn.key.pub');
+        $esnauth->getServer()->on("auth:success", function($tenant) use (&$authNotificationResult) {
+            $authNotificationResult[] = $tenant->getPrincipal();
+        });
+        $esnauth->getDb()->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId(self::USER_ID),
+            'accounts' => [
+                [ 'type' => 'email', 'emails' => [ 'user1@open-paas.org' ] ]
+            ],
+            'domains' => [
+                [ 'domain_id' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID) ]
+            ]
+        ]);
+
+        $request = new \Sabre\HTTP\Request('GET', '/foo/bar');
+        // Token signed by the test key, {"sub":"user1@open-paas.org","iat":1611593604}
+        $request->setHeader('Authorization', 'Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMUBvcGVuLXBhYXMub3JnIiwiaWF0IjoxNjExNTkzNjA0fQ.FddHtNdatKnSub_zAWxLFfFyf-azfGnpL-eBjAulLtIzPvDMDfYY0W5VWe4FIkmA59Gi0JxBq_topZM6mrrQyMtWEVBIb3IFHbHGYWtKcnrBmQN7UdLuaa7V5EEQ5_8JZU4l-qkXFeqYr-LTq2KTz3NiZPZgSaEcam4_C9ByzUBQ_-jMiMK5nb_gGGPMEUYGmxobrf7I9tXQHSqSHK58Igg67FnqtEMHsfrya4g_Fs13zSYk_TkUY9x0IpiU5g-PgjEN6-7ts1Or8maBQsmKgn9pqmsYEg3VM2QZIyw7MMNG9gLQRE6QRchlc1ReJZRJk6eZY2d-xenzX8lqn5e40A');
+        $response = new \Sabre\HTTP\Response(200);
+
+        list($rv, $msg) = $esnauth->check($request, $response);
+
+        $this->assertFalse($rv);
+        $this->assertNull($esnauth->getCurrentPrincipal());
+        $this->assertEquals([], $authNotificationResult);
+    }
+
     function testAuthenticationFailWithJwt() {
         $authNotificationResult = [];
         $esnauth = new EsnMock('http://localhost:8080/');
@@ -1466,6 +1495,10 @@ class EsnMock extends Esn {
 
     function getClient() {
         return $this->httpClient;
+    }
+
+    function setPublicKeyFile(string $publicKeyFile) {
+        $this->publicKeyFile = $publicKeyFile;
     }
 
     function getServer() {

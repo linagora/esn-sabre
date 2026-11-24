@@ -73,8 +73,10 @@ this order:
    `KERBEROS_REALM_DOMAINS` maps its realm to, never an alias. A principal Sabre
    refuses gets `403`, not `401`.
    See [Kerberos authentication](CONFIGURE.md#kerberos-authentication).
-2. `Authorization: Bearer <JWT>`: the token is verified with the configured
-   RS256 public key and its `sub` email is resolved to a user tenant. This
+2. `Authorization: Bearer <JWT>`: the token is verified with the RS256 public
+   key mounted at `/var/www/config/esn.key.pub` (none is shipped: without it,
+   Bearer tokens are refused, see [JWT authentication](CONFIGURE.md#jwt-authentication))
+   and its `sub` email is resolved to a user tenant. This
    legacy OpenPaaS frontend compatibility path is deprecated and should be
    removed when those frontends no longer depend on it.
 3. `TwakeCalendarToken: <token>`: the token is introspected by the calendar side

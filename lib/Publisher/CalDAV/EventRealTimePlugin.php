@@ -336,6 +336,11 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             if($user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_INVALID) {
                 continue;
             }
+            // A sharee who declined the share is refused read access to the calendar (SharedCalendar::getACL):
+            // it is not told about its events either
+            if ((int) $user->inviteStatus === \Sabre\DAV\Sharing\Plugin::INVITE_DECLINED) {
+                continue;
+            }
 
             $inviteeCalendar = $this->findInviteeCalendar($user->principal, $options['calendarid']);
             // An invitee without an instance of the calendar has no path to be notified on

@@ -69,6 +69,23 @@ class SubscriptionTest extends \ESN\DAV\ServerMock {
         $this->assertNull($this->storedSource('newsub'));
     }
 
+    #[\PHPUnit\Framework\Attributes\DataProvider('xmlContentTypesAcceptedBySabre')]
+    function testMkcolSubscriptionShouldRejectAPrivateSourceWhateverTheXmlContentType($contentType) {
+        $response = $this->mkcolSubscription('newsub', 'calendars/' . $this->user2Id() . '/' . $this->calUser2['uri'], $contentType);
+
+        $this->assertEquals(403, $response->status);
+        $this->assertNull($this->storedSource('newsub'));
+    }
+
+    static function xmlContentTypesAcceptedBySabre() {
+        return [
+            'space before the parameters' => ['text/xml ; charset=utf-8'],
+            'suffixed media type' => ['application/xml-x'],
+            'longer subtype' => ['text/xmlx'],
+            'upper case' => ['Application/XML'],
+        ];
+    }
+
     function testMkcolSubscriptionShouldRejectASourceThatIsNotACalendar() {
         $response = $this->mkcolSubscription('newsub', 'calendars/' . $this->user2Id());
 
@@ -298,10 +315,10 @@ class SubscriptionTest extends \ESN\DAV\ServerMock {
         $this->assertEquals(400, $response->getStatus());
     }
 
-    private function mkcolSubscription($uri, $source) {
+    private function mkcolSubscription($uri, $source, $contentType = 'application/xml') {
         $request = \Sabre\HTTP\Sapi::createFromServerArray([
             'REQUEST_METHOD'    => 'MKCOL',
-            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'HTTP_CONTENT_TYPE' => $contentType,
             'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f/' . $uri,
         ]);
         $request->setBody('<?xml version="1.0" encoding="utf-8"?>'

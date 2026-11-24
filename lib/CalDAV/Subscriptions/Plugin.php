@@ -49,8 +49,10 @@ class Plugin extends \Sabre\CalDAV\Subscriptions\Plugin {
             return;
         }
 
-        $contentType = strtolower(explode(';', $request->getHeader('Content-Type') ?? '')[0]);
-        if (!in_array($contentType, ['application/xml', 'text/xml'])) {
+        // Sabre's MKCOL handler takes any Content-Type that merely starts with an XML
+        // type ("text/xml ; charset=utf-8", "application/xml-x"...): check at least those.
+        $contentType = strtolower($request->getHeader('Content-Type') ?? '');
+        if (!str_starts_with($contentType, 'application/xml') && !str_starts_with($contentType, 'text/xml')) {
             return;
         }
 

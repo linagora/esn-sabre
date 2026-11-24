@@ -571,6 +571,22 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertEquals(['/calendars/inv2/cal-inv2/e.ics'], $this->eventPaths($plugin));
     }
 
+    function testShareeWhoDeclinedTheShareIsNotNotified() {
+        $plugin = $this->pluginWithCalendarsForUser([
+            ['principals/users/declined', [['id' => ['cal-id', 'i1'], 'uri' => 'cal-declined']]],
+            ['principals/users/accepted', [['id' => ['cal-id', 'i2'], 'uri' => 'cal-accepted']]],
+        ]);
+
+        $this->notifyInvites($plugin, [
+            new \Sabre\DAV\Xml\Element\Sharee(['principal' => 'principals/users/declined', 'access' => 2,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_DECLINED]),
+            new \Sabre\DAV\Xml\Element\Sharee(['principal' => 'principals/users/accepted', 'access' => 2,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED]),
+        ]);
+
+        $this->assertEquals(['/calendars/accepted/cal-accepted/e.ics'], $this->eventPaths($plugin));
+    }
+
     function testDelegateMessageOfAPrivateEventIsReducedInEveryEventField() {
         $owner = 'principals/users/owner';
         $backend = $this->createMock(\Sabre\CalDAV\Backend\BackendInterface::class);

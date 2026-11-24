@@ -12,6 +12,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use ESN\DAV\ChangeLog\ChangeLog;
 use ESN\DAV\ChangeLog\ChangeLogPruner;
+use ESN\Utils\MongoCredentialRedactor;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 
@@ -52,6 +53,11 @@ try {
     $pruner->prune(ChangeLog::calendars(), (int) ($dbConfig['calendarChangesRetentionInDays'] ?? $defaultRetentionInDays));
     $pruner->prune(ChangeLog::addressBooks(), (int) ($dbConfig['addressBookChangesRetentionInDays'] ?? $defaultRetentionInDays));
 } catch (\Throwable $error) {
-    $logger->error('Change log pruning failed', ['reason' => $error->getMessage(), 'error' => get_class($error)]);
+    // Driver messages can quote the connection URI, password included ("Failed to parse MongoDB URI: '...'").
+    $logger->error('Change log pruning failed', [
+        'reason' => MongoCredentialRedactor::redact($error->getMessage(), $connectionString ?? null),
+        'error' => get_class($error),
+        'error_code' => $error->getCode(),
+    ]);
     exit(1);
 }

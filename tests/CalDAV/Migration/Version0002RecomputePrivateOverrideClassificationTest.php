@@ -57,8 +57,25 @@ class Version0002RecomputePrivateOverrideClassificationTest extends TestCase
         $this->assertSame('PRIVATE', $classification(4));
         $this->assertNull($classification(5));
         $this->assertSame('e1', $this->database->calendarobjects->findOne(['_id' => 1])['etag']);
-        $this->assertSame(4, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(5, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
         $this->assertTrue($this->logs->hasWarningThatContains('Skipping calendar object'));
+        $this->assertFalse($this->logs->hasErrorRecords());
+    }
+
+    public function testPrivateOverrideWrittenByAnOlderReplicaAfterVersion2IsRepairedByVersion5(): void
+    {
+        // Version 2 already ran on the first upgraded replica, then a replica still on the older code
+        // stored the CLASS of the first component only
+        $this->database->db_version->insertOne(['_id' => 'schema', 'version' => 4]);
+        $this->database->calendarobjects->insertOne(
+            ['_id' => 1, 'calendardata' => $this->series('PUBLIC', 'PRIVATE'), 'classification' => 'PUBLIC', 'etag' => 'e1']
+        );
+
+        (new MigrationRunner($this->database, $this->logger))->run();
+
+        $this->assertSame('PRIVATE', $this->database->calendarobjects->findOne(['_id' => 1])['classification']);
+        $this->assertSame(5, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertTrue($this->logs->hasInfoThatContains('Database migration starting'));
         $this->assertFalse($this->logs->hasErrorRecords());
     }
 }

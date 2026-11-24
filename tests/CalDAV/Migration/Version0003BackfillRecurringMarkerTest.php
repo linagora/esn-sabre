@@ -54,7 +54,7 @@ class Version0003BackfillRecurringMarkerTest extends TestCase
         $this->assertFalse(isset($object(4)['recurring']));
         $this->assertFalse(isset($object(5)['recurring']));
         $this->assertSame('e1', $object(1)['etag']);
-        $this->assertSame(4, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(5, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
         $this->assertTrue($this->logs->hasWarningThatContains('Skipping calendar object'));
         $this->assertFalse($this->logs->hasErrorRecords());
     }

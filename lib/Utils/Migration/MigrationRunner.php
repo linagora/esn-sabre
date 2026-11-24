@@ -4,6 +4,7 @@ namespace ESN\Utils\Migration;
 
 use ESN\CalDAV\Migration\Version0002RecomputePrivateOverrideClassification;
 use ESN\CalDAV\Migration\Version0003BackfillRecurringMarker;
+use ESN\CalDAV\Migration\Version0005RecomputePrivateOverrideClassificationAgain;
 use ESN\CardDAV\Migration\Version0001BackfillContactSortFields;
 use ESN\DAV\Migration\Version0004BackfillChangeDates;
 use MongoDB\Collection;
@@ -21,6 +22,7 @@ class MigrationRunner
             2 => new Version0002RecomputePrivateOverrideClassification(),
             3 => new Version0003BackfillRecurringMarker(),
             4 => new Version0004BackfillChangeDates(),
+            5 => new Version0005RecomputePrivateOverrideClassificationAgain(),
         ];
     }
 

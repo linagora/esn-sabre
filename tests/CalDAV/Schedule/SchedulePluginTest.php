@@ -15,6 +15,9 @@ use Sabre\VObject\Reader;
 #[\AllowDynamicProperties]
 class SchedulePluginTest extends \PHPUnit\Framework\TestCase {
     private $plugin;
+    // ObjectIds of the Team Calendar copies of daily-2: the one of bob's other Team Calendar is
+    // a second older
+    private $teamCopyIds = ['team2-id' => '000000010000000000000000', 'team-id' => '000000020000000000000000'];
 
     function setUp(): void {
         $server = new Server();
@@ -660,6 +663,101 @@ END:VCALENDAR
         $this->assertSame('1.2;Message delivered locally', $message->scheduleStatus);
         $this->assertSame(1, $carolsCopy->putCount);
         $this->assertSame('mailto:mallory@example.org', (string) Reader::read($carolsCopy->putData)->VEVENT->ORGANIZER);
+    }
+
+    /**
+     * Bob organizes daily-2 from another Team Calendar, which mallory cannot see: mallory's copy
+     * of that UID in the Team Calendar they share does not make the event theirs to take over.
+     */
+    function testShouldRefuseOrganizerHandoverOfAnEventTheFormerOrganizerOrganizesFromAnotherTeamCalendar() {
+        $carolsCopy = $this->initializePluginWithCarolsCopyAndSenderTeamCalendar(false, true);
+        $message = $this->newMessageToCarol('mailto:mallory@example.org',
+            $this->newHandedOverCalendarObject('mailto:mallory@example.org'));
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('5.', $message->scheduleStatus);
+        $this->assertSame(0, $carolsCopy->putCount);
+        $this->assertCount(0, $this->inbox->getChildren());
+    }
+
+    /**
+     * The vobject fork throws Error or TypeError on some unparsable data: the handover is
+     * refused like for any other unreadable copy, instead of failing the delivery.
+     */
+    function testShouldRefuseOrganizerHandoverWhenParsingTheTeamCalendarCopyThrowsAnError() {
+        $carolsCopy = $this->initializePluginWithCarolsCopyAndSenderTeamCalendar(false, false, ParserErrorStream::open());
+        $message = $this->newMessageToCarol('mailto:mallory@example.org',
+            $this->newHandedOverCalendarObject('mailto:mallory@example.org'));
+
+        $this->plugin->scheduleLocalDelivery($message);
+
+        $this->assertStringStartsWith('5.', $message->scheduleStatus);
+        $this->assertSame(0, $carolsCopy->putCount);
+        $this->assertCount(0, $this->inbox->getChildren());
+    }
+
+    public static function bobsOtherCopies(): array {
+        return [
+            'personal calendar' => ['personal', ['mailto:mallory@example.org']],
+            'other Team Calendar' => ['team2', ['mailto:mallory@example.org']],
+            'none' => ['none', ['mailto:bob@example.org']],
+            // A member of the other Team Calendar wrote a copy of the UID in it afterwards
+            'other Team Calendar, after this one' => ['team-then-team2', ['mailto:bob@example.org']],
+            'other Team Calendar, before this one' => ['team2-then-team', ['mailto:mallory@example.org']],
+            'other Team Calendar, within the same second' => ['team-and-team2-same-second', ['mailto:mallory@example.org']],
+            // A lookup that fails never schedules in bob's name, nor fails the write
+            'unparsable copy in another Team Calendar' => ['unparsable-team2', ['mailto:mallory@example.org']],
+            // The vobject fork throws Error or TypeError on some unparsable data
+            'copy the parser fails on with an Error in another Team Calendar' => ['parser-error-team2', ['mailto:mallory@example.org']],
+        ];
+    }
+
+    /**
+     * Mallory writes a copy of daily-2 into the Team Calendar she shares with bob, under
+     * ORGANIZER:bob. She schedules in bob's name only when bob organizes the event from it.
+     */
+    #[DataProvider('bobsOtherCopies')]
+    function testShouldScheduleATeamCalendarCopyInAnotherMembersNameOnlyForTheirTeamCalendarEvent(string $bobsCopy, array $expected) {
+        $this->assertSame($expected, $this->schedulingAddressesOfTeamCalendarCopyOrganizedByBob($bobsCopy, ['mailto:mallory@example.org']));
+    }
+
+    function testShouldScheduleATeamCalendarCopyInTheConnectedOrganizersOwnName() {
+        $this->assertSame(['mailto:bob@example.org'],
+            $this->schedulingAddressesOfTeamCalendarCopyOrganizedByBob('personal', ['mailto:bob@example.org']));
+    }
+
+    private function schedulingAddressesOfTeamCalendarCopyOrganizedByBob(string $bobsCopy, array $actorAddresses): array {
+        if ($bobsCopy === 'team-then-team2') {
+            $this->teamCopyIds = ['team-id' => '000000010000000000000000', 'team2-id' => '000000020000000000000000'];
+        }
+        if ($bobsCopy === 'team-and-team2-same-second') {
+            // ObjectIds only order to the second: the other copy may as well be the older one
+            $this->teamCopyIds = ['team-id' => '000000010000000000000000', 'team2-id' => '00000001ffffffffffffffff'];
+        }
+        list($malloryHome, $schedulingRecipientPlugin) = $this->newSenderTeamCalendar('mailto:bob@example.org',
+            ['principals/users/mallory', 'principals/users/bob']);
+        $bobsTeam2 = fn() => $this->newTeamCalendar('team2', 'team2-id', $this->newCalendarObjectOrganizedByBob(), ['principals/users/bob']);
+        $bobsTeam = fn() => $this->newTeamCalendar('team', 'team-id', $this->newHandedOverCalendarObject('mailto:bob@example.org'),
+            ['principals/users/mallory', 'principals/users/bob']);
+        $bobsHome = match ($bobsCopy) {
+            'personal' => new TeamCalendarHomeTestDouble('bob', ['daily-2' => 'default/event.ics'], [
+                new WritableCollectionTestDouble('default', [new SimpleFile('event.ics', $this->newCalendarObjectOrganizedByBob())])
+            ]),
+            'team2' => $this->newCalendarHomeWith('bob', $bobsTeam2()),
+            'none' => new CalendarHomeTestDouble('bob'),
+            'unparsable-team2' => $this->newCalendarHomeWith('bob',
+                $this->newTeamCalendar('team2', 'team2-id', "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\n", ['principals/users/bob'])),
+            'parser-error-team2' => $this->newCalendarHomeWith('bob',
+                $this->newTeamCalendar('team2', 'team2-id', ParserErrorStream::open(), ['principals/users/bob'])),
+            'team-then-team2', 'team2-then-team', 'team-and-team2-same-second' => $this->newCalendarHomeWith('bob', $bobsTeam(), $bobsTeam2()),
+        };
+        $this->initializePluginForDelivery([$bobsHome, $malloryHome], [],
+            ['mailto:mallory@example.org' => 'principals/users/mallory'], [$schedulingRecipientPlugin]);
+
+        $method = new \ReflectionMethod(Plugin::class, 'resolveSchedulingAddresses');
+        return $method->invoke($this->plugin, 'calendars/mallory/team', true,
+            Reader::read($this->newHandedOverCalendarObject('mailto:bob@example.org')), $actorAddresses);
     }
 
     function testShouldNotCreateInboxItemWhenTheBrokerRefusesTheMerge() {
@@ -2053,22 +2151,27 @@ ICS;
      * Carol's copy of daily-2, organized by bob, and a Team Calendar of mallory and bob whose
      * copy of daily-2 mallory now organizes. Bob may keep his own organizer copy of it.
      */
-    private function initializePluginWithCarolsCopyAndSenderTeamCalendar(bool $bobKeepsHisOwnCopy): WritableCalendarObjectTestDouble {
+    private function initializePluginWithCarolsCopyAndSenderTeamCalendar(bool $bobKeepsHisOwnCopy,
+        bool $bobOrganizesItFromAnotherTeamCalendar = false, $senderTeamCopy = null): WritableCalendarObjectTestDouble {
         list($malloryHome, $schedulingRecipientPlugin) = $this->newSenderTeamCalendar('mailto:mallory@example.org',
-            ['principals/users/mallory', 'principals/users/bob']);
+            ['principals/users/mallory', 'principals/users/bob'], $senderTeamCopy);
         $carolsCopy = new WritableCalendarObjectTestDouble('event.ics', $this->newCalendarObjectOrganizedByBob());
         $bobsCopy = new WritableCalendarObjectTestDouble('event.ics', $this->newCalendarObjectOrganizedByBob());
         $this->inbox = new WritableCollectionTestDouble('inbox');
+        $bobsHome = $bobOrganizesItFromAnotherTeamCalendar
+            ? $this->newCalendarHomeWith('bob', $this->newTeamCalendar('team2', 'team2-id',
+                $this->newCalendarObjectOrganizedByBob(), ['principals/users/bob']))
+            : new TeamCalendarHomeTestDouble('bob', $bobKeepsHisOwnCopy ? ['daily-2' => 'default/event.ics'] : [], [
+                new WritableCollectionTestDouble('inbox'),
+                new WritableCollectionTestDouble('default', $bobKeepsHisOwnCopy ? [$bobsCopy] : [])
+            ]);
 
         $this->initializePluginForDelivery([
             new TeamCalendarHomeTestDouble('carol', ['daily-2' => 'default/event.ics'], [
                 $this->inbox,
                 new WritableCollectionTestDouble('default', [$carolsCopy])
             ]),
-            new TeamCalendarHomeTestDouble('bob', $bobKeepsHisOwnCopy ? ['daily-2' => 'default/event.ics'] : [], [
-                new WritableCollectionTestDouble('inbox'),
-                new WritableCollectionTestDouble('default', $bobKeepsHisOwnCopy ? [$bobsCopy] : [])
-            ]),
+            $bobsHome,
             $malloryHome
         ], [], [
             'mailto:mallory@example.org' => 'principals/users/mallory',
@@ -2097,25 +2200,48 @@ ICS;
      * A Team Calendar mallory writes to, whose copy of daily-2 has the given organizer and
      * the given write-enabled members: mallory's calendar home, and the plugin finding it.
      */
-    private function newSenderTeamCalendar(string $teamCopyOrganizer, array $writeEnabledMembers): array {
+    private function newSenderTeamCalendar(string $teamCopyOrganizer, array $writeEnabledMembers, $teamCopy = null): array {
         $backend = $this->createStub(\ESN\CalDAV\Backend\Mongo::class);
-        $backend->method('findCalendarObjectsByUid')->willReturn([['calendarid' => 'team-id', 'uri' => 'team-event.ics']]);
+        // The copies of daily-2 in mallory's Team Calendar, and in a Team Calendar bob may write to,
+        // with the ObjectId they were created under
+        $objects = ['team-id' => 'team-event.ics', 'team2-id' => 'team2-event.ics'];
+        $ids = $this->teamCopyIds;
+        $backend->method('findCalendarObjectsByUid')->willReturnCallback(fn($uid, array $calendarIds) => array_map(
+            fn($calendarId) => ['_id' => new \MongoDB\BSON\ObjectId($ids[$calendarId]), 'calendarid' => $calendarId, 'uri' => $objects[$calendarId]],
+            array_values(array_intersect($calendarIds, array_keys($objects)))
+        ));
+        $teamCalendar = $this->newTeamCalendar('team', 'team-id', $teamCopy ?? $this->newHandedOverCalendarObject($teamCopyOrganizer),
+            $writeEnabledMembers);
+
+        return [$this->newCalendarHomeWith('mallory', $teamCalendar), new \ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin($backend)];
+    }
+
+    /**
+     * @param string|resource $calendarData
+     */
+    private function newTeamCalendar(string $name, string $calendarId, $calendarData, array $writeEnabledMembers) {
         $teamCalendar = $this->createStub(\ESN\CalDAV\SharedCalendar::class);
-        $teamCalendar->method('getName')->willReturn('team');
-        $teamCalendar->method('getCalendarId')->willReturn('team-id');
-        $teamCalendar->method('getOwner')->willReturn('principals/team-calendars/team');
+        $teamCalendar->method('getName')->willReturn($name);
+        $teamCalendar->method('getCalendarId')->willReturn($calendarId);
+        $teamCalendar->method('getOwner')->willReturn('principals/team-calendars/' . $name);
         $teamCalendar->method('getShareAccess')->willReturn(\ESN\DAV\Sharing\Plugin::ACCESS_READWRITE);
-        $teamCalendar->method('getChild')->willReturn(new SimpleFile('team-event.ics', $this->newHandedOverCalendarObject($teamCopyOrganizer)));
+        $teamCalendar->method('getChild')->willReturn(new SimpleFile($name . '-event.ics', $calendarData));
         $teamCalendar->method('getInvites')->willReturn(array_map(fn($principal) => new \Sabre\DAV\Xml\Element\Sharee([
             'principal' => $principal,
             'access' => \ESN\DAV\Sharing\Plugin::ACCESS_READWRITE
         ]), $writeEnabledMembers));
-        $malloryHome = $this->createStub(\ESN\CalDAV\CalendarHome::class);
-        $malloryHome->method('getName')->willReturn('mallory');
-        $malloryHome->method('getChildren')->willReturn([$teamCalendar]);
-        $malloryHome->method('getChild')->willReturn($teamCalendar);
 
-        return [$malloryHome, new \ESN\CalDAV\TeamCalendarSchedulingRecipientPlugin($backend)];
+        return $teamCalendar;
+    }
+
+    private function newCalendarHomeWith(string $name, ...$calendars) {
+        $home = $this->createStub(\ESN\CalDAV\CalendarHome::class);
+        $home->method('getName')->willReturn($name);
+        $home->method('getChildren')->willReturn($calendars);
+        $home->method('getChild')->willReturnCallback(fn($child) => current(array_filter($calendars,
+            fn($calendar) => $calendar->getName() === $child)) ?: throw new \Sabre\DAV\Exception\NotFound($child));
+
+        return $home;
     }
 
     private function newCalendarObjectOrganizedByBob(): string {
@@ -2398,5 +2524,36 @@ class TeamCalendarAclPluginTestDouble extends \Sabre\DAV\ServerPlugin {
     }
 
     function propFind() {
+    }
+}
+
+/**
+ * Stored calendar data whose parsing throws an \Error from within the vobject parser.
+ */
+class ParserErrorStream {
+    public $context;
+
+    static function open() {
+        if (!in_array('esn-parser-error', stream_get_wrappers(), true)) {
+            stream_wrapper_register('esn-parser-error', self::class);
+        }
+
+        return fopen('esn-parser-error://calendar', 'r');
+    }
+
+    function stream_open($path, $mode, $options, &$openedPath) {
+        return true;
+    }
+
+    function stream_read($count) {
+        throw new \Error('parser failure');
+    }
+
+    function stream_eof() {
+        return false;
+    }
+
+    function stream_stat() {
+        return [];
     }
 }

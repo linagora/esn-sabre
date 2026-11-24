@@ -160,7 +160,10 @@ class CalendarObjectService {
         }
     }
 
-    public function findByUid(string $uid, array $calendarIds, array $filters = []): array {
+    /**
+     * @param bool $withId also return the _id, whose ObjectId orders the objects by creation
+     */
+    public function findByUid(string $uid, array $calendarIds, array $filters = [], bool $withId = false): array {
         return iterator_to_array(
             $this->calendarObjectDAO->findWithQuery(
                 [
@@ -169,7 +172,7 @@ class CalendarObjectService {
                     'componenttype' => 'VEVENT'
                 ] + $filters,
                 [
-                    '_id' => 0,
+                    '_id' => $withId ? 1 : 0,
                     'calendarid' => 1,
                     'uri' => 1
                 ]

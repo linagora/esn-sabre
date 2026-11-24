@@ -47,20 +47,39 @@ class TeamCalendarSchedulingRecipientPlugin extends ServerPlugin {
         return $this->findTeamCalendarObjectPathsByUid($homePath, $uid, null);
     }
 
+    /**
+     * The objects of findCalendarObjectPathsWithoutSchedulingRecipient(), each as
+     * ['path' => ..., 'calendarId' => the id of its calendar, shared by every instance of it,
+     *  'createdAt' => the second its ObjectId was generated at, null when unknown].
+     */
+    public function findCalendarObjectsWithoutSchedulingRecipientWithCreationTime(string $homePath, string $uid): array {
+        return array_map(fn($found) => [
+            'path' => $found[0],
+            'calendarId' => (string) $found[1]->getCalendarId(),
+            'createdAt' => ($found[2]['_id'] ?? null) instanceof \MongoDB\BSON\ObjectId ? $found[2]['_id']->getTimestamp() : null,
+        ], $this->findTeamCalendarObjectsByUid($homePath, $uid, null, true));
+    }
+
     private function findTeamCalendarObjectPathsByUid(string $homePath, string $uid, ?string $recipient): array {
+        return array_column($this->findTeamCalendarObjectsByUid($homePath, $uid, $recipient), 0);
+    }
+
+    private function findTeamCalendarObjectsByUid(string $homePath, string $uid, ?string $recipient, bool $withId = false): array {
         $calendars = $this->calendarInstancesById($homePath);
         if (!$calendars) return [];
 
         // Reuse the /events UID query before loading owners/invites of unrelated calendars.
-        $paths = [];
-        foreach ($this->calendarBackend->findCalendarObjectsByUid($uid, array_keys($calendars),
-            ['metadata.schedulingRecipientPrincipalUri' => $recipient]) as $object) {
+        $filters = ['metadata.schedulingRecipientPrincipalUri' => $recipient];
+        $objects = [];
+        foreach ($withId
+            ? $this->calendarBackend->findCalendarObjectsByUid($uid, array_keys($calendars), $filters, true)
+            : $this->calendarBackend->findCalendarObjectsByUid($uid, array_keys($calendars), $filters) as $object) {
             $calendar = $calendars[$object['calendarid']];
             if ($this->isWritableTeamCalendar($calendar)) {
-                $paths[] = rtrim($homePath, '/') . '/' . $calendar->getName() . '/' . $object['uri'];
+                $objects[] = [rtrim($homePath, '/') . '/' . $calendar->getName() . '/' . $object['uri'], $calendar, $object];
             }
         }
-        return $paths;
+        return $objects;
     }
 
     private function calendarInstancesById(string $homePath): array {

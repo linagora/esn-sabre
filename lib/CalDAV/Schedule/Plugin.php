@@ -246,8 +246,9 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      *
      * UIDs are only unique within a calendar: a member may create a Team Calendar copy of
      * any event whose UID they know. The event of a Team Calendar is organized from it, so
-     * its organizer keeps no copy of their own: a former organizer still organizing a copy
-     * in one of their own calendars proves a personal event, which is never handed over.
+     * its organizer keeps no copy anywhere else: a former organizer still organizing a copy
+     * in one of their own calendars, or in another Team Calendar, proves the event is not
+     * this calendar's, and it is never handed over.
      */
     private function isTeamCalendarOrganizerHandover(ITip\Message $iTipMessage, array $formerOrganizers): bool {
         $plugin = $this->server->getPlugin(TeamCalendarSchedulingRecipientPlugin::PLUGIN_NAME);
@@ -257,42 +258,17 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         try {
-            if ($this->anyOrganizerOrganizesAnOwnCopy($formerOrganizers, $iTipMessage->uid)) {
-                return false;
-            }
-
             $paths = $plugin->findCalendarObjectPathsWithoutSchedulingRecipient('calendars/' . basename($senderPrincipal), $iTipMessage->uid);
             return (bool) array_filter($paths,
-                fn($path) => $this->handsOverTeamCalendarObject($path, $iTipMessage->sender, $formerOrganizers));
-        } catch (\Sabre\DAV\Exception $e) {
-            $this->logger->warning('Organizer handover lookup failed', ['reason' => $e->getMessage()]);
+                fn($path) => $this->handsOverTeamCalendarObject($path, $iTipMessage->sender, $iTipMessage->uid, $formerOrganizers));
+        } catch (\Throwable $e) {
+            // Unparsable stored data or a backend failure: refuse the handover
+            $this->logger->warning('Organizer handover lookup failed', ['reason' => get_class($e) . ': ' . $e->getMessage()]);
             return false;
         }
     }
 
-    private function anyOrganizerOrganizesAnOwnCopy(array $organizers, string $uid): bool {
-        foreach ($organizers as $organizer) {
-            $principal = Utils::getPrincipalByUri($organizer, $this->server);
-            if (!$principal) {
-                continue;
-            }
-
-            $copy = $this->loadExistingCalendarObject('calendars/' . basename($principal), $uid)['calendarObject'];
-            if (!$copy) {
-                continue;
-            }
-            $organizesCopy = $this->calendarObjectHasOrganizer($copy, $organizer);
-            $copy->destroy();
-
-            if ($organizesCopy) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function handsOverTeamCalendarObject(string $objectPath, string $sender, array $formerOrganizers): bool {
+    private function handsOverTeamCalendarObject(string $objectPath, string $sender, string $uid, array $formerOrganizers): bool {
         $teamObject = $this->loadTeamCalendarObjectAtPath($objectPath, $sender)['calendarObject'];
         if (!$teamObject) {
             return false;
@@ -300,10 +276,68 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $teamObject->destroy();
 
         [$calendarPath] = \Sabre\Uri\split($objectPath);
-        $formerOrganizersWithoutWriteAccess = array_filter($formerOrganizers,
-            fn($organizer) => !$this->mayScheduleAsOrganizer($organizer, $calendarPath));
+        $formerOrganizersNotOrganizingFromIt = array_filter($formerOrganizers,
+            fn($organizer) => !$this->mayScheduleAsOrganizer($organizer, $calendarPath)
+                || $this->organizesCopyOutsideTeamCalendar($organizer, $uid, $calendarPath));
 
-        return !$formerOrganizersWithoutWriteAccess;
+        return !$formerOrganizersNotOrganizingFromIt;
+    }
+
+    /**
+     * Whether $organizer organizes a copy of $uid in one of their own calendars, or in a Team
+     * Calendar they write to other than the one at $teamCalendarPath: the event is then not
+     * that Team Calendar's own, whatever copy of the UID a member created in it.
+     *
+     * Any member of another Team Calendar may write a copy of the UID in it as well, so a copy
+     * there only counts when it was created before the copy of this Team Calendar: the event
+     * belongs to the calendar that held it first, and a copy cannot be planted before the UID
+     * is known. ObjectIds only order to the second: a copy created within the same second, or
+     * whose creation time is unknown, still counts.
+     */
+    private function organizesCopyOutsideTeamCalendar(string $organizer, string $uid, string $teamCalendarPath): bool {
+        $principal = Utils::getPrincipalByUri($organizer, $this->server);
+        if (!$principal) {
+            return false;
+        }
+        $homePath = 'calendars/' . basename($principal);
+
+        $copy = $this->loadExistingCalendarObject($homePath, $uid)['calendarObject'];
+        if ($copy) {
+            $organizesCopy = $this->calendarObjectHasOrganizer($copy, $organizer);
+            $copy->destroy();
+            if ($organizesCopy) {
+                return true;
+            }
+        }
+
+        $plugin = $this->server->getPlugin(TeamCalendarSchedulingRecipientPlugin::PLUGIN_NAME);
+        if (!$plugin) {
+            return false;
+        }
+
+        $teamCalendarId = $this->calendarIdAt($teamCalendarPath);
+        $objects = $plugin->findCalendarObjectsWithoutSchedulingRecipientWithCreationTime($homePath, $uid);
+        $ownCopies = array_filter($objects, fn($object) => $object['calendarId'] === $teamCalendarId);
+        $ownCopyCreatedAt = $ownCopies ? min(array_map(fn($object) => $object['createdAt'] ?? PHP_INT_MAX, $ownCopies)) : PHP_INT_MAX;
+
+        foreach ($objects as $object) {
+            if ($object['calendarId'] === $teamCalendarId
+                || ($object['createdAt'] !== null && $object['createdAt'] > $ownCopyCreatedAt)) {
+                continue;
+            }
+            $teamObject = $this->loadTeamCalendarObjectAtPath($object['path'], $organizer)['calendarObject'];
+            if ($teamObject) {
+                $teamObject->destroy();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function calendarIdAt(string $calendarPath): ?string {
+        $calendar = $this->server->tree->getNodeForPath($calendarPath);
+        return method_exists($calendar, 'getCalendarId') ? (string) $calendar->getCalendarId() : null;
     }
 
     /**
@@ -1350,6 +1384,10 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * client supplied, hence it is only granted to a write-enabled member; otherwise we fall
      * back to the connected user, who can still reply as an attendee but cannot send
      * invitations in somebody else's name.
+     *
+     * Nor in the name of a member for an event that member organizes outside this calendar:
+     * UIDs are only unique within a calendar, so a member could otherwise create a copy of
+     * another member's event here and rewrite or cancel its attendees' copies in their name.
      */
     protected function resolveSchedulingAddresses(string $calendarPath, bool $isTeamCalendar, VCalendar $vCal, array $actorAddresses): array {
         if (!$isTeamCalendar) {
@@ -1359,8 +1397,25 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         $organizerAddress = $this->extractSingleOrganizerAddress($vCal);
 
         return $organizerAddress && $this->mayScheduleAsOrganizer($organizerAddress, $calendarPath)
+            && !$this->organizesItOutsideTeamCalendar($organizerAddress, $vCal, $calendarPath, $actorAddresses)
             ? [$organizerAddress]
             : $actorAddresses;
+    }
+
+    private function organizesItOutsideTeamCalendar(string $organizerAddress, VCalendar $vCal, string $calendarPath, array $actorAddresses): bool {
+        $actors = array_map(fn($address) => $this->calendarAddressValue($address), $actorAddresses);
+        $uid = isset($vCal->VEVENT->UID) ? (string) $vCal->VEVENT->UID : '';
+        if ($uid === '' || in_array($this->calendarAddressValue($organizerAddress), $actors, true)) {
+            return false;
+        }
+
+        try {
+            return $this->organizesCopyOutsideTeamCalendar($organizerAddress, $uid, $calendarPath);
+        } catch (\Throwable $e) {
+            // Unparsable stored data or a backend failure: do not schedule in the organizer's name
+            $this->logger->warning('Team calendar organizer lookup failed', ['reason' => get_class($e) . ': ' . $e->getMessage()]);
+            return true;
+        }
     }
 
     /**

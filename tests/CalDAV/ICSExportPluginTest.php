@@ -194,4 +194,136 @@ class ICSExportPluginTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame(['Europe/Paris'], $this->tzids($merged));
         $this->assertSame(['a' => '20260105T090000', 'b' => '20260106T090000'], $this->utcStarts($merged));
     }
+
+    /**
+     * The merge when each object is read from a stream: its VTIMEZONEs are
+     * then always serialized to be recognised.
+     */
+    private function mergeFromStreams(array $inputObjects) {
+        $streams = array_map(function ($input) {
+            $stream = fopen('php://memory', 'r+');
+            fwrite($stream, $input);
+            rewind($stream);
+
+            return $stream;
+        }, $inputObjects);
+        try {
+            return (new ICSExportPlugin())->mergeObjects([], $streams);
+        } finally {
+            array_map('fclose', $streams);
+        }
+    }
+
+    private function assertMergedAsWhenSerialized(array $inputObjects) {
+        $merged = (new ICSExportPlugin())->mergeObjects([], $inputObjects);
+
+        $this->assertSame($this->mergeFromStreams($inputObjects)->serialize(), $merged->serialize());
+
+        return $merged;
+    }
+
+    /**
+     * linagora/esn-sabre#886
+     */
+    function testMergeOfRawTimezonesIsTheMergeOfTheirSerialization() {
+        $lf = function ($text) {
+            return str_replace("\r\n", "\n", $text);
+        };
+        $objects = [
+            'a.ics' => $this->calendarOf($this->customZone('+1000'), $this->eventIn('a', '05')),
+            'b.ics' => $this->calendarOf($this->customZone('-0300'), $this->eventIn('b', '06')),
+            'c.ics' => $this->calendarOf($this->customZone('+1000'), $this->eventIn('c', '07')),
+            'd.ics' => $lf($this->calendarOf($this->customZone('-0300'), $this->eventIn('d', '08'))),
+            'e.ics' => $this->calendarOf($this->customZone('+0500', 'Custom-2'), $this->customZone('-0300'),
+                $this->eventIn('e', '09', 'Custom-2'), $this->eventIn('e2', '09')),
+            'f.ics' => $this->calendarOf($this->customZone('-0300'), $this->customZone('+0700'), $this->eventIn('f', '10')),
+            'g.ics' => $this->calendarOf($this->customZone('-0300'), $this->eventIn('g', '11')),
+        ];
+
+        $merged = $this->assertMergedAsWhenSerialized($objects);
+
+        $this->assertSame(['Custom', 'Custom-2', 'Custom-2-2'], $this->tzids($merged));
+        $this->assertSame([
+            'a' => '20260105T000000', 'b' => '20260106T130000', 'c' => '20260107T000000', 'd' => '20260108T130000',
+            'e' => '20260109T050000', 'e2' => '20260109T130000', 'f' => '20260110T130000', 'g' => '20260111T130000',
+        ], $this->utcStarts($merged));
+    }
+
+    function testMergeOfTwoRawTimezonesSerializedAlikeKeepsOneDefinition() {
+        $zone = $this->customZone('+1000');
+        $a = $this->calendarOf($zone, $this->eventIn('a', '05'));
+        $b = $this->calendarOf(str_replace("TZOFFSETTO:+1000", "TZOFFSE\r\n TTO:+1000", $zone), $this->eventIn('b', '06'));
+        $c = $this->calendarOf(str_replace("TZID:Custom", "tzid:Custom", $zone), $this->eventIn('c', '07'));
+
+        $merged = $this->assertMergedAsWhenSerialized(['a.ics' => $a, 'b.ics' => $b, 'c.ics' => $c]);
+
+        $this->assertSame(['Custom'], $this->tzids($merged));
+    }
+
+    private function eventWithNestedZone($uid, $day, $zone) {
+        return str_replace("END:VEVENT\r\n", $zone . "END:VEVENT\r\n", $this->eventIn($uid, $day));
+    }
+
+    /**
+     * A VTIMEZONE nested in an event is not one of the object: its text must
+     * not be taken for the text of the VTIMEZONE of the object.
+     */
+    function testMergeDoesNotPairATimezoneWithTheTextOfANestedOne() {
+        $a = $this->calendarOf($this->eventWithNestedZone('a', '05', $this->customZone('-0300')), $this->customZone('+1000'));
+        $b = $this->calendarOf($this->customZone('-0300'), $this->eventIn('b', '06'));
+
+        $merged = $this->assertMergedAsWhenSerialized(['a.ics' => $a, 'b.ics' => $b]);
+
+        $this->assertSame(['a' => '20260105T000000', 'b' => '20260106T130000'], $this->utcStarts($merged));
+    }
+
+    function testMergeDoesNotTakeTheTextUpToANestedEndForATimezone() {
+        $nesting = function ($offset) {
+            return str_replace("BEGIN:STANDARD\r\n",
+                "BEGIN:VTIMEZONE\r\nTZID:Inner\r\nEND:VTIMEZONE\r\nBEGIN:STANDARD\r\n", $this->customZone($offset));
+        };
+        $a = $this->calendarOf($nesting('+1000'), $this->eventIn('a', '05'));
+        $b = $this->calendarOf($nesting('-0300'), $this->eventIn('b', '06'));
+
+        $merged = $this->assertMergedAsWhenSerialized(['a.ics' => $a, 'b.ics' => $b]);
+
+        $this->assertSame(['a' => '20260105T000000', 'b' => '20260106T130000'], $this->utcStarts($merged));
+    }
+
+    function testMergeDoesNotPairATimezoneWhoseBeginLineIsFolded() {
+        // Counting the BEGIN:VTIMEZONE lines would find one, the nested one
+        $folded = str_replace("BEGIN:VTIMEZONE\r\n", "BEGIN:VTIME\r\n ZONE\r\n", $this->customZone('+1000'));
+        $a = $this->calendarOf($this->eventWithNestedZone('a', '05', $this->customZone('-0300')), $folded);
+        $b = $this->calendarOf($this->customZone('-0300'), $this->eventIn('b', '06'));
+
+        $merged = $this->assertMergedAsWhenSerialized(['a.ics' => $a, 'b.ics' => $b]);
+
+        $this->assertSame(['a' => '20260105T000000', 'b' => '20260106T130000'], $this->utcStarts($merged));
+    }
+
+    function testMergeDoesNotPairATimezoneWithTextAfterTheEndOfItsObject() {
+        $folded = str_replace("BEGIN:VTIMEZONE\r\n", "BEGIN:VTIME\r\n ZONE\r\n", $this->customZone('+1000'));
+        // The parser stops at END:VCALENDAR
+        $a = $this->calendarOf($folded, $this->eventIn('a', '05')) . $this->customZone('-0300');
+        $b = $this->calendarOf($this->customZone('-0300'), $this->eventIn('b', '06'));
+
+        $merged = $this->assertMergedAsWhenSerialized(['a.ics' => $a, 'b.ics' => $b]);
+
+        $this->assertSame(['Custom', 'Custom-2'], $this->tzids($merged));
+        $this->assertSame(['a' => '20260105T000000', 'b' => '20260106T130000'], $this->utcStarts($merged));
+    }
+
+    function testMergeOfAZoneResolvedWithAnotherDefinitionOfItsObject() {
+        // Without observances, a VTIMEZONE resolves to the zone of the next
+        // VTIMEZONE of its TZID in its object, if any.
+        $bare = "BEGIN:VTIMEZONE\r\nTZID:Custom\r\nEND:VTIMEZONE\r\n";
+        $a = $this->calendarOf($this->customZone('+1000'), $this->eventIn('a', '05'));
+        $b = $this->calendarOf($bare, $this->customZone('+1000'), $this->eventIn('b', '06'));
+        $c = $this->calendarOf($bare, $this->eventIn('c', '07'));
+        $d = $this->calendarOf($bare, $this->eventIn('d', '08'));
+
+        $merged = $this->assertMergedAsWhenSerialized(['a.ics' => $a, 'b.ics' => $b, 'c.ics' => $c, 'd.ics' => $d]);
+
+        $this->assertSame(['Custom', 'Custom-2'], $this->tzids($merged));
+    }
 }

@@ -18,6 +18,16 @@ class ExportedTimezones {
     private $definitions = [];
 
     /**
+     * Raw text of a VTIMEZONE in its object => TZID it is exported under.
+     *
+     * Only for a text whose serialized form is in $definitions: the TZID is
+     * then the one add() returns for that text whatever object it is read in.
+     *
+     * @var array
+     */
+    private $byRaw = [];
+
+    /**
      * TZID => [name of the zone it resolves to => TZID its first definition is exported under]
      *
      * @var array
@@ -47,22 +57,44 @@ class ExportedTimezones {
     /**
      * Adds $vtimezone, read in its own object, unless the same zone is already exported.
      *
+     * $raw is trusted as is: a text already seen gives the TZID recorded for
+     * it, whatever $vtimezone is. It must be the exact text $vtimezone was
+     * parsed from in a VCALENDAR, as ICSExportPlugin::rawTimezones() finds it
+     * and pairs it by index; when that is not certain, pass null.
+     *
      * @param VObject\Component $vtimezone
+     * @param string|null $raw The text $vtimezone was read from, from its
+     *                         BEGIN:VTIMEZONE line to its END:VTIMEZONE line
+     *                         (without the line break after it), null when
+     *                         it is not known for sure
      * @return string The TZID it is exported under
      */
-    public function add(VObject\Component $vtimezone) {
+    public function add(VObject\Component $vtimezone, ?string $raw = null) {
+        // The same text as a definition already exported, which is the case of
+        // nearly every object of a calendar: one text is read into one
+        // component, so neither the serialization nor the zone is needed.
+        if ($raw !== null && isset($this->byRaw[$raw])) {
+            return $this->byRaw[$raw];
+        }
+
         $tzid = (string) $vtimezone->TZID;
         $serialized = $vtimezone->serialize();
 
-        // The same text as a definition already exported, which is the case of
-        // nearly every object of a calendar: no need to resolve the zone.
+        // The same serialized text: no need to resolve the zone.
         if (isset($this->definitions[$tzid][$serialized])) {
-            return $this->definitions[$tzid][$serialized][0];
+            $exportedTzid = $this->definitions[$tzid][$serialized][0];
+            if ($raw !== null) {
+                $this->byRaw[$raw] = $exportedTzid;
+            }
+
+            return $exportedTzid;
         }
 
         $resolvedName = self::resolvedName($vtimezone);
         $exportedTzid = $this->findSameZone($tzid, $resolvedName);
         if ($exportedTzid !== null) {
+            // Not recorded in $byRaw: the zone a text resolves to may depend
+            // on the other VTIMEZONEs of its object.
             return $exportedTzid;
         }
 
@@ -74,6 +106,9 @@ class ExportedTimezones {
 
         $this->components[] = $timezone;
         $this->definitions[$tzid][$serialized] = [$exportedTzid, $resolvedName];
+        if ($raw !== null) {
+            $this->byRaw[$raw] = $exportedTzid;
+        }
         if ($resolvedName !== null) {
             $this->byZone[$tzid][$resolvedName] ??= $exportedTzid;
         }

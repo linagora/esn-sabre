@@ -168,6 +168,30 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
         );
     }
 
+    function testGetGroupMemberSetShouldExposeOnlyTheCurrentPrincipal() {
+        $backend = $this->newPrivateBackend(self::USER_PRINCIPAL);
+
+        $this->assertEquals([self::USER_PRINCIPAL], $backend->getGroupMemberSet(self::DOMAIN_PRINCIPAL));
+        $this->assertEquals([self::USER_PRINCIPAL], $backend->getGroupMemberSet(self::RESOURCE_PRINCIPAL));
+        $this->assertEquals([], $backend->getGroupMemberSet(self::OTHER_DOMAIN_PRINCIPAL));
+        $this->assertEquals([], $backend->getGroupMemberSet(self::TEAM_CALENDAR_PRINCIPAL));
+    }
+
+    function testGetGroupMemberSetShouldReturnNothingWithoutCurrentPrincipal() {
+        $backend = $this->newPrivateBackend(null);
+
+        $this->assertEquals([], $backend->getGroupMemberSet(self::DOMAIN_PRINCIPAL));
+    }
+
+    function testGetGroupMemberSetShouldDelegateForTechnicalPrincipal() {
+        $backend = $this->newPrivateBackend('principals/technicalUser');
+
+        $this->assertEquals(
+            [self::USER_PRINCIPAL, self::OTHER_USER_PRINCIPAL],
+            $backend->getGroupMemberSet(self::DOMAIN_PRINCIPAL)
+        );
+    }
+
     function testGetPrincipalsByPrefixShouldReturnNothingWithoutCurrentPrincipal() {
         $backend = $this->newPrivateBackend(null);
 
@@ -292,6 +316,12 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
             [
                 self::USER_PRINCIPAL => [self::DOMAIN_PRINCIPAL],
                 self::OTHER_USER_PRINCIPAL => [self::OTHER_DOMAIN_PRINCIPAL]
+            ],
+            [
+                self::DOMAIN_PRINCIPAL => [self::USER_PRINCIPAL, self::OTHER_USER_PRINCIPAL],
+                self::OTHER_DOMAIN_PRINCIPAL => [self::OTHER_USER_PRINCIPAL],
+                self::RESOURCE_PRINCIPAL => [self::USER_PRINCIPAL, self::OTHER_USER_PRINCIPAL],
+                self::TEAM_CALENDAR_PRINCIPAL => [self::OTHER_USER_PRINCIPAL]
             ]
         );
     }
@@ -313,10 +343,12 @@ class PrivatePrincipalBackendTest extends \PHPUnit\Framework\TestCase {
 class PrivatePrincipalBackendTestMongo extends Mongo {
     private $principalsByPath;
     private $memberships;
+    private $memberSets;
 
-    function __construct($principalsByPath, $memberships) {
+    function __construct($principalsByPath, $memberships, $memberSets = []) {
         $this->principalsByPath = $principalsByPath;
         $this->memberships = $memberships;
+        $this->memberSets = $memberSets;
     }
 
     function getPrincipalsByPrefix($prefixPath) {
@@ -347,5 +379,9 @@ class PrivatePrincipalBackendTestMongo extends Mongo {
 
     function getGroupMembership($principal) {
         return $this->memberships[$principal] ?? [];
+    }
+
+    function getGroupMemberSet($principal) {
+        return $this->memberSets[$principal] ?? [];
     }
 }

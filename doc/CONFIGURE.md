@@ -44,6 +44,8 @@ not in `environment`. Setting the target key in `config.json` directly has the s
 | `MONGO_TIMEOUT` | `10000` | `database.*.connectionOptions.connectTimeoutMS` |
 | `ESN_HOST` | `esn_host` | `esn.apiRoot`, `esn.calendarRoot` |
 | `ESN_PORT` | `8080` | `esn.apiRoot`, `esn.calendarRoot` |
+| `ESN_SCHEME` | `http` — set `https` when the ESN API is not on a trusted local network: it carries technical tokens and answers with the authenticated identity; any value but `http` or `https` (case-insensitive) stops the container | `esn.apiRoot`, `esn.calendarRoot` |
+| `ESN_API_URL` | unset — falls back to `ESN_SCHEME://ESN_HOST:ESN_PORT`; when set, the whole ESN API base URL (e.g. `https://esn.example.com`), trailing slashes dropped, and `ESN_SCHEME`/`ESN_HOST`/`ESN_PORT` are ignored; a value not starting with `http://` or `https://` and a host stops the container | `esn.apiRoot`, `esn.calendarRoot` |
 | `AMQP_HOST` | `amqp_host` | `amqp.host` |
 | `AMQP_PORT` | `5672` | `amqp.port` |
 | `AMQP_LOGIN` | `guest` | `amqp.login` |

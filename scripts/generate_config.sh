@@ -8,6 +8,7 @@ esn_mongo_port='27017'
 esn_mongo_dbname='esn'
 esn_host='esn_host'
 esn_port='8080'
+esn_scheme='http'
 amqp_host='amqp_host'
 amqp_port='5672'
 amqp_login='guest'
@@ -27,6 +28,7 @@ sabre_env='production'
 [ -z "$MONGO_TIMEOUT" ] || mongo_timeout="$MONGO_TIMEOUT"
 [ -z "$ESN_HOST" ] || esn_host="$ESN_HOST"
 [ -z "$ESN_PORT" ] || esn_port="$ESN_PORT"
+[ -z "$ESN_SCHEME" ] || esn_scheme="$ESN_SCHEME"
 [ -z "$AMQP_HOST" ] || amqp_host="$AMQP_HOST"
 [ -z "$AMQP_PORT" ] || amqp_port="$AMQP_PORT"
 [ -z "$AMQP_LOGIN" ] || amqp_login="$AMQP_LOGIN"
@@ -56,6 +58,39 @@ fi
 json_escape() {
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | tr '\n\r' '  '
 }
+
+# The ESN API carries technical tokens and answers with the authenticated
+# identity: ESN_SCHEME=https, or a whole ESN_API_URL, lets it be reached over
+# TLS. ESN_API_URL wins over ESN_SCHEME/ESN_HOST/ESN_PORT; its trailing slashes
+# are dropped, since paths such as /api/... are appended to it.
+# The one in use is checked here, case-insensitively, and its scheme lowercased:
+# a value such as ESN_SCHEME=https:// would otherwise yield https://://host.
+lowercase() {
+  printf '%s' "$1" | tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz'
+}
+if [ ! -z "${ESN_API_URL}" ]
+then
+  esn_api_url_scheme="$(lowercase "${ESN_API_URL%%://*}")"
+  case "$(lowercase "${ESN_API_URL}")" in
+    http://[!/]*|https://[!/]*) ;;
+    *)
+      echo "generate_config.sh: ESN_API_URL: invalid URL '${ESN_API_URL}' (expected http://host... or https://host...)" >&2
+      exit 1
+      ;;
+  esac
+  esn_api_root="$(printf '%s' "${esn_api_url_scheme}://${ESN_API_URL#*://}" | sed -e 's:/*$::')"
+else
+  esn_scheme="$(lowercase "${esn_scheme}")"
+  case "${esn_scheme}" in
+    http|https) ;;
+    *)
+      echo "generate_config.sh: ESN_SCHEME: invalid scheme '${ESN_SCHEME}' (expected http or https)" >&2
+      exit 1
+      ;;
+  esac
+  esn_api_root="${esn_scheme}://${esn_host}:${esn_port}"
+fi
+esn_api_root="$(json_escape "${esn_api_root}")"
 
 # Settings read at runtime by PHP through ESN\Utils\Env. Only the variables
 # that are actually set get written out: anything absent keeps the default
@@ -134,8 +169,8 @@ config="{
     }
   },
   \"esn\": {
-    \"apiRoot\": \"http://${esn_host}:${esn_port}\",
-    \"calendarRoot\": \"http://${esn_host}:${esn_port}/calendar/api\"
+    \"apiRoot\": \"${esn_api_root}\",
+    \"calendarRoot\": \"${esn_api_root}/calendar/api\"
   },
   \"environment\": {
 ${environment_entries}

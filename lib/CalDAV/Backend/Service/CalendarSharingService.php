@@ -15,6 +15,13 @@ use Sabre\Event\EventEmitter;
  * - Invite status updates
  */
 class CalendarSharingService {
+    const GRANTABLE_ACCESSES = [
+        \Sabre\DAV\Sharing\Plugin::ACCESS_NOACCESS,
+        \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+        \Sabre\DAV\Sharing\Plugin::ACCESS_READWRITE,
+        \ESN\DAV\Sharing\Plugin::ACCESS_ADMINISTRATION,
+        \ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY,
+    ];
     const INVITES_PROJECTION = [
         'principaluri' => 1,
         'access' => 1,
@@ -66,6 +73,11 @@ class CalendarSharingService {
     public function updateInvites($calendarId, array $sharees) {
         list($calendarId, $instanceId) = $calendarId;
 
+        // Validate every level before writing anything, so a bad sharee does not leave a partial update.
+        foreach($sharees as $sharee) {
+            $this->assertGrantableAccess($sharee);
+        }
+
         $currentInvites = $this->getInvites([$calendarId, $instanceId]);
         $existingInstance = $this->calendarInstanceDAO->findInstanceById($instanceId, ['_id' => 0]);
         $sourceCalendarPath = $this->getSourceCalendarPath($calendarId);
@@ -85,6 +97,18 @@ class CalendarSharingService {
         $this->eventEmitter->emit('esn:updateSharees', [$calendarInstances]);
 
         return $calendarInstances;
+    }
+
+    /**
+     * Sabre's share-access parser also yields the owner levels (shared-owner,
+     * not-shared). A sharee instance stored with one of them would act as a
+     * second owner instance: full owner ACL, and its deletion would destroy
+     * the whole calendar.
+     */
+    private function assertGrantableAccess($sharee) {
+        if (!in_array($sharee->access, self::GRANTABLE_ACCESSES, true)) {
+            throw new \Sabre\DAV\Exception\BadRequest('Unsupported share-access for a calendar sharee');
+        }
     }
 
     // Always resolve the owner instance: a delegated admin may update sharees through their own copy.

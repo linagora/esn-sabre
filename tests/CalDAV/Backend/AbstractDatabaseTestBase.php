@@ -1160,6 +1160,40 @@ abstract class AbstractDatabaseTestBase extends \PHPUnit\Framework\TestCase {
         $this->assertEquals($expected, $result);
     }
 
+    function testUpdateInvitesShouldRefuseOwnerAccessLevels() {
+        $backend = $this->getBackend();
+
+        $backend->createCalendar('principals/user1/userID', 'somerandomid', []);
+        $ownerCalendar = $backend->getCalendarsForUser('principals/user1/userID')[0];
+
+        foreach ([\Sabre\DAV\Sharing\Plugin::ACCESS_SHAREDOWNER, \Sabre\DAV\Sharing\Plugin::ACCESS_NOTSHARED, 42] as $access) {
+            try {
+                $backend->updateInvites(
+                    $ownerCalendar['id'],
+                    [
+                        new Sharee([
+                            'href'         => 'mailto:user3@example.org',
+                            'principal'    => 'principals/user3/userID',
+                            'access'       => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+                        ]),
+                        new Sharee([
+                            'href'         => 'mailto:user2@example.org',
+                            'principal'    => 'principals/user2/userID',
+                            'access'       => $access,
+                        ])
+                    ]
+                );
+                $this->fail('Access ' . $access . ' should have been refused');
+            } catch (\Sabre\DAV\Exception\BadRequest $e) {
+                // expected
+            }
+
+            $this->assertEquals([], $backend->getCalendarsForUser('principals/user2/userID'));
+            $this->assertEquals([], $backend->getCalendarsForUser('principals/user3/userID'), 'nothing is written for the valid sharee either');
+            $this->assertCount(1, $backend->getInvites($ownerCalendar['id']));
+        }
+    }
+
     function testDelegatedAdminCanKeepOwnDelegationWhenUpdatingInvites() {
         $backend = $this->getBackend();
 

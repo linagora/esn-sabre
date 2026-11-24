@@ -21,6 +21,8 @@ In order to run, the ESN sabre instance must access to the ESN, and mongo instan
 - ESN_MONGO_DBNAME: Database name of the ESN Mongodb instance, defaults to 'esn'
 - ESN_HOST: Hostname of the ESN API, defaults to 'esn_host'
 - ESN_PORT: Port of the ESN API, defaults to '8080'
+- ESN_SCHEME: Scheme of the ESN API, defaults to 'http'; set 'https' when the ESN API is not on a trusted local network
+- ESN_API_URL: Whole base URL of the ESN API (e.g. 'https://esn.example.com'); when set, ESN_SCHEME, ESN_HOST and ESN_PORT are ignored
 - AMQP_HOST: AMQP instance used by Sabre and the ESN, defaults to 'amqp_host'
 - AMQP_PORT: Port of the instance defined just above, defaults to '5672'
 - AMQP_LOGIN: login used to connect to the message broker defined above, defaults to 'guest'

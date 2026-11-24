@@ -244,7 +244,8 @@ fi
 
 /root/set_nginx_htpasswd.sh
 
-sh /var/www/scripts/generate_config.sh > /var/www/config.json
+sh /var/www/scripts/generate_config.sh > /var/www/config.json \
+  || fail "could not generate /var/www/config.json, see the error above"
 
 nginx -t || fail "invalid nginx configuration, see the error above"
 

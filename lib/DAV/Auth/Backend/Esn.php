@@ -11,13 +11,15 @@ use \ESN\Utils\Env;
 use \ESN\Utils\Principal;
 use \ESN\Utils\TenantType;
 
-define('ESN_PUBLIC_KEY', __DIR__ . '/../../../../config/esn.key.pub');
+// Public key trusted for Bearer JWT. None is shipped: the deployment mounts it, JWT is refused without it.
+if (!defined('ESN_PUBLIC_KEY')) define('ESN_PUBLIC_KEY', __DIR__ . '/../../../../config/esn.key.pub');
 
 #[\AllowDynamicProperties]
 class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     protected $httpClient;
     protected ?AuthTenant $currentTenant = null;
+    protected string $publicKeyFile = ESN_PUBLIC_KEY;
     protected $apiroot;
     protected $principalBackend;
     protected $server;
@@ -492,7 +494,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     private function validateJWTPreconditions(string $token) {
         // No public key = no jwt
-        if (!file_exists(ESN_PUBLIC_KEY))
+        if (!is_readable($this->publicKeyFile))
             throw new AuthException('no public key file used by checkJWT()');
 
         $matchtoken = preg_match('/^[A-Za-z0-9_-]{2,}(?:\.[A-Za-z0-9_-]{2,}){2}$/', $token);
@@ -502,7 +504,7 @@ class Esn implements \Sabre\DAV\Auth\Backend\BackendInterface {
 
     private function resolveJWTAuthTenant(string $token) {
         // Load esn's public key and decode the token with the expected algorithm.
-        $key = file_get_contents(ESN_PUBLIC_KEY);
+        $key = file_get_contents($this->publicKeyFile);
         $user = JWT::decode($token, new Key($key, 'RS256'));
         $email = $this->getJWTEmail($user);
         $tenant = $this->principalBackend->getAuthTenantByEmail($email);

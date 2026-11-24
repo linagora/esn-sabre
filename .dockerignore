@@ -19,6 +19,9 @@ UPGRADE_NOTES.md
 .phpunit.cache/
 tests/report/
 
+# JWT public key: never baked into the image, mounted by the deployment (see doc/CONFIGURE.md)
+config/esn.key.pub
+
 # Docker
 docker-compose*.yaml
 Dockerfile.ldap

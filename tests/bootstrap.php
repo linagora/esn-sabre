@@ -20,6 +20,7 @@ $testconfig = [
     'ESN_TEST_BASE' => __DIR__,
     'ESN_TEST_VENDOR' => __DIR__ . '/../vendor/',
     'ESN_TEMPDIR'   => __DIR__ . '/temp/',
+    'ESN_PUBLIC_KEY' => __DIR__ . '/fixtures/esn.key.pub',
     'ESN_MONGO_ESNURI'  => $config['database']['esn']['connectionString'],
     'ESN_MONGO_ESNDB' => $config['database']['esn']['db'] . "_test",
     'ESN_MONGO_SABREDB' => $config['database']['sabre']['db'] . "_test",

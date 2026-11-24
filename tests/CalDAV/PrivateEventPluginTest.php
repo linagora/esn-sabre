@@ -106,6 +106,81 @@ class PrivateEventPluginTest extends \ESN\DAV\ServerMock {
         $this->assertNull($this->caldavBackend->getCalendarObject($this->cal['id'], 'copy.ics'));
     }
 
+    public static function privateTasksAndJournals() {
+        return [
+            'private task' => ['VTODO', 'PRIVATE'],
+            'confidential task' => ['VTODO', 'CONFIDENTIAL'],
+            'private journal' => ['VJOURNAL', 'PRIVATE'],
+            'confidential journal' => ['VJOURNAL', 'CONFIDENTIAL'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateTasksAndJournals')]
+    function testGetHidesPrivateTasksAndJournals($component, $class) {
+        $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'task.ics', $this->component($component, $class));
+
+        $this->assertReducedComponent($this->getBody(self::PUBLIC_CALENDAR_PATH . 'task.ics'), $component);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateTasksAndJournals')]
+    function testPropFindHidesPrivateTasksAndJournals($component, $class) {
+        $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'task.ics', $this->component($component, $class));
+
+        $properties = $this->propFind(self::PUBLIC_CALENDAR_PATH . 'task.ics', '0', '<c:calendar-data/><d:getcontentlength/>');
+
+        $this->assertReducedComponent($properties['calendar-data'], $component);
+        $this->assertSame(strlen($properties['calendar-data']), $properties['getcontentlength']);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateTasksAndJournals')]
+    function testCalendarQueryHidesPrivateTasksAndJournals($component, $class) {
+        $this->caldavBackend->createCalendarObject($this->publicCal['id'], 'task.ics', $this->component($component, $class));
+
+        $response = $this->calendarQuery(self::PUBLIC_CALENDAR_PATH,
+            '<c:comp-filter name="VCALENDAR"><c:comp-filter name="' . $component . '"/></c:comp-filter>');
+        $this->assertReducedComponent($this->propertiesOf($response, self::PUBLIC_CALENDAR_PATH . 'task.ics')['calendar-data'], $component);
+
+        // The hidden fields cannot be probed through a filter either
+        $response = $this->calendarQuery(self::PUBLIC_CALENDAR_PATH,
+            '<c:comp-filter name="VCALENDAR"><c:comp-filter name="' . $component . '">'
+            . '<c:prop-filter name="DESCRIPTION"><c:text-match>Diagnosis</c:text-match></c:prop-filter>'
+            . '</c:comp-filter></c:comp-filter>');
+        $this->assertStringNotContainsString('task.ics', $response);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('privateTasksAndJournals')]
+    function testOwnerGetsTheirPrivateTasksAndJournalsInFull($component, $class) {
+        $this->caldavBackend->createCalendarObject($this->cal['id'], 'task.ics', $this->component($component, $class));
+
+        $body = $this->getBody(self::OWN_CAL . '/task.ics');
+
+        $this->assertStringContainsString('DESCRIPTION:Diagnosis', $body);
+        $this->assertStringContainsString('LOCATION:Hospital', $body);
+    }
+
+    private function component($component, $class) {
+        return implode("\r\n", [
+            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN',
+            'BEGIN:' . $component, 'UID:task', 'DTSTAMP:20260101T000000Z', 'DTSTART:20260101T090000Z',
+            ...($component === 'VTODO' ? ['DUE:20260108T090000Z'] : []),
+            'CLASS:' . $class, 'SUMMARY:Doctor', 'DESCRIPTION:Diagnosis', 'LOCATION:Hospital',
+            ...($component === 'VTODO' ? ['BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Hospital', 'TRIGGER:-PT15M', 'END:VALARM'] : []),
+            'END:' . $component, 'END:VCALENDAR', '']);
+    }
+
+    private function assertReducedComponent($calendarData, $component) {
+        $this->assertStringContainsString('BEGIN:' . $component, $calendarData);
+        $this->assertStringContainsString('UID:task', $calendarData);
+        $this->assertStringContainsString('SUMMARY:Busy', $calendarData);
+        $this->assertStringContainsString('CLASS:PRIVATE', $calendarData);
+        $this->assertStringNotContainsString('Doctor', $calendarData);
+        $this->assertStringNotContainsString('Diagnosis', $calendarData);
+        $this->assertStringNotContainsString('Hospital', $calendarData);
+        if ($component === 'VTODO') {
+            $this->assertStringContainsString('DUE:20260108T090000Z', $calendarData);
+        }
+    }
+
     public static function privateClasses() {
         return [
             'PRIVATE' => ['PRIVATE'],

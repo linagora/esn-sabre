@@ -1083,6 +1083,19 @@ END:VCALENDAR
         $this->assertNotNull($this->caldavBackend->getCalendarObject($this->delegatedCal['id'], 'privateRecurEvent.ics'));
     }
 
+    function test403ModifyOwnerPrivateTaskViaDelegatedCalendar() {
+        $task = implode("\r\n", ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN',
+            'BEGIN:VTODO', 'UID:task', 'DTSTAMP:20260101T000000Z', 'DUE:20260108T090000Z',
+            'CLASS:PRIVATE', 'SUMMARY:Doctor', 'LOCATION:Hospital', 'END:VTODO', 'END:VCALENDAR', '']);
+        $delegatedEventUri = $this->givenOwnerPrivateEventInDelegatedCalendar($task);
+
+        $response = $this->requestAsDelegate('PUT', $delegatedEventUri, 'text/calendar', str_replace('Hospital', 'Elsewhere', $task));
+
+        $this->assertEquals(403, $response->status);
+        $this->assertStringContainsString('Hospital',
+            $this->caldavBackend->getCalendarObject($this->delegatedCal['id'], 'privateRecurEvent.ics')['calendardata']);
+    }
+
     private function seriesWithPrivateOverride($overrideFirst) {
         $master = ['BEGIN:VEVENT', 'UID:series', 'DTSTAMP:20260101T000000Z',
             'DTSTART:20260101T090000Z', 'DTEND:20260101T100000Z', 'RRULE:FREQ=WEEKLY;COUNT=3',

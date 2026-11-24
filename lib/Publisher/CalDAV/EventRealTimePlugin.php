@@ -405,13 +405,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     private function hasHiddenPrivateEvent($vCalendar, $eventCalendar, $principal): bool {
-        foreach ($vCalendar->select('VEVENT') as $vevent) {
-            if (Utils::isHiddenPrivateEvent($vevent, $eventCalendar, $principal)) {
-                return true;
-            }
-        }
-
-        return false;
+        return Utils::hasHiddenPrivateComponent($vCalendar, $eventCalendar, $principal);
     }
 
     /**

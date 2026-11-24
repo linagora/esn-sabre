@@ -777,36 +777,29 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
         return $adminForDomains;
     }
 
-    private function queryPrincipals($prefix, $collection, $query, $test = 'allof') {
-        if (count($query) > 0 && $test == 'allof') {
-            $query = [ '$and' => $query ];
-        } elseif (count($query) > 0 && $test == 'anyof') {
-            $query = [ '$or' => $query ];
-        } else {
+    /**
+     * Only the caller's own domain can match, like the prefix listing: the
+     * names of the other tenants hosted on the server are not searchable.
+     */
+    private function searchDomainPrincipals($key, $test = 'allof') {
+        if (!$key || !in_array($test, ['allof', 'anyof'], true)) {
             return [];
         }
 
+        $query = [
+            '$and' => [
+                [ 'name' => [ '$regex' => preg_quote($key), '$options' => 'i' ] ],
+                [ '_id' => new \MongoDB\BSON\ObjectId($this->requireAuthDomainId()) ]
+            ]
+        ];
+
         $principals = [];
-        $res = $collection->find($query, [ 'projection' => [ '_id' => 1 ]]);
+        $res = $this->db->domains->find($query, [ 'projection' => [ '_id' => 1 ]]);
         foreach ($res as $obj) {
-            $principals[] = 'principals/' . $prefix . '/' . $obj['_id'];
+            $principals[] = 'principals/domains/' . $obj['_id'];
         }
+
         return $principals;
-    }
-
-    private function searchDomainPrincipals($key, $test = 'allof') {
-        $query = [];
-
-        if ($key) {
-            $query[] = array('name' => [ '$regex' => preg_quote($key), '$options' => 'i' ]);
-        }
-
-        return $this->queryPrincipals(
-            'domains',
-            $this->db->domains,
-            $query,
-            $test
-        );
     }
 
     private function searchGroupPrincipals($groupName, array $searchProperties, $test = 'allof') {
@@ -838,7 +831,9 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
         if ($groupName === 'resources') {
             return $this->queryResourcePrincipals($collection, $query, $test);
         }
-        return $this->queryPrincipals($groupName, $collection, $query, $test);
+
+        // A group type without a tenant-scoped query must not search every tenant.
+        return [];
     }
 
     /**

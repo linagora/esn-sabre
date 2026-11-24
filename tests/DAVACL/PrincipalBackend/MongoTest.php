@@ -591,6 +591,12 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $result = $backend->searchPrincipals('principals/domains', array('{DAV:}displayname' => 'notexist'));
         $this->assertEquals([], $result);
 
+        $result = $backend->searchPrincipals('principals/domains', array('{DAV:}displayname' => 'other.test'));
+        $this->assertEquals([], $result, 'the name of another tenant must not be searchable');
+
+        $result = $backend->searchPrincipals('principals/domains', array('{DAV:}displayname' => '.'), 'anyof');
+        $this->assertEquals(array('principals/domains/' . self::DOMAIN_ID), $result);
+
         $result = $backend->searchPrincipals('principals/team-calendars', array('{DAV:}displayname' => 'sales'));
         $this->assertEquals([], $result);
 

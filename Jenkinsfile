@@ -1,12 +1,32 @@
 def prComment
 
+/* Pushes an already built image. The Docker Hub credential exists only for this
+   step and the login goes to a throwaway DOCKER_CONFIG, so that it is neither in
+   the environment of the steps that run the checkout's code nor left in the
+   agent's ~/.docker/config.json for a later build to read. */
+def pushImage(String image) {
+    withEnv(["PUSH_IMAGE=${image}"]) {
+        withCredentials([usernamePassword(credentialsId: 'dockerHub', usernameVariable: 'DOCKER_HUB_USR', passwordVariable: 'DOCKER_HUB_PSW')]) {
+            sh '''
+                set -e
+                DOCKER_CONFIG="$(mktemp -d)"
+                export DOCKER_CONFIG
+                trap 'docker logout >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
+                printf '%s' "$DOCKER_HUB_PSW" | docker login -u "$DOCKER_HUB_USR" --password-stdin
+                docker push "$PUSH_IMAGE"
+            '''
+        }
+    }
+}
+
 pipeline {
     agent any
 
-    environment {
-        DOCKER_HUB_CREDENTIAL = credentials('dockerHub')
-        GITHUB_CREDENTIAL = credentials('github')
-    }
+    /* No pipeline-wide credentials: the test stages run run_test.sh, the
+       Dockerfiles and the tests from the checkout, which for a pull request
+       come from its author. Credentials are bound with withCredentials only
+       around the steps that need them, none of which runs code of the
+       checkout. */
 
     options {
         timeout(time: 2, unit: 'HOURS')
@@ -58,56 +78,62 @@ pipeline {
         steps {
           script {
             if (env.CHANGE_FORK) {
-              def forkOwner = env.CHANGE_FORK.split('/')[0]
-              def memberStatus = sh(
-                script: """curl -s -o /dev/null -w "%{http_code}" \
-                  -H "Authorization: token \${GITHUB_CREDENTIAL_PSW}" \
-                  "https://api.github.com/orgs/linagora/members/${forkOwner}" """,
-                returnStdout: true
-              ).trim()
-              echo "GitHub org membership check returned HTTP ${memberStatus} for '${forkOwner}'"
-              if (memberStatus == '204') {
-                echo "Fork owner '${forkOwner}' is a linagora org member, proceeding."
-              } else if (memberStatus == '404') {
-                echo "Fork owner '${forkOwner}' is not a member of the linagora organization."
-                def approvedByMember = false
-                def commentsJson = sh(
-                  script: """curl -s \
+              /* Not a bare return inside withCredentials: it would leave only the
+                 closure and the image would still be delivered. */
+              def approved = false
+              withCredentials([usernamePassword(credentialsId: 'github', usernameVariable: 'GITHUB_CREDENTIAL_USR', passwordVariable: 'GITHUB_CREDENTIAL_PSW')]) {
+                def forkOwner = env.CHANGE_FORK.split('/')[0]
+                def memberStatus = sh(
+                  script: """curl -s -o /dev/null -w "%{http_code}" \
                     -H "Authorization: token \${GITHUB_CREDENTIAL_PSW}" \
-                    "https://api.github.com/repos/linagora/esn-sabre/issues/\${CHANGE_ID}/comments" """,
+                    "https://api.github.com/orgs/linagora/members/${forkOwner}" """,
                   returnStdout: true
                 ).trim()
-                def comments = new groovy.json.JsonSlurper().parseText(commentsJson)
-                for (comment in comments) {
-                  if (comment.body.trim().toLowerCase() == 'build this please') {
-                    def commenter = comment.user.login
-                    def commenterStatus = sh(
-                      script: """curl -s -o /dev/null -w "%{http_code}" \
-                        -H "Authorization: token \${GITHUB_CREDENTIAL_PSW}" \
-                        "https://api.github.com/orgs/linagora/members/${commenter}" """,
-                      returnStdout: true
-                    ).trim()
-                    if (commenterStatus == '204') {
-                      echo "Build approved by linagora member '${commenter}', proceeding."
-                      approvedByMember = true
-                      break
+                echo "GitHub org membership check returned HTTP ${memberStatus} for '${forkOwner}'"
+                if (memberStatus == '204') {
+                  echo "Fork owner '${forkOwner}' is a linagora org member, proceeding."
+                  approved = true
+                } else if (memberStatus == '404') {
+                  echo "Fork owner '${forkOwner}' is not a member of the linagora organization."
+                  def approvedByMember = false
+                  def commentsJson = sh(
+                    script: """curl -s \
+                      -H "Authorization: token \${GITHUB_CREDENTIAL_PSW}" \
+                      "https://api.github.com/repos/linagora/esn-sabre/issues/\${CHANGE_ID}/comments?per_page=100" """,
+                    returnStdout: true
+                  ).trim()
+                  def comments = new groovy.json.JsonSlurper().parseText(commentsJson)
+                  for (comment in comments) {
+                    if (comment.body.trim().toLowerCase() == 'build this please') {
+                      def commenter = comment.user.login
+                      def commenterStatus = sh(
+                        script: """curl -s -o /dev/null -w "%{http_code}" \
+                          -H "Authorization: token \${GITHUB_CREDENTIAL_PSW}" \
+                          "https://api.github.com/orgs/linagora/members/${commenter}" """,
+                        returnStdout: true
+                      ).trim()
+                      if (commenterStatus == '204') {
+                        echo "Build approved by linagora member '${commenter}', proceeding."
+                        approvedByMember = true
+                        break
+                      }
                     }
                   }
+                  approved = approvedByMember
+                } else if (memberStatus == '401' || memberStatus == '403') {
+                  error("Authentication/permission error validating fork owner: ${memberStatus}")
+                } else {
+                  error("GitHub API error ${memberStatus} while checking membership for '${forkOwner}'")
                 }
-                if (!approvedByMember) {
-                  echo "No linagora member approval found. Skipping PR image delivery."
-                  return
-                }
-              } else if (memberStatus == '401' || memberStatus == '403') {
-                error("Authentication/permission error validating fork owner: ${memberStatus}")
-              } else {
-                error("GitHub API error ${memberStatus} while checking membership for '${forkOwner}'")
+              }
+              if (!approved) {
+                echo "No linagora member approval found. Skipping PR image delivery."
+                return
               }
             }
 
             sh 'docker build --pull --no-cache -t linagora/esn-sabre-pr:$CHANGE_ID .'
-            sh 'docker login -u $DOCKER_HUB_CREDENTIAL_USR -p $DOCKER_HUB_CREDENTIAL_PSW'
-            sh 'docker push linagora/esn-sabre-pr:$CHANGE_ID'
+            pushImage("linagora/esn-sabre-pr:${env.CHANGE_ID}")
             env.PR_DOCKER_IMAGE = "linagora/esn-sabre-pr:${env.CHANGE_ID}"
           }
         }
@@ -127,9 +153,8 @@ pipeline {
             }
 
             echo "Docker tag: ${env.DOCKER_TAG}"
-                sh 'docker build --pull --no-cache -t linagora/esn-sabre:$DOCKER_TAG .'
-                sh 'docker login -u $DOCKER_HUB_CREDENTIAL_USR -p $DOCKER_HUB_CREDENTIAL_PSW'
-                sh 'docker push linagora/esn-sabre:$DOCKER_TAG'
+            sh 'docker build --pull --no-cache -t linagora/esn-sabre:$DOCKER_TAG .'
+            pushImage("linagora/esn-sabre:${env.DOCKER_TAG}")
           }
         }
       }

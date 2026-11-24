@@ -42,3 +42,17 @@ also prunes them. Without it they would be kept forever. Rows older than the ret
 run; clients holding a sync token below the pruned one get a `403` `DAV:valid-sync-token` and resync from scratch.
 
 Each collection is updated by a single server-side `updateMany`, only on rows without a `date`.
+
+## Version 5 — Recompute the classification of private overrides again
+
+Upgrades database version `4` to `5`. It runs the repair of version `2` again: objects holding a component whose
+`CLASS` is `PRIVATE` or `CONFIDENTIAL` (a private override of a public series), but not stored as private, get their
+`classification` recomputed from their `calendardata`, so that they are sanitised for sharees, delegates, public
+readers and subscribers. Older versions stored the `CLASS` of the first component only. Version `2` runs on the first
+upgraded replica while the replicas still on the older code keep writing such objects; this rerun repairs the ones
+they wrote after it. Each update checks that the payload is unchanged. Objects with invalid data are skipped with a
+WARNING containing their ID.
+
+When upgrading from a version without version `2`, a single startup runs versions `2` to `5` back to back, during
+the rollout: set `SABRE_MIGRATE_ON_STARTUP=false` until every replica runs the new code, then run
+`php scripts/migrate-database.php`. The same holds for any migration that repairs a field the access checks rely on.

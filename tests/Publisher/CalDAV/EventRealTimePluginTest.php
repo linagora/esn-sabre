@@ -451,7 +451,66 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
 
     #[DataProvider('resourceReplyAttendees')]
     function testResourceReplyIsReadLeniently(string $vevent, array $expectedTopics) {
+        $this->assertSame($expectedTopics, $this->resourceReplyTopics($vevent, $vevent));
+    }
+
+    #[DataProvider('forgedResourceReplies')]
+    function testResourceReplyStatusComesFromTheResourcesOwnCopy(string $storedVevent, string $replyVevent, array $expectedTopics) {
+        $this->assertSame($expectedTopics, $this->resourceReplyTopics($storedVevent, $replyVevent));
+    }
+
+    static function forgedResourceReplies(): array {
+        $vevent = fn(string $partstat, string $extra = '') => "BEGIN:VEVENT\r\nUID:daab17fe-fac4-4946-9105-0f2cdb30f5ab\r\nDTSTAMP:20260101T090000Z\r\n$extra"
+            . "ORGANIZER:mailto:robertocarlos@realmadrid.com\r\nATTENDEE;PARTSTAT=$partstat:mailto:room@example.com\r\nEND:VEVENT";
+        $override = "RECURRENCE-ID:20260302T090000Z\r\n";
+
+        return [
+            'accepted while the resource has not answered' => [$vevent('NEEDS-ACTION'), $vevent('ACCEPTED'), []],
+            'declined while the resource accepted' => [$vevent('ACCEPTED'), $vevent('DECLINED'), ['resource:calendar:event:accepted']],
+            'occurrence the resource declined' => [
+                $vevent('ACCEPTED', "RRULE:FREQ=DAILY\r\n") . "\r\n" . $vevent('DECLINED', $override),
+                $vevent('ACCEPTED', $override),
+                ['resource:calendar:event:declined'],
+            ],
+            'occurrence the resource excluded' => [
+                $vevent('ACCEPTED', "RRULE:FREQ=DAILY\r\nEXDATE:20260302T090000Z\r\n"),
+                $vevent('ACCEPTED', $override),
+                ['resource:calendar:event:declined'],
+            ],
+            'occurrence without an override falls back to the master' => [
+                $vevent('NEEDS-ACTION', "RRULE:FREQ=DAILY\r\n"),
+                $vevent('ACCEPTED', $override),
+                [],
+            ],
+        ];
+    }
+
+    /**
+     * The vobject fork throws Error or TypeError on some unparsable data, not only ParseException:
+     * no status is published for a stored copy that cannot be read.
+     */
+    function testResourceReplyIsNotPublishedWhenParsingTheResourcesOwnCopyThrowsAnError() {
+        $vevent = "BEGIN:VEVENT\r\nUID:daab17fe-fac4-4946-9105-0f2cdb30f5ab\r\nDTSTAMP:20260101T090000Z\r\n"
+            . "ORGANIZER:mailto:robertocarlos@realmadrid.com\r\nATTENDEE;PARTSTAT=ACCEPTED:mailto:room@example.com\r\nEND:VEVENT";
+        $cache = $this->getMockBuilder(\ESN\Utils\VObjectCache::class)->onlyMethods(['read'])->getMock();
+        $cache->method('read')->willReturnCallback(fn($data) => is_string($data) && str_contains($data, 'X-PARSER-ERROR')
+            ? throw new \TypeError('parser failure')
+            : (new \ESN\Utils\VObjectCache())->read($data));
+
+        $this->assertSame([], $this->resourceReplyTopics(str_replace('END:VEVENT', "X-PARSER-ERROR:1\r\nEND:VEVENT", $vevent), $vevent, $cache));
+    }
+
+    private function resourceReplyTopics(string $storedVevent, string $replyVevent, ?\ESN\Utils\VObjectCache $cache = null): array {
         $this->prepare();
+        if ($cache) {
+            $this->server->addPlugin(new \ESN\DAV\VObjectCachePlugin($cache));
+        }
+        // The resource's own copy, which only its administrators write: it must be storable.
+        if (str_contains($storedVevent, 'BEGIN:VEVENT')) {
+            $storedVevent = str_replace("DTSTAMP:20260101T090000Z\r\n", "DTSTAMP:20260101T090000Z\r\nDTSTART:20260302T090000Z\r\n", $storedVevent);
+            $this->caldavBackend->updateCalendarObject($this->calUser2['id'], 'simple.ics',
+                "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n$storedVevent\r\nEND:VCALENDAR\r\n");
+        }
 
         $plugin = $this->getMockBuilder(EventRealTimePluginMock::class)
             ->onlyMethods(['createMessage'])
@@ -467,13 +526,15 @@ class EventRealTimePluginTest extends \PHPUnit\Framework\TestCase {
         $message->uid = 'daab17fe-fac4-4946-9105-0f2cdb30f5ab';
         $message->sender = 'mailto:room@example.com';
         $message->recipient = 'mailto:robertocarlos@realmadrid.com';
-        $message->message = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\n$vevent\r\nEND:VCALENDAR\r\n");
+        $message->message = \Sabre\VObject\Reader::read("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REPLY\r\n$replyVevent\r\nEND:VCALENDAR\r\n");
 
+        // Handed over by a client: every field of the REPLY is the client's
+        $this->server->httpRequest = new \Sabre\HTTP\Request('POST', '/itip');
         $notifyResourceReplyStatus = new \ReflectionMethod(EventRealTimePlugin::class, 'notifyResourceReplyStatus');
         $notified = $notifyResourceReplyStatus->invoke($plugin, $message, $this->calUser2['principaluri']);
 
         $this->assertTrue($notified);
-        $this->assertSame($expectedTopics, $publishedTopics);
+        return $publishedTopics;
     }
 
     static function resourceReplyAttendees(): array {

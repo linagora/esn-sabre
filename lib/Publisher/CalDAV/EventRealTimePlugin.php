@@ -695,7 +695,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             return false;
         }
 
-        $topic = $this->resourceReplyTopic($this->resourceReplyPartstat($iTipMessage));
+        $partstat = $this->isClientWrittenItip()
+            ? $this->resourceReplyPartstat($iTipMessage, $upToDateEventIcs)
+            : $this->messageReplyPartstat($iTipMessage);
+        $topic = $this->resourceReplyTopic($partstat);
         if ($topic !== null) {
             $explodedSenderPrincipalUri = explode('/', $senderPrincipalUri);
             $this->createMessage($topic, [
@@ -710,17 +713,100 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
     }
 
     /**
-     * Returns the uppercased PARTSTAT the resource answered in the first VEVENT
-     * of its REPLY, or null when the reply holds no VEVENT or the resource is
-     * not one of its attendees.
+     * A REPLY handed over through the ITIP verb or POST /itip is written by the client, every
+     * field of it: any user can name a resource as its sender. Any other REPLY was built by the
+     * broker of this server from the write of the current request, which only someone allowed
+     * to write the resource's calendar can make.
      */
-    private function resourceReplyPartstat(\Sabre\VObject\ITip\Message $iTipMessage): ?string {
+    private function isClientWrittenItip(): bool {
+        $request = $this->server->httpRequest;
+
+        return $request === null || $request->getMethod() === 'ITIP' || $request->getPath() === 'itip';
+    }
+
+    /**
+     * The PARTSTAT a REPLY the broker built from the resource's write answers, in its first
+     * VEVENT. With synchronous scheduling it is delivered while the resource's PUT is
+     * handled, before the stored copy holds the answer.
+     */
+    private function messageReplyPartstat(\Sabre\VObject\ITip\Message $iTipMessage): ?string {
         $vevents = $iTipMessage->message->select('VEVENT');
-        if (empty($vevents)) {
+
+        return $vevents ? $this->attendeePartstat(reset($vevents), strtolower($iTipMessage->sender)) : null;
+    }
+
+    /**
+     * Returns the uppercased PARTSTAT the resource holds, in its own stored copy, for the
+     * occurrence the first VEVENT of the REPLY answers, or null when the reply holds no VEVENT
+     * or the resource is not one of the attendees of that occurrence.
+     *
+     * The PARTSTAT of a client-written message is never trusted. Only the resource's
+     * administrators can write its copy, and with asynchronous scheduling, which production
+     * runs, the REPLY is only published once that write is stored.
+     */
+    private function resourceReplyPartstat(\Sabre\VObject\ITip\Message $iTipMessage, $resourceEventIcs): ?string {
+        $vevents = $iTipMessage->message->select('VEVENT');
+        if (empty($vevents) || $resourceEventIcs === null) {
             return null;
         }
 
-        return $this->attendeePartstat(reset($vevents), strtolower($iTipMessage->sender));
+        try {
+            $stored = VObjectCachePlugin::cacheFor($this->server)->read($resourceEventIcs);
+        } catch (\Throwable $e) {
+            // The vobject fork also throws Error or TypeError on some unparsable data: publish no status
+            error_log('EventRealTimePlugin: could not parse the stored copy of resource reply ' . $iTipMessage->uid
+                . ': ' . get_class($e) . ': ' . $e->getMessage());
+            return null;
+        }
+        $replied = reset($vevents);
+        $recurrenceId = $this->occurrenceTimestamp($replied);
+        if (isset($replied->{'RECURRENCE-ID'}) && $recurrenceId === null) {
+            return null;
+        }
+
+        $override = $recurrenceId === null ? null : current(array_filter($stored->select('VEVENT'),
+            fn($vevent) => $this->occurrenceTimestamp($vevent) === $recurrenceId));
+        if ($override) {
+            return $this->attendeePartstat($override, strtolower($iTipMessage->sender));
+        }
+
+        // An occurrence without an override follows the series, unless the resource excluded it
+        $master = $this->findMasterVEvent($stored);
+        if (!$master) {
+            return null;
+        }
+        if ($recurrenceId !== null && $this->excludes($master, $recurrenceId)) {
+            return 'DECLINED';
+        }
+
+        return $this->attendeePartstat($master, strtolower($iTipMessage->sender));
+    }
+
+    private function excludes($master, int $instant): bool {
+        foreach ($master->select('EXDATE') as $exdate) {
+            try {
+                foreach ($exdate->getDateTimes(new \DateTimeZone('UTC')) as $excluded) {
+                    if ($excluded->getTimestamp() === $instant) {
+                        return true;
+                    }
+                }
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+
+        return false;
+    }
+
+    private function occurrenceTimestamp($vevent): ?int {
+        if (!isset($vevent->{'RECURRENCE-ID'})) {
+            return null;
+        }
+        try {
+            return $vevent->{'RECURRENCE-ID'}->getDateTime(new \DateTimeZone('UTC'))->getTimestamp();
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private function resourceReplyTopic(?string $partstat): ?string {

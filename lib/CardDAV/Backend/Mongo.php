@@ -27,6 +27,11 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     public $addressBookSubscriptionsTableName = 'addressbooksubscriptions';
     public $CharAPI;
 
+    const TEXT_PROPERTIES = [
+        '{DAV:}displayname',
+        '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description'
+    ];
+
     public $subscriptionPropertyMap = [
         '{DAV:}displayname' => 'displayname',
         '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => 'description'
@@ -88,8 +93,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'id'  => (string)$row['_id'],
                 'uri' => $row['uri'],
                 'principaluri' => $row['principaluri'],
-                '{DAV:}displayname' => $this->getValue($row, 'displayname', ''),
-                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getValue($row, 'description', ''),
+                '{DAV:}displayname' => $this->getTextValue($row, 'displayname'),
+                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getTextValue($row, 'description'),
                 '{DAV:}acl' => $this->getValue($row, 'privilege', ['dav:read', 'dav:write']),
                 '{http://open-paas.org/contacts}type' => $this->getValue($row, 'type', ''),
                 '{http://open-paas.org/contacts}state' => $this->getValue($row, 'state', ''),
@@ -121,6 +126,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         ];
 
         $propPatch->handle($supportedProperties, function($mutations) use ($addressBookId) {
+            if ($invalid = $this->nonTextResultCodes($mutations)) {
+                return $invalid;
+            }
 
             $updates = [];
             foreach($mutations as $property=>$newValue) {
@@ -238,6 +246,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'state' => '',
             'uri' => $uri,
         ];
+
+        $this->assertTextValues($properties);
 
         foreach($properties as $property=>$newValue) {
 
@@ -675,15 +685,9 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 $privilege = $privilege->getArrayCopy();
             }
 
-            // A display name with child elements is stored as a document: Sabre can only serialize it as an array
-            $displayName = $row['displayname'];
-            if ($displayName instanceof \MongoDB\Model\BSONDocument) {
-                $displayName = $displayName->getArrayCopy();
-            }
-
             $subscription = [
                 'id'           => (string)$row['_id'],
-                '{DAV:}displayname' => $displayName,
+                '{DAV:}displayname' => $this->getTextValue($row, 'displayname'),
                 'uri'          => $row['uri'],
                 'principaluri' => $row['principaluri'],
                 '{http://open-paas.org/contacts}subscription-type' => 'public',
@@ -691,7 +695,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'source'       => $row['source'],
                 'lastmodified' => $row['lastmodified'],
                 '{DAV:}acl'    => $privilege,
-                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getValue($row, 'description', '')
+                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getTextValue($row, 'description')
             ];
 
             $subscriptions[] = $subscription;
@@ -704,6 +708,8 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         if (!isset($properties['{http://open-paas.org/contacts}source'])) {
             throw new \Sabre\DAV\Exception\Forbidden('The {http://open-paas.org/contacts}source property is required when creating subscriptions');
         }
+
+        $this->assertTextValues($properties);
 
         // Restore an unsubscribed delegation instead of creating a public subscription with weaker rights.
         $restoredId = $this->restoreHiddenSharedAddressBook($principalUri, $uri, $properties);
@@ -793,6 +799,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $supportedProperties[] = '{http://open-paas.org/contacts}source';
 
         $propPatch->handle($supportedProperties, function($mutations) use ($subscriptionId) {
+            if ($invalid = $this->nonTextResultCodes($mutations)) {
+                return $invalid;
+            }
+
             $newValues = [];
             $newValues['lastmodified'] = time();
 
@@ -926,13 +936,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
             $addressBook = [
                 'id'           => (string)$row['_id'],
-                '{DAV:}displayname' => $row['displayname'],
+                '{DAV:}displayname' => $this->getTextValue($row, 'displayname'),
                 'uri'          => $row['uri'],
                 'principaluri' => $row['principaluri'],
                 'addressbookid' => $row['addressbookid'],
                 'lastmodified' => $this->getValue($row, 'lastmodified', ''),
                 '{DAV:}acl'    => $this->getValue($row, 'privilege', ['dav:read', 'dav:write']),
-                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getValue($row, 'description', ''),
+                '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getTextValue($row, 'description'),
                 '{http://open-paas.org/contacts}subscription-type' => 'delegation',
                 '{http://open-paas.org/contacts}type' => $this->getValue($addressBookInstance, 'type', ''),
                 '{http://open-paas.org/contacts}state' => $this->getValue($addressBookInstance, 'state', ''),
@@ -974,6 +984,10 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $supportedProperties = array_keys($this->sharedAddressBookPropertyMap);
 
         $propPatch->handle($supportedProperties, function($mutations) use ($addressBookId) {
+            if ($invalid = $this->nonTextResultCodes($mutations)) {
+                return $invalid;
+            }
+
             $newValues = [];
             $newValues['lastmodified'] = time();
 
@@ -1310,6 +1324,50 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
 
     protected function getValue($array, $key, $default=null){
         return isset($array[$key]) ? $array[$key] : $default;
+    }
+
+    /**
+     * A display name or description with child elements, sent over XML, used to be
+     * stored as a document that Sabre cannot serialize back: read it as empty text.
+     * Other scalars (numbers the JSON routes accepted, booleans) are read as the text
+     * Sabre's XML writer always rendered them as.
+     */
+    private function getTextValue($row, $key) {
+        $value = $this->getValue($row, $key, '');
+
+        return is_scalar($value) ? (string) $value : '';
+    }
+
+    // Scalars stay accepted, as they always were and serialize fine: only arrays and objects break a listing.
+    private function nonTextProperties(array $properties) {
+        return array_keys(array_filter(
+            array_intersect_key($properties, array_flip(self::TEXT_PROPERTIES)),
+            fn($value) => $value !== null && !is_scalar($value)
+        ));
+    }
+
+    /**
+     * Every route (XML, JSON) ends here: refuse a display name or description that is an array or
+     * an object, as it would be copied to the sharees and break the listing of their address book home.
+     */
+    private function assertTextValues(array $properties) {
+        if ($this->nonTextProperties($properties)) {
+            throw new \Sabre\DAV\Exception\BadRequest('The display name and the description of an address book must be text');
+        }
+    }
+
+    private function nonTextResultCodes(array $mutations) {
+        $invalid = $this->nonTextProperties($mutations);
+        if (!$invalid) {
+            return null;
+        }
+
+        $resultCodes = array_fill_keys(array_keys($mutations), 424);
+        foreach ($invalid as $property) {
+            $resultCodes[$property] = 400;
+        }
+
+        return $resultCodes;
     }
 
     protected function getDenormalizedData($cardData) {

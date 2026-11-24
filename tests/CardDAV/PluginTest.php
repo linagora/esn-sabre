@@ -1261,4 +1261,100 @@ class PluginTest extends PluginTestBase {
 
         $this->assertEquals(403, $response->status);
     }
+    const COMPLEX_DISPLAYNAME = '<D:displayname><x:y xmlns:x="urn:x"/></D:displayname>';
+
+    private function xmlRequest($method, $uri, $body, $depth = null) {
+        $server = [
+            'REQUEST_METHOD'    => $method,
+            'HTTP_CONTENT_TYPE' => 'application/xml',
+            'REQUEST_URI'       => $uri,
+        ];
+        if ($depth !== null) {
+            $server['HTTP_DEPTH'] = $depth;
+        }
+        $request = \Sabre\HTTP\Sapi::createFromServerArray($server);
+        $request->setBody($body);
+
+        return $this->request($request);
+    }
+
+    function testXmlMkcolWithAComplexDisplayNameIsRejected() {
+        $response = $this->xmlRequest('MKCOL', '/addressbooks/' . $this->userTestId1 . '/complexbook',
+            '<D:mkcol xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:set><D:prop>'
+            . '<D:resourcetype><D:collection/><C:addressbook/></D:resourcetype>'
+            . self::COMPLEX_DISPLAYNAME
+            . '</D:prop></D:set></D:mkcol>');
+
+        $this->assertEquals(400, $response->status);
+        $this->assertFalse($this->carddavBackend->addressBookExists('principals/users/' . $this->userTestId1, 'complexbook'));
+    }
+
+    function testXmlProppatchWithAComplexDisplayNameOrDescriptionIsRejected() {
+        foreach ([self::COMPLEX_DISPLAYNAME, '<C:addressbook-description><x:y xmlns:x="urn:x"/></C:addressbook-description>'] as $prop) {
+            $response = $this->xmlRequest('PROPPATCH', '/addressbooks/' . $this->userTestId1 . '/book1/',
+                '<D:propertyupdate xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:set><D:prop>'
+                . $prop
+                . '</D:prop></D:set></D:propertyupdate>');
+
+            $this->assertEquals(207, $response->status);
+            $this->assertStringContainsString('HTTP/1.1 400', $response->getBodyAsString());
+        }
+
+        $books = $this->carddavBackend->getAddressBooksForUser('principals/users/' . $this->userTestId1);
+        $book1 = array_values(array_filter($books, fn($book) => $book['uri'] === 'book1'))[0];
+        $this->assertSame('Book 1', $book1['{DAV:}displayname']);
+        $this->assertSame('Book 1 description', $book1['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+    }
+
+    function testSharingABookWithAStoredDocumentDisplayNameKeepsTheShareeHomeListable() {
+        // As stored before display names were checked: a Complex value is saved as an empty document.
+        $this->sabredb->addressbooks->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($this->carddavAddressBook['id'])],
+            ['$set' => ['displayname' => new \stdClass(), 'description' => ['x' => 'y']]]
+        );
+        $this->carddavBackend->updateInvites($this->carddavAddressBook['id'], [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => 'principals/users/' . $this->userTestId2,
+                'principal' => 'principals/users/' . $this->userTestId2,
+                'access' => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+            ])
+        ]);
+        $this->server->tree->markDirty('addressbooks');
+        $this->authBackend->setAuthTenant(new AuthTenant($this->userTestId2, SERVER_MOCK_DOMAIN_ID));
+
+        $response = $this->xmlRequest('PROPFIND', '/addressbooks/' . $this->userTestId2 . '/',
+            '<D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop>'
+            . '<D:displayname/><C:addressbook-description/></D:prop></D:propfind>', '1');
+
+        $this->assertEquals(207, $response->status);
+        $this->assertStringContainsString('/addressbooks/' . $this->userTestId2 . '/user2book1/', $response->getBodyAsString());
+
+        $shared = $this->carddavBackend->getSharedAddressBooksForUser('principals/users/' . $this->userTestId2);
+        $this->assertSame('', $shared[0]['{DAV:}displayname']);
+        $this->assertSame('', $shared[0]['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+    }
+    function testStoredScalarDisplayNamesAreReadAsTheirText() {
+        $principal = 'principals/users/' . $this->userTestId1;
+        $this->sabredb->addressbooks->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($this->carddavAddressBook['id'])],
+            ['$set' => ['displayname' => 2024, 'description' => 1.5]]
+        );
+
+        $books = $this->carddavBackend->getAddressBooksForUser($principal);
+        $book1 = array_values(array_filter($books, fn($book) => $book['uri'] === 'book1'))[0];
+
+        $this->assertSame('2024', $book1['{DAV:}displayname']);
+        $this->assertSame('1.5', $book1['{urn:ietf:params:xml:ns:carddav}addressbook-description']);
+    }
+
+    function testNumericDisplayNameIsStillAcceptedByTheBackend() {
+        $propPatch = new \Sabre\DAV\PropPatch(['{DAV:}displayname' => 2024]);
+        $this->carddavBackend->updateAddressBook($this->carddavAddressBook['id'], $propPatch);
+
+        $this->assertTrue($propPatch->commit());
+        $books = $this->carddavBackend->getAddressBooksForUser('principals/users/' . $this->userTestId1);
+        $book1 = array_values(array_filter($books, fn($book) => $book['uri'] === 'book1'))[0];
+        $this->assertSame('2024', $book1['{DAV:}displayname']);
+    }
 }

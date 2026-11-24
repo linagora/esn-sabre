@@ -37,8 +37,21 @@ class PrivatePrincipalBackend extends AbstractBackend implements BatchUserPrinci
         return $this->principalBackend->updatePrincipal($path, $propPatch);
     }
 
+    /**
+     * The member set of a domain lists every user of the tenant, and the one
+     * of a resource or team calendar its members: outside the technical
+     * user, a caller only learns whether it is a member itself.
+     */
     function getGroupMemberSet($principal) {
-        return $this->principalBackend->getGroupMemberSet($principal);
+        $members = $this->principalBackend->getGroupMemberSet($principal);
+        if ($this->isTechnicalPrincipal()) {
+            return $members;
+        }
+
+        $currentPrincipal = $this->currentPrincipalPath();
+        $members = array_map([$this, 'normalizePrincipalUri'], $members);
+
+        return $currentPrincipal && in_array($currentPrincipal, $members, true) ? [$currentPrincipal] : [];
     }
 
     function getGroupMembership($principal) {

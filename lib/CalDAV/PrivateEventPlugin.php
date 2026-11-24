@@ -234,7 +234,7 @@ class PrivateEventPlugin extends ServerPlugin {
             return $calendarData;
         }
 
-        if (!isset($vCalendar->VEVENT)) {
+        if (!Utils::privacyComponents($vCalendar)) {
             $vCalendar->destroy();
             return $calendarData;
         }

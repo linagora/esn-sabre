@@ -109,8 +109,8 @@ class Plugin extends \Sabre\CalDAV\Plugin {
                 if ($isIcal) {
                     $result = \Sabre\VObject\Reader::read($data);
 
-                    // Sanitize private events for non-owners (only if there are VEVENTs)
-                    if (isset($result->VEVENT)) {
+                    // Sanitize private events, tasks and journals for non-owners
+                    if (Utils::privacyComponents($result)) {
                         $path = $request->getPath();
                         $parentNode = $this->getParentCalendarNode($path);
                         if ($parentNode) {
@@ -254,17 +254,15 @@ class Plugin extends \Sabre\CalDAV\Plugin {
 
     function checkModificationsRights($path, \Sabre\DAV\IFile $node) {
         if ($node instanceof \Sabre\CalDAV\ICalendarObject) {
-            // Shared instance: the privacy check only reads the VEVENTs.
+            // Shared instance: the privacy check only reads the components.
             $vcalendar = VObjectCachePlugin::cacheFor($this->server)->read($node->get());
             // Ownership is read on the calendar: the objects of a delegated calendar
             // carry the principal of the delegate, not the one of the owner.
             list($calendarPath) = \Sabre\Uri\split($path);
             $calendar = $this->server->tree->getNodeForPath($calendarPath);
-            // Any VEVENT: a private override of a public series is private too.
-            foreach ($vcalendar->select('VEVENT') as $vevent) {
-                if (Utils::isHiddenPrivateEvent($vevent, $calendar, $this->currentUser)) {
-                    throw new DAV\Exception\Forbidden('You can not modify private events you do not own');
-                }
+            // Any component: a private override of a public series, or a private task, is private too.
+            if (Utils::hasHiddenPrivateComponent($vcalendar, $calendar, $this->currentUser)) {
+                throw new DAV\Exception\Forbidden('You can not modify private events you do not own');
             }
         }
         return true;

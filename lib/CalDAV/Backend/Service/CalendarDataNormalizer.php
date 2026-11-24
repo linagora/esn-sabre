@@ -97,8 +97,9 @@ class CalendarDataNormalizer {
      */
     private function calculateClassification($vObject) {
         $classification = null;
-        foreach ($vObject->getComponents() as $component) {
-            if ($component->name === 'VTIMEZONE' || !isset($component->CLASS)) {
+        // The components the read-side sanitiser reduces: the two rules must not drift apart
+        foreach (Utils::privacyComponents($vObject) as $component) {
+            if (!isset($component->CLASS)) {
                 continue;
             }
             $value = strtoupper((string) $component->CLASS);

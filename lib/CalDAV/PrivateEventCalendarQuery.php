@@ -153,11 +153,9 @@ class PrivateEventCalendarQuery {
             return false;
         }
 
-        // Any private VEVENT: matching a non-private object on its sanitized form changes nothing
-        $isPrivate = false;
-        foreach ($vObject->select('VEVENT') as $vevent) {
-            $isPrivate = $isPrivate || Utils::isPrivateClassification((string) $vevent->CLASS);
-        }
+        // Any private component (event, task, journal): matching a non-private object on its sanitized form
+        // changes nothing
+        $isPrivate = Utils::hasPrivateComponent($vObject);
         $vObject->destroy();
 
         return $isPrivate;

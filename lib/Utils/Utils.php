@@ -248,30 +248,69 @@ class Utils {
         return $clonedCalendar;
     }
 
-    private static function sanitizePrivateEvents($vCalendar, $parentNode, $userPrincipal) {
-        $events = [];
-        $hasSanitizedEvent = false;
-
-        foreach ($vCalendar->select('VEVENT') as $vevent) {
-            $event = self::isHiddenPrivateEvent($vevent, $parentNode, $userPrincipal)
-                ? self::createSanitizedPrivateEvent($vCalendar, $vevent)
-                : $vevent;
-            $events[] = $event;
-            $hasSanitizedEvent = $hasSanitizedEvent || $event !== $vevent;
-        }
-
-        return [$events, $hasSanitizedEvent];
+    /**
+     * The components whose CLASS makes an object private: every one but VTIMEZONE, the rule
+     * CalendarDataNormalizer stores the classification with. Tasks (VTODO) and journals (VJOURNAL)
+     * are reduced like events.
+     *
+     * @return \Sabre\VObject\Component[]
+     */
+    static function privacyComponents($vCalendar): array {
+        return array_values(array_filter(
+            $vCalendar->getComponents(),
+            fn ($component) => $component->name !== 'VTIMEZONE'
+        ));
     }
 
-    private static function replaceCalendarEvents($vCalendar, $events) {
-        $vCalendar->remove('VEVENT');
-        foreach ($events as $event) {
-            $vCalendar->add($event);
+    static function hasPrivateComponent($vCalendar): bool {
+        foreach (self::privacyComponents($vCalendar) as $component) {
+            if (self::isPrivateClassification((string) $component->CLASS)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static function hasHiddenPrivateComponent($vCalendar, $node, $userPrincipal): bool {
+        foreach (self::privacyComponents($vCalendar) as $component) {
+            if (self::isHiddenPrivateEvent($component, $node, $userPrincipal)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function sanitizePrivateEvents($vCalendar, $parentNode, $userPrincipal) {
+        $components = [];
+        $hasSanitizedEvent = false;
+
+        foreach (self::privacyComponents($vCalendar) as $component) {
+            $sanitized = self::isHiddenPrivateEvent($component, $parentNode, $userPrincipal)
+                ? self::createSanitizedPrivateEvent($vCalendar, $component)
+                : $component;
+            $components[] = $sanitized;
+            $hasSanitizedEvent = $hasSanitizedEvent || $sanitized !== $component;
+        }
+
+        return [$components, $hasSanitizedEvent];
+    }
+
+    private static function replaceCalendarEvents($vCalendar, $components) {
+        // Removed by name, not one by one: select() would otherwise keep the keys of the removed components
+        $names = array_unique(array_map(fn ($component) => $component->name, self::privacyComponents($vCalendar)));
+        foreach ($names as $name) {
+            $vCalendar->remove($name);
+        }
+        foreach ($components as $component) {
+            $vCalendar->add($component);
         }
     }
 
     private static function createSanitizedPrivateEvent($vCalendar, $vevent, bool $freeBusy = false) {
-        $sanitizedEvent = $vCalendar->createComponent('VEVENT', [], false);
+        // Keeps the component name: a private task stays a task, only reduced
+        $sanitizedEvent = $vCalendar->createComponent($vevent->name, [], false);
 
         // Rebuild from an allowlist so nested components such as VALARM and
         // arbitrary custom properties cannot retain private details.
@@ -282,6 +321,7 @@ class Utils {
             'DTSTART' => ['VALUE', 'TZID'],
             'DTEND' => ['VALUE', 'TZID'],
             'DURATION' => [],
+            'DUE' => ['VALUE', 'TZID'],
             'RRULE' => [],
             'RDATE' => ['VALUE', 'TZID'],
             'EXDATE' => ['VALUE', 'TZID'],

@@ -102,6 +102,21 @@ class ResourcePartStatDeliveryTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame(['DECLINED', 'DECLINED'], $this->resourcePartStatsOfBothAddresses());
     }
 
+    function testReplyOfTheResourceIsNotPropagatedBackToItsOtherAddress() {
+        $this->putAliceEvent($this->eventListingBothResourceAddresses('NEEDS-ACTION', 'NEEDS-ACTION', 'Board meeting'));
+        $deliveries = [];
+        $this->server->on('schedule', function (\Sabre\VObject\ITip\Message $message) use (&$deliveries) {
+            $deliveries[] = $message->method . ' ' . strtolower($message->recipient);
+        });
+
+        $this->writeResourceCopyAs(self::ADMIN_ID, $this->eventListingBothResourceAddresses('ACCEPTED', 'NEEDS-ACTION', 'Board meeting'));
+
+        $this->assertContains('REPLY mailto:alice@linagora.com', $deliveries);
+        $this->assertContains('REQUEST mailto:bob@linagora.com', $deliveries);
+        $this->assertNotContains('REQUEST ' . self::RESOURCE_ALIAS, $deliveries);
+        $this->assertNotContains('REQUEST ' . self::RESOURCE_ADDRESS, $deliveries);
+    }
+
     private function resourcePartStatsOfBothAddresses(): array {
         $vevent = \Sabre\VObject\Reader::read($this->resourceCopy())->VEVENT;
 

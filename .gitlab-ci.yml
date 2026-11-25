@@ -25,7 +25,7 @@ test:
   tags:
     - docker
   services:
-    - name: mongo:3.2
+    - name: mongo:6.0.20
       alias: mongodb
   script:
     - composer up

@@ -19,7 +19,7 @@ services:
       - esn-sabre-net
 
   amqp_host:
-    image: docker.io/library/rabbitmq:4.4.1-management
+    image: docker.io/library/rabbitmq:4.2.9-management
     container_name: amqp_host
     hostname: amqp_host
     networks:

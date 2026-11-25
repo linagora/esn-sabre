@@ -58,20 +58,33 @@ class ResourceReplyPublicationTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame([], $this->resourceTopics());
     }
 
-    private function writeResourceCopyAs(string $userId, string $partstat): void {
+    function testReplySentFromTheCustomAddressOfTheResourceTakesTheStatusOfItsIdAddress() {
+        $this->initServer(true);
+
+        // The organizer lists the room under both of its addresses
+        $this->caldavBackend->updateCalendarObject($this->aliceCalendarId, self::UID . '.ics', $this->event('NEEDS-ACTION', 'NEEDS-ACTION'));
+        // A copy stored before the guard keyed on the principal: the custom address line kept the organizer's ACCEPTED
+        $this->writeResourceCopyAs(self::ADMIN_ID, 'NEEDS-ACTION', 'ACCEPTED');
+        $reply = str_replace('BEGIN:VEVENT', "METHOD:REPLY\r\nBEGIN:VEVENT", $this->event('ACCEPTED', 'ACCEPTED'));
+        $this->assertSame(204, $this->postItipAs(self::ALICE_ID, $reply, 'alice@linagora.com', 'room-a@linagora.com')->getStatus());
+
+        $this->assertNotContains('resource:calendar:event:accepted', $this->resourceTopics());
+    }
+
+    private function writeResourceCopyAs(string $userId, string $partstat, ?string $aliasPartstat = null): void {
         $this->authBackend->setPrincipal('principals/users/' . $userId);
         $request = new \Sabre\HTTP\Request('PUT', '/calendars/' . self::RESOURCE_ID . '/' . self::RESOURCE_ID . '/' . self::UID . '.ics',
-            ['Content-Type' => 'text/calendar'], $this->event($partstat));
+            ['Content-Type' => 'text/calendar'], $this->event($partstat, $aliasPartstat));
         $response = $this->exec($request);
 
         $this->assertSame(204, $response->getStatus(), (string) $response->getBodyAsString());
     }
 
-    private function postItipAs(string $userId, string $ical, string $recipient = 'alice@linagora.com') {
+    private function postItipAs(string $userId, string $ical, string $recipient = 'alice@linagora.com', string $sender = self::RESOURCE_ID . '@linagora.com') {
         $this->authBackend->setPrincipal('principals/users/' . $userId);
         $request = new \Sabre\HTTP\Request('POST', '/itip', ['Content-Type' => 'application/json'], json_encode([
             'method' => 'REPLY', 'uid' => self::UID, 'sequence' => 0,
-            'sender' => self::RESOURCE_ID . '@linagora.com', 'recipient' => $recipient, 'ical' => $ical
+            'sender' => $sender, 'recipient' => $recipient, 'ical' => $ical
         ]));
 
         return $this->exec($request);
@@ -103,8 +116,8 @@ class ResourceReplyPublicationTest extends \PHPUnit\Framework\TestCase {
             fn($topic) => strpos($topic, 'resource:calendar:event:') === 0 && $topic !== 'resource:calendar:event:created'));
     }
 
-    private function event(string $resourcePartstat): string {
-        return implode("\r\n", [
+    private function event(string $resourcePartstat, ?string $aliasPartstat = null): string {
+        return implode("\r\n", array_merge([
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
             'PRODID:-//Linagora//Twake//EN',
@@ -118,11 +131,14 @@ class ResourceReplyPublicationTest extends \PHPUnit\Framework\TestCase {
             'ATTENDEE;PARTSTAT=ACCEPTED:mailto:alice@linagora.com',
             'ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:mallory@linagora.com',
             'ATTENDEE;CUTYPE=RESOURCE;PARTSTAT=' . $resourcePartstat . ':mailto:' . self::RESOURCE_ID . '@linagora.com',
+        ], $aliasPartstat === null ? [] : [
+            'ATTENDEE;CUTYPE=RESOURCE;PARTSTAT=' . $aliasPartstat . ':mailto:room-a@linagora.com',
+        ], [
             'SEQUENCE:0',
             'END:VEVENT',
             'END:VCALENDAR',
             '',
-        ]);
+        ]));
     }
 
     private function calendarOf(string $userId) {
@@ -148,6 +164,7 @@ class ResourceReplyPublicationTest extends \PHPUnit\Framework\TestCase {
         $esndb->resources->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_ID),
             'name' => 'Meeting Room A',
+            'emailAddress' => 'room-a@linagora.com',
             'type' => 'calendar',
             'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
         ]);

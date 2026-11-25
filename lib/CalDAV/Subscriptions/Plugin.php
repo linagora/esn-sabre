@@ -128,6 +128,12 @@ class Plugin extends \Sabre\CalDAV\Subscriptions\Plugin {
             throw new DAV\Exception\BadRequest('A subscription source must be a calendar');
         }
 
+        // A shared instance belongs to its sharee: subscribe to the owner's instance instead
+        $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+        if (method_exists($sourceNode, 'isSharedInstance') && $sourceNode->isSharedInstance()) {
+            throw new DAV\Exception\BadRequest('A subscription source must not be a shared instance of a calendar');
+        }
+
         $this->server->getPlugin('acl')->checkPrivileges($sourcePath, '{DAV:}read');
 
         return new DAV\Xml\Property\Href($sourcePath, false);

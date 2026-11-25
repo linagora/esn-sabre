@@ -2025,6 +2025,35 @@ END:VCALENDAR
         $this->assertCount(1, $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']));
     }
 
+    function testCreateSubscriptionToASharedInstanceOfTheSubscriberIsBadRequest() {
+        $this->caldavBackend->updateInvites($this->calUser2['id'], [
+            new \Sabre\DAV\Xml\Element\Sharee([
+                'href'      => 'mailto:user1@example.org',
+                'principal' => $this->cal['principaluri'],
+                'access'    => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+            ]),
+        ]);
+        $instances = array_filter($this->caldavBackend->getCalendarsForUser($this->cal['principaluri']),
+            fn($calendar) => $calendar['id'][0] === $this->calUser2['id'][0]);
+        $this->assertCount(1, $instances);
+        $request = \Sabre\HTTP\Sapi::createFromServerArray(array(
+            'REQUEST_METHOD'    => 'POST',
+            'HTTP_CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT'       => 'application/json',
+            'REQUEST_URI'       => '/calendars/54b64eadf6d7d8e41d263e0f.json',
+        ));
+        $request->setBody(json_encode([
+            'id' => 'sub1',
+            'dav:name' => 'S',
+            'calendarserver:source' => ['href' => '/calendars/54b64eadf6d7d8e41d263e0f/' . current($instances)['uri'] . '.json']
+        ]));
+
+        $response = $this->request($request);
+
+        $this->assertEquals(400, $response->status);
+        $this->assertCount(1, $this->caldavBackend->getSubscriptionsForUser($this->cal['principaluri']));
+    }
+
     static function unusableSubscriptionSources() {
         return [
             'url without path' => ['http://example.org'],

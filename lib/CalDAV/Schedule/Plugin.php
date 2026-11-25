@@ -291,7 +291,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * Any member of another Team Calendar may write a copy of the UID in it as well, so a copy
      * there only counts when it was created before the copy of this Team Calendar: the event
      * belongs to the calendar that held it first, and a copy cannot be planted before the UID
-     * is known. ObjectIds only order to the second: a copy created within the same second, or
+     * is known: the ObjectId dates the object, so a Team Calendar object may never change its
+     * UID (ESN\CalDAV\Plugin::validateUniqueUidInTeamCalendar). ObjectIds only order to the second: a copy created within the same second, or
      * whose creation time is unknown, still counts.
      */
     private function organizesCopyOutsideTeamCalendar(string $organizer, string $uid, string $teamCalendarPath): bool {

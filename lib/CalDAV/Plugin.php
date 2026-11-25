@@ -88,15 +88,22 @@ class Plugin extends \Sabre\CalDAV\Plugin {
      * Sabre does not emit calendarObjectChange for a COPY or a MOVE: they are
      * checked by validateBeforeMoveToTeamCalendar() / validateBeforeCopyToTeamCalendar().
      *
-     * An update already holds its own UID in the Team Calendar: it is only
-     * checked when it changes that UID, which may be held by another object.
+     * An update may not change the UID of a Team Calendar object (RFC 4791
+     * section 5.3.2): the scheduling of a Team Calendar orders the copies of a
+     * UID by the creation time of their object, which a UID rewrite would carry
+     * over to the new UID.
      */
     function validateUniqueUidInTeamCalendar(RequestInterface $request, ResponseInterface $response, VCalendar $vCal, $calendarPath, &$modified, $isNew) {
         if ($request->getMethod() === 'ITIP') return;
 
         $calendar = $this->teamCalendarAt($calendarPath);
         if (!$calendar) return;
-        if (!$isNew && $this->uidOf($vCal) === $this->storedUid($request->getPath())) return;
+        if (!$isNew) {
+            if ($this->uidOf($vCal) !== $this->storedUid($request->getPath())) {
+                throw new \Sabre\DAV\Exception\Forbidden('The UID of a Team Calendar object cannot be changed.');
+            }
+            return;
+        }
 
         $this->assertUidNotInTeamCalendar($vCal, $calendar);
     }
@@ -149,9 +156,16 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         }
     }
 
+    /**
+     * A write through a subscription lands in its source calendar: that calendar is checked.
+     */
     private function teamCalendarAt($calendarPath): ?SharedCalendar {
         try {
             $calendar = $this->server->tree->getNodeForPath($calendarPath);
+            if ($calendar instanceof Subscriptions\Subscription) {
+                $sourcePath = $calendar->getSourceCalendarPath();
+                $calendar = $sourcePath !== null ? $this->server->tree->getNodeForPath($sourcePath) : null;
+            }
         } catch (\Sabre\DAV\Exception\NotFound $e) {
             return null;
         }

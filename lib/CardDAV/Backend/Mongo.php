@@ -471,7 +471,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
     function getCardCount($addressBookId) {
         $query = [ 'addressbookid' => new \MongoDB\BSON\ObjectId($addressBookId) ];
         $collection = $this->db->selectCollection($this->cardsTableName);
-        return $collection->count($query);
+        return $collection->countDocuments($query);
     }
 
     function getCard($addressBookId, $cardUri) {

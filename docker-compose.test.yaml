@@ -3,7 +3,7 @@
 #
 services:
   mongodb:
-    image: docker.io/library/mongo:8.0.6
+    image: docker.io/library/mongo:9.0.8
     hostname: mongodb
     ulimits:
       nofile:
@@ -19,7 +19,7 @@ services:
       - esn-sabre-test-net
 
   amqp_host:
-    image: docker.io/library/rabbitmq:4.1.1-management
+    image: docker.io/library/rabbitmq:4.4.1-management
     hostname: amqp_host
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]

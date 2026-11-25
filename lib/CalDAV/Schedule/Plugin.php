@@ -638,18 +638,106 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
      * The stored copy may hold data the broker refuses (an override with its own
      * ORGANIZER, an unsupported RRULE part...). The REPLY itself is already
      * merged, so such a copy only loses the propagation, not the answer.
+     *
+     * The replier is never sent its own answer back, whatever ATTENDEE address it is
+     * listed under besides the one it replied from (issue #921).
      */
     private function propagateReply(ITip\Message $iTipMessage, $previousRevision, VCalendar $newObject): void {
         try {
-            $this->processICalendarChange(
+            $this->withAttendeePrincipalsResolved($newObject, fn() => $this->processICalendarChange(
                 $previousRevision,
                 $newObject,
                 [$iTipMessage->recipient],
-                [$iTipMessage->sender]
-            );
+                $this->replierAddresses($iTipMessage->sender, $newObject)
+            ));
         } catch (ITip\ITipException | InvalidDataException $e) {
             $this->logger->warning('REPLY could not be propagated to the other attendees', ['uid' => $iTipMessage->uid, 'reason' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * The sender of a REPLY, and every ATTENDEE address of the event resolving to its principal:
+     * a resource answers to its <id>@<domain> and to its custom address, a user to each of its e-mails.
+     *
+     * @return string[]
+     */
+    private function replierAddresses(string $sender, VCalendar $event): array {
+        $isReplierAddress = $this->replierAddressMatcher($sender);
+        $replierAttendeeAddresses = $isReplierAddress ? array_filter(self::attendeeAddresses($event), $isReplierAddress) : [];
+
+        return array_values(array_unique(array_merge([$sender], $replierAttendeeAddresses)));
+    }
+
+    /**
+     * Matches the other addresses of the sender's principal, or null when it has none to match.
+     *
+     * A resource's addresses are read from its principal, a user's from the user lookups the
+     * propagation resolves together: no other attendee is looked up in the directory.
+     *
+     * @return (callable(string): bool)|null
+     */
+    private function replierAddressMatcher(string $sender): ?callable {
+        $senderPrincipal = $this->principalOfAddress($sender);
+        if ($senderPrincipal === null) {
+            return null;
+        }
+        if (strpos($senderPrincipal, 'principals/resources/') === 0) {
+            return ResourcePartStatGuard::resourceAddressMatcher($senderPrincipal, $sender, $this->server);
+        }
+        if (strpos($senderPrincipal, 'principals/users/') === 0 && $this->principalBackend) {
+            return fn(string $address) => $this->userPrincipalOfAddress($address) === $senderPrincipal;
+        }
+
+        return null;
+    }
+
+    private function principalOfAddress(string $address): ?string {
+        $aclPlugin = $this->server->getPlugin('acl');
+
+        return self::principalUriOrNull($aclPlugin ? $aclPlugin->getPrincipalByUri($address) : null);
+    }
+
+    private function userPrincipalOfAddress(string $address): ?string {
+        $emailAddress = self::emailAddressOf($address);
+
+        return $emailAddress === null
+            ? null
+            : self::principalUriOrNull($this->principalBackend->findByUri('mailto:' . $emailAddress, 'principals/users'));
+    }
+
+    private static function principalUriOrNull($principalUri): ?string {
+        return is_string($principalUri) && $principalUri !== '' ? rtrim($principalUri, '/') : null;
+    }
+
+    /**
+     * The calendar addresses of every ATTENDEE line of the event, as the broker writes the recipients.
+     *
+     * @return string[]
+     */
+    private static function attendeeAddresses(VCalendar $event): array {
+        $attendees = array_merge(...array_map(
+            fn($vevent) => $vevent->select('ATTENDEE'),
+            array_values($event->select('VEVENT'))
+        ));
+        $addresses = array_map(fn($attendee) => CalendarObjectHelper::calendarAddress($attendee), $attendees);
+
+        return array_values(array_unique(array_filter($addresses, fn($address) => is_string($address) && $address !== '')));
+    }
+
+    /**
+     * Runs $operation with the user principals of the event's attendees resolved together.
+     */
+    private function withAttendeePrincipalsResolved(VCalendar $event, callable $operation): void {
+        if (!$this->principalBackend instanceof BatchUserPrincipalLookup) {
+            $operation();
+            return;
+        }
+
+        $emailAddresses = array_filter(
+            array_map(fn(string $address) => self::emailAddressOf($address), self::attendeeAddresses($event)),
+            fn($address) => $address !== null
+        );
+        $this->principalBackend->withUserPrincipalsResolved(array_values($emailAddresses), $operation);
     }
 
     /**

@@ -51,7 +51,7 @@ class Version0004BackfillChangeDatesTest extends TestCase
         $date = fn (string $uri) => $this->database->selectCollection($collection)->findOne(['uri' => $uri])['date'];
         $this->assertEquals(new UTCDateTime(1700000000000), $date('legacy'));
         $this->assertEquals($dated, $date('dated'));
-        $this->assertSame(6, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(7, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
         $this->assertTrue($this->logs->hasInfoThatContains('Change log date backfill completed'));
         $this->assertFalse($this->logs->hasErrorRecords());
     }

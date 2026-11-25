@@ -269,6 +269,30 @@ class SubscriptionTest extends \ESN\DAV\ServerMock {
             $this->server->tree->getNodeForPath(self::SUBSCRIPTION_PATH)->getSourceOwner());
     }
 
+    function testMigratedSubscriptionToTheOwnSharedInstanceOfTheSubscriberShouldServeTheOwnerInstance() {
+        $this->shareCalendarUser2WithUser1(\Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+        $this->subscriptionToTheSharedInstanceOfUser1();
+
+        (new \ESN\CalDAV\Migration\Version0007RemapSharedInstanceSubscriptions())->up($this->sabredb, new \Psr\Log\NullLogger());
+        $this->server->tree->markDirty('calendars');
+
+        $subscription = $this->server->tree->getNodeForPath('calendars/54b64eadf6d7d8e41d263e0f/ownsub');
+        $this->assertEquals('calendars/' . $this->user2Id() . '/' . $this->calUser2['uri'], $this->storedSource('ownsub'));
+        $this->assertEquals($this->calUser2['principaluri'], $subscription->getSourceOwner());
+        $this->assertTrue($subscription->childExists('shared.ics'));
+    }
+
+    function testMigratedSubscriptionToTheOwnSharedInstanceOfTheSubscriberShouldServeNothingOnceDowngradedToFreeBusy() {
+        $this->shareCalendarUser2WithUser1(\Sabre\DAV\Sharing\Plugin::ACCESS_READ);
+        $this->subscriptionToTheSharedInstanceOfUser1();
+        $this->shareCalendarUser2WithUser1(\ESN\DAV\Sharing\Plugin::ACCESS_FREEBUSY);
+
+        (new \ESN\CalDAV\Migration\Version0007RemapSharedInstanceSubscriptions())->up($this->sabredb, new \Psr\Log\NullLogger());
+        $this->server->tree->markDirty('calendars');
+
+        $this->assertServesNothing($this->server->tree->getNodeForPath('calendars/54b64eadf6d7d8e41d263e0f/ownsub'));
+    }
+
     private function sharedInstancePathOfUser1() {
         foreach ($this->caldavBackend->getCalendarsForUser('principals/users/54b64eadf6d7d8e41d263e0f') as $calendar) {
             if ($calendar['id'][0] === $this->calUser2['id'][0]) {

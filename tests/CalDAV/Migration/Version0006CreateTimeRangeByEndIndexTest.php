@@ -44,7 +44,7 @@ class Version0006CreateTimeRangeByEndIndexTest extends TestCase
 
         (new MigrationRunner($this->database, $this->logger))->run();
 
-        $this->assertSame(6, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
+        $this->assertSame(7, $this->database->db_version->findOne(['_id' => 'schema'])['version']);
         $this->assertContains(['calendarid', 'componenttype', 'lastoccurence', 'firstoccurence'], $this->indexKeys());
         $this->assertContains(['calendarid', 'componenttype', 'firstoccurence', 'lastoccurence'], $this->indexKeys());
         $this->assertTrue($this->logs->hasInfoThatContains('Calendar object time-range index build completed'));

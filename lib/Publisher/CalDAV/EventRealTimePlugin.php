@@ -698,7 +698,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
         }
 
         $partstat = $this->isClientWrittenItip()
-            ? $this->resourceReplyPartstat($iTipMessage, $upToDateEventIcs)
+            ? $this->resourceReplyPartstat($iTipMessage, $senderPrincipalUri, $upToDateEventIcs)
             : $this->messageReplyPartstat($iTipMessage);
         $topic = $this->resourceReplyTopic($partstat);
         if ($topic !== null) {
@@ -746,7 +746,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
      * administrators can write its copy, and with asynchronous scheduling, which production
      * runs, the REPLY is only published once that write is stored.
      */
-    private function resourceReplyPartstat(\Sabre\VObject\ITip\Message $iTipMessage, $resourceEventIcs): ?string {
+    private function resourceReplyPartstat(\Sabre\VObject\ITip\Message $iTipMessage, string $resourcePrincipalUri, $resourceEventIcs): ?string {
         $vevents = $iTipMessage->message->select('VEVENT');
         if (empty($vevents) || $resourceEventIcs === null) {
             return null;
@@ -768,8 +768,10 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
 
         $override = $recurrenceId === null ? null : current(array_filter($stored->select('VEVENT'),
             fn($vevent) => $this->occurrenceTimestamp($vevent) === $recurrenceId));
+        // Whatever address of the resource the REPLY is sent from: the side service writes its <id>@<domain> line
+        $isResourceAddress = \ESN\CalDAV\Schedule\ResourcePartStatGuard::resourceAddressMatcher($resourcePrincipalUri, $iTipMessage->sender, $this->server);
         if ($override) {
-            return $this->attendeePartstat($override, strtolower($iTipMessage->sender));
+            return \ESN\CalDAV\Schedule\ResourcePartStatGuard::resourcePartStat($override, $isResourceAddress, $resourcePrincipalUri);
         }
 
         // An occurrence without an override follows the series, unless the resource excluded it
@@ -781,7 +783,7 @@ class EventRealTimePlugin extends \ESN\Publisher\RealTimePlugin {
             return 'DECLINED';
         }
 
-        return $this->attendeePartstat($master, strtolower($iTipMessage->sender));
+        return \ESN\CalDAV\Schedule\ResourcePartStatGuard::resourcePartStat($master, $isResourceAddress, $resourcePrincipalUri);
     }
 
     private function excludes($master, int $instant): bool {

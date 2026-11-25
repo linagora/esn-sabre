@@ -145,7 +145,8 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
         }
 
         if ($newObject && ResourcePartStatGuard::appliesTo($iTipMessage, $principalUri)) {
-            ResourcePartStatGuard::keepStoredPartStats($iTipMessage->recipient, $previousRevision, $newObject);
+            ResourcePartStatGuard::keepStoredPartStats(ResourcePartStatGuard::resourceAddressMatcher($principalUri, $iTipMessage->recipient, $this->server),
+                $principalUri, $previousRevision, $newObject);
         }
 
         $this->createInboxItemIfSignificant($inboxPath, $newFileName, $iTipMessage);

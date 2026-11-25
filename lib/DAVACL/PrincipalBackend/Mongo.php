@@ -721,6 +721,10 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
         if (isset($obj['domain']) && $obj['domain'] instanceof \MongoDB\Model\BSONDocument) {
             $principal['{http://sabredav.org/ns}email-address'] = $obj['_id'] . '@' . $obj['domain']['name'];
         }
+        // The custom address a resource also answers to (see tenantIdAddressSearchQuery)
+        if (isset($obj['emailAddress']) && is_string($obj['emailAddress']) && $obj['emailAddress'] !== '') {
+            $principal[\ESN\CalDAV\Principal\PrincipalResource::CUSTOM_EMAIL_ADDRESS] = strtolower($obj['emailAddress']);
+        }
 
         return $principal;
     }

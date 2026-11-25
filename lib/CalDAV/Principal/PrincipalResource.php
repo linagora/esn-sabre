@@ -7,6 +7,29 @@ use Sabre\DAVACL;
 
 class PrincipalResource extends DAVACL\Principal {
 
+    /**
+     * The principal key of the custom address of a resource, besides its <id>@<domain> one.
+     * Not a property name: PROPFIND never serves it.
+     */
+    const CUSTOM_EMAIL_ADDRESS = 'customEmailAddress';
+
+    /**
+     * Every lower-cased mailto: address the resource answers to.
+     *
+     * @return string[]
+     */
+    function getCalendarAddresses(): array {
+        $addresses = [];
+        foreach (['{http://sabredav.org/ns}email-address', self::CUSTOM_EMAIL_ADDRESS] as $key) {
+            $email = $this->principalProperties[$key] ?? null;
+            if (is_string($email) && $email !== '') {
+                $addresses[] = 'mailto:' . strtolower($email);
+            }
+        }
+
+        return array_values(array_unique($addresses));
+    }
+
     function getACL() {
         $acl = parent::getACL();
 

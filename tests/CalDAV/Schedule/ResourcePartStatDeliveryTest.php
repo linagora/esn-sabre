@@ -17,6 +17,7 @@ class ResourcePartStatDeliveryTest extends \PHPUnit\Framework\TestCase {
     const BOB_ID = '54b64eadf6d7d8e41d263e0d';
     const RESOURCE_ID = '68fef2e630c9f300553cf04a';
     const RESOURCE_ADDRESS = 'mailto:68fef2e630c9f300553cf04a@linagora.com';
+    const RESOURCE_ALIAS = 'mailto:room-a@linagora.com';
     const UID = 'resource-partstat';
 
     private $server;
@@ -77,12 +78,42 @@ class ResourcePartStatDeliveryTest extends \PHPUnit\Framework\TestCase {
         $storedCopy = \Sabre\VObject\Reader::read($this->recurringEvent(['ACCEPTED', 'DECLINED']));
         $newObject = \Sabre\VObject\Reader::read($this->recurringEvent(['DECLINED', 'ACCEPTED', 'ACCEPTED']));
 
-        ResourcePartStatGuard::keepStoredPartStats(self::RESOURCE_ADDRESS, $storedCopy, $newObject);
+        ResourcePartStatGuard::keepStoredPartStats(fn($address) => strtolower($address) === self::RESOURCE_ADDRESS,
+            'principals/resources/' . self::RESOURCE_ID, $storedCopy, $newObject);
 
         $this->assertSame(['ACCEPTED', 'DECLINED', 'ACCEPTED'], array_map(
             fn($vevent) => CalendarObjectHelper::attendeePartStat($vevent, self::RESOURCE_ADDRESS),
             $newObject->select('VEVENT')
         ));
+    }
+
+    function testOrganizerCannotBookTheResourceAsAcceptedUnderBothOfItsAddresses() {
+        $this->putAliceEvent($this->eventListingBothResourceAddresses('ACCEPTED', 'ACCEPTED', 'Board meeting'));
+
+        $this->assertSame(['NEEDS-ACTION', 'NEEDS-ACTION'], $this->resourcePartStatsOfBothAddresses());
+    }
+
+    function testDeclineWrittenOnTheIdAddressHoldsForBothAddressesOfTheResource() {
+        $this->putAliceEvent($this->eventListingBothResourceAddresses('NEEDS-ACTION', 'NEEDS-ACTION', 'Board meeting'));
+        $this->writeResourceCopyAs(self::ADMIN_ID, $this->eventListingBothResourceAddresses('DECLINED', 'NEEDS-ACTION', 'Board meeting'));
+
+        $this->putAliceEvent($this->eventListingBothResourceAddresses('ACCEPTED', 'ACCEPTED', 'Board meeting, room please', 1));
+
+        $this->assertSame(['DECLINED', 'DECLINED'], $this->resourcePartStatsOfBothAddresses());
+    }
+
+    private function resourcePartStatsOfBothAddresses(): array {
+        $vevent = \Sabre\VObject\Reader::read($this->resourceCopy())->VEVENT;
+
+        return [
+            CalendarObjectHelper::attendeePartStat($vevent, self::RESOURCE_ADDRESS),
+            CalendarObjectHelper::attendeePartStat($vevent, self::RESOURCE_ALIAS)
+        ];
+    }
+
+    private function eventListingBothResourceAddresses(string $idPartstat, string $aliasPartstat, string $summary, int $sequence = 0): string {
+        return str_replace("\r\nSEQUENCE:", "\r\nATTENDEE;CUTYPE=RESOURCE;PARTSTAT=$aliasPartstat:" . self::RESOURCE_ALIAS . "\r\nSEQUENCE:",
+            $this->event($idPartstat, $summary, $sequence));
     }
 
     private function putAliceEvent(string $ical): void {
@@ -117,6 +148,8 @@ class ResourcePartStatDeliveryTest extends \PHPUnit\Framework\TestCase {
         // The auth plugin keeps whoever authenticated first: each request here has its own user
         (new \ReflectionProperty(\Sabre\DAV\Auth\Plugin::class, 'currentPrincipal'))
             ->setValue($this->server->getPlugin('auth'), null);
+        // Production builds a fresh tree per request: drop the nodes a previous request loaded
+        $this->server->tree->markDirty('calendars');
         $this->server->httpRequest = $request;
         $this->server->httpResponse = new \Sabre\HTTP\ResponseMock();
         $this->server->exec();
@@ -222,6 +255,7 @@ class ResourcePartStatDeliveryTest extends \PHPUnit\Framework\TestCase {
         $esndb->resources->insertOne([
             '_id' => new \MongoDB\BSON\ObjectId(self::RESOURCE_ID),
             'name' => 'Meeting Room A',
+            'emailAddress' => 'room-a@linagora.com',
             'type' => 'calendar',
             'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
         ]);

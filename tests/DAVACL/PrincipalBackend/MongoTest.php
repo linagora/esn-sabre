@@ -420,6 +420,29 @@ class MongoTest extends \PHPUnit\Framework\TestCase {
         $this->assertSame($expected['id'], $principal['id']);
     }
 
+    function testResourcePrincipalShouldHoldItsCustomAddress() {
+        $resourceId = '68fef2e630c9f300553cf04b';
+        self::$esndb->resources->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($resourceId),
+            'name' => 'room',
+            'emailAddress' => 'Room-A@example.com',
+            'domain' => new \MongoDB\BSON\ObjectId(self::DOMAIN_ID)
+        ]);
+        $backend = new Mongo(self::$esndb, self::$tenant);
+
+        try {
+            $principal = $backend->getPrincipalByPath('principals/resources/' . $resourceId);
+        } finally {
+            self::$esndb->resources->deleteOne(['_id' => new \MongoDB\BSON\ObjectId($resourceId)]);
+        }
+
+        $this->assertSame('room-a@example.com', $principal[\ESN\CalDAV\Principal\PrincipalResource::CUSTOM_EMAIL_ADDRESS]);
+        $this->assertSame(['mailto:' . $resourceId . '@example.com', 'mailto:room-a@example.com'],
+            (new \ESN\CalDAV\Principal\PrincipalResource($backend, $principal))->getCalendarAddresses());
+        // Its calendar address stays the <id>@<domain> one
+        $this->assertSame($resourceId . '@example.com', $principal['{http://sabredav.org/ns}email-address']);
+    }
+
     function testResourcePrincipalShouldRejectCrossDomainAccess() {
         $this->expectException(\Sabre\DAV\Exception\Forbidden::class);
 

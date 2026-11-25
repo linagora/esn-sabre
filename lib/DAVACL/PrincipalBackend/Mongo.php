@@ -721,12 +721,22 @@ class Mongo extends \Sabre\DAVACL\PrincipalBackend\AbstractBackend implements Ba
         if (isset($obj['domain']) && $obj['domain'] instanceof \MongoDB\Model\BSONDocument) {
             $principal['{http://sabredav.org/ns}email-address'] = $obj['_id'] . '@' . $obj['domain']['name'];
         }
-        // The custom address a resource also answers to (see tenantIdAddressSearchQuery)
-        if (isset($obj['emailAddress']) && is_string($obj['emailAddress']) && $obj['emailAddress'] !== '') {
-            $principal[\ESN\CalDAV\Principal\PrincipalResource::CUSTOM_EMAIL_ADDRESS] = strtolower($obj['emailAddress']);
+        $customEmailAddress = $this->resourceCustomEmailAddress($obj);
+        if ($customEmailAddress !== null) {
+            $principal[\ESN\CalDAV\Principal\PrincipalResource::CUSTOM_EMAIL_ADDRESS] = $customEmailAddress;
         }
 
         return $principal;
+    }
+
+    /**
+     * The custom address a resource also answers to (see tenantIdAddressSearchQuery),
+     * lower-cased, or null when the resource has none.
+     */
+    private function resourceCustomEmailAddress($obj): ?string {
+        $emailAddress = $obj['emailAddress'] ?? null;
+
+        return is_string($emailAddress) && $emailAddress !== '' ? strtolower($emailAddress) : null;
     }
 
     private function teamCalendarToPrincipal($obj): array {

@@ -242,6 +242,12 @@ This is a bugfix to prevent displaying global addressbook twice.
 
 ## CardDAV
 
+### ESN\CardDAV\CardDAVPlugin
+
+Extends Sabre's CardDAV plugin. Disabled group address books are omitted from XML
+PROPFIND responses for every client, independently of the mobile display-name rewrites.
+Their configuration remains accessible through the JSON API so administrators can enable them again.
+
 ### ESN\CardDAV\Backend\Esn
 
 Preprovisionning for user default addressbook if missing.

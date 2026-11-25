@@ -114,8 +114,6 @@ class MobileRequestPlugin extends \ESN\JSON\BasePlugin {
         list(,, $ownerId) = explode('/', $addressBookNode->getOwner());
         list(,, $shareOwnerId) = explode('/', $addressBookNode->getShareOwner());
 
-        if ($addressBookNode instanceof Group\GroupAddressBook && $addressBookNode->isDisabled()) return null;
-
         // Do not return address book if the query book ID is not owner ID
         if ($bookId !== $ownerId) return null;
 

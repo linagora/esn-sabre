@@ -10,6 +10,16 @@ use ESN\DAV\MultiGetMissingHrefs;
  */
 class CardDAVPlugin extends \Sabre\CardDAV\Plugin {
 
+    #[\Override]
+    function propFindEarly(\Sabre\DAV\PropFind $propFind, \Sabre\DAV\INode $node) {
+        // Discovery visibility is independent of the client and of display-name rewriting.
+        if ($node instanceof Group\GroupAddressBook && $node->isDisabled()) {
+            return false;
+        }
+
+        return parent::propFindEarly($propFind, $node);
+    }
+
     /**
      * @param \Sabre\CardDAV\Xml\Request\AddressBookMultiGetReport $report
      * @return void

@@ -393,29 +393,14 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
      * For subscriptions, this returns the owner of the source calendar (not the subscriber).
      * This is important for permission checks like hiding private events.
      *
-     * The principaluri of a shared instance is its sharee: the owner is then the sharer, as
-     * ESN\CalDAV\SharedCalendar::getOwner() tells. A source that does not resolve has no owner,
-     * rather than one guessed from its path, which may name the subscriber's own home.
+     * A source is never a shared instance (see subscriberMayReadSource), whose principaluri would
+     * be its sharee. A source that does not resolve has no owner, rather than one guessed from its
+     * path, which may name the subscriber's own home.
      *
      * @return string|null The principal URI of the source calendar owner
      */
     function getSourceOwner() {
         // The source calendar is usually already loaded to reach its objects
-        $sourceCalendarInfo = $this->getSourceCalendarInfo();
-        if (!$sourceCalendarInfo || !isset($sourceCalendarInfo['principaluri'])) {
-            return null;
-        }
-
-        if (isset($sourceCalendarInfo['share-access'])) {
-            foreach ($this->caldavBackend->getInvites($sourceCalendarInfo['id']) as $sharee) {
-                if ((int) $sharee->access === SPlugin::ACCESS_SHAREDOWNER) {
-                    return $sharee->principal;
-                }
-            }
-
-            return null;
-        }
-
-        return $sourceCalendarInfo['principaluri'];
+        return $this->getSourceCalendarInfo()['principaluri'] ?? null;
     }
 }

@@ -6,6 +6,7 @@ use ESN\CalDAV\Migration\Version0002RecomputePrivateOverrideClassification;
 use ESN\CalDAV\Migration\Version0003BackfillRecurringMarker;
 use ESN\CalDAV\Migration\Version0005RecomputePrivateOverrideClassificationAgain;
 use ESN\CalDAV\Migration\Version0006CreateTimeRangeByEndIndex;
+use ESN\CalDAV\Migration\Version0007RemapSharedInstanceSubscriptions;
 use ESN\CardDAV\Migration\Version0001BackfillContactSortFields;
 use ESN\DAV\Migration\Version0004BackfillChangeDates;
 use MongoDB\Collection;
@@ -25,6 +26,7 @@ class MigrationRunner
             4 => new Version0004BackfillChangeDates(),
             5 => new Version0005RecomputePrivateOverrideClassificationAgain(),
             6 => new Version0006CreateTimeRangeByEndIndex(),
+            7 => new Version0007RemapSharedInstanceSubscriptions(),
         ];
     }
 

@@ -55,6 +55,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
  - The single event JSON REPORT answers `422` with the parser message instead of `500` when a stored recurrence rule cannot be expanded, e.g. an RRULE with `WKST=2` delivered through iTIP (#873)
  - A browser or proxy cache no longer serves the vCard or iCalendar text for a jCard or jCal request on the same card or event: responses now `Vary` on `Accept`, jCard and jCal carry their own `ETag`, and `If-None-Match` is evaluated against it (#854)
  - Saving a recurring event bounded by a `COUNT` no longer holds the request for tens of seconds or more when `SABRE_MAX_RECURRENCES` is negative: the computation of its stored time window is now bounded
+ - ISSUE-920 Subscriptions stored with a shared instance of a calendar as their source (`calendars/<sharee>/<instanceUri>`), refused since GHSA-g357-w92v-552m, no longer serve nothing silently: migration 7 points them to the owner's instance of the calendar, whose access rules then apply. See [doc/storage/MIGRATIONS.md](doc/storage/MIGRATIONS.md#version-7--remap-the-subscriptions-to-a-shared-instance-of-a-calendar) (#920)
 
 ### Security
 

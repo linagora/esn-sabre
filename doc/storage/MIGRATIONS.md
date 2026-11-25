@@ -77,3 +77,18 @@ db.calendarobjects.createIndex({ calendarid: 1, componenttype: 1, lastoccurence:
 ```
 
 The migration then finds it built and only saves version `6`.
+
+## Version 7 — Remap the subscriptions to a shared instance of a calendar
+
+Upgrades database version `6` to `7`. A subscription is never served from a shared instance of a calendar
+(`calendars/<sharee>/<instanceUri>`, GHSA-g357-w92v-552m): its `principaluri` is the sharee, not the owner of the events.
+Subscriptions stored with such a `source` before it was refused would serve nothing, without telling the user why. Their
+`source` is rewritten to the owner's instance of the calendar (`calendars/<owner>/<uri>`, the `access: 1` instance of
+the same `calendarid`).
+
+The rewrite grants no access: whether the subscriber may read the owner's instance (public right, a share that is not
+free/busy nor declined, delegation) is still checked on every read, as for any subscription. A subscription the
+subscriber may not read keeps serving nothing, and can be removed by the user. Subscriptions whose shared instance
+no longer has an owner's instance are left untouched. Each update checks that the `source` is unchanged, so concurrent
+DAV writes keep their value. A subscriber who also subscribed to the owner's instance ends up with two subscriptions
+to it.

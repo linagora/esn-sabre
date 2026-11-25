@@ -45,7 +45,11 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
                 'team1.ics' => $this->event(self::EXISTING_UID),
                 'other.ics' => $this->event('other')
             ]),
-            $this->calendar('team-mirror', 'principals/team-calendars/team', self::TEAM_CALENDAR_ID, [])
+            $this->calendar('team-mirror', 'principals/team-calendars/team', self::TEAM_CALENDAR_ID, []),
+            $this->subscription('team-sub', 'team', [
+                'team1.ics' => $this->event(self::EXISTING_UID),
+                'other.ics' => $this->event('other')
+            ])
         ]);
         $this->server->addPlugin($acl);
         $this->server->addPlugin(new Plugin());
@@ -93,9 +97,33 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testPutUpdatingAnotherObjectToAnExistingUidOfATeamCalendarIsRefused() {
-        $this->expectForbidden('The destination Team Calendar already contains an event with this UID.');
+        $this->expectForbidden('The UID of a Team Calendar object cannot be changed.');
 
         $this->emitCalendarObjectChange('PUT', 'team/other.ics', false);
+    }
+
+    function testPutChangingTheUidOfATeamCalendarObjectToAnUnusedUidIsRefused() {
+        // The object would keep its creation time, which orders the copies of the new UID
+        $this->expectForbidden('The UID of a Team Calendar object cannot be changed.');
+
+        $this->emitCalendarObjectChange('PUT', 'team/other.ics', false, $this->event('unused'));
+    }
+
+    function testPutThroughASubscriptionChangingTheUidOfATeamCalendarObjectIsRefused() {
+        // A write through a subscription lands in its source Team Calendar
+        $this->expectForbidden('The UID of a Team Calendar object cannot be changed.');
+
+        $this->emitCalendarObjectChange('PUT', 'team-sub/other.ics', false, $this->event('unused'));
+    }
+
+    function testPutThroughASubscriptionOfANewEventWithAnExistingUidOfATeamCalendarIsRefused() {
+        $this->expectForbidden('The destination Team Calendar already contains an event with this UID.');
+
+        $this->emitCalendarObjectChange('PUT', 'team-sub/new.ics', true);
+    }
+
+    function testPutChangingTheUidOfAPersonalCalendarObjectIsAccepted() {
+        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'personal/fresh.ics', false, $this->event('unused')));
     }
 
     function testPutOfANewEventWithAnExistingUidIntoAPersonalCalendarIsAccepted() {
@@ -233,6 +261,15 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
         $calendar->method('getChild')->willReturnCallback(fn($objectName) => $this->calendarObject($objectName, $objects));
 
         return $calendar;
+    }
+
+    private function subscription(string $name, string $sourcePath, array $objects): Subscriptions\Subscription {
+        $subscription = $this->createStub(Subscriptions\Subscription::class);
+        $subscription->method('getName')->willReturn($name);
+        $subscription->method('getSourceCalendarPath')->willReturn($sourcePath);
+        $subscription->method('getChild')->willReturnCallback(fn($objectName) => $this->calendarObject($objectName, $objects));
+
+        return $subscription;
     }
 
     private function calendarObject(string $objectName, array $objects): \Sabre\CalDAV\ICalendarObject {

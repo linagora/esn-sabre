@@ -94,6 +94,14 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
     }
 
     /**
+     * The calendars/<home>/<uri> path of the source calendar, which a write through this
+     * subscription lands in, or null when the subscription exposes no source.
+     */
+    function getSourceCalendarPath(): ?string {
+        return $this->hasReadableSource() ? SubscriptionSource::toPath($this->subscriptionInfo['source']) : null;
+    }
+
+    /**
      * Returns calendar info for the source calendar that this subscription points to.
      *
      * @return array|null

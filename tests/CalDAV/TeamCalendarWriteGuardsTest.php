@@ -43,7 +43,8 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
             ]),
             $this->calendar('team', 'principals/team-calendars/team', self::TEAM_CALENDAR_ID, [
                 'team1.ics' => $this->event(self::EXISTING_UID),
-                'other.ics' => $this->event('other')
+                'other.ics' => $this->event('other'),
+                'task.ics' => $this->todo('task')
             ]),
             $this->calendar('team-mirror', 'principals/team-calendars/team', self::TEAM_CALENDAR_ID, []),
             $this->subscription('team-sub', 'team', [
@@ -120,6 +121,26 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
         $this->expectForbidden('The destination Team Calendar already contains an event with this UID.');
 
         $this->emitCalendarObjectChange('PUT', 'team-sub/new.ics', true);
+    }
+
+    function testPutChangingTheUidOfATaskOfATeamCalendarIsRefused() {
+        $this->expectForbidden('The UID of a Team Calendar object cannot be changed.');
+
+        $this->emitCalendarObjectChange('PUT', 'team/task.ics', false, $this->todo('unused'));
+    }
+
+    function testPutUpdatingATaskOfATeamCalendarIsAccepted() {
+        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'team/task.ics', false, $this->todo('task')));
+    }
+
+    function testPutOfANewTaskWithAnExistingUidIntoATeamCalendarIsRefused() {
+        $this->expectForbidden('The destination Team Calendar already contains an event with this UID.');
+
+        $this->emitCalendarObjectChange('PUT', 'team/new.ics', true, $this->todo(self::EXISTING_UID));
+    }
+
+    function testPutOfANewTaskWithAnUnusedUidIntoATeamCalendarIsAccepted() {
+        $this->assertTrue($this->emitCalendarObjectChange('PUT', 'team/new.ics', true, $this->todo('unused')));
     }
 
     function testPutChangingTheUidOfAPersonalCalendarObjectIsAccepted() {
@@ -289,5 +310,10 @@ class TeamCalendarWriteGuardsTest extends \PHPUnit\Framework\TestCase {
 
         return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:$uid\r\nDTSTART:20260101T100000Z\r\n"
             . "DTEND:20260101T110000Z\r\n{$meeting}END:VEVENT\r\nEND:VCALENDAR\r\n";
+    }
+
+    private function todo(string $uid): string {
+        return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:$uid\r\nDTSTAMP:20260101T100000Z\r\n"
+            . "SUMMARY:Task\r\nEND:VTODO\r\nEND:VCALENDAR\r\n";
     }
 }

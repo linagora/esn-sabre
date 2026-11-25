@@ -130,8 +130,18 @@ class Plugin extends \Sabre\CalDAV\Plugin {
         return \Sabre\VObject\Reader::read(is_resource($data) ? stream_get_contents($data) : $data);
     }
 
+    /**
+     * The UID of the first VEVENT, VTODO or VJOURNAL: the backend stores and
+     * matches the UID of every component type.
+     */
     private function uidOf(VCalendar $calendar): ?string {
-        return isset($calendar->VEVENT->UID) ? (string) $calendar->VEVENT->UID : null;
+        foreach ($calendar->getComponents() as $component) {
+            if (in_array($component->name, ['VEVENT', 'VTODO', 'VJOURNAL'], true)) {
+                return isset($component->UID) ? (string) $component->UID : null;
+            }
+        }
+
+        return null;
     }
 
     private function validateCopiedObjectUidInTeamCalendar($sourcePath, $destinationPath, bool $sameCalendarConflicts) {

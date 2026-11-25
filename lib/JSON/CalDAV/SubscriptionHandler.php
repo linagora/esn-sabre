@@ -58,7 +58,13 @@ class SubscriptionHandler {
             return [404, null];
         }
 
-        if (!$this->server->tree->getNodeForPath($sourcePath) instanceof \Sabre\CalDAV\Calendar) {
+        $sourceNode = $this->server->tree->getNodeForPath($sourcePath);
+        if (!$sourceNode instanceof \Sabre\CalDAV\Calendar) {
+            return [400, null];
+        }
+
+        // A shared instance belongs to its sharee: subscribe to the owner's instance instead
+        if (method_exists($sourceNode, 'isSharedInstance') && $sourceNode->isSharedInstance()) {
             return [400, null];
         }
 

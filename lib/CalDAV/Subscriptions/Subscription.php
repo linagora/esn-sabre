@@ -153,6 +153,12 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
             return false;
         }
 
+        // A shared instance belongs to its sharee, not to the calendar owner: the sharees only
+        // read the owner's instance of a calendar, whose principaluri is the owner of its events.
+        if (isset($calendar['share-access'])) {
+            return false;
+        }
+
         if (in_array($this->caldavBackend->getCalendarPublicRight($calendar['id']), ['{DAV:}read', '{DAV:}write'], true)) {
             return true;
         }
@@ -160,11 +166,6 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
         $owner = $calendar['principaluri'] ?? null;
         if ($owner === $subscriber || $this->isProxyOf($subscriber, $owner)) {
             return true;
-        }
-
-        // The sharees only read the owner's instance of a calendar, not a shared one.
-        if (isset($calendar['share-access'])) {
-            return false;
         }
 
         foreach ($this->caldavBackend->getInvites($calendar['id']) as $sharee) {
@@ -392,20 +393,29 @@ class Subscription extends \Sabre\CalDAV\Subscriptions\Subscription implements I
      * For subscriptions, this returns the owner of the source calendar (not the subscriber).
      * This is important for permission checks like hiding private events.
      *
+     * The principaluri of a shared instance is its sharee: the owner is then the sharer, as
+     * ESN\CalDAV\SharedCalendar::getOwner() tells. A source that does not resolve has no owner,
+     * rather than one guessed from its path, which may name the subscriber's own home.
+     *
      * @return string|null The principal URI of the source calendar owner
      */
     function getSourceOwner() {
         // The source calendar is usually already loaded to reach its objects
         $sourceCalendarInfo = $this->getSourceCalendarInfo();
-        if ($sourceCalendarInfo && isset($sourceCalendarInfo['principaluri'])) {
-            return $sourceCalendarInfo['principaluri'];
+        if (!$sourceCalendarInfo || !isset($sourceCalendarInfo['principaluri'])) {
+            return null;
         }
 
-        $source = $this->subscriptionInfo['source'] ?? null;
-        if ($source && preg_match('#calendars/([^/]+)#', $source, $matches)) {
-            return 'principals/users/' . $matches[1];
+        if (isset($sourceCalendarInfo['share-access'])) {
+            foreach ($this->caldavBackend->getInvites($sourceCalendarInfo['id']) as $sharee) {
+                if ((int) $sharee->access === SPlugin::ACCESS_SHAREDOWNER) {
+                    return $sharee->principal;
+                }
+            }
+
+            return null;
         }
 
-        return $this->getOwner();
+        return $sourceCalendarInfo['principaluri'];
     }
 }

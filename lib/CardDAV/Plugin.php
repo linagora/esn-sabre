@@ -22,6 +22,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
     function initialize(\Sabre\DAV\Server $server) {
         parent::initialize($server);
 
+        $server->on('beforeMethod:ACL', [$this, 'beforeAcl'], 19);
         $server->on('beforeUnbind', [$this, 'beforeUnbind']);
         $server->on('beforeWriteContent', [$this, 'beforeWriteContent']);
         $server->on('beforeCreateFile', [$this, 'beforeCreateFile']);
@@ -115,6 +116,15 @@ class Plugin extends \ESN\JSON\BasePlugin {
             \ESN\CardDAV\Backend\Esn::CONTACTS_URI,
             \ESN\CardDAV\Backend\Esn::COLLECTED_URI
         ]);
+    }
+
+    function beforeAcl($request, $response) {
+        $node = $this->server->tree->getNodeForPath($request->getPath());
+        if ($node instanceof Group\GroupAddressBook && $node->getName() === Backend\Esn::DOMAIN_MEMBERS_URI
+            && ($this->authTenant?->tenantType !== TenantType::Technical
+                || $node->getOwner() !== 'principals/domains/' . $this->authTenant->domainId)) {
+            throw new Forbidden('Only a technical token of this domain can change the domain-members ACL');
+        }
     }
 
     function beforeWriteContent($path, DAV\IFile $node, &$data, &$modified) {
@@ -806,12 +816,29 @@ class Plugin extends \ESN\JSON\BasePlugin {
             ContactSources::fromQueryParameters($queryParams),
             $this->contactsPageLimit($queryParams),
             $this->afterCursor($queryParams, $order, $sort),
-            fn($path) => $this->server->getPlugin('acl')->checkPrivileges($path, '{DAV:}read', \Sabre\DAVACL\Plugin::R_PARENT, false),
+            $this->canReadContactSource(...),
             $order,
             $sort
         );
 
         return [200, $this->contactsPageResult($nodePath, $page)];
+    }
+
+    private function canReadContactSource(string $path): bool {
+        try {
+            $book = $this->server->tree->getNodeForPath($path);
+        } catch (DAV\Exception\NotFound $e) {
+            return false;
+        }
+
+        $acl = $this->server->getPlugin('acl');
+        if ($book instanceof Group\GroupAddressBook && $book->getName() === Backend\Esn::DOMAIN_MEMBERS_URI) {
+            $user = $acl->getCurrentUserPrincipal();
+            $isMember = Utils::isUserPrincipal($user) && in_array($book->getOwner(), $acl->getPrincipalMembership($user), true);
+            $book = $book->forMemberPrivilegeCheck($isMember ? $user : null);
+        }
+
+        return in_array('{DAV:}read', $acl->getCurrentUserPrivilegeSet($book), true);
     }
 
     /**

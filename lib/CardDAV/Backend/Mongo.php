@@ -79,6 +79,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'displayname' => 1,
             'principaluri' => 1,
             'privilege' => 1,
+            'acl' => 1,
             'type' => 1,
             'state' => 1,
             'description' => 1,
@@ -93,6 +94,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 'id'  => (string)$row['_id'],
                 'uri' => $row['uri'],
                 'principaluri' => $row['principaluri'],
+                'acl' => $this->getValue($row, 'acl'),
                 '{DAV:}displayname' => $this->getTextValue($row, 'displayname'),
                 '{' . \Sabre\CardDAV\Plugin::NS_CARDDAV . '}addressbook-description' => $this->getTextValue($row, 'description'),
                 '{DAV:}acl' => $this->getValue($row, 'privilege', ['dav:read', 'dav:write']),
@@ -1298,6 +1300,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $query = [ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ];
 
         $collection->updateOne($query, [ '$set' => [ 'privilege' => $privileges ] ]);
+    }
+
+    function setAddressBookACL($addressBookId, array $acl) {
+        $this->db->selectCollection($this->addressBooksTableName)->updateOne(
+            ['_id' => new \MongoDB\BSON\ObjectId($addressBookId)],
+            ['$set' => ['acl' => $acl]]
+        );
     }
 
     protected function addChange($addressBookId, $objectUri, $operation) {

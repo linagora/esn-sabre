@@ -11,7 +11,22 @@ use ESN\DAV\Sharing\Plugin as SPlugin;
  */
 #[\AllowDynamicProperties]
 class GroupAddressBook extends \ESN\CardDAV\AddressBook {
+    /** Limit generated member ACEs to the caller for a single privilege check. */
+    public function forMemberPrivilegeCheck(?string $member): self {
+        $book = clone $this;
+        $book->addressBookInfo['members'] = $member === null ? [] : [$member];
+        return $book;
+    }
+
     function getACL() {
+        if ($this->getName() === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI
+            && isset($this->addressBookInfo['acl'])) {
+            // Domain administrators retain their current role's rights independently of the stored ACL.
+            return $this->updateAclWithAdministratorsRight(
+                array_map(fn($ace) => (array) $ace, (array) $this->addressBookInfo['acl'])
+            );
+        }
+
         $acl = [];
         $acl = $this->updateAclWithShareAccess($acl);
 
@@ -19,9 +34,23 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
             $acl = $this->updateAclWithMembersAccess($acl);
         }
 
-        $acl = $this->updateAclWithAdministratorsRight($acl);
+        if ($this->getName() === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI) {
+            // Only member/delegation grants are editable; administrator rights follow the domain role.
+            $acl = array_map(fn($ace) => array_replace($ace, ['protected' => false]), $acl);
+        }
+        return $this->updateAclWithAdministratorsRight($acl);
+    }
 
-        return $acl;
+    public function setACL(array $acl) {
+        if ($this->getName() !== \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI) {
+            return parent::setACL($acl);
+        }
+        foreach ($acl as $ace) {
+            if (!empty($ace['protected'])) {
+                throw new \Sabre\DAVACL\Exception\AceConflict('Clients cannot create protected ACEs');
+            }
+        }
+        $this->carddavBackend->setAddressBookACL($this->addressBookInfo['id'], $acl);
     }
 
     function getProperties($properties) {
@@ -55,7 +84,8 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
             $shareePrincipals[] = $sharee->principal;
         }
 
-        foreach ($this->addressBookInfo['members'] as $member) {
+        $members = $this->addressBookInfo['members'];
+        foreach ($members instanceof \Closure ? $members() : $members as $member) {
 
             // If a member is delegated, he does not have group members rights
             if (in_array($member, $shareePrincipals)) continue;

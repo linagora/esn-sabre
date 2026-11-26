@@ -8,6 +8,8 @@ They are not for end-user authentication.
 Technical tokens may perform operations that normal users cannot perform.
 This is required for domain-level automation such as creating resources or
 consolidating the domain member address book, etc.
+See [Domain Members Address Book](DOMAIN-MEMBERS.md) for the WebDAV ACL requests
+used to revoke or restore directory access with a domain-scoped technical token.
 
 ## Authentication flow
 

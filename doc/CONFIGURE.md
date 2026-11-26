@@ -16,6 +16,10 @@ In the Docker image, [`scripts/generate_config.sh`](../scripts/generate_config.s
 `config.json` from the variables exported to the container, `environment` section included, so
 exporting an ENV variable and setting the matching `config.json` key are equivalent.
 [`config.json.default`](../config.json.default) lists every key with its default value.
+A `config.json` mounted read-only (a Kubernetes ConfigMap) is kept as is: the settings read by the
+generation script only (such as `ESN_HOST` or `ESN_API_URL`) then have no effect, the others still
+follow the order above, and an invalid generation setting (`ESN_SCHEME`, `ESN_API_URL`) still stops
+the container.
 
 Booleans accept `true` / `1` / `yes` / `on` and `false` / `0` / `no` / `off`, in any case, as a
 JSON string (`"true"`) or as a JSON native (`true`). Unset, empty and unparseable values all

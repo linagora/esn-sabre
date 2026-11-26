@@ -244,8 +244,20 @@ fi
 
 /root/set_nginx_htpasswd.sh
 
-sh /var/www/scripts/generate_config.sh > /var/www/config.json \
+# The configuration is generated aside and checked first: an invalid setting stops the
+# container instead of booting on an empty config.json. A config.json mounted read-only
+# (a Kubernetes ConfigMap) is the deployment's own configuration: it is kept, not an error.
+GENERATED_CONFIG=$(mktemp /tmp/config.json.XXXXXX) \
+  || fail "could not create a temporary file for /var/www/config.json"
+sh /var/www/scripts/generate_config.sh > "$GENERATED_CONFIG" \
   || fail "could not generate /var/www/config.json, see the error above"
+if [ -e /var/www/config.json ] && [ ! -w /var/www/config.json ]; then
+  echo "start.sh: /var/www/config.json is read-only, keeping the mounted configuration" >&2
+else
+  cat "$GENERATED_CONFIG" > /var/www/config.json \
+    || fail "could not write /var/www/config.json"
+fi
+rm -f "$GENERATED_CONFIG"
 
 nginx -t || fail "invalid nginx configuration, see the error above"
 

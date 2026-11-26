@@ -60,6 +60,11 @@ if cid=$(start -v "$MOUNTED:/var/www/config.json:ro"); then
   else
     failed "the mounted config.json was replaced"
   fi
+  if [ "$(docker exec "$cid" stat -c '%a' /var/www/config.json)" = 644 ]; then
+    pass "the mode of the mounted config.json is left unchanged"
+  else
+    failed "the mode of the mounted config.json changed"
+  fi
   if docker logs "$cid" 2>&1 | grep -q "read-only, keeping the mounted configuration"; then
     pass "start.sh logs that it keeps the mounted configuration"
   else
@@ -75,6 +80,22 @@ if cid=$(start); then
     pass "config.json is generated"
   else
     failed "config.json is not generated"
+  fi
+  mode=$(docker exec "$cid" stat -c '%a %U:%G' /var/www/config.json)
+  if [ "$mode" = "640 root:www-data" ]; then
+    pass "the generated config.json is readable by root and www-data only"
+  else
+    failed "the generated config.json is $mode, expected 640 root:www-data"
+  fi
+  if docker exec -u www-data "$cid" cat /var/www/config.json >/dev/null 2>&1; then
+    pass "php-fpm (www-data) reads config.json"
+  else
+    failed "www-data cannot read config.json"
+  fi
+  if [ "$(docker exec "$cid" curl -s -o /dev/null -w '%{http_code}' -X PROPFIND http://127.0.0.1/ 2>/dev/null)" != 500 ]; then
+    pass "PHP answers with the restricted config.json"
+  else
+    failed "PHP answers 500 with the restricted config.json"
   fi
 else
   failed "the container does not start without a mounted config.json"

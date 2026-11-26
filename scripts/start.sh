@@ -262,6 +262,15 @@ if [ -e /var/www/config.json ] && [ ! -w /var/www/config.json ]; then
 else
   cat "$GENERATED_CONFIG" > /var/www/config.json \
     || fail_config "could not write /var/www/config.json"
+  # Readable by root (this script and the startup PHP scripts) and by php-fpm (www-data) only:
+  # it carries the passwords too. A file that cannot be handed to www-data keeps its mode,
+  # since php-fpm would otherwise lose it.
+  if chown root:www-data /var/www/config.json 2>/dev/null; then
+    chmod 0640 /var/www/config.json \
+      || fail_config "could not restrict the permissions of /var/www/config.json"
+  else
+    echo "start.sh: could not give /var/www/config.json to the www-data group, its permissions are left unchanged" >&2
+  fi
 fi
 rm -f "$GENERATED_CONFIG"
 

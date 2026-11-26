@@ -247,15 +247,21 @@ fi
 # The configuration is generated aside and checked first: an invalid setting stops the
 # container instead of booting on an empty config.json. A config.json mounted read-only
 # (a Kubernetes ConfigMap) is the deployment's own configuration: it is kept, not an error.
+# It carries the database and AMQP passwords: mktemp creates it 0600, owned by root, and it is
+# removed on every path, failures included.
 GENERATED_CONFIG=$(mktemp /tmp/config.json.XXXXXX) \
   || fail "could not create a temporary file for /var/www/config.json"
+fail_config() {
+  rm -f "$GENERATED_CONFIG"
+  fail "$@"
+}
 sh /var/www/scripts/generate_config.sh > "$GENERATED_CONFIG" \
-  || fail "could not generate /var/www/config.json, see the error above"
+  || fail_config "could not generate /var/www/config.json, see the error above"
 if [ -e /var/www/config.json ] && [ ! -w /var/www/config.json ]; then
   echo "start.sh: /var/www/config.json is read-only, keeping the mounted configuration" >&2
 else
   cat "$GENERATED_CONFIG" > /var/www/config.json \
-    || fail "could not write /var/www/config.json"
+    || fail_config "could not write /var/www/config.json"
 fi
 rm -f "$GENERATED_CONFIG"
 

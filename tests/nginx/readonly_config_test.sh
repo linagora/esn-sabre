@@ -98,6 +98,27 @@ else
   failed "an invalid ESN_SCHEME does not stop the container with a read-only config.json"
 fi
 
+echo "Temporary configuration"
+# Any temporary copy of the configuration (it carries the passwords) is gone, after a start and a failure
+check_no_leftover() {
+  local cid=$1 what=$2 leftovers
+  leftovers=$(docker export "$cid" | tar -t 2>/dev/null | grep '^tmp/config\.json\.' || true)
+  if [ -z "$leftovers" ]; then
+    pass "no temporary configuration is left $what"
+  else
+    failed "temporary configuration left $what: $leftovers"
+  fi
+}
+if cid=$(start); then
+  check_no_leftover "$cid" "after a start"
+else
+  failed "the container does not start"
+fi
+cid=$(docker run -d "${WITHOUT_MONGO[@]}" -e ESN_SCHEME=ftp "$IMAGE")
+CONTAINERS+=("$cid")
+docker wait "$cid" >/dev/null
+check_no_leftover "$cid" "after a failed generation"
+
 if [ "$FAILURES" -gt 0 ]; then
   echo "$FAILURES failure(s)"
   exit 1

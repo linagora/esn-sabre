@@ -231,6 +231,9 @@ $server->addPlugin(new ESN\CardDAV\InlinePhotoPlugin(
 // Runs the card write guards above on COPY and MOVE into an address book
 $server->addPlugin(new ESN\CardDAV\CopyMoveGuardPlugin());
 
+// Access policy of the domain-members address book, technical tokens scoped to their domain
+$server->addPlugin(new ESN\CardDAV\DomainMembersAccessPlugin());
+
 // vCard export plugin
 $vcfPlugin = new Sabre\CardDAV\VCFExportPlugin();
 $server->addPlugin($vcfPlugin);

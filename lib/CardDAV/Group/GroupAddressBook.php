@@ -12,6 +12,11 @@ use ESN\DAV\Sharing\Plugin as SPlugin;
 #[\AllowDynamicProperties]
 class GroupAddressBook extends \ESN\CardDAV\AddressBook {
     function getACL() {
+        // Neither the members nor the administrators: only the technical user, which bypasses the ACL
+        if ($this->getAccessPolicy() === DomainMembersAccessPolicy::Restricted) {
+            return [];
+        }
+
         $acl = [];
         $acl = $this->updateAclWithShareAccess($acl);
 
@@ -42,6 +47,19 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
 
     function setMembersRight($privileges) {
         return $this->carddavBackend->setMembersRight($this->addressBookInfo['id'], $privileges);
+    }
+
+    function isDomainMembers(): bool {
+        return $this->getName() === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI;
+    }
+
+    function getAccessPolicy(): DomainMembersAccessPolicy {
+        return DomainMembersAccessPolicy::fromAddressBookInfo($this->addressBookInfo);
+    }
+
+    function setAccessPolicy(DomainMembersAccessPolicy $policy) {
+        $this->carddavBackend->setAccessPolicy($this->addressBookInfo['id'], $policy);
+        $this->addressBookInfo[DomainMembersAccessPolicy::PROPERTY] = $policy->value;
     }
 
     function isDisabled() {
@@ -112,7 +130,7 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
      */
     function updateInvites(array $sharees) {
         // Every sharing route (JSON, XML share-resource, ...) ends here: refuse on the node, not on the request path
-        if ($this->getName() === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI) {
+        if ($this->isDomainMembers()) {
             throw new \Sabre\DAV\Exception\MethodNotAllowed('Cannot update public rights or delegations for domain addressbook');
         }
 

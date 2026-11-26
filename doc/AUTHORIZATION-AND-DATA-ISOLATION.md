@@ -341,6 +341,13 @@ server.
   reports, exports, subscriptions, `COPY`, and `MOVE`.
 - Ordinary users, domain administrators, and technical users have distinct
   rights on domain address books and the domain-members address book.
+- The access policy of the domain-members address book
+  (`POST /addressbooks/{domainId}/domain-members.json`, see
+  [JSON-API.md](JSON-API.md#set-the-access-policy-of-the-domain-members-address-book))
+  is set by a technical token of the domain only. `restricted` denies every
+  end user, domain administrators included, on every read surface; the
+  technical token of the domain keeps its read/write access. A technical token
+  never reaches the domain-members address book of another domain.
 - Tenant isolation applies to root enumeration, contacts, public rights,
   delegation, and technical-token management.
 - Contact names, email addresses, phone numbers, avatars, and vCard properties

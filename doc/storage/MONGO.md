@@ -104,6 +104,9 @@ Address book metadata per principal.
 
 Key fields: `principaluri`, `uri`, `synctoken`.
 
+`accesspolicy` (`restricted` or `readable`, absent meaning `readable`) is only set on the `domain-members` address
+book of a domain, see `CardDAV\Group\DomainMembersAccessPolicy`.
+
 **Class:** `CardDAV\Backend\Mongo`  
 **Indexes:** `{ principaluri, uri }` (unique)
 

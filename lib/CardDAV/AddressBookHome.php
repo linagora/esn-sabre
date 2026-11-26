@@ -251,7 +251,7 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
     /**
      * Paths of address books known by principaluri + uri, keyed by id. When several resolve to the same address
      * book the first one wins; those that no longer exist (deleted source), or are no longer published when they
-     * must be ('published' => true), are left out.
+     * must be ('published' => true), or whose access is restricted (domain-members), are left out.
      */
     private function resolveAddressBookPaths(array $addressBooks): array {
         $found = [];
@@ -262,7 +262,7 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         $paths = [];
         foreach ($addressBooks as $addressBook) {
             $row = $found[$addressBook['principaluri'] . '/' . $addressBook['uri']] ?? null;
-            if ($row === null || (($addressBook['published'] ?? false) && empty($row['public_right']))) {
+            if ($row === null || !$this->isListable($addressBook, $row)) {
                 continue;
             }
 
@@ -270,6 +270,13 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         }
 
         return $paths;
+    }
+
+    private function isListable(array $addressBook, array $row): bool {
+        $unpublished = ($addressBook['published'] ?? false) && empty($row['public_right']);
+        $restricted = Group\DomainMembersAccessPolicy::fromAddressBookInfo($row) === Group\DomainMembersAccessPolicy::Restricted;
+
+        return !$unpublished && !$restricted;
     }
 
     /**

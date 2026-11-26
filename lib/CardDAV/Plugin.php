@@ -127,23 +127,13 @@ class Plugin extends \ESN\JSON\BasePlugin {
 
     private function checkDomainMembersAccess($path) {
         // Check if the path is within domain-members addressbook
-        if (!$this->isDomainMembersPath($path)) {
+        if (!DomainMembersPath::matches($path)) {
             return;
         }
 
         // Only technical users can modify domain-members addressbook
         if ($this->authTenant?->tenantType !== TenantType::Technical)
             throw new Forbidden('Only technical users can modify domain-members addressbook');
-    }
-
-    private function isDomainMembersPath($path): bool {
-        // Path format: addressbooks/{domainId}/domain-members/{card.vcf}
-        // Empty segments ('//', or a decoded '%2F') are skipped, as the tree does when resolving the node
-        $pathParts = array_values(array_filter(explode('/', $path), 'strlen'));
-
-        return count($pathParts) >= 3
-            && $pathParts[0] === 'addressbooks'
-            && $pathParts[2] === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI;
     }
 
     function httpHead($request, $response) {

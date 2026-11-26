@@ -465,6 +465,7 @@ END:VCALENDAR'
             $this->carddavPlugin = new \ESN\CardDAV\Plugin();
             $this->server->addPlugin($this->carddavPlugin);
             $this->server->addPlugin(new \ESN\CardDAV\CopyMoveGuardPlugin());
+            $this->server->addPlugin(new \ESN\CardDAV\DomainMembersAccessPlugin());
 
             $this->carddavSubscriptionsPlugin = new \ESN\CardDAV\Subscriptions\Plugin();
             $this->server->addPlugin($this->carddavSubscriptionsPlugin);

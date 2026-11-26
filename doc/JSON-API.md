@@ -535,6 +535,37 @@ Privilege codes:
 - 403 Forbidden: Princial user does not have `{DAV:}share` privilege
 
 
+#### Set the access policy of the domain-members address book
+
+Only on `/addressbooks/{domainId}/domain-members.json`, and only with a technical token of the domain `{domainId}`.
+
+Policies:
+ - `restricted`: only a technical token of the domain reads and writes the address book. The domain members and
+   the domain administrators are denied on every route: cards, export, JSON listing and email lookup, `PROPFIND`,
+   CardDAV `REPORT`, contacts listed with `GET /contacts/{userId}.json?domainMember=true`.
+ - `readable`: the domain members get their members right back, the domain administrators their own rights.
+   This is the policy of an address book on which none was ever set.
+
+The cards are kept whatever the policy: switching it changes neither the cards nor the sync token, so no
+resynchronization is needed. Applying the current policy again is a no-op.
+
+**Request JSON Object:**
+
+```json
+{
+    "dav:domain-members-access": {
+      "policy": "restricted"
+    }
+}
+```
+
+**Status Codes:**
+
+- 204 No Content: The policy is applied
+- 400 Bad Request: `policy` is neither `restricted` nor `readable`
+- 403 Forbidden: The request is not authenticated with a technical token of the domain
+- 405 Method Not Allowed: The path is not the domain-members address book
+
 #### Accept address book sharing invitation
 
 Set the sharing invitation of an address book to accepted.

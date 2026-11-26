@@ -16,4 +16,13 @@ interface GroupSupport extends BackendInterface {
      * @return void
      */
     function setMembersRight($addressBookId, $privileges);
+
+    /**
+     * Set the access policy of the domain-members address book. The cards are left untouched.
+     *
+     * @param mixed $addressBookId
+     * @param \ESN\CardDAV\Group\DomainMembersAccessPolicy $policy
+     * @return void
+     */
+    function setAccessPolicy($addressBookId, \ESN\CardDAV\Group\DomainMembersAccessPolicy $policy);
 }

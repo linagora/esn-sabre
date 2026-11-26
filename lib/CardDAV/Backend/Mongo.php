@@ -81,6 +81,7 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
             'privilege' => 1,
             'type' => 1,
             'state' => 1,
+            'accesspolicy' => 1,
             'description' => 1,
             'synctoken' => 1
         ];
@@ -100,9 +101,18 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
                 '{http://open-paas.org/contacts}state' => $this->getValue($row, 'state', ''),
                 '{http://calendarserver.org/ns/}getctag' => $row['synctoken'],
                 '{http://sabredav.org/ns}sync-token' => $this->getValue($row, 'synctoken', '0'),
-            ];
+            ] + $this->accessPolicyInfo($row);
         }
         return $addressBooks;
+    }
+
+    /**
+     * Only the address books an access policy was set on (domain-members) carry one.
+     */
+    private function accessPolicyInfo($row): array {
+        return isset($row['accesspolicy'])
+            ? [ \ESN\CardDAV\Group\DomainMembersAccessPolicy::PROPERTY => $row['accesspolicy'] ]
+            : [];
     }
 
     function addressBookExists($principalUri, $uri) {
@@ -369,14 +379,14 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $collection = $this->db->selectCollection($this->addressBooksTableName);
         $found = [];
         // Served by the { principaluri, uri } index
-        $projection = self::MINIMAL_ADDRESSBOOK_FIELDS + [ 'public_right' => 1 ];
+        $projection = self::MINIMAL_ADDRESSBOOK_FIELDS + [ 'public_right' => 1, 'accesspolicy' => 1 ];
         foreach ($collection->find([ '$or' => array_values($or) ], [ 'projection' => $projection ]) as $row) {
             $found[] = [
                 'id' => (string)$row['_id'],
                 'principaluri' => $row['principaluri'],
                 'uri' => $row['uri'],
                 'public_right' => $row['public_right'] ?? null
-            ];
+            ] + $this->accessPolicyInfo($row);
         }
 
         return $found;
@@ -1298,6 +1308,13 @@ class Mongo extends \Sabre\CardDAV\Backend\AbstractBackend implements
         $query = [ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ];
 
         $collection->updateOne($query, [ '$set' => [ 'privilege' => $privileges ] ]);
+    }
+
+    function setAccessPolicy($addressBookId, \ESN\CardDAV\Group\DomainMembersAccessPolicy $policy) {
+        $collection = $this->db->selectCollection($this->addressBooksTableName);
+        $query = [ '_id' => new \MongoDB\BSON\ObjectId($addressBookId) ];
+
+        $collection->updateOne($query, [ '$set' => [ 'accesspolicy' => $policy->value ] ]);
     }
 
     protected function addChange($addressBookId, $objectUri, $operation) {

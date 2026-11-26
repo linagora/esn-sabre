@@ -19,7 +19,8 @@ exporting an ENV variable and setting the matching `config.json` key are equival
 A `config.json` mounted read-only (a Kubernetes ConfigMap) is kept as is: the settings read by the
 generation script only (such as `ESN_HOST` or `ESN_API_URL`) then have no effect, the others still
 follow the order above, and an invalid generation setting (`ESN_SCHEME`, `ESN_API_URL`) still stops
-the container.
+the container. The generated `config.json` carries the passwords: it is made readable by root and
+php-fpm only (`0640 root:www-data`).
 
 Booleans accept `true` / `1` / `yes` / `on` and `false` / `0` / `no` / `off`, in any case, as a
 JSON string (`"true"`) or as a JSON native (`true`). Unset, empty and unparseable values all

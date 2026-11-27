@@ -19,8 +19,8 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
     }
 
     function getACL() {
-        if ($this->getName() === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI
-            && isset($this->addressBookInfo['acl'])) {
+        $isDomainMembers = $this->getName() === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI;
+        if ($isDomainMembers && isset($this->addressBookInfo['acl'])) {
             // Domain administrators retain their current role's rights independently of the stored ACL.
             return $this->updateAclWithAdministratorsRight(
                 array_map(fn($ace) => (array) $ace, (array) $this->addressBookInfo['acl'])
@@ -30,11 +30,11 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
         $acl = [];
         $acl = $this->updateAclWithShareAccess($acl);
 
-        if (isset($this->addressBookInfo['members'])) {
+        if ($isDomainMembers || isset($this->addressBookInfo['members'])) {
             $acl = $this->updateAclWithMembersAccess($acl);
         }
 
-        if ($this->getName() === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI) {
+        if ($isDomainMembers) {
             // Only member/delegation grants are editable; administrator rights follow the domain role.
             $acl = array_map(fn($ace) => array_replace($ace, ['protected' => false]), $acl);
         }
@@ -84,7 +84,10 @@ class GroupAddressBook extends \ESN\CardDAV\AddressBook {
             $shareePrincipals[] = $sharee->principal;
         }
 
-        $members = $this->addressBookInfo['members'];
+        // A domain grant follows membership when an ACL is saved and restored, without enumerating its users.
+        $members = $this->getName() === \ESN\CardDAV\Backend\Esn::DOMAIN_MEMBERS_URI
+            ? [$this->getOwner()]
+            : $this->addressBookInfo['members'];
         foreach ($members instanceof \Closure ? $members() : $members as $member) {
 
             // If a member is delegated, he does not have group members rights

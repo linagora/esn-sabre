@@ -84,7 +84,7 @@ class GroupAddressBookHomeTest extends \PHPUnit\Framework\TestCase {
     }
 
     function testOnlyTheFullGeneratedAclLoadsTheMemberSet() {
-        $this->carddavBackend->createAddressBook('principals/domains/' . self::DOMAIN_ID, 'domain-members', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
+        $this->carddavBackend->createAddressBook('principals/domains/' . self::DOMAIN_ID, 'GAB', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
         $principalBackend = $this->memberSetBackend(['principals/users/' . self::USER_ID]);
         $home = new GroupAddressBookHome($this->carddavBackend, [
             'uri' => 'principals/domains/' . self::DOMAIN_ID,
@@ -102,10 +102,27 @@ class GroupAddressBookHomeTest extends \PHPUnit\Framework\TestCase {
         $this->assertContains([
             'privilege' => '{DAV:}read',
             'principal' => 'principals/users/' . self::USER_ID,
-            'protected' => false
+            'protected' => true
         ], $children[0]->getACL());
         $home->getChildren()[0]->getACL();
         $this->assertSame(['principals/domains/' . self::DOMAIN_ID], $principalBackend->groupMemberSetCalls);
+    }
+
+    function testDomainMembersAclUsesTheDomainWithoutLoadingItsMembers() {
+        $domain = 'principals/domains/' . self::DOMAIN_ID;
+        $this->carddavBackend->createAddressBook($domain, 'domain-members', [ '{DAV:}acl' => [ '{DAV:}read' ] ]);
+        $principalBackend = $this->memberSetBackend(['principals/users/' . self::USER_ID]);
+        $home = new GroupAddressBookHome($this->carddavBackend, [
+            'uri' => $domain,
+            'administrators' => ['principals/users/' . self::ADMINISTRATOR_ID],
+        ], $principalBackend);
+
+        $acl = $home->getChildren()[0]->getACL();
+        $this->assertContains(['privilege' => '{DAV:}read', 'principal' => $domain, 'protected' => false], $acl);
+        $this->assertNotContains('principals/users/' . self::USER_ID, array_column($acl, 'principal'));
+        $this->assertCount(4, $acl);
+        $this->assertSame($acl, $home->getChildren()[0]->getACL());
+        $this->assertSame([], $principalBackend->groupMemberSetCalls);
     }
 
     function testWithoutMembersNoMemberIsGrantedTheAddressBooks() {

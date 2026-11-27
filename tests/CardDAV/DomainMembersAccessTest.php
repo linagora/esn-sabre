@@ -343,6 +343,36 @@ class DomainMembersAccessTest extends PluginTestBase {
         $this->assertEquals(204, $this->callDav('PROPPATCH', '.json', '{"dav:name":"Restored directory"}', ['Content-Type' => 'application/json', 'Accept' => 'application/json'])->status);
     }
 
+    function testRestoredDefaultAclFollowsNewDomainMembersWithoutListingUsers() {
+        $this->actor(true);
+        $savedAcl = '';
+        $memberScans = \ESN\DAV\MongoFindCounter::count('users', function () use (&$savedAcl) {
+            $response = $this->callDav('PROPFIND', '', '<d:propfind xmlns:d="DAV:"><d:prop><d:acl/></d:prop></d:propfind>');
+            $this->assertEquals(207, $response->status, $response->getBodyAsString());
+            $savedAcl = $this->editableAclFromPropfind($response->getBodyAsString());
+        }, fn($command) => isset($command->filter->domains) || isset($command->filter->{'domains.domain_id'}));
+        $this->assertSame(0, $memberScans);
+        $this->assertStringContainsString('/principals/domains/' . SERVER_MOCK_DOMAIN_ID, $savedAcl);
+        $this->assertStringNotContainsString('principals/users/', $savedAcl);
+        $this->assertEquals(200, $this->changeAccess('restricted')->status);
+
+        $newMember = '54b64eadf6d7d8e41d263e7c';
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($newMember), 'firstname' => 'New', 'lastname' => 'Member',
+            'accounts' => [['type' => 'email', 'emails' => ['new@example.org']]],
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId(SERVER_MOCK_DOMAIN_ID)]]
+        ]);
+        $this->actor(false, $newMember);
+        $this->assertEquals(403, $this->callDav('GET', '/probe.vcf')->status);
+        $this->actor(true);
+        $this->assertEquals(200, $this->callDav('ACL', '', $savedAcl)->status);
+        $this->actor(false, $newMember);
+        $this->assertEquals(200, $this->callDav('GET', '/probe.vcf')->status);
+        $response = $this->makeRequest('GET', '/contacts/' . $newMember . '.json?domainMember=true');
+        $this->assertEquals(200, $response->status);
+        $this->assertStringContainsString('secret@example.org', $response->getBodyAsString());
+    }
+
     function testAdministratorRightsFollowCurrentDomainRoleWithAnEmptyAcl() {
         $this->actor(true);
         $this->assertEquals(200, $this->changeAccess('restricted')->status);

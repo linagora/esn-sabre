@@ -24,5 +24,7 @@ Grant domain members read access:
 ```
 
 Cards are preserved; technical-token access and synchronization continue.
-To restore exact previous permissions, save `DAV:acl` with `PROPFIND` before revoking
-and resubmit it through `ACL`, excluding `DAV:protected` and `DAV:inherited` ACEs.
+The default `DAV:acl` grants member access to the domain principal, so it follows
+current membership without listing individual users. To restore access for all
+current members, submit the domain read grant above. Explicit grants to individual
+users remain limited to those users and do not expand when new members join.

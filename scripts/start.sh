@@ -244,8 +244,15 @@ fi
 
 /root/set_nginx_htpasswd.sh
 
-sh /var/www/scripts/generate_config.sh > /var/www/config.json \
-  || fail "could not generate /var/www/config.json, see the error above"
+# A config.json mounted read-only (e.g. a Kubernetes ConfigMap) is used as is: it can not be regenerated.
+# test -w relies on access(2), which reports a read-only file system even when running as root.
+SABRE_CONFIG_FILE=/var/www/config.json
+if [ -e "$SABRE_CONFIG_FILE" ] && [ ! -w "$SABRE_CONFIG_FILE" ]; then
+  echo "start.sh: $SABRE_CONFIG_FILE is read-only, using it as is instead of generating it from the environment"
+else
+  sh /var/www/scripts/generate_config.sh > "$SABRE_CONFIG_FILE" \
+    || fail "could not generate $SABRE_CONFIG_FILE, see the error above"
+fi
 
 nginx -t || fail "invalid nginx configuration, see the error above"
 

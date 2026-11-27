@@ -15,6 +15,8 @@ and an empty one were equivalent.
 In the Docker image, [`scripts/generate_config.sh`](../scripts/generate_config.sh) writes
 `config.json` from the variables exported to the container, `environment` section included, so
 exporting an ENV variable and setting the matching `config.json` key are equivalent.
+A `config.json` mounted read-only (e.g. from a Kubernetes ConfigMap) is not regenerated: the
+container uses it as is, so the variables read by the generation script have no effect then.
 [`config.json.default`](../config.json.default) lists every key with its default value.
 
 Booleans accept `true` / `1` / `yes` / `on` and `false` / `0` / `no` / `off`, in any case, as a

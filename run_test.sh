@@ -232,6 +232,7 @@ if [ "$SKIP_NGINX" = false ]; then
   bash tests/nginx/rate_limit_test.sh "$NGINX_IMAGE" || exit 1
   bash tests/nginx/fpm_status_test.sh "$NGINX_IMAGE" || exit 1
   bash tests/nginx/kerberos_cross_site_test.sh "$NGINX_IMAGE" || exit 1
+  bash tests/nginx/readonly_config_test.sh "$NGINX_IMAGE" || exit 1
 else
   echo "Skipping nginx rate limit tests"
 fi

@@ -40,6 +40,14 @@ private port only
 bash tests/nginx/fpm_status_test.sh linagora/esn-sabre
 ```
 
+`tests/nginx/readonly_config_test.sh` checks, on the same image, that a `config.json` mounted read-only (a
+Kubernetes ConfigMap) is kept and the container starts on it, that `config.json` is still generated when it is
+writable, and that an invalid `ESN_SCHEME` still stops the container:
+
+```bash
+bash tests/nginx/readonly_config_test.sh linagora/esn-sabre
+```
+
 ### Using Makefile
 
 ```bash

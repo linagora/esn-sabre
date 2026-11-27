@@ -244,8 +244,42 @@ fi
 
 /root/set_nginx_htpasswd.sh
 
-sh /var/www/scripts/generate_config.sh > /var/www/config.json \
-  || fail "could not generate /var/www/config.json, see the error above"
+# The configuration is generated aside and checked first: an invalid setting stops the
+# container instead of booting on an empty config.json. A config.json mounted read-only
+# (a Kubernetes ConfigMap) is the deployment's own configuration: it is kept, not an error.
+# It carries the database and AMQP passwords: mktemp creates it 0600, owned by root, and it is
+# removed on every path, failures included.
+GENERATED_CONFIG=$(mktemp /tmp/config.json.XXXXXX) \
+  || fail "could not create a temporary file for /var/www/config.json"
+fail_config() {
+  rm -f "$GENERATED_CONFIG"
+  fail "$@"
+}
+# SABRE_CONFIG_JSON, when set, is the whole configuration, used as is instead of the generated one.
+# The integration tests pass it, as their Docker daemon may not share a file to mount.
+if [ -n "${SABRE_CONFIG_JSON:-}" ]; then
+  printf '%s' "$SABRE_CONFIG_JSON" > "$GENERATED_CONFIG" \
+    || fail_config "could not write SABRE_CONFIG_JSON to /var/www/config.json"
+else
+  sh /var/www/scripts/generate_config.sh > "$GENERATED_CONFIG" \
+    || fail_config "could not generate /var/www/config.json, see the error above"
+fi
+if [ -e /var/www/config.json ] && [ ! -w /var/www/config.json ]; then
+  echo "start.sh: /var/www/config.json is read-only, keeping the mounted configuration" >&2
+else
+  cat "$GENERATED_CONFIG" > /var/www/config.json \
+    || fail_config "could not write /var/www/config.json"
+  # Readable by root (this script and the startup PHP scripts) and by php-fpm (www-data) only:
+  # it carries the passwords too. A file that cannot be handed to www-data keeps its mode,
+  # since php-fpm would otherwise lose it.
+  if chown root:www-data /var/www/config.json 2>/dev/null; then
+    chmod 0640 /var/www/config.json \
+      || fail_config "could not restrict the permissions of /var/www/config.json"
+  else
+    echo "start.sh: could not give /var/www/config.json to the www-data group, its permissions are left unchanged" >&2
+  fi
+fi
+rm -f "$GENERATED_CONFIG"
 
 nginx -t || fail "invalid nginx configuration, see the error above"
 

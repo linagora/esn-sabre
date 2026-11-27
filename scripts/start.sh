@@ -255,8 +255,15 @@ fail_config() {
   rm -f "$GENERATED_CONFIG"
   fail "$@"
 }
-sh /var/www/scripts/generate_config.sh > "$GENERATED_CONFIG" \
-  || fail_config "could not generate /var/www/config.json, see the error above"
+# SABRE_CONFIG_JSON, when set, is the whole configuration, used as is instead of the generated one.
+# The integration tests pass it, as their Docker daemon may not share a file to mount.
+if [ -n "${SABRE_CONFIG_JSON:-}" ]; then
+  printf '%s' "$SABRE_CONFIG_JSON" > "$GENERATED_CONFIG" \
+    || fail_config "could not write SABRE_CONFIG_JSON to /var/www/config.json"
+else
+  sh /var/www/scripts/generate_config.sh > "$GENERATED_CONFIG" \
+    || fail_config "could not generate /var/www/config.json, see the error above"
+fi
 if [ -e /var/www/config.json ] && [ ! -w /var/www/config.json ]; then
   echo "start.sh: /var/www/config.json is read-only, keeping the mounted configuration" >&2
 else

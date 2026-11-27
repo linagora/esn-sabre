@@ -67,12 +67,55 @@ class DomainMembersAccessTest extends PluginTestBase {
         return [
             'empty body' => ['', 400],
             'wrong XML root' => ['<d:not-acl xmlns:d="DAV:"/>', 400],
+            'text instead of ACEs' => ['<d:acl xmlns:d="DAV:">not an ACE</d:acl>', 400],
             'ACE outside DAV namespace' => ['<d:acl xmlns:d="DAV:"><ace/></d:acl>', 400],
             'mixed ACE namespaces' => [str_replace(['PRIVILEGE', 'EXTRA', '</d:acl>'], ['<d:read/>', '', '<ace/></d:acl>'], $ace), 400],
             'missing principal' => ['<d:acl xmlns:d="DAV:"><d:ace/></d:acl>', 400],
+            'misspelled privilege' => [str_replace('d:privilege', 'd:privilge', str_replace(['PRIVILEGE', 'EXTRA'], ['<d:read/>', ''], $ace)), 400],
+            'empty privilege' => [str_replace(['PRIVILEGE', 'EXTRA'], ['', ''], $ace), 400],
+            'empty grant' => [str_replace(['<d:privilege>PRIVILEGE</d:privilege>', 'EXTRA'], ['', ''], $ace), 400],
+            'privilege outside DAV namespace' => [str_replace(['<d:privilege>PRIVILEGE</d:privilege>', 'EXTRA'], ['<privilege><d:read/></privilege>', ''], $ace), 400],
+            'unknown ACE child' => [str_replace(['PRIVILEGE', 'EXTRA'], ['<d:read/>', '<d:typo/>'], $ace), 400],
+            'multiple privilege names' => [str_replace(['PRIVILEGE', 'EXTRA'], ['<d:read/><d:write/>', ''], $ace), 400],
+            'nested privilege name' => [str_replace(['PRIVILEGE', 'EXTRA'], ['<d:read><d:write/></d:read>', ''], $ace), 400],
+            'mixed valid and mistyped privileges' => [str_replace(['PRIVILEGE', 'EXTRA', '</d:grant>'], ['<d:read/>', '', '<d:privilge><d:write/></d:privilge></d:grant>'], $ace), 400],
+            'duplicate principal' => [str_replace(['PRIVILEGE', 'EXTRA'], ['<d:read/>', '<d:principal><d:href>/principals/domains/' . SERVER_MOCK_DOMAIN_ID . '</d:href></d:principal>'], $ace), 400],
+            'duplicate grant' => [str_replace(['PRIVILEGE', 'EXTRA'], ['<d:read/>', '<d:grant><d:privilege><d:read/></d:privilege></d:grant>'], $ace), 400],
+            'duplicate protected marker' => [str_replace(['PRIVILEGE', 'EXTRA'], ['<d:read/>', '<d:protected/><d:protected/>'], $ace), 400],
+            'text in protected marker' => [str_replace(['PRIVILEGE', 'EXTRA'], ['<d:read/>', '<d:protected>unexpected</d:protected>'], $ace), 400],
+            'multiple principal elements' => [str_replace(['PRIVILEGE', 'EXTRA', '</d:principal>'], ['<d:read/>', '', '<d:all/></d:principal>'], $ace), 400],
             'unknown privilege' => [str_replace(['PRIVILEGE', 'EXTRA'], ['<d:unknown/>', ''], $ace), 403, 'not-supported-privilege'],
             'unrecognized principal' => [str_replace(['PRIVILEGE', 'EXTRA', 'principals/domains/' . SERVER_MOCK_DOMAIN_ID], ['<d:read/>', '', 'principals/users/000000000000000000000000'], $ace), 403, 'recognized-principal'],
             'client-protected ACE' => [str_replace(['PRIVILEGE', 'EXTRA'], ['<d:read/>', '<d:protected/>'], $ace), 409, 'no-ace-conflict']
+        ];
+    }
+
+    #[DataProvider('validAcls')]
+    function testValidAclKeepsEverySubmittedPrivilege(string $body, int $count) {
+        $this->actor(true);
+        $response = $this->callDav('ACL', '', $body);
+        $this->assertEquals(200, $response->status, $response->getBodyAsString());
+        $propfind = $this->callDav('PROPFIND', '', '<d:propfind xmlns:d="DAV:"><d:prop><d:acl/></d:prop></d:propfind>');
+        $this->assertEquals(207, $propfind->status);
+        $document = new \DOMDocument();
+        $document->loadXML($this->editableAclFromPropfind($propfind->getBodyAsString()));
+        $this->assertSame($count, $document->getElementsByTagNameNS('DAV:', 'ace')->length);
+        $this->actor();
+        $this->assertEquals($count === 0 ? 403 : 200, $this->callDav('GET', '/probe.vcf')->status);
+    }
+
+    static function validAcls(): array {
+        $principal = '<principal><href>/principals/domains/' . SERVER_MOCK_DOMAIN_ID . '</href></principal>';
+        $read = '<privilege><read/></privilege>';
+        $ace = '<ace>' . $principal . '<grant>' . $read . '</grant></ace>';
+        return [
+            'empty ACL with whitespace and comment' => ["<acl xmlns=\"DAV:\">\n<!-- restricted -->\n</acl>", 0],
+            'default namespace' => ['<acl xmlns="DAV:">' . $ace . '</acl>', 1],
+            'multiple privileges in one grant' => ['<acl xmlns="DAV:"><ace>' . $principal
+                . '<grant>' . $read . '<privilege><write-properties/></privilege></grant></ace></acl>', 2],
+            'multiple ACEs' => ['<acl xmlns="DAV:">' . $ace . '<ace><principal><href>/principals/users/'
+                . '54b64eadf6d7d8e41d263e0d</href></principal><grant>' . $read . '</grant></ace></acl>', 2],
+            'whitespace and comments inside ACL' => ["<acl xmlns=\"DAV:\">\n<!-- grant -->\n" . $ace . "\n</acl>", 1]
         ];
     }
 
@@ -92,6 +135,40 @@ class DomainMembersAccessTest extends PluginTestBase {
         $this->assertEquals(403, $this->callDav('GET', '/probe.vcf')->status);
         $this->actor();
         $this->assertEquals(200, $this->callDav('GET', '/probe.vcf')->status);
+    }
+
+    #[DataProvider('foreignPrincipalTypes')]
+    function testAclCannotGrantAnotherDomainsPrincipal(string $type) {
+        $foreignDomain = '54b64eadf6d7d8e41d263e7b';
+        $foreignUser = '54b64eadf6d7d8e41d263e7c';
+        $this->esndb->domains->insertOne(['_id' => new \MongoDB\BSON\ObjectId($foreignDomain), 'name' => 'foreign.example']);
+        $this->esndb->users->insertOne([
+            '_id' => new \MongoDB\BSON\ObjectId($foreignUser),
+            'accounts' => [['type' => 'email', 'emails' => ['user@foreign.example']]],
+            'domains' => [['domain_id' => new \MongoDB\BSON\ObjectId($foreignDomain)]]
+        ]);
+        $this->actor(true);
+        $this->assertEquals(200, $this->changeAccess('members')->status);
+        $propfind = '<d:propfind xmlns:d="DAV:"><d:prop><d:acl/></d:prop></d:propfind>';
+        $before = $this->callDav('PROPFIND', '', $propfind);
+        $principal = '/principals/' . $type . '/' . ($type === 'users' ? $foreignUser : $foreignDomain);
+        $body = '<d:acl xmlns:d="DAV:"><d:ace><d:principal><d:href>/principals/users/' . $this->userTestId1
+            . '</d:href></d:principal><d:grant><d:privilege><d:read/></d:privilege></d:grant></d:ace>'
+            . '<d:ace><d:principal><d:href>' . $principal
+            . '</d:href></d:principal><d:grant><d:privilege><d:read/></d:privilege></d:grant></d:ace></d:acl>';
+        $response = $this->callDav('ACL', '', $body);
+        $this->assertEquals(403, $response->status, $response->getBodyAsString());
+        $after = $this->callDav('PROPFIND', '', $propfind);
+        $this->assertSame($this->editableAclFromPropfind($before->getBodyAsString()),
+            $this->editableAclFromPropfind($after->getBodyAsString()));
+        $this->authBackend->setAuthTenant(new AuthTenant($foreignUser, $foreignDomain, TenantType::User));
+        $this->assertEquals(403, $this->callDav('GET', '/probe.vcf')->status);
+        $this->actor();
+        $this->assertEquals(200, $this->callDav('GET', '/probe.vcf')->status);
+    }
+
+    static function foreignPrincipalTypes(): array {
+        return ['user' => ['users'], 'domain' => ['domains']];
     }
 
     function testStandardAclRemainsUnsupportedOnPersonalAddressBooks() {

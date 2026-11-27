@@ -41,17 +41,8 @@ class HomeListingAclPlugin extends \Sabre\DAVACL\Plugin {
             return parent::httpAcl($request, $response);
         }
 
-        // Sabre silently drops unknown children of DAV:acl, so a mistyped ACE could revoke all access.
         $body = $request->getBodyAsString();
-        $document = new \DOMDocument();
-        if ($body === '' || !@$document->loadXML($body, LIBXML_NONET)) {
-            throw new DAV\Exception\BadRequest('Expected a well-formed ACL document');
-        }
-        foreach ($document->documentElement->childNodes as $child) {
-            if ($child instanceof \DOMElement && ($child->namespaceURI !== 'DAV:' || $child->localName !== 'ace')) {
-                throw new DAV\Exception\BadRequest('Expected DAV:ace inside DAV:acl');
-            }
-        }
+        $this->assertDomainMembersAclBody($body);
         // Sabre reads the body again; the incoming request may have a non-seekable stream.
         $request->setBody($body);
 
@@ -67,6 +58,74 @@ class HomeListingAclPlugin extends \Sabre\DAVACL\Plugin {
         } finally {
             $this->replacingDomainMembersAcl = false;
         }
+    }
+
+    private function assertDomainMembersAclBody(string $body): void {
+        $document = new \DOMDocument();
+        if ($body === '' || !@$document->loadXML($body, LIBXML_NONET)
+            || $document->documentElement->namespaceURI !== 'DAV:' || $document->documentElement->localName !== 'acl') {
+            throw new DAV\Exception\BadRequest('Expected a well-formed DAV:acl document');
+        }
+        // Sabre silently drops unknown grant children and empty privileges. Reject the entire ACL before writing it.
+        foreach ($this->aclChildElements($document->documentElement) as $ace) {
+            if ($ace->namespaceURI !== 'DAV:' || $ace->localName !== 'ace') {
+                throw new DAV\Exception\BadRequest('Expected DAV:ace inside DAV:acl');
+            }
+            $this->assertAclAce($ace);
+        }
+    }
+
+    private function assertAclAce(\DOMElement $ace): void {
+        $elements = [];
+        foreach ($this->aclChildElements($ace) as $child) {
+            $name = $child->localName;
+            if ($child->namespaceURI !== 'DAV:' || !in_array($name, ['principal', 'grant', 'protected'], true)) {
+                throw new DAV\Exception\BadRequest('Expected DAV:principal, DAV:grant or DAV:protected inside DAV:ace');
+            }
+            if (isset($elements[$name])) {
+                throw new DAV\Exception\BadRequest('Duplicate DAV:' . $name . ' inside DAV:ace');
+            }
+            $elements[$name] = $child;
+        }
+        if (!isset($elements['principal'], $elements['grant'])) {
+            throw new DAV\Exception\BadRequest('Each DAV:ace requires one DAV:principal and one DAV:grant');
+        }
+        if (count($this->aclChildElements($elements['principal'])) !== 1) {
+            throw new DAV\Exception\BadRequest('DAV:principal requires exactly one principal element');
+        }
+        if (isset($elements['protected'])) {
+            $this->aclChildElements($elements['protected']);
+        }
+        $this->assertAclGrant($elements['grant']);
+    }
+
+    private function assertAclGrant(\DOMElement $grant): void {
+        $privileges = $this->aclChildElements($grant);
+        if (!$privileges) {
+            throw new DAV\Exception\BadRequest('DAV:grant requires at least one DAV:privilege');
+        }
+        foreach ($privileges as $privilege) {
+            if ($privilege->namespaceURI !== 'DAV:' || $privilege->localName !== 'privilege') {
+                throw new DAV\Exception\BadRequest('Expected DAV:privilege inside DAV:grant');
+            }
+            $names = $this->aclChildElements($privilege);
+            if (count($names) !== 1 || $this->aclChildElements($names[0])) {
+                throw new DAV\Exception\BadRequest('DAV:privilege requires exactly one empty privilege element');
+            }
+        }
+    }
+
+    /** Ignore XML whitespace and comments, but never silently drop text in an ACL container. */
+    private function aclChildElements(\DOMElement $parent): array {
+        $elements = [];
+        foreach ($parent->childNodes as $child) {
+            if ($child instanceof \DOMElement) {
+                $elements[] = $child;
+            } elseif ($child instanceof \DOMText && trim($child->textContent) !== '') {
+                throw new DAV\Exception\BadRequest('Unexpected text inside DAV:' . $parent->localName);
+            }
+        }
+        return $elements;
     }
 
     public function propFind(DAV\PropFind $propFind, DAV\INode $node) {

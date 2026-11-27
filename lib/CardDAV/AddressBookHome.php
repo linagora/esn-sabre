@@ -224,21 +224,14 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
 
         $addressBooks = [];
         if ($sources->domainMembers) {
-            $domainMembers = $this->domainAddressBook($domainPrincipalUri, Backend\Esn::DOMAIN_MEMBERS_URI);
-            if ($canRead($domainMembers['path'])) {
-                $addressBooks[] = $domainMembers;
-            }
+            $addressBooks[] = $this->domainAddressBook($domainPrincipalUri, Backend\Esn::DOMAIN_MEMBERS_URI);
         }
 
         if ($sources->domainContacts && $this->hasEnabledDomainAddressBook($domainPrincipalUri)) {
-            $domainAddressBook = $this->domainAddressBook($domainPrincipalUri, Backend\Esn::DOMAIN_ADDRESS_BOOK_URI);
-            // Left out when the members right was revoked
-            if ($canRead($domainAddressBook['path'])) {
-                $addressBooks[] = $domainAddressBook;
-            }
+            $addressBooks[] = $this->domainAddressBook($domainPrincipalUri, Backend\Esn::DOMAIN_ADDRESS_BOOK_URI);
         }
 
-        return $addressBooks;
+        return array_values(array_filter($addressBooks, fn($addressBook) => $canRead($addressBook['path'])));
     }
 
     private function domainAddressBook($domainPrincipalUri, $uri): array {

@@ -31,12 +31,10 @@ class DomainMembersAccessTest extends PluginTestBase {
         $this->server->tree->markDirty('');
     }
 
-    private function callDav(string $method, string $suffix = '', string $body = '', string $type = 'application/xml', string $accept = 'application/xml') {
+    private function callDav(string $method, string $suffix = '', string $body = '', array $headers = []) {
         $this->server->tree->markDirty('');
-        $request = \Sabre\HTTP\Sapi::createFromServerArray([
-            'REQUEST_METHOD' => $method, 'REQUEST_URI' => $this->bookPath . $suffix,
-            'HTTP_CONTENT_TYPE' => $type, 'HTTP_ACCEPT' => $accept, 'HTTP_DEPTH' => '1']);
-        $request->setBody($body);
+        $headers += ['Content-Type' => 'application/xml', 'Accept' => 'application/xml', 'Depth' => '1'];
+        $request = new \Sabre\HTTP\Request($method, $this->bookPath . $suffix, $headers, $body);
         return $this->request($request);
     }
 
@@ -104,32 +102,32 @@ class DomainMembersAccessTest extends PluginTestBase {
 
     static function readRequests(): array {
         $requests = [
-            'single card' => ['GET', '/probe.vcf', '', 'application/xml', 'application/xml'],
-            'export' => ['GET', '?export', '', 'application/xml', 'text/vcard'],
-            'JSON listing' => ['GET', '.json', '', 'application/json', 'application/json'],
-            'JSON email lookup' => ['GET', '.json?email=secret%40example.org', '', 'application/json', 'application/json'],
-            'PROPFIND' => ['PROPFIND', '', '<D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:propfind>', 'application/xml', 'application/xml'],
-            'addressbook-query' => ['REPORT', '', '<C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><C:address-data/></D:prop></C:addressbook-query>', 'application/xml', 'application/xml'],
-            'addressbook-multiget' => ['REPORT', '', '<C:addressbook-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><C:address-data/></D:prop><D:href>/addressbooks/' . SERVER_MOCK_DOMAIN_ID . '/domain-members/probe.vcf</D:href></C:addressbook-multiget>', 'application/xml', 'application/xml'],
+            'single card' => ['method' => 'GET', 'suffix' => '/probe.vcf'],
+            'export' => ['method' => 'GET', 'suffix' => '?export', 'headers' => ['Accept' => 'text/vcard']],
+            'JSON listing' => ['method' => 'GET', 'suffix' => '.json', 'headers' => ['Content-Type' => 'application/json', 'Accept' => 'application/json']],
+            'JSON email lookup' => ['method' => 'GET', 'suffix' => '.json?email=secret%40example.org', 'headers' => ['Content-Type' => 'application/json', 'Accept' => 'application/json']],
+            'PROPFIND' => ['method' => 'PROPFIND', 'body' => '<D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:propfind>'],
+            'addressbook-query' => ['method' => 'REPORT', 'body' => '<C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><C:address-data/></D:prop></C:addressbook-query>'],
+            'addressbook-multiget' => ['method' => 'REPORT', 'body' => '<C:addressbook-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav"><D:prop><C:address-data/></D:prop><D:href>/addressbooks/' . SERVER_MOCK_DOMAIN_ID . '/domain-members/probe.vcf</D:href></C:addressbook-multiget>'],
         ];
         $cases = [];
         foreach ($requests as $name => $request) {
             foreach ([false, true] as $administrator) {
-                $cases[$name . ($administrator ? ' as admin' : ' as member')] = array_merge([$administrator], $request);
+                $cases[$name . ($administrator ? ' as admin' : ' as member')] = [$administrator, $request];
             }
         }
         return $cases;
     }
 
     #[DataProvider('readRequests')]
-    function testRestrictionPreservesAdministratorReadWithoutDeletingCards(bool $administrator, string $method, string $suffix, string $body, string $type, string $accept) {
+    function testRestrictionPreservesAdministratorReadWithoutDeletingCards(bool $administrator, array $request) {
         $this->actor(false, $administrator ? $this->userTestId2 : $this->userTestId1);
-        $before = $this->callDav($method, $suffix, $body, $type, $accept);
+        $before = $this->callDav(...$request);
         $this->assertContains($before->status, [200, 207], $before->getBodyAsString());
         $this->actor(true);
         $this->assertEquals(200, $this->changeAccess('restricted')->status);
         $this->actor(false, $administrator ? $this->userTestId2 : $this->userTestId1);
-        $after = $this->callDav($method, $suffix, $body, $type, $accept);
+        $after = $this->callDav(...$request);
         $this->assertEquals($administrator ? $before->status : 403, $after->status, $after->getBodyAsString());
         if (!$administrator) {
             $this->assertStringNotContainsString('secret@example.org', $after->getBodyAsString());
@@ -142,7 +140,7 @@ class DomainMembersAccessTest extends PluginTestBase {
         $this->assertEquals(200, $this->changeAccess('restricted')->status);
         $this->assertEquals(200, $this->changeAccess('restricted')->status);
         $this->assertEquals(200, $this->callDav('GET', '/probe.vcf')->status);
-        $write = $this->callDav('PUT', '/new.vcf', str_replace('UID:probe', 'UID:new', self::CARD), 'text/vcard');
+        $write = $this->callDav('PUT', '/new.vcf', str_replace('UID:probe', 'UID:new', self::CARD), ['Content-Type' => 'text/vcard']);
         $this->assertEquals(201, $write->status, $write->getBodyAsString());
         $this->actor();
         $this->assertEquals(403, $this->callDav('GET', '/new.vcf')->status);
@@ -265,7 +263,7 @@ class DomainMembersAccessTest extends PluginTestBase {
         $this->assertSame($savedAcl, $this->editableAclFromPropfind($after->getBodyAsString()));
         $this->actor(false, $this->userTestId2);
         $this->assertEquals(200, $this->callDav('GET', '/probe.vcf')->status);
-        $this->assertEquals(204, $this->callDav('PROPPATCH', '.json', '{"dav:name":"Restored directory"}', 'application/json', 'application/json')->status);
+        $this->assertEquals(204, $this->callDav('PROPPATCH', '.json', '{"dav:name":"Restored directory"}', ['Content-Type' => 'application/json', 'Accept' => 'application/json'])->status);
     }
 
     function testAdministratorRightsFollowCurrentDomainRoleWithAnEmptyAcl() {
@@ -273,7 +271,7 @@ class DomainMembersAccessTest extends PluginTestBase {
         $this->assertEquals(200, $this->changeAccess('restricted')->status);
         $this->actor(false, $this->userTestId2);
         $this->assertEquals(200, $this->callDav('GET', '/probe.vcf')->status);
-        $this->assertEquals(403, $this->callDav('PUT', '/new.vcf', self::CARD, 'text/vcard')->status);
+        $this->assertEquals(403, $this->callDav('PUT', '/new.vcf', self::CARD, ['Content-Type' => 'text/vcard'])->status);
         $response = $this->makeRequest('GET', '/contacts/' . $this->userTestId2 . '.json?domainMember=true');
         $this->assertEquals(200, $response->status);
         $this->assertStringContainsString('secret@example.org', $response->getBodyAsString());
@@ -290,8 +288,7 @@ class DomainMembersAccessTest extends PluginTestBase {
     }
 
     #[DataProvider('readRequests')]
-    function testForeignDomainMembersAndAdministratorsCannotReadDirectory(bool $administrator, string $method,
-        string $suffix, string $body, string $type, string $accept) {
+    function testForeignDomainMembersAndAdministratorsCannotReadDirectory(bool $administrator, array $request) {
         $foreignDomain = '54b64eadf6d7d8e41d263e7b';
         $foreignUser = '54b64eadf6d7d8e41d263e7c';
         $this->esndb->domains->insertOne([
@@ -309,7 +306,7 @@ class DomainMembersAccessTest extends PluginTestBase {
                 $this->assertEquals(200, $this->changeAccess('restricted')->status);
             }
             $this->authBackend->setAuthTenant(new AuthTenant($foreignUser, $foreignDomain, TenantType::User));
-            $response = $this->callDav($method, $suffix, $body, $type, $accept);
+            $response = $this->callDav(...$request);
             $this->assertEquals(403, $response->status, $response->getBodyAsString());
             $this->assertStringNotContainsString('secret@example.org', $response->getBodyAsString());
         }

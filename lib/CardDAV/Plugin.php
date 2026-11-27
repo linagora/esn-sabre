@@ -832,7 +832,7 @@ class Plugin extends \ESN\JSON\BasePlugin {
         }
 
         $acl = $this->server->getPlugin('acl');
-        if ($book instanceof Group\GroupAddressBook && $book->getName() === Backend\Esn::DOMAIN_MEMBERS_URI) {
+        if ($book instanceof Group\GroupAddressBook) {
             $user = $acl->getCurrentUserPrincipal();
             $isMember = Utils::isUserPrincipal($user) && in_array($book->getOwner(), $acl->getPrincipalMembership($user), true);
             $book = $book->forMemberPrivilegeCheck($isMember ? $user : null);

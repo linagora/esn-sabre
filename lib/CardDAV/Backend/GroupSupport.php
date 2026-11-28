@@ -16,4 +16,7 @@ interface GroupSupport extends BackendInterface {
      * @return void
      */
     function setMembersRight($addressBookId, $privileges);
+
+    /** Store the non-protected ACEs supplied through the WebDAV ACL method. */
+    function setAddressBookACL($addressBookId, array $acl);
 }

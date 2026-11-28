@@ -7,6 +7,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Sabre\DAV\Exception\BadRequest;
 
 require_once ESN_TEST_BASE . '/CardDAV/PluginTestBase.php';
+require_once ESN_TEST_BASE . '/DAV/MongoFindCounter.php';
 
 class GetAllContactsRouteTest extends \ESN\CardDAV\PluginTestBase {
 
@@ -53,6 +54,48 @@ class GetAllContactsRouteTest extends \ESN\CardDAV\PluginTestBase {
         $body = json_decode($response->getBodyAsString());
         $this->assertCount(3, $body->{'_embedded'}->{'dav:addressbook'});
         $this->assertObjectNotHasProperty('dav:item', $body->{'_embedded'});
+    }
+
+    #[DataProvider('domainContactAccess')]
+    function testDomainContactPrivilegeChecksDoNotLoadEveryMember(bool $memberRead, bool $delegated, bool $administrator) {
+        $bookId = $this->carddavBackend->createAddressBook('principals/domains/' . SERVER_MOCK_DOMAIN_ID, 'dab', [
+            '{DAV:}acl' => $memberRead ? ['{DAV:}read'] : [],
+            '{http://open-paas.org/contacts}type' => 'group',
+            '{http://open-paas.org/contacts}state' => 'enabled'
+        ]);
+        $this->carddavBackend->createCard($bookId, 'dab.vcf', "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:dab\r\nFN:DAB Contact\r\nEND:VCARD\r\n");
+        if ($delegated) {
+            $this->carddavBackend->updateInvites($bookId, [new \Sabre\DAV\Xml\Element\Sharee([
+                'href' => 'mailto:' . $this->userTestEmail1,
+                'principal' => 'principals/users/' . $this->userTestId1,
+                'access' => \Sabre\DAV\Sharing\Plugin::ACCESS_READ,
+                'inviteStatus' => \Sabre\DAV\Sharing\Plugin::INVITE_ACCEPTED,
+                'properties' => []
+            ])]);
+        }
+        if ($administrator) {
+            $this->esndb->domains->updateOne(['_id' => new \MongoDB\BSON\ObjectId(SERVER_MOCK_DOMAIN_ID)],
+                ['$set' => ['administrators' => [['user_id' => new \MongoDB\BSON\ObjectId($this->userTestId1)]]]]);
+        }
+        $canRead = $memberRead || $delegated || $administrator;
+        $memberScans = \ESN\DAV\MongoFindCounter::count('users', function () use ($canRead) {
+            $response = $this->makeRequest('GET', '/contacts/' . $this->userTestId1 . '.json?domainContacts=true');
+            $this->assertEquals(200, $response->status, $response->getBodyAsString());
+            $this->assertSame($canRead, str_contains($response->getBodyAsString(), 'DAB Contact'));
+        }, fn($command) => isset($command->filter->domains) || isset($command->filter->{'domains.domain_id'}));
+        $this->assertSame(0, $memberScans);
+
+        $response = $this->makeRequest('GET', '/addressbooks/' . SERVER_MOCK_DOMAIN_ID . '/dab.json');
+        $this->assertEquals($canRead ? 200 : 403, $response->status);
+    }
+
+    static function domainContactAccess(): array {
+        return [
+            'member' => [true, false, false],
+            'member rights revoked' => [false, false, false],
+            'delegated member' => [false, true, false],
+            'administrator' => [false, false, true]
+        ];
     }
 
     #[DataProvider('subscriptionSourceForms')]

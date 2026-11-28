@@ -7,12 +7,14 @@ namespace ESN\DAV;
  */
 class MongoFindCounter implements \MongoDB\Driver\Monitoring\CommandSubscriber {
     private $finds = [];
+    private $matches;
 
     /**
      * Runs $callback and returns the number of find commands it sent on $collection.
      */
-    static function count($collection, callable $callback) {
+    static function count($collection, callable $callback, ?callable $matches = null) {
         $counter = new self();
+        $counter->matches = $matches;
         \MongoDB\Driver\Monitoring\addSubscriber($counter);
         try {
             $callback();
@@ -24,7 +26,7 @@ class MongoFindCounter implements \MongoDB\Driver\Monitoring\CommandSubscriber {
     }
 
     function commandStarted(\MongoDB\Driver\Monitoring\CommandStartedEvent $event): void {
-        if ($event->getCommandName() === 'find') {
+        if ($event->getCommandName() === 'find' && (!$this->matches || ($this->matches)($event->getCommand()))) {
             $collection = $event->getCommand()->find;
             $this->finds[$collection] = ($this->finds[$collection] ?? 0) + 1;
         }

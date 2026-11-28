@@ -20,8 +20,7 @@ class GroupAddressBookHome extends AddressBookHome {
      * @param \Sabre\CardDAV\Backend\BackendInterface $carddavBackend
      * @param array $principal The group principal. Its 'members', when it has
      *              them, are used as they are; otherwise they are asked to
-     *              $principalBackend, only when an address book of the group is
-     *              listed: reading them lists every user of the domain.
+     *              $principalBackend, only when computing a full member ACL.
      * @param \Sabre\DAVACL\PrincipalBackend\BackendInterface|null $principalBackend
      */
     function __construct(\Sabre\CardDAV\Backend\BackendInterface $carddavBackend, $principal, $principalBackend = null) {
@@ -78,7 +77,7 @@ class GroupAddressBookHome extends AddressBookHome {
 
         foreach($addressBooks as $addressBook) {
             $addressBook['administrators'] = $this->principal['administrators'];
-            $addressBook['members'] = $this->getMembers();
+            $addressBook['members'] = $this->getMembers(...);
 
             $children[] = new Group\GroupAddressBook($this->carddavBackend, $addressBook);
         }

@@ -145,7 +145,7 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         }
 
         if ($sources->delegations) {
-            $paths += $this->delegatedAddressBookPaths();
+            $paths += $this->delegatedAddressBookPaths($canRead);
         }
 
         // Subscriptions and domain address books are only known by principaluri + uri, while cards reference
@@ -158,7 +158,7 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         return $paths + $this->resolveAddressBookPaths($toResolve);
     }
 
-    private function delegatedAddressBookPaths(): array {
+    private function delegatedAddressBookPaths(callable $canRead): array {
         $paths = [];
         foreach ($this->carddavBackend->getSharedAddressBookSourcesForUser($this->principalUri) as $share) {
             // Pending or declined delegations do not give access to the contacts
@@ -178,7 +178,11 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
 
             // Delegated group address books are not exposed in this home (see removeChildrenSharedByGroupAddressBooks),
             // they are read directly
-            $paths[$share['addressbookid']] ??= $this->directPath($share['source_principaluri'], $share['source_uri']);
+            $path = $this->directPath($share['source_principaluri'], $share['source_uri']);
+            if ($share['source_uri'] === Backend\Esn::DOMAIN_MEMBERS_URI && !$canRead($path)) {
+                continue;
+            }
+            $paths[$share['addressbookid']] ??= $path;
         }
 
         return $paths;
@@ -224,14 +228,10 @@ class AddressBookHome extends \Sabre\CardDAV\AddressBookHome {
         }
 
         if ($sources->domainContacts && $this->hasEnabledDomainAddressBook($domainPrincipalUri)) {
-            $domainAddressBook = $this->domainAddressBook($domainPrincipalUri, Backend\Esn::DOMAIN_ADDRESS_BOOK_URI);
-            // Left out when the members right was revoked
-            if ($canRead($domainAddressBook['path'])) {
-                $addressBooks[] = $domainAddressBook;
-            }
+            $addressBooks[] = $this->domainAddressBook($domainPrincipalUri, Backend\Esn::DOMAIN_ADDRESS_BOOK_URI);
         }
 
-        return $addressBooks;
+        return array_values(array_filter($addressBooks, fn($addressBook) => $canRead($addressBook['path'])));
     }
 
     private function domainAddressBook($domainPrincipalUri, $uri): array {

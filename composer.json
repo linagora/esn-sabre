@@ -33,7 +33,7 @@
         "php-amqplib/php-amqplib": "^3.3",
         "php": ">=8.4",
         "sabre/dav": "4.7.1",
-        "sabre/vobject": "dev-linagora-waiting-merges-5.0.0#43471e307ca88d732d1f5aeeed5c6f21b7d46918",
+        "sabre/vobject": "dev-linagora-waiting-merges-5.0.0#db04c2447af670639c97d5106cda775f48697c00",
         "sabre/xml": "dev-linagora-waiting-merges-2.2#e18889b1bc2bbccecf87821b5b83799d54bb45ae",
         "mongodb/mongodb": "^2.5@stable",
         "monolog/monolog": "^3.12",
